@@ -1,0 +1,37 @@
+/**
+ * Shoreguard — Wizard Styles
+ * Step indicators, preset selection chips.
+ */
+
+.wizard-step {
+    padding: 0.5rem 1rem;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+
+.wizard-step.active {
+    opacity: 1;
+}
+
+.wizard-step.completed .badge {
+    background-color: var(--sg-accent) !important;
+}
+
+/* Policy preset chips */
+.preset-chip {
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid var(--sg-border);
+    border-radius: 2px;
+    padding: 0.5rem 1rem;
+}
+
+.preset-chip:hover {
+    border-color: var(--sg-accent);
+}
+
+.preset-chip.selected {
+    border-color: var(--sg-accent);
+    background-color: rgba(118, 185, 0, 0.15);
+    color: var(--sg-accent);
+}

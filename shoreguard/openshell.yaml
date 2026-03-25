@@ -1,0 +1,107 @@
+# OpenShell metadata — synced with NVIDIA/OpenShell
+#
+# This file contains metadata derived from the OpenShell source code that is
+# not (yet) available via the gRPC API. It serves as the single source of
+# truth for Shoreguard's Web UI and TUI.
+#
+# When OpenShell updates its provider registry or community sandbox list,
+# update this file accordingly. See the sync sources below.
+#
+# Sync sources:
+#   Provider types:      OpenShell/crates/openshell-providers/src/lib.rs  (ProviderRegistry::new)
+#   Credential discovery: OpenShell/crates/openshell-providers/src/<type>.rs
+#   Inference providers:  OpenShell/crates/openshell-core/src/inference.rs (profile_for)
+#   Community sandboxes:  OpenShell/docs/sandboxes/community-sandboxes.md
+#   Supported agents:     OpenShell/docs/about/supported-agents.md
+
+# ─── Provider types ──────────────────────────────────────────────────────────
+# Validated by OpenShell's normalize_provider_type() whitelist.
+# Unknown types are rejected with "unsupported provider type".
+
+provider_types:
+  anthropic:
+    label: Anthropic
+    cred_key: ANTHROPIC_API_KEY
+    icon: terminal
+  claude:
+    label: Claude (Anthropic)
+    cred_key: ANTHROPIC_API_KEY
+    icon: terminal
+  openai:
+    label: OpenAI
+    cred_key: OPENAI_API_KEY
+    icon: stars
+  nvidia:
+    label: NVIDIA NIM
+    cred_key: NVIDIA_API_KEY
+    icon: gpu-card
+  github:
+    label: GitHub
+    cred_key: GITHUB_TOKEN
+    icon: github
+  gitlab:
+    label: GitLab
+    cred_key: GITLAB_TOKEN
+    icon: git
+  copilot:
+    label: GitHub Copilot
+    cred_key: GITHUB_TOKEN
+    icon: code-square
+  codex:
+    label: Codex
+    cred_key: OPENAI_API_KEY
+    icon: code
+  opencode:
+    label: OpenCode
+    cred_key: OPENAI_API_KEY
+    icon: code-slash
+  outlook:
+    label: Outlook
+    cred_key: OUTLOOK_TOKEN
+    icon: envelope
+  generic:
+    label: Generic
+    cred_key: API_KEY
+    icon: gear
+
+# ─── Inference providers ─────────────────────────────────────────────────────
+# Only these 3 types support inference routing via profile_for().
+# Other provider types only supply credentials for outbound access.
+
+inference_providers:
+  - name: nvidia
+    label: NVIDIA NIM
+    placeholder: meta/llama-3.1-8b-instruct
+    env_var: NVIDIA_API_KEY
+  - name: anthropic
+    label: Anthropic
+    placeholder: claude-sonnet-4-20250514
+    env_var: ANTHROPIC_API_KEY
+  - name: openai
+    label: OpenAI
+    placeholder: gpt-4o
+    env_var: OPENAI_API_KEY
+
+# ─── Community sandboxes ─────────────────────────────────────────────────────
+# Pre-built sandbox images from the OpenShell community registry.
+# Users can also specify arbitrary container images.
+
+community_sandboxes:
+  - name: base
+    description: Foundational image with pre-installed agents
+    image: ""  # default, no --from needed
+    agents:
+      - claude-code
+      - opencode
+      - codex
+      - copilot
+  - name: openclaw
+    description: Open agent manipulation framework
+    image: ghcr.io/nvidia/openshell-community/sandboxes/openclaw:latest
+    default_provider: nvidia
+  - name: ollama
+    description: Local LLM inference with Ollama
+    image: ghcr.io/nvidia/openshell-community/sandboxes/ollama:latest
+  - name: sdg
+    description: Synthetic data generation
+    image: ghcr.io/nvidia/openshell-community/sandboxes/sdg:latest

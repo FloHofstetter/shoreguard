@@ -1,0 +1,18 @@
+{% extends "pages/sandbox_base.html" %}
+{% block title %}Terminal — {{ sandbox_name }} — Shoreguard{% endblock %}
+
+{% block breadcrumb_tail %}
+<li class="breadcrumb-item active">Terminal</li>
+{% endblock %}
+
+{% block content %}
+<div id="terminal-content"></div>
+{% endblock %}
+
+{% block sandbox_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadTerminalPage('{{ sandbox_name }}');
+});
+</script>
+{% endblock %}

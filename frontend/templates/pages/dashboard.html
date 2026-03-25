@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Shoreguard{% endblock %}
+
+{% block content %}
+<div id="dashboard-content"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>document.addEventListener('DOMContentLoaded', loadDashboard);</script>
+{% endblock %}

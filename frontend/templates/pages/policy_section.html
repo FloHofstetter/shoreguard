@@ -1,0 +1,25 @@
+{% extends "pages/sandbox_base.html" %}
+{% block title %}{{ section_title }} — {{ sandbox_name }} — Shoreguard{% endblock %}
+
+{% block breadcrumb_tail %}
+<li class="breadcrumb-item"><a href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/policy">Policy</a></li>
+<li class="breadcrumb-item active">{{ section_title }}</li>
+{% endblock %}
+
+{% block content %}
+<div id="policy-page-content"></div>
+{% endblock %}
+
+{% block sandbox_js %}
+<script src="/static/js/policy.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const section = '{{ section }}';
+    const name = '{{ sandbox_name }}';
+    if (section === 'network') loadNetworkPolicies(name);
+    else if (section === 'filesystem') loadFilesystemPolicy(name);
+    else if (section === 'process') loadProcessPolicy(name);
+    else if (section === 'presets') loadPresetsPage(name);
+});
+</script>
+{% endblock %}

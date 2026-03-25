@@ -1,0 +1,85 @@
+/**
+ * Shoreguard — Table Styles
+ * Dark theme table overrides, clickable rows, expand chevrons.
+ */
+
+.table-clickable tbody tr {
+    cursor: pointer;
+}
+
+.table-clickable tbody tr:active {
+    background-color: rgba(118, 185, 0, 0.1) !important;
+}
+
+/* Tighter striping for dark theme */
+.table-dark.table-striped > tbody > tr:nth-of-type(odd) > * {
+    --bs-table-bg-type: rgba(255, 255, 255, 0.02);
+}
+
+.table-dark.table-hover > tbody > tr:hover > * {
+    --bs-table-bg-state: rgba(118, 185, 0, 0.06);
+}
+
+/* Expand chevron rotation */
+.expand-chevron {
+    transition: transform 0.2s ease;
+    display: inline-block;
+}
+
+.expand-chevron.open {
+    transform: rotate(90deg);
+}
+
+/* Truncated cell content */
+.cell-truncate {
+    max-width: 250px;
+    display: inline-block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
+/* Inline confidence progress bar */
+.confidence-bar {
+    width: 60px;
+    height: 6px;
+}
+
+/* Responsive: smaller text on mobile */
+@media (max-width: 767.98px) {
+    .table { font-size: 0.8rem; }
+    .cell-truncate { max-width: 120px; }
+}
+
+/* Subtle delete button — only visible on hover */
+.delete-btn {
+    opacity: 0.4;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.delete-btn:hover {
+    opacity: 1;
+    color: var(--sg-danger) !important;
+}
+
+tr:hover .delete-btn {
+    opacity: 0.7;
+}
+
+/* Table header contrast */
+.table-dark > thead > tr > th {
+    background-color: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--sg-border);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--sg-text-muted);
+}
+
+/* Detail/expand row */
+.detail-row > td {
+    background-color: var(--sg-overlay-dark) !important;
+    border-top: none !important;
+    padding-top: 0 !important;
+}

@@ -1,0 +1,293 @@
+/**
+ * Shoreguard — Base Styles
+ * CSS variables, body, topbar, breadcrumbs, shared badges.
+ */
+
+:root {
+    /* Brand */
+    --sg-accent: #76b900;
+    /* Surfaces */
+    --sg-bg: #121212;
+    --sg-card: #1e1e1e;
+
+    --sg-border: #333333;
+    /* Text */
+    --sg-text: #e6edf3;
+    --sg-text-muted: #8b949e;
+    --sg-text-dim: #484f58;
+    /* Status */
+    --sg-success: #3fb950;
+    --sg-warning: #d29922;
+    --sg-danger: #f85149;
+    --sg-muted: #6c757d;
+    /* Log */
+    --sg-log-bg: #0a0a0a;
+    --sg-log-text: #c9d1d9;
+    --sg-log-info: #58a6ff;
+    /* Overlays */
+    --sg-overlay-light: rgba(255, 255, 255, 0.05);
+    --sg-overlay-dark: rgba(0, 0, 0, 0.2);
+    /* Font */
+    --sg-font-mono: 'Courier New', monospace;
+    /* Layout */
+    --topbar-height: 48px;
+}
+
+body {
+    background-color: var(--sg-bg);
+    min-height: 100vh;
+}
+
+/* ─── Topbar ─────────────────────────────────────────────────────────── */
+
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--topbar-height);
+    background-color: var(--sg-card);
+    border-bottom: 1px solid var(--sg-border);
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    gap: 1rem;
+    z-index: 1040;
+}
+
+.topbar-brand {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--sg-accent) !important;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.topbar-brand:hover {
+    color: var(--sg-accent) !important;
+}
+
+.topbar .breadcrumb {
+    margin-bottom: 0;
+    padding: 0;
+    font-size: 0.85rem;
+    background: transparent;
+    flex-grow: 1;
+}
+
+.topbar .breadcrumb-item a {
+    color: var(--sg-text-muted);
+    text-decoration: none;
+}
+
+.topbar .breadcrumb-item a:hover {
+    color: var(--sg-accent);
+}
+
+.topbar .breadcrumb-item.active {
+    color: var(--sg-text);
+}
+
+.topbar .breadcrumb-item + .breadcrumb-item::before {
+    color: var(--sg-text-dim);
+}
+
+.topbar-status {
+    margin-left: auto;
+    padding-left: 1rem;
+    border-left: 1px solid var(--sg-border);
+    font-size: 0.7rem;
+    font-weight: 400;
+    white-space: nowrap;
+}
+
+/* ─── Sub-navigation ─────────────────────────────────────────────────── */
+
+.subnav {
+    position: fixed;
+    top: var(--topbar-height);
+    left: 0;
+    right: 0;
+    height: 40px;
+    background-color: var(--sg-bg);
+    border-bottom: 1px solid var(--sg-border);
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    gap: 0.25rem;
+    z-index: 1035;
+}
+
+.subnav .nav-link {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8rem;
+    color: var(--sg-text-muted);
+    border-radius: 2px;
+}
+
+.subnav .nav-link.active {
+    background-color: rgba(118, 185, 0, 0.15);
+    color: var(--sg-accent);
+}
+
+.subnav .nav-link:hover:not(.active) {
+    color: var(--sg-text);
+    background-color: var(--sg-overlay-light);
+}
+
+.subnav-spacer {
+    flex-grow: 1;
+}
+
+/* ─── Main content ───────────────────────────────────────────────────── */
+
+.app-content {
+    padding: calc(var(--topbar-height) + 1.5rem) 1.5rem 1.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.has-subnav .app-content {
+    padding-top: calc(var(--topbar-height) + 40px + 1.5rem);
+}
+
+/* ─── Shared badges ──────────────────────────────────────────────────── */
+
+.endpoint-badge {
+    background-color: rgba(118, 185, 0, 0.15);
+    color: var(--sg-accent);
+    border: 1px solid rgba(118, 185, 0, 0.3);
+    border-radius: 2px;
+    font-size: 0.75rem;
+}
+
+/* ─── Getting Started ────────────────────────────────────────────────── */
+
+.getting-started-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--sg-border);
+}
+
+.getting-started-step:last-child {
+    border-bottom: none;
+}
+
+.getting-started-num {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.getting-started-num.done {
+    background-color: rgba(118, 185, 0, 0.2);
+    color: var(--sg-accent);
+}
+
+.getting-started-num.pending {
+    background-color: var(--sg-overlay-light);
+    color: var(--sg-text-muted);
+}
+
+/* ─── Bootstrap overrides (angular NVIDIA feel) ──────────────────────── */
+
+.card {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 2px;
+}
+
+.badge {
+    border-radius: 2px;
+}
+
+.btn {
+    border-radius: 2px;
+}
+
+.form-control, .form-select {
+    border-radius: 2px;
+}
+
+.toast {
+    border-radius: 2px;
+}
+
+.progress {
+    border-radius: 2px;
+}
+
+.alert {
+    border-radius: 2px;
+}
+
+/* ─── Sandbox hero header ─────────────────────────────────────────────── */
+
+.sandbox-hero {
+    border-bottom: 1px solid var(--sg-border);
+    padding-bottom: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.sandbox-hero h3 {
+    margin-bottom: 0.25rem;
+}
+
+.sandbox-hero .sandbox-meta {
+    color: var(--sg-text-muted);
+    font-size: 0.85rem;
+}
+
+.sandbox-hero .sandbox-meta span + span::before {
+    content: '·';
+    margin: 0 0.5rem;
+    color: var(--sg-text-dim);
+}
+
+/* ─── Themed containers ──────────────────────────────────────────────── */
+
+.sg-modal-themed {
+    background-color: var(--sg-card);
+    border-color: var(--sg-border);
+}
+
+.sg-modal-themed .modal-header {
+    border-color: var(--sg-border) !important;
+}
+
+/* ─── Themed containers (replaces inline styles in JS) ───────────────── */
+
+.sg-card-themed {
+    background: var(--sg-card);
+    border-color: var(--sg-border);
+}
+
+.sg-overlay-card {
+    background: var(--sg-overlay-dark);
+    border-color: var(--sg-border);
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--sg-bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: var(--sg-border);
+    border-radius: 3px;
+}

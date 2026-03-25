@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Gateways — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item active">Gateways</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">Gateways</h5>
+    <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary" onclick="loadGatewayPage()" title="Refresh">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+        <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#createGatewayModal">
+            <i class="bi bi-plus-lg me-1"></i>New
+        </button>
+    </div>
+</div>
+<div id="gateway-page-content"></div>
+{% endblock %}
+
+{% block modals %}
+<div class="modal fade" id="createGatewayModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content sg-modal-themed">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>New Gateway</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="create-gateway-form" onsubmit="createGateway(event)">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" id="new-gw-name" placeholder="my-gateway" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Port</label>
+                        <input type="number" class="form-control" id="new-gw-port" value="8080" min="1024" max="65535">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Remote Host <span class="text-muted small">(optional)</span></label>
+                        <input type="text" class="form-control" id="new-gw-remote" placeholder="user@hostname">
+                        <div class="form-text">Leave empty for local gateway.</div>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="new-gw-gpu">
+                        <label class="form-check-label" for="new-gw-gpu">GPU passthrough</label>
+                    </div>
+                    <div id="create-gw-output"></div>
+                </form>
+            </div>
+            <div class="modal-footer border-0">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-success" onclick="createGateway(event)" id="create-gw-btn">
+                    <i class="bi bi-plus me-1"></i>Create
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/gateway.js"></script>
+<script>document.addEventListener('DOMContentLoaded', loadGatewayPage);</script>
+{% endblock %}

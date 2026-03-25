@@ -1,0 +1,25 @@
+/**
+ * Shoreguard — Log Output Styles
+ */
+
+.log-output {
+    background-color: var(--sg-log-bg);
+    border: 1px solid var(--sg-border);
+    border-radius: 2px;
+    padding: 0.75rem;
+    max-height: 500px;
+    overflow-y: auto;
+    font-family: var(--sg-font-mono);
+    font-size: 0.8rem;
+    color: var(--sg-log-text);
+}
+
+.log-output .log-line {
+    margin-bottom: 2px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-output .log-error { color: var(--sg-danger); }
+.log-output .log-warn { color: var(--sg-warning); }
+.log-output .log-info { color: var(--sg-log-info); }

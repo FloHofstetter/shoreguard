@@ -1,0 +1,101 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "shoreguard"
+version = "0.1.0"
+description = "Open source control plane for NVIDIA OpenShell"
+license = "Apache-2.0"
+readme = "README.md"
+keywords = ["openshell", "nvidia", "sandbox", "security", "ai-agents", "control-plane"]
+authors = [
+    { name = "Florian Hofstetter", email = "flo.max.hofstetter@gmail.com" },
+]
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = [
+    "fastapi>=0.135",
+    "uvicorn>=0.42",
+    "grpcio>=1.78",
+    "pyyaml>=6.0",
+    "jinja2>=3.1",
+    "websockets>=16.0",
+    "typer>=0.15",
+]
+
+[dependency-groups]
+dev = [
+    "grpcio-tools>=1.78",
+    "pytest>=9.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+    "ruff>=0.15",
+    "pyright>=1.1",
+    "hatchling>=1.29.0",
+    "mutmut>=3.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/FloHofstetter/shoreguard"
+Repository = "https://github.com/FloHofstetter/shoreguard"
+Issues = "https://github.com/FloHofstetter/shoreguard/issues"
+
+[project.scripts]
+shoreguard = "shoreguard.api.main:cli"
+
+[tool.hatch.build.targets.wheel.force-include]
+"frontend" = "shoreguard/_frontend"
+
+[tool.hatch.build.targets.sdist]
+include = ["shoreguard", "frontend", "LICENSE", "README.md"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "D"]
+pydocstyle.convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+"shoreguard/client/_proto/**" = ["D", "E", "F", "I", "UP"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+include = ["shoreguard"]
+exclude = ["shoreguard/client/_proto"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: requires a live OpenShell gateway (deselect with -m 'not integration')",
+]
+
+[tool.coverage.run]
+source = ["shoreguard"]
+omit = ["shoreguard/client/_proto/*"]
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.mutmut]
+paths_to_mutate = ["shoreguard"]
+tests_dir = ["tests"]
+do_not_mutate = ["shoreguard/client/_proto/*"]
+also_copy = ["frontend"]
+runner = "python -m pytest -x --ignore=tests/integration"

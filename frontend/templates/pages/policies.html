@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Policy Presets — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item active">Policy Presets</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<h5 class="mb-3">Policy Presets</h5>
+<div id="presets-list"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/policy.js"></script>
+<script>document.addEventListener('DOMContentLoaded', loadPresets);</script>
+{% endblock %}

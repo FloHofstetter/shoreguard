@@ -1,0 +1,19 @@
+{% extends "pages/sandbox_base.html" %}
+{% block title %}{{ sandbox_name }} — Shoreguard{% endblock %}
+
+{% block content %}
+<div id="sandbox-info"></div>
+{% endblock %}
+
+{% block modals %}
+{% include "components/approval_modal.html" %}
+{% endblock %}
+
+{% block sandbox_js %}
+<script src="/static/js/websocket.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadSandboxInfo('{{ sandbox_name }}');
+});
+</script>
+{% endblock %}

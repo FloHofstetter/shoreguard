@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/gateways">Gateways</a></li>
+    <li class="breadcrumb-item"><a href="/gateways/{{ gateway_name }}">{{ gateway_name }}</a></li>
+    <li class="breadcrumb-item"><a href="/gateways/{{ gateway_name }}/sandboxes">Sandboxes</a></li>
+    <li class="breadcrumb-item"><a href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}">{{ sandbox_name }}</a></li>
+    {% block breadcrumb_tail %}{% endblock %}
+</ol>
+{% endblock %}
+
+{% block subnav %}
+{% include "components/sandbox_nav.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/sandboxes.js"></script>
+{% block sandbox_js %}{% endblock %}
+{% endblock %}

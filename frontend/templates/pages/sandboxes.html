@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Sandboxes — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/gateways">Gateways</a></li>
+    <li class="breadcrumb-item"><a href="/gateways/{{ gateway_name }}">{{ gateway_name }}</a></li>
+    <li class="breadcrumb-item active">Sandboxes</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">Sandboxes</h5>
+    <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary" onclick="refreshSandboxes()" title="Refresh">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+        <a class="btn btn-outline-success" href="/gateways/{{ gateway_name }}/wizard">
+            <i class="bi bi-plus-lg me-1"></i>New
+        </a>
+    </div>
+</div>
+<div class="table-responsive">
+    <table class="table table-dark table-striped table-hover table-sm align-middle table-clickable">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th class="d-none d-md-table-cell">Image</th>
+                <th>Phase</th>
+                <th class="d-none d-md-table-cell">Policy</th>
+                <th class="d-none d-lg-table-cell">GPU</th>
+                <th class="text-end d-none d-md-table-cell">Created</th>
+                <th class="text-end">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="sandbox-list">
+            <tr><td colspan="7" class="text-center text-muted py-5">
+                <div class="spinner-border spinner-border-sm me-2"></div>Loading sandboxes...
+            </td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/sandboxes.js"></script>
+<script>document.addEventListener('DOMContentLoaded', refreshSandboxes);</script>
+{% endblock %}

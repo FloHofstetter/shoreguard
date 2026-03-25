@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Providers — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/gateways">Gateways</a></li>
+    <li class="breadcrumb-item"><a href="/gateways/{{ gateway_name }}">{{ gateway_name }}</a></li>
+    <li class="breadcrumb-item active">Providers</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">Providers</h5>
+    <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary" onclick="loadProvidersPage()" title="Refresh">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+        <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#createProviderModal">
+            <i class="bi bi-plus-lg me-1"></i>New
+        </button>
+    </div>
+</div>
+<div id="providers-page-content"></div>
+{% endblock %}
+
+{% block modals %}
+<div class="modal fade" id="createProviderModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content sg-modal-themed">
+            <div class="modal-header border-bottom">
+                <h5 class="modal-title"><i class="bi bi-key me-2"></i>New Provider</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="create-provider-form" onsubmit="createProvider(event)">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" id="new-prov-name" placeholder="my-provider" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type</label>
+                        <select class="form-select" id="new-prov-type" required onchange="onProviderTypeChange()">
+                            <option value="">Select type...</option>
+                            {% for ptype in provider_types %}
+                            <option value="{{ ptype.type }}">{{ ptype.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">API Key</label>
+                        <div class="input-group">
+                            <span class="input-group-text font-monospace small" id="new-prov-cred-label" style="background:var(--sg-card);border-color:var(--sg-border);color:var(--sg-accent);min-width:170px">API_KEY</span>
+                            <input type="password" class="form-control font-monospace" id="new-prov-apikey" placeholder="sk-..." autocomplete="off">
+                        </div>
+                        <div class="form-text">The environment variable name is set automatically based on the provider type.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Additional Credentials <span class="text-muted small">(optional, KEY=value per line)</span></label>
+                        <textarea class="form-control font-monospace" id="new-prov-creds" rows="2" placeholder="EXTRA_TOKEN=..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Config <span class="text-muted small">(optional, KEY=value per line)</span></label>
+                        <textarea class="form-control font-monospace" id="new-prov-config" rows="2" placeholder="base_url=https://..."></textarea>
+                    </div>
+                    <div id="create-prov-output"></div>
+                </form>
+            </div>
+            <div class="modal-footer border-0">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-success" onclick="createProvider(event)" id="create-prov-btn">
+                    <i class="bi bi-plus me-1"></i>Create
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/providers.js"></script>
+<script>document.addEventListener('DOMContentLoaded', loadProvidersPage);</script>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "pages/sandbox_base.html" %}
+{% block title %}Policy — {{ sandbox_name }} — Shoreguard{% endblock %}
+
+{% block breadcrumb_tail %}
+<li class="breadcrumb-item active">Policy</li>
+{% endblock %}
+
+{% block content %}
+<div id="policy-content"></div>
+{% endblock %}
+
+{% block sandbox_js %}
+<script src="/static/js/policy.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadPolicyTab('{{ sandbox_name }}', document.getElementById('policy-content'));
+});
+</script>
+{% endblock %}

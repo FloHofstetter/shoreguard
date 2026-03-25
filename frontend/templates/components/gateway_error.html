@@ -1,0 +1,8 @@
+<div id="gateway-error-banner" class="alert alert-danger d-flex align-items-center mb-2 py-2" style="display:none!important" role="alert">
+    <i class="bi bi-exclamation-octagon-fill me-2"></i>
+    <div class="flex-grow-1">
+        <strong>Gateway disconnected.</strong>
+        <span id="gateway-error-detail" class="ms-1">Attempting to reconnect...</span>
+    </div>
+    <button class="btn btn-outline-light btn-sm" onclick="checkGatewayHealth()">Retry</button>
+</div>

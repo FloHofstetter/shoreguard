@@ -1,0 +1,24 @@
+{% extends "pages/sandbox_base.html" %}
+{% block title %}Approvals — {{ sandbox_name }} — Shoreguard{% endblock %}
+
+{% block breadcrumb_tail %}
+<li class="breadcrumb-item active">Approvals</li>
+{% endblock %}
+
+{% block content %}
+<div id="approvals-content"></div>
+{% endblock %}
+
+{% block modals %}
+{% include "components/approval_modal.html" %}
+{% endblock %}
+
+{% block sandbox_js %}
+<script src="/static/js/approvals.js"></script>
+<script src="/static/js/websocket.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadApprovalsPage('{{ sandbox_name }}');
+});
+</script>
+{% endblock %}

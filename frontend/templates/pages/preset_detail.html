@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ preset_name }} — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/policies">Policy Presets</a></li>
+    <li class="breadcrumb-item active">{{ preset_name }}</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div id="preset-detail"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/policy.js"></script>
+<script>document.addEventListener('DOMContentLoaded', function() { showPresetDetail('{{ preset_name }}'); });</script>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ gateway_name }} — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/gateways">Gateways</a></li>
+    <li class="breadcrumb-item active">{{ gateway_name }}</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div id="gateway-detail-content"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/gateway.js"></script>
+<script>document.addEventListener('DOMContentLoaded', function() { loadGatewayDetail('{{ gateway_name }}'); });</script>
+{% endblock %}

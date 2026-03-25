@@ -1,0 +1,1 @@
+"""Shoreguard FastAPI application."""
