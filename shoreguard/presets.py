@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import pathlib
 from typing import Any
 
 import yaml
+
+logger = logging.getLogger("shoreguard")
 
 _PRESETS_DIR = pathlib.Path(__file__).parent / "presets"
 
@@ -16,7 +19,13 @@ def list_presets() -> list[dict[str, str]]:
     if not _PRESETS_DIR.exists():
         return presets
     for path in sorted(_PRESETS_DIR.glob("*.yaml")):
-        data = yaml.safe_load(path.read_text())
+        try:
+            data = yaml.safe_load(path.read_text())
+        except (yaml.YAMLError, AttributeError, OSError):
+            logger.warning("Failed to load preset file %s", path.name, exc_info=True)
+            continue
+        if not isinstance(data, dict):
+            continue
         preset_meta = data.get("preset", {})
         presets.append(
             {
@@ -29,8 +38,26 @@ def list_presets() -> list[dict[str, str]]:
 
 
 def get_preset(preset_name: str) -> dict[str, Any] | None:
-    """Load a single preset by name. Returns None if not found."""
+    """Load a single preset by name. Returns None if not found.
+
+    Returns ``{name, description, policy}`` where *policy* contains
+    the network_policies / filesystem / process definitions.
+    """
     preset_path = _PRESETS_DIR / f"{preset_name}.yaml"
+    if not preset_path.resolve().is_relative_to(_PRESETS_DIR.resolve()):
+        return None
     if not preset_path.exists():
         return None
-    return yaml.safe_load(preset_path.read_text())
+    try:
+        data = yaml.safe_load(preset_path.read_text())
+    except (yaml.YAMLError, AttributeError, OSError):
+        logger.warning("Failed to load preset file %s", preset_path.name, exc_info=True)
+        return None
+    if not isinstance(data, dict):
+        return None
+    preset_meta = data.pop("preset", {})
+    return {
+        "name": preset_meta.get("name", preset_name),
+        "description": preset_meta.get("description", ""),
+        "policy": data,
+    }

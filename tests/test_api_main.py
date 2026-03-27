@@ -99,16 +99,24 @@ async def test_not_found_returns_404(api_client, mock_client):
     assert resp.status_code == 404
 
 
-async def test_policy_error_returns_500(api_client, mock_client):
+async def test_policy_error_returns_400(api_client, mock_client):
     mock_client.policies.get.side_effect = PolicyError("policy corrupt")
     resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/sb1/policy")
-    assert resp.status_code == 500
+    assert resp.status_code == 400
 
 
-async def test_sandbox_error_returns_500(api_client, mock_client):
+async def test_sandbox_error_returns_409(api_client, mock_client):
     mock_client.sandboxes.get.side_effect = SandboxError("sandbox crashed")
     resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/broken")
-    assert resp.status_code == 500
+    assert resp.status_code == 409
+
+
+async def test_grpc_deadline_exceeded_returns_504(api_client, mock_client):
+    mock_client.sandboxes.list.side_effect = _FakeRpcError(
+        grpc.StatusCode.DEADLINE_EXCEEDED, "deadline exceeded"
+    )
+    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes")
+    assert resp.status_code == 504
 
 
 async def test_timeout_returns_504(api_client, mock_client):
@@ -128,16 +136,56 @@ async def test_grpc_error_handler_maps_status_codes():
     assert _GRPC_STATUS_MAP[grpc.StatusCode.PERMISSION_DENIED] == 403
     assert _GRPC_STATUS_MAP[grpc.StatusCode.UNAUTHENTICATED] == 401
     assert _GRPC_STATUS_MAP[grpc.StatusCode.UNIMPLEMENTED] == 501
+    assert _GRPC_STATUS_MAP[grpc.StatusCode.DEADLINE_EXCEEDED] == 504
+
+
+async def test_grpc_unimplemented_returns_501(api_client, mock_client):
+    """gRPC UNIMPLEMENTED returns 501 with feature and upgrade_required fields."""
+    mock_client.policies.get.side_effect = _FakeRpcError(
+        grpc.StatusCode.UNIMPLEMENTED, "Method not implemented"
+    )
+    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/sb1/policy")
+    assert resp.status_code == 501
+    data = resp.json()
+    assert data["upgrade_required"] is True
+    assert "feature" in data
 
 
 async def test_domain_error_status_map():
     """Verify domain exception → HTTP status mapping."""
     from shoreguard.api.main import _DOMAIN_STATUS_MAP
+    from shoreguard.exceptions import FeatureNotAvailableError
 
     assert _DOMAIN_STATUS_MAP[GatewayNotConnectedError] == 503
     assert _DOMAIN_STATUS_MAP[NotFoundError] == 404
-    assert _DOMAIN_STATUS_MAP[PolicyError] == 500
-    assert _DOMAIN_STATUS_MAP[SandboxError] == 500
+    assert _DOMAIN_STATUS_MAP[PolicyError] == 400
+    assert _DOMAIN_STATUS_MAP[SandboxError] == 409
+    assert _DOMAIN_STATUS_MAP[FeatureNotAvailableError] == 501
+
+
+def test_detect_feature_from_path_policy():
+    from shoreguard.api.main import _detect_feature_from_path
+
+    assert "policy" in _detect_feature_from_path("/api/gateways/gw/sandboxes/sb/policy").lower()
+
+
+def test_detect_feature_from_path_approvals():
+    from shoreguard.api.main import _detect_feature_from_path
+
+    result = _detect_feature_from_path("/api/gateways/gw/sandboxes/sb/approvals")
+    assert "approval" in result.lower()
+
+
+def test_detect_feature_from_path_inference():
+    from shoreguard.api.main import _detect_feature_from_path
+
+    assert "inference" in _detect_feature_from_path("/api/gateways/gw/inference").lower()
+
+
+def test_detect_feature_from_path_unknown():
+    from shoreguard.api.main import _detect_feature_from_path
+
+    assert _detect_feature_from_path("/api/gateways/gw/sandboxes") == "This operation"
 
 
 # ─── 3B: Page Routes ─────────────────────────────────────────────────────────
@@ -273,6 +321,86 @@ def test_ws_gateway_not_connected():
             assert "not connected" in data["data"]["message"]
 
 
+def test_ws_streams_sandbox_events():
+    """WebSocket streams sandbox watch events to the client."""
+    from starlette.testclient import TestClient
+
+    from shoreguard.api.main import app
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
+    # watch() returns an iterable of events
+    mock_client.sandboxes.watch.return_value = iter(
+        [
+            {"type": "status", "sandbox": "test-sb", "phase": "ready"},
+            {"type": "log", "sandbox": "test-sb", "message": "hello"},
+        ]
+    )
+
+    with patch("shoreguard.api.main.get_client", return_value=mock_client):
+        client = TestClient(app)
+        with client.websocket_connect("/ws/test-gw/test-sb") as ws:
+            msg1 = ws.receive_json()
+            assert msg1["type"] == "status"
+            msg2 = ws.receive_json()
+            assert msg2["type"] == "log"
+
+
+def test_ws_handles_grpc_stream_error():
+    """WebSocket sends error event when gRPC watch stream fails."""
+    from starlette.testclient import TestClient
+
+    from shoreguard.api.main import app
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
+
+    # Create a fake gRPC error
+    class _FakeRpcError(grpc.RpcError):
+        def code(self):
+            return grpc.StatusCode.UNAVAILABLE
+
+        def details(self):
+            return "stream died"
+
+    mock_client.sandboxes.watch.side_effect = _FakeRpcError()
+
+    with patch("shoreguard.api.main.get_client", return_value=mock_client):
+        client = TestClient(app)
+        with client.websocket_connect("/ws/test-gw/test-sb") as ws:
+            msg = ws.receive_json()
+            assert msg["type"] == "error"
+            assert "stream died" in msg.get("data", {}).get("message", "")
+
+
+def test_ws_client_disconnect():
+    """WebSocket cleanup handles client disconnect gracefully."""
+    import time
+
+    from starlette.testclient import TestClient
+
+    from shoreguard.api.main import app
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
+
+    # watch() returns a slow generator that yields forever
+    def slow_watch(**kwargs):
+        while True:
+            time.sleep(0.5)
+            yield {"type": "heartbeat"}
+
+    mock_client.sandboxes.watch.return_value = slow_watch()
+
+    with patch("shoreguard.api.main.get_client", return_value=mock_client):
+        client = TestClient(app)
+        with client.websocket_connect("/ws/test-gw/test-sb") as ws:
+            # Receive at least one event then disconnect
+            msg = ws.receive_json(mode="text")
+            assert msg["type"] == "heartbeat"
+        # Exiting the context manager disconnects - no crash expected
+
+
 # ─── 3D: CLI (Typer) ─────────────────────────────────────────────────────────
 
 
@@ -340,6 +468,17 @@ def test_cli_overrides_env():
             result = runner.invoke(cli, ["--host", "127.0.0.1"])
             assert result.exit_code == 0
             assert mock_run.call_args[1]["host"] == "127.0.0.1"
+
+
+def test_cli_api_key_flag():
+    from shoreguard.api.main import cli
+
+    runner = _cli_runner()
+    with patch("uvicorn.run"):
+        with patch("shoreguard.api.main.configure_auth") as mock_configure:
+            result = runner.invoke(cli, ["--api-key", "my-secret-key"])
+            assert result.exit_code == 0
+            mock_configure.assert_called_once_with("my-secret-key")
 
 
 # ─── 3E: Frontend Resolution ─────────────────────────────────────────────────

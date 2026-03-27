@@ -6,7 +6,9 @@ import json
 import logging
 import os
 import shutil
+import ssl
 import subprocess
+import threading
 import time
 from typing import Any
 
@@ -37,11 +39,13 @@ class _ClientEntry:
 
 
 _clients: dict[str, _ClientEntry] = {}
+_clients_lock = threading.Lock()
 
 
 def _reset_clients() -> None:
     """Clear all cached gateway clients. For test teardown only."""
-    _clients.clear()
+    with _clients_lock:
+        _clients.clear()
 
 
 def _derive_status(connected: bool, container_status: str | None) -> str:
@@ -77,70 +81,92 @@ class GatewayService:
         if not gw_name:
             raise GatewayNotConnectedError("No gateway specified or configured.")
 
-        entry = _clients.get(gw_name)
-        if entry is None:
-            entry = _ClientEntry()
-            _clients[gw_name] = entry
+        # Phase 1: read state under the lock
+        with _clients_lock:
+            entry = _clients.get(gw_name)
+            if entry is None:
+                entry = _ClientEntry()
+                _clients[gw_name] = entry
+            existing_client = entry.client
 
-        if entry.client is not None:
+        # Phase 2: health-check existing client (blocking I/O, no lock)
+        if existing_client is not None:
             try:
-                entry.client.health()
-                return entry.client
+                existing_client.health()
+                return existing_client
             except grpc.RpcError:
-                logger.info("Gateway '%s' connection lost, attempting reconnect...", gw_name)
+                logger.warning("Gateway '%s' connection lost, attempting reconnect...", gw_name)
                 try:
-                    entry.client.close()
+                    existing_client.close()
                 except Exception:
-                    pass
-                entry.client = None
-                entry.backoff = 0.0
+                    logger.debug("Error closing stale connection for '%s'", gw_name, exc_info=True)
+                with _clients_lock:
+                    entry.client = None
+                    entry.backoff = 0.0
 
+        # Phase 3: check backoff under the lock
         now = time.monotonic()
-        if entry.backoff > 0 and (now - entry.last_attempt) < entry.backoff:
-            raise GatewayNotConnectedError(f"Gateway '{gw_name}' not connected.")
+        with _clients_lock:
+            if entry.backoff > 0 and (now - entry.last_attempt) < entry.backoff:
+                raise GatewayNotConnectedError(f"Gateway '{gw_name}' not connected.")
+            entry.last_attempt = now
 
-        entry.last_attempt = now
-        entry.client = self._try_connect(gw_name)
-        if entry.client is None:
-            if entry.backoff == 0:
-                entry.backoff = _BACKOFF_MIN
-            else:
-                entry.backoff = min(entry.backoff * _BACKOFF_FACTOR, _BACKOFF_MAX)
-            raise GatewayNotConnectedError(f"Gateway '{gw_name}' not connected.")
-        entry.backoff = 0.0
-        return entry.client
+        # Phase 4: attempt connection (blocking I/O, no lock)
+        new_client = self._try_connect(gw_name)
+
+        # Phase 5: write result under the lock
+        with _clients_lock:
+            if new_client is None:
+                if entry.backoff == 0:
+                    entry.backoff = _BACKOFF_MIN
+                else:
+                    entry.backoff = min(entry.backoff * _BACKOFF_FACTOR, _BACKOFF_MAX)
+                raise GatewayNotConnectedError(f"Gateway '{gw_name}' not connected.")
+            entry.client = new_client
+            entry.backoff = 0.0
+        return new_client
 
     def set_client(self, client: ShoreGuardClient | None, name: str | None = None) -> None:
         """Set or clear a client for the given gateway."""
         gw_name = name or self.get_active_name()
         if not gw_name:
             return
-        if client is None:
-            _clients.pop(gw_name, None)
-        else:
-            entry = _clients.get(gw_name)
-            if entry is None:
-                entry = _ClientEntry()
-                _clients[gw_name] = entry
-            entry.client = client
-            entry.backoff = 0.0
+        with _clients_lock:
+            if client is None:
+                _clients.pop(gw_name, None)
+            else:
+                entry = _clients.get(gw_name)
+                if entry is None:
+                    entry = _ClientEntry()
+                    _clients[gw_name] = entry
+                entry.client = client
+                entry.backoff = 0.0
 
     def reset_backoff(self, name: str | None = None) -> None:
         """Reset connection backoff for a gateway."""
         gw_name = name or self.get_active_name()
-        if gw_name and gw_name in _clients:
-            _clients[gw_name].backoff = 0.0
-            _clients[gw_name].last_attempt = 0.0
+        with _clients_lock:
+            if gw_name and gw_name in _clients:
+                _clients[gw_name].backoff = 0.0
+                _clients[gw_name].last_attempt = 0.0
 
     def _try_connect(self, name: str) -> ShoreGuardClient | None:
         """Attempt to create a client for a specific gateway."""
         try:
             client = ShoreGuardClient.from_active_cluster(cluster=name)
+        except (grpc.RpcError, OSError, ConnectionError, TimeoutError) as e:
+            logger.debug("Gateway '%s' connection failed: %s", name, e)
+            return None
+        try:
             client.health()
             logger.info("Connected to OpenShell gateway '%s'", name)
             return client
-        except Exception as e:
+        except (grpc.RpcError, OSError, ConnectionError, TimeoutError) as e:
             logger.debug("Gateway '%s' connection failed: %s", name, e)
+            try:
+                client.close()
+            except Exception:
+                logger.debug("Failed to close client for '%s'", name, exc_info=True)
             return None
 
     # ── Gateway discovery ─────────────────────────────────────────────────
@@ -159,7 +185,11 @@ class GatewayService:
         if not metadata_file.exists():
             return {"name": name, "error": "Metadata file not found"}
 
-        metadata = json.loads(metadata_file.read_text())
+        try:
+            metadata = json.loads(metadata_file.read_text())
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Failed to read metadata for '%s': %s", name, e)
+            return {"name": name, "error": "Failed to read metadata"}
         auth_mode = metadata.get("auth_mode")
         if auth_mode == "cloudflare_jwt":
             gw_type = "cloud"
@@ -176,6 +206,7 @@ class GatewayService:
             "type": gw_type,
             "auth_mode": auth_mode,
             "remote_host": metadata.get("remote_host"),
+            "gpu": metadata.get("gpu", False),
         }
 
     # ── List & Info ───────────────────────────────────────────────────────
@@ -192,6 +223,8 @@ class GatewayService:
         for entry in sorted(gateways_dir.iterdir()):
             if not entry.is_dir():
                 continue
+            if not (entry / "metadata.json").exists():
+                continue
             gw = self.read_metadata(entry.name)
             gw["active"] = entry.name == active_name
 
@@ -200,10 +233,12 @@ class GatewayService:
 
             connected = False
             version = None
-            cached = _clients.get(entry.name)
-            if cached and cached.client is not None:
+            with _clients_lock:
+                cached = _clients.get(entry.name)
+                cached_client = cached.client if cached else None
+            if cached_client is not None:
                 try:
-                    health = cached.client.health()
+                    health = cached_client.health()
                     connected = True
                     version = health.get("version")
                 except grpc.RpcError:
@@ -229,10 +264,12 @@ class GatewayService:
 
         connected = False
         version = None
-        cached = _clients.get(gw_name)
-        if cached and cached.client is not None:
+        with _clients_lock:
+            cached = _clients.get(gw_name)
+            cached_client = cached.client if cached else None
+        if cached_client is not None:
             try:
-                health = cached.client.health()
+                health = cached_client.health()
                 connected = True
                 version = health.get("version")
             except grpc.RpcError:
@@ -262,7 +299,7 @@ class GatewayService:
             result["version"] = health.get("version")
             result["health_status"] = health.get("status")
         except (grpc.RpcError, GatewayNotConnectedError):
-            pass
+            logger.debug("Health check failed for gateway '%s'", active_name)
 
         return result
 
@@ -339,7 +376,7 @@ class GatewayService:
                 if proc.returncode == 0:
                     result["openshell_version"] = proc.stdout.strip()
             except (subprocess.SubprocessError, OSError):
-                pass
+                logger.debug("openshell --version check failed", exc_info=True)
 
         return result
 
@@ -367,9 +404,10 @@ class GatewayService:
         try:
             self.get_client()
             return {"success": True, "connected": True}
-        except Exception as e:
+        except (grpc.RpcError, OSError, ConnectionError, TimeoutError, ssl.SSLError) as e:
+            logger.debug("Gateway '%s' select failed: %s", name, e, exc_info=True)
             err_msg = str(e)
-            if "SSL" in err_msg or "certificate" in err_msg.lower():
+            if isinstance(e, ssl.SSLError) or "SSL" in err_msg or "certificate" in err_msg.lower():
                 return {
                     "success": True,
                     "connected": False,
@@ -386,6 +424,7 @@ class GatewayService:
         gw_name = name or self.get_active_name()
         if not gw_name:
             return {"success": False, "error": "No active gateway configured"}
+        logger.info("Starting gateway '%s'", gw_name)
 
         if not self._check_docker_daemon():
             return {
@@ -454,6 +493,7 @@ class GatewayService:
         gw_name = name or self.get_active_name()
         if not gw_name:
             return {"success": False, "error": "No active gateway configured"}
+        logger.info("Stopping gateway '%s'", gw_name)
 
         status = self._get_container_status(gw_name)
         if status != "running":
@@ -470,6 +510,10 @@ class GatewayService:
 
     def restart(self, name: str | None = None) -> dict[str, Any]:
         """Restart a gateway (stop + start)."""
+        gw_name = name or self.get_active_name()
+        if not gw_name:
+            return {"success": False, "error": "No active gateway configured"}
+        logger.info("Restarting gateway '%s'", gw_name)
         self.stop(name=name)
         return self.start(name=name)
 
@@ -520,13 +564,69 @@ class GatewayService:
                 self.get_client()
             except GatewayNotConnectedError:
                 pass
+            info = self.get_info(name)
+            info["gpu"] = gpu
+            return info
 
         return result
 
-    def destroy(self, name: str) -> dict[str, Any]:
-        """Destroy a gateway and remove its configuration."""
+    def destroy(self, name: str, *, force: bool = False) -> dict[str, Any]:
+        """Destroy a gateway and remove its configuration.
+
+        Without force, refuses if sandboxes or providers still exist.
+        With force=True, deletes all dependent resources first.
+        """
         if not shutil.which("openshell"):
             return {"success": False, "error": "openshell CLI not found"}
+
+        logger.info("Destroying gateway '%s'", name)
+
+        # Check for dependent resources if gateway is connected
+        client = self._get_client_if_connected(name)
+        if client is not None:
+            sandboxes = self._list_resources_safe(client.sandboxes.list)
+            providers = self._list_resources_safe(client.providers.list)
+
+            if (sandboxes or providers) and not force:
+                details = []
+                if sandboxes:
+                    details.append(f"{len(sandboxes)} sandbox(es)")
+                if providers:
+                    details.append(f"{len(providers)} provider(s)")
+                return {
+                    "success": False,
+                    "error": (
+                        f"Gateway '{name}' still has {' and '.join(details)}. "
+                        f"Use force=true to destroy everything."
+                    ),
+                    "sandboxes": [s.get("name", s.get("id", "")) for s in sandboxes],
+                    "providers": [p.get("name", p.get("id", "")) for p in providers],
+                }
+
+            if force:
+                for sb in sandboxes:
+                    sb_name = sb.get("name", "")
+                    if sb_name:
+                        try:
+                            client.sandboxes.delete(sb_name)
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to delete sandbox '%s' during gateway cleanup: %s",
+                                sb_name,
+                                e,
+                            )
+
+                for prov in providers:
+                    prov_name = prov.get("name", "")
+                    if prov_name:
+                        try:
+                            client.providers.delete(prov_name)
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to delete provider '%s' during gateway cleanup: %s",
+                                prov_name,
+                                e,
+                            )
 
         active_name = self.get_active_name()
         if name == active_name:
@@ -536,6 +636,32 @@ class GatewayService:
             ["gateway", "destroy", "--name", name],
             timeout=30,
         )
+
+    def _get_client_if_connected(self, name: str) -> ShoreGuardClient | None:
+        """Return the gRPC client for a gateway if connected, None otherwise."""
+        with _clients_lock:
+            cached = _clients.get(name)
+            if cached and cached.client is not None:
+                return cached.client
+        try:
+            active = self.get_active_name()
+            if name == active:
+                return self.get_client(name=name)
+        except (GatewayNotConnectedError, grpc.RpcError, OSError):
+            logger.debug(
+                "Could not connect to gateway '%s' for resource listing",
+                name,
+                exc_info=True,
+            )
+        return None
+
+    def _list_resources_safe(self, list_fn: Any) -> list[dict]:
+        """Call a list function, returning [] on any error."""
+        try:
+            return list_fn()
+        except (grpc.RpcError, OSError, ConnectionError):
+            logger.debug("Failed to list resources via %s", list_fn, exc_info=True)
+            return []
 
     # ── Docker helpers ────────────────────────────────────────────────────
 

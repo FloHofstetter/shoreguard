@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 from shoreguard.exceptions import GatewayNotConnectedError
 
 GW = "test"  # gateway name used in all gateway-scoped URLs
@@ -23,7 +26,7 @@ async def test_list_sandboxes(api_client, mock_client):
 
 
 async def test_create_sandbox_validation(api_client, mock_client):
-    """POST /api/gateways/{gw}/sandboxes with valid body succeeds."""
+    """POST /api/gateways/{gw}/sandboxes with valid body succeeds (202 for async LRO)."""
     mock_client.sandboxes.create.return_value = {"name": "new-sb", "phase": "provisioning"}
 
     resp = await api_client.post(
@@ -31,7 +34,7 @@ async def test_create_sandbox_validation(api_client, mock_client):
         json={"name": "new-sb", "image": "base"},
     )
 
-    assert resp.status_code == 201
+    assert resp.status_code == 202
 
 
 async def test_health_disconnected(api_client, mock_client):
@@ -76,6 +79,21 @@ async def test_revoke_ssh_session(api_client, mock_client):
 
     assert resp.status_code == 200
     assert resp.json()["revoked"] is True
+
+
+async def test_get_inference(api_client, mock_client):
+    """GET /api/gateways/{gw}/inference returns cluster inference config."""
+    mock_client.get_cluster_inference.return_value = {
+        "provider_name": "anthropic",
+        "model_id": "claude-3",
+        "version": 1,
+        "route_name": "default",
+    }
+    resp = await api_client.get(f"/api/gateways/{GW}/inference")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["provider_name"] == "anthropic"
+    assert data["model_id"] == "claude-3"
 
 
 async def test_set_inference_validation(api_client, mock_client):
@@ -169,3 +187,211 @@ async def test_get_sandbox_logs(api_client, mock_client):
     data = resp.json()
     assert len(data) == 1
     assert data[0]["message"] == "started"
+
+
+async def test_create_sandbox_duplicate_returns_409(api_client, mock_client):
+    """Second sandbox creation with the same name returns 409 while first is running."""
+
+    def _slow_create(**kwargs):
+        time.sleep(10)
+        return {"name": "dup-sb", "id": "abc"}
+
+    mock_client.sandboxes.create.side_effect = _slow_create
+    mock_client.sandboxes.wait_ready.side_effect = lambda *a, **kw: None
+
+    resp1 = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes",
+        json={"name": "dup-sb", "image": "base"},
+    )
+    assert resp1.status_code == 202
+
+    # Give the event loop a tick so the task starts
+    await asyncio.sleep(0.05)
+
+    resp2 = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes",
+        json={"name": "dup-sb", "image": "base"},
+    )
+    assert resp2.status_code == 409
+
+
+async def test_exec_shlex_unterminated_quote(api_client, mock_client):
+    """POST exec with unterminated quote returns 400 (ValidationError)."""
+    mock_client.sandboxes.get.return_value = {"id": "abc-123", "name": "sb1"}
+    resp = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes/sb1/exec",
+        json={"command": "echo 'hello"},
+    )
+    assert resp.status_code == 400
+    assert "Invalid command syntax" in resp.json()["detail"]
+
+
+async def test_create_sandbox_invalid_name(api_client, mock_client):
+    """POST sandbox create with invalid name returns 400."""
+    resp = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes",
+        json={"name": "--malicious", "image": "base"},
+    )
+    assert resp.status_code == 400
+    assert "Invalid sandbox name" in resp.json()["detail"]
+
+
+# ─── Operations endpoint ─────────────────────────────────────────────────────
+
+
+async def test_get_operation_found(api_client):
+    """GET /api/operations/{id} returns 200 for an existing operation."""
+    from shoreguard.services.operations import operation_store
+
+    op = operation_store.create("sandbox", "test-sb")
+    operation_store.complete(op.id, {"name": "test-sb"})
+    resp = await api_client.get(f"/api/operations/{op.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "succeeded"
+    assert data["id"] == op.id
+
+
+async def test_get_operation_not_found(api_client):
+    """GET /api/operations/{nonexistent} returns 404."""
+    resp = await api_client.get("/api/operations/nonexistent-id")
+    assert resp.status_code == 404
+
+
+# ─── LRO completion tests ────────────────────────────────────────────────────
+
+
+async def test_sandbox_create_lro_success(api_client, mock_client):
+    """Sandbox LRO completes and operation transitions to succeeded."""
+    mock_client.sandboxes.create.return_value = {"name": "lro-sb", "id": "abc"}
+    mock_client.sandboxes.wait_ready.return_value = None
+    mock_client.sandboxes.get.return_value = {"name": "lro-sb", "phase": "ready"}
+
+    resp = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes",
+        json={"name": "lro-sb", "image": "base"},
+    )
+    assert resp.status_code == 202
+    op_id = resp.json()["operation_id"]
+
+    await asyncio.sleep(0.2)
+
+    resp2 = await api_client.get(f"/api/operations/{op_id}")
+    assert resp2.status_code == 200
+    assert resp2.json()["status"] == "succeeded"
+
+
+async def test_sandbox_create_lro_failure(api_client, mock_client):
+    """Sandbox LRO that raises marks the operation as failed."""
+    mock_client.sandboxes.create.side_effect = RuntimeError("boom")
+
+    resp = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes",
+        json={"name": "fail-sb", "image": "base"},
+    )
+    assert resp.status_code == 202
+    op_id = resp.json()["operation_id"]
+
+    await asyncio.sleep(0.2)
+
+    resp2 = await api_client.get(f"/api/operations/{op_id}")
+    assert resp2.status_code == 200
+    assert resp2.json()["status"] == "failed"
+
+
+async def test_create_sandbox_empty_name(api_client, mock_client):
+    """POST with empty name defaults to 'unnamed'."""
+    mock_client.sandboxes.create.return_value = {"name": "unnamed", "id": "xyz"}
+    mock_client.sandboxes.wait_ready.return_value = None
+    mock_client.sandboxes.get.return_value = {"name": "unnamed", "phase": "ready"}
+
+    resp = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes",
+        json={"name": "", "image": "base"},
+    )
+    assert resp.status_code == 202
+    op_id = resp.json()["operation_id"]
+    from shoreguard.services.operations import operation_store
+
+    op = operation_store.get(op_id)
+    assert op.resource_key == "unnamed"
+
+
+async def test_create_sandbox_wait_ready_timeout(api_client, mock_client):
+    """Sandbox created but wait_ready times out — operation still succeeds with warning."""
+    mock_client.sandboxes.create.return_value = {"name": "slow-sb", "id": "abc"}
+    mock_client.sandboxes.wait_ready.side_effect = TimeoutError("timed out")
+
+    resp = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes",
+        json={"name": "slow-sb", "image": "base"},
+    )
+    assert resp.status_code == 202
+    op_id = resp.json()["operation_id"]
+
+    await asyncio.sleep(0.2)
+
+    resp2 = await api_client.get(f"/api/operations/{op_id}")
+    assert resp2.status_code == 200
+    data = resp2.json()
+    assert data["status"] == "succeeded"
+    assert "warning" in data.get("result", {})
+
+
+async def test_sandbox_create_lro_cancelled(api_client, mock_client):
+    """CancelledError during sandbox LRO marks the operation as failed."""
+
+    async def _cancel_task():
+        await asyncio.sleep(0.05)
+        for task in asyncio.all_tasks():
+            if task is not asyncio.current_task() and "_run" in repr(task):
+                task.cancel()
+
+    mock_client.sandboxes.create.side_effect = lambda **kw: time.sleep(10)
+
+    resp = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes",
+        json={"name": "cancel-sb", "image": "base"},
+    )
+    assert resp.status_code == 202
+    op_id = resp.json()["operation_id"]
+
+    await _cancel_task()
+    await asyncio.sleep(0.2)
+
+    resp2 = await api_client.get(f"/api/operations/{op_id}")
+    assert resp2.status_code == 200
+    assert resp2.json()["status"] == "failed"
+
+
+async def test_get_sandbox_logs_default_params(api_client, mock_client):
+    """GET /api/gateways/{gw}/sandboxes/{name}/logs returns log entries."""
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "sb1"}
+    mock_client.sandboxes.get_logs.return_value = [
+        {"timestamp": 1000, "message": "hello", "level": "INFO"},
+    ]
+
+    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/sb1/logs")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["message"] == "hello"
+
+
+async def test_get_sandbox_logs_with_params(api_client, mock_client):
+    """GET /api/gateways/{gw}/sandboxes/{name}/logs passes query params."""
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "sb1"}
+    mock_client.sandboxes.get_logs.return_value = []
+
+    resp = await api_client.get(
+        f"/api/gateways/{GW}/sandboxes/sb1/logs",
+        params={"lines": 50, "since_ms": 500, "min_level": "ERROR", "sources": "app,system"},
+    )
+    assert resp.status_code == 200
+    mock_client.sandboxes.get_logs.assert_called_once_with(
+        "sb-123",
+        lines=50,
+        since_ms=500,
+        sources=["app", "system"],
+        min_level="ERROR",
+    )

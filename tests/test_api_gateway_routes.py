@@ -132,19 +132,184 @@ async def test_gateway_destroy(gw_client, mock_gw_svc):
     mock_gw_svc.destroy.return_value = {"success": True}
     resp = await gw_client.post("/api/gateway/my-gw/destroy")
     assert resp.status_code == 200
-    mock_gw_svc.destroy.assert_called_once_with("my-gw")
+    mock_gw_svc.destroy.assert_called_once_with("my-gw", force=False)
+
+
+async def test_gateway_destroy_with_force(gw_client, mock_gw_svc):
+    mock_gw_svc.destroy.return_value = {"success": True}
+    resp = await gw_client.post("/api/gateway/my-gw/destroy?force=true")
+    assert resp.status_code == 200
+    mock_gw_svc.destroy.assert_called_once_with("my-gw", force=True)
+
+
+async def test_gateway_destroy_blocked(gw_client, mock_gw_svc):
+    mock_gw_svc.destroy.return_value = {
+        "success": False,
+        "error": "Gateway 'my-gw' still has 2 sandbox(es). Use force=true.",
+        "sandboxes": ["sb1", "sb2"],
+        "providers": [],
+    }
+    resp = await gw_client.post("/api/gateway/my-gw/destroy")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is False
+    assert "sandbox(es)" in data["error"]
 
 
 async def test_gateway_create(gw_client, mock_gw_svc):
-    mock_gw_svc.create.return_value = {"success": True}
     resp = await gw_client.post(
         "/api/gateway/create",
         json={"name": "new-gw", "port": 9090, "gpu": True},
     )
-    assert resp.status_code == 200
-    mock_gw_svc.create.assert_called_once_with(
-        name="new-gw",
-        port=9090,
-        remote_host=None,
-        gpu=True,
+    assert resp.status_code == 202
+    data = resp.json()
+    assert "operation_id" in data
+    assert data["status"] == "running"
+    assert data["resource_type"] == "gateway"
+
+
+async def test_gateway_create_duplicate_returns_409(gw_client, mock_gw_svc):
+    import asyncio
+    import time
+
+    # Make the mock block so the operation stays "running"
+    def _slow_create(**kwargs):
+        time.sleep(10)
+        return {"success": True}
+
+    mock_gw_svc.create.side_effect = _slow_create
+
+    # First create starts an operation
+    resp1 = await gw_client.post(
+        "/api/gateway/create",
+        json={"name": "dup-gw", "port": 9090},
     )
+    assert resp1.status_code == 202
+
+    # Give the event loop a tick so the task starts
+    await asyncio.sleep(0.05)
+
+    # Second create with same name returns 409
+    resp2 = await gw_client.post(
+        "/api/gateway/create",
+        json={"name": "dup-gw", "port": 9091},
+    )
+    assert resp2.status_code == 409
+
+
+async def test_gateway_create_lro_success(gw_client, mock_gw_svc):
+    """Gateway LRO completes and operation transitions to succeeded."""
+    import asyncio
+
+    mock_gw_svc.create.return_value = {"name": "new-gw", "success": True}
+
+    resp = await gw_client.post(
+        "/api/gateway/create",
+        json={"name": "new-gw", "port": 9090},
+    )
+    assert resp.status_code == 202
+    op_id = resp.json()["operation_id"]
+
+    await asyncio.sleep(0.2)
+
+    resp2 = await gw_client.get(f"/api/operations/{op_id}")
+    assert resp2.status_code == 200
+    assert resp2.json()["status"] == "succeeded"
+
+
+async def test_gateway_create_lro_failure(gw_client, mock_gw_svc):
+    """Gateway LRO that raises marks the operation as failed."""
+    import asyncio
+
+    mock_gw_svc.create.side_effect = RuntimeError("docker not found")
+
+    resp = await gw_client.post(
+        "/api/gateway/create",
+        json={"name": "fail-gw"},
+    )
+    assert resp.status_code == 202
+    op_id = resp.json()["operation_id"]
+
+    await asyncio.sleep(0.2)
+
+    resp2 = await gw_client.get(f"/api/operations/{op_id}")
+    assert resp2.status_code == 200
+    assert resp2.json()["status"] == "failed"
+
+
+async def test_gateway_create_success_false(gw_client, mock_gw_svc):
+    """Gateway create returning success=False marks operation as failed."""
+    import asyncio
+
+    mock_gw_svc.create.return_value = {"success": False, "error": "openshell CLI not found"}
+
+    resp = await gw_client.post(
+        "/api/gateway/create",
+        json={"name": "bad-gw"},
+    )
+    assert resp.status_code == 202
+    op_id = resp.json()["operation_id"]
+
+    await asyncio.sleep(0.2)
+
+    resp2 = await gw_client.get(f"/api/operations/{op_id}")
+    assert resp2.status_code == 200
+    assert resp2.json()["status"] == "failed"
+
+
+async def test_gateway_create_invalid_name(gw_client, mock_gw_svc):
+    """Gateway create with invalid name returns 400."""
+    resp = await gw_client.post(
+        "/api/gateway/create",
+        json={"name": "--malicious"},
+    )
+    assert resp.status_code == 400
+    assert "Invalid gateway name" in resp.json()["detail"]
+
+
+async def test_gateway_create_lro_catch_all(gw_client, mock_gw_svc):
+    """Unexpected exception type in background task still marks operation as failed."""
+    import asyncio
+
+    mock_gw_svc.create.side_effect = ValueError("totally unexpected")
+
+    resp = await gw_client.post(
+        "/api/gateway/create",
+        json={"name": "catchall-gw"},
+    )
+    assert resp.status_code == 202
+    op_id = resp.json()["operation_id"]
+
+    await asyncio.sleep(0.3)
+
+    resp2 = await gw_client.get(f"/api/operations/{op_id}")
+    assert resp2.status_code == 200
+    assert resp2.json()["status"] == "failed"
+
+
+async def test_gateway_create_lro_cancelled(gw_client, mock_gw_svc):
+    """CancelledError during gateway LRO marks the operation as failed."""
+    import asyncio
+    import time
+
+    async def _cancel_task():
+        await asyncio.sleep(0.05)
+        for task in asyncio.all_tasks():
+            if task is not asyncio.current_task() and "_run" in repr(task):
+                task.cancel()
+
+    mock_gw_svc.create.side_effect = lambda **kw: time.sleep(10)
+
+    resp = await gw_client.post(
+        "/api/gateway/create",
+        json={"name": "cancel-gw"},
+    )
+    assert resp.status_code == 202
+    op_id = resp.json()["operation_id"]
+
+    await _cancel_task()
+    await asyncio.sleep(0.2)
+
+    resp2 = await gw_client.get(f"/api/operations/{op_id}")
+    assert resp2.status_code == 200
+    assert resp2.json()["status"] == "failed"

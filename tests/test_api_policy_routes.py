@@ -18,12 +18,20 @@ async def test_get_policy(api_client, mock_client):
 
 
 async def test_update_policy(api_client, mock_client):
-    """PUT /policy with a dict body returns 200."""
-    mock_client.policies.update.return_value = {"revision": 3}
+    """PUT /policy returns full PolicyResponse after update."""
+    mock_client.policies.update.return_value = {"version": 3, "policy_hash": "abc"}
+    mock_client.policies.get.return_value = {
+        "active_version": 3,
+        "revision": {"version": 3, "status": "loaded", "policy_hash": "abc"},
+        "policy": {"network_policies": {}},
+    }
 
     resp = await api_client.put(BASE, json={"network_policies": {}})
 
     assert resp.status_code == 200
+    data = resp.json()
+    assert data["active_version"] == 3
+    assert "policy" in data
 
 
 async def test_list_revisions(api_client, mock_client):
@@ -113,9 +121,11 @@ async def test_apply_preset(api_client, mock_client):
 
 
 async def test_get_valid_preset(api_client):
-    """GET /api/policies/presets/pypi returns the pypi preset (no gateway needed)."""
+    """GET /api/policies/presets/pypi returns PresetDetail format."""
     resp = await api_client.get("/api/policies/presets/pypi")
 
     assert resp.status_code == 200
     data = resp.json()
-    assert "network_policies" in data
+    assert data["name"] == "pypi"
+    assert "description" in data
+    assert "network_policies" in data["policy"]

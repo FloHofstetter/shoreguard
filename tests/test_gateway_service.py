@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import ssl
 import subprocess
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -221,7 +222,7 @@ def test_try_connect_failure(svc, monkeypatch):
     """_try_connect returns None on exception."""
     monkeypatch.setattr(
         "shoreguard.services.gateway.ShoreGuardClient.from_active_cluster",
-        MagicMock(side_effect=Exception("connection failed")),
+        MagicMock(side_effect=OSError("connection failed")),
     )
     result = svc._try_connect(GW)
     assert result is None
@@ -312,6 +313,16 @@ def test_read_metadata_port(svc, config_dir):
     )
     result = svc.read_metadata("gw1")
     assert result["port"] == 9090
+
+
+def test_read_metadata_corrupt_json(svc, config_dir):
+    """read_metadata returns error dict when metadata.json is invalid JSON."""
+    gw_dir = config_dir / "gateways" / "corrupt-gw"
+    gw_dir.mkdir(parents=True)
+    (gw_dir / "metadata.json").write_text("{not valid json!!!")
+    result = svc.read_metadata("corrupt-gw")
+    assert result["name"] == "corrupt-gw"
+    assert "error" in result
 
 
 # ─── 1D: list_all and get_info ────────────────────────────────────────────────
@@ -818,7 +829,7 @@ def test_select_tls_error(svc, config_dir, monkeypatch):
         lambda *a, **kw: _mock_proc(stdout="running"),
     )
 
-    with patch.object(svc, "get_client", side_effect=Exception("SSL certificate verify failed")):
+    with patch.object(svc, "get_client", side_effect=ssl.SSLError("SSL certificate verify failed")):
         result = svc.select("gw1")
 
     assert result["success"] is True
@@ -834,7 +845,7 @@ def test_select_generic_error(svc, config_dir, monkeypatch):
         lambda *a, **kw: _mock_proc(stdout="running"),
     )
 
-    with patch.object(svc, "get_client", side_effect=Exception("some other error")):
+    with patch.object(svc, "get_client", side_effect=OSError("some other error")):
         result = svc.select("gw1")
 
     assert result["success"] is True
@@ -1012,16 +1023,18 @@ def test_create_port_conflict(svc, monkeypatch):
 def test_create_auto_port(svc, config_dir, monkeypatch):
     monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
     (config_dir / "active_gateway").write_text("gw1")
+    gw_info = {"name": "gw1", "status": "running", "endpoint": "localhost:8085"}
 
     with (
         patch.object(svc, "_check_docker_daemon", return_value=True),
         patch.object(svc, "_next_free_port", return_value=8085),
         patch.object(svc, "_run_openshell", return_value={"success": True}) as mock_run,
         patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("test")),
+        patch.object(svc, "get_info", return_value=gw_info),
     ):
         result = svc.create("gw1")
 
-    assert result["success"] is True
+    assert result["name"] == "gw1"
     args_call = mock_run.call_args
     assert "8085" in args_call[0][0]
 
@@ -1029,15 +1042,18 @@ def test_create_auto_port(svc, config_dir, monkeypatch):
 def test_create_with_gpu_and_remote(svc, config_dir, monkeypatch):
     monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
     (config_dir / "active_gateway").write_text("gw1")
+    gw_info = {"name": "gw1", "status": "running", "endpoint": "user@host:9090"}
 
     with (
         patch.object(svc, "_check_docker_daemon", return_value=True),
         patch.object(svc, "_find_port_blocker", return_value=None),
         patch.object(svc, "_run_openshell", return_value={"success": True}) as mock_run,
         patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("test")),
+        patch.object(svc, "get_info", return_value=gw_info),
     ):
-        svc.create("gw1", port=9090, remote_host="user@host", gpu=True)
+        result = svc.create("gw1", port=9090, remote_host="user@host", gpu=True)
 
+    assert result["gpu"] is True
     args = mock_run.call_args[0][0]
     assert "--remote" in args
     assert "user@host" in args
@@ -1047,7 +1063,10 @@ def test_create_with_gpu_and_remote(svc, config_dir, monkeypatch):
 
 def test_destroy_clears_active_client(svc, config_dir, monkeypatch):
     (config_dir / "active_gateway").write_text("gw1")
-    svc.set_client(MagicMock(), name="gw1")
+    mock_client = MagicMock()
+    mock_client.sandboxes.list.return_value = []
+    mock_client.providers.list.return_value = []
+    svc.set_client(mock_client, name="gw1")
     monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
 
     with patch.object(svc, "_run_openshell", return_value={"success": True}):
@@ -1065,7 +1084,10 @@ def test_destroy_no_openshell(svc, monkeypatch):
 
 def test_destroy_non_active_no_client_clear(svc, config_dir, monkeypatch):
     (config_dir / "active_gateway").write_text("other-gw")
-    svc.set_client(MagicMock(), name="gw1")
+    mock_client = MagicMock()
+    mock_client.sandboxes.list.return_value = []
+    mock_client.providers.list.return_value = []
+    svc.set_client(mock_client, name="gw1")
     monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
 
     with patch.object(svc, "_run_openshell", return_value={"success": True}):
@@ -1426,16 +1448,18 @@ def test_create_port_zero_uses_auto_port(svc, config_dir, monkeypatch):
     """port=0 triggers _next_free_port just like port=None."""
     monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
     (config_dir / "active_gateway").write_text("gw1")
+    gw_info = {"name": "gw1", "status": "running"}
 
     with (
         patch.object(svc, "_check_docker_daemon", return_value=True),
         patch.object(svc, "_next_free_port", return_value=9999) as mock_nfp,
         patch.object(svc, "_run_openshell", return_value={"success": True}) as mock_run,
         patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("test")),
+        patch.object(svc, "get_info", return_value=gw_info),
     ):
         result = svc.create("gw1", port=0)
 
-    assert result["success"] is True
+    assert result["name"] == "gw1"
     mock_nfp.assert_called_once()
     assert "9999" in mock_run.call_args[0][0]
 
@@ -1450,6 +1474,7 @@ def test_create_writes_active_gateway_on_success(svc, config_dir, monkeypatch):
         patch.object(svc, "_run_openshell", return_value={"success": True}),
         patch.object(svc, "_write_active_gateway") as mock_wag,
         patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("test")),
+        patch.object(svc, "get_info", return_value={"name": "new-gw"}),
     ):
         svc.create("new-gw")
 
@@ -1486,6 +1511,123 @@ def test_destroy_passes_correct_args(svc, config_dir, monkeypatch):
         ["gateway", "destroy", "--name", "gw1"],
         timeout=30,
     )
+
+
+# ── destroy with force/cascade ─────────────────────────────────────────
+
+
+def test_destroy_refuses_with_active_sandboxes(svc, config_dir, monkeypatch):
+    """Without force, destroy returns error when sandboxes exist."""
+    (config_dir / "active_gateway").write_text("gw1")
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.list.return_value = [{"name": "sb1"}]
+    mock_client.providers.list.return_value = []
+    svc.set_client(mock_client, name="gw1")
+
+    result = svc.destroy("gw1")
+    assert result["success"] is False
+    assert "1 sandbox(es)" in result["error"]
+    assert result["sandboxes"] == ["sb1"]
+
+
+def test_destroy_refuses_with_active_providers(svc, config_dir, monkeypatch):
+    """Without force, destroy returns error when providers exist."""
+    (config_dir / "active_gateway").write_text("gw1")
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.list.return_value = []
+    mock_client.providers.list.return_value = [{"name": "anthropic"}]
+    svc.set_client(mock_client, name="gw1")
+
+    result = svc.destroy("gw1")
+    assert result["success"] is False
+    assert "1 provider(s)" in result["error"]
+
+
+def test_destroy_force_deletes_sandboxes_and_providers(svc, config_dir, monkeypatch):
+    """With force=True, destroy deletes resources then destroys gateway."""
+    (config_dir / "active_gateway").write_text("gw1")
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.list.return_value = [{"name": "sb1"}, {"name": "sb2"}]
+    mock_client.providers.list.return_value = [{"name": "anthropic"}]
+    svc.set_client(mock_client, name="gw1")
+
+    with patch.object(svc, "_run_openshell", return_value={"success": True}):
+        result = svc.destroy("gw1", force=True)
+
+    assert result["success"] is True
+    assert mock_client.sandboxes.delete.call_count == 2
+    mock_client.providers.delete.assert_called_once_with("anthropic")
+
+
+def test_destroy_force_continues_on_delete_failure(svc, config_dir, monkeypatch):
+    """Force destroy continues even if individual deletes fail."""
+    (config_dir / "active_gateway").write_text("gw1")
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.list.return_value = [{"name": "sb1"}]
+    mock_client.sandboxes.delete.side_effect = Exception("gRPC error")
+    mock_client.providers.list.return_value = []
+    svc.set_client(mock_client, name="gw1")
+
+    with patch.object(svc, "_run_openshell", return_value={"success": True}):
+        result = svc.destroy("gw1", force=True)
+
+    assert result["success"] is True
+
+
+def test_destroy_force_mixed_failure(svc, config_dir, monkeypatch):
+    """Force destroy continues when sandbox delete fails but provider delete succeeds."""
+    (config_dir / "active_gateway").write_text("gw1")
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.list.return_value = [{"name": "sb1"}, {"name": "sb2"}]
+    mock_client.sandboxes.delete.side_effect = [Exception("gRPC error"), None]
+    mock_client.providers.list.return_value = [{"name": "anthropic"}]
+    mock_client.providers.delete.return_value = None
+    svc.set_client(mock_client, name="gw1")
+
+    with patch.object(svc, "_run_openshell", return_value={"success": True}):
+        result = svc.destroy("gw1", force=True)
+
+    assert result["success"] is True
+    # sb1 delete failed, sb2 delete succeeded, provider delete succeeded
+    assert mock_client.sandboxes.delete.call_count == 2
+    mock_client.providers.delete.assert_called_once_with("anthropic")
+
+
+def test_destroy_no_resources_succeeds_without_force(svc, config_dir, monkeypatch):
+    """Destroy succeeds without force when no resources exist."""
+    (config_dir / "active_gateway").write_text("gw1")
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.list.return_value = []
+    mock_client.providers.list.return_value = []
+    svc.set_client(mock_client, name="gw1")
+
+    with patch.object(svc, "_run_openshell", return_value={"success": True}):
+        result = svc.destroy("gw1")
+
+    assert result["success"] is True
+
+
+def test_destroy_disconnected_gateway_skips_check(svc, config_dir, monkeypatch):
+    """If gateway is not connected, skip dependency check and destroy."""
+    (config_dir / "active_gateway").write_text("other")
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/openshell")
+
+    with patch.object(svc, "_run_openshell", return_value={"success": True}):
+        result = svc.destroy("gw1")
+
+    assert result["success"] is True
 
 
 # ── _get_container_status mutants ────────────────────────────────────────────

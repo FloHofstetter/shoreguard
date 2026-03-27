@@ -25,10 +25,13 @@ def test_list_presets_dir_exists():
 
 
 def test_get_preset_existing():
-    """get_preset() for an existing preset returns a dict with content."""
+    """get_preset() returns PresetDetail format {name, description, policy}."""
     result = get_preset("pypi")
     assert result is not None
-    assert isinstance(result, dict)
+    assert result["name"] == "pypi"
+    assert "description" in result
+    assert "policy" in result
+    assert "network_policies" in result["policy"]
 
 
 def test_get_preset_nonexistent():
@@ -57,3 +60,41 @@ def test_list_presets_with_yaml_files(tmp_path, monkeypatch):
     assert result[0]["name"] == "test-preset"
     assert result[0]["description"] == "A test preset"
     assert result[0]["file"] == "test.yaml"
+
+
+def test_get_preset_traversal():
+    """Path traversal attempts return None."""
+    assert get_preset("../../etc/passwd") is None
+    assert get_preset("../../../etc/shadow") is None
+
+
+def test_get_preset_malformed_yaml(tmp_path, monkeypatch):
+    """get_preset() with malformed YAML returns None gracefully."""
+    preset_dir = tmp_path / "presets"
+    preset_dir.mkdir()
+    (preset_dir / "bad.yaml").write_text(": :")
+    monkeypatch.setattr("shoreguard.presets._PRESETS_DIR", preset_dir)
+    assert get_preset("bad") is None
+
+
+def test_get_preset_empty_file(tmp_path, monkeypatch):
+    """get_preset() for an empty YAML file returns None."""
+    preset_dir = tmp_path / "presets"
+    preset_dir.mkdir()
+    (preset_dir / "empty.yaml").write_text("")
+    monkeypatch.setattr("shoreguard.presets._PRESETS_DIR", preset_dir)
+    assert get_preset("empty") is None
+
+
+def test_list_presets_skips_malformed(tmp_path, monkeypatch):
+    """list_presets() skips malformed YAML files and returns the good ones."""
+    preset_dir = tmp_path / "presets"
+    preset_dir.mkdir()
+    (preset_dir / "good.yaml").write_text(
+        "preset:\n  name: good-preset\n  description: Works fine\n"
+    )
+    (preset_dir / "bad.yaml").write_text(": :")
+    monkeypatch.setattr("shoreguard.presets._PRESETS_DIR", preset_dir)
+    result = list_presets()
+    assert len(result) == 1
+    assert result[0]["name"] == "good-preset"

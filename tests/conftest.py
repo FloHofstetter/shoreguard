@@ -30,6 +30,27 @@ def mock_client():
     return client
 
 
+@pytest.fixture(autouse=True)
+def _disable_auth():
+    """Disable authentication for all tests by default."""
+    from shoreguard.api import auth
+
+    original = auth._api_key
+    auth._api_key = None
+    yield
+    auth._api_key = original
+
+
+@pytest.fixture(autouse=True)
+def _reset_operations():
+    """Reset operation store between tests."""
+    from shoreguard.services.operations import operation_store
+
+    operation_store._reset()
+    yield
+    operation_store._reset()
+
+
 @pytest.fixture
 async def api_client(mock_client):
     """Async HTTP client for testing FastAPI routes with mocked gateway."""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -9,6 +10,8 @@ from shoreguard.client import ShoreGuardClient
 from shoreguard.client._converters import _dict_to_policy
 from shoreguard.exceptions import NotFoundError, PolicyError
 from shoreguard.presets import get_preset
+
+logger = logging.getLogger("shoreguard")
 
 
 class PolicyService:
@@ -27,9 +30,11 @@ class PolicyService:
         return self._client.policies.get(sandbox_name)
 
     def update(self, sandbox_name: str, policy_dict: dict) -> dict[str, Any]:
-        """Push a new policy version to a sandbox."""
+        """Push a new policy version and return the full PolicyResponse."""
+        logger.info("Updating policy for sandbox '%s'", sandbox_name)
         proto_policy = _dict_to_policy(policy_dict)
-        return self._client.policies.update(sandbox_name, proto_policy)
+        self._client.policies.update(sandbox_name, proto_policy)
+        return self._client.policies.get(sandbox_name)
 
     def list_revisions(
         self, sandbox_name: str, *, limit: int = 20, offset: int = 0
@@ -39,11 +44,13 @@ class PolicyService:
 
     def apply_preset(self, sandbox_name: str, preset_name: str) -> dict[str, Any]:
         """Apply a policy preset to a sandbox (merges network_policies)."""
+        logger.info("Applying preset '%s' to sandbox '%s'", preset_name, sandbox_name)
         preset_data = get_preset(preset_name)
         if not preset_data:
             raise NotFoundError(f"Preset '{preset_name}' not found")
 
-        preset_rules = preset_data.get("network_policies", {})
+        policy_content = preset_data.get("policy", preset_data)
+        preset_rules = policy_content.get("network_policies", {})
 
         def _merge(policy: dict) -> None:
             policy.setdefault("network_policies", {}).update(preset_rules)
@@ -65,6 +72,7 @@ class PolicyService:
 
     def add_network_rule(self, sandbox_name: str, key: str, rule: dict[str, Any]) -> dict[str, Any]:
         """Add or update a single network rule (read-modify-write)."""
+        logger.info("Adding network rule '%s' to sandbox '%s'", key, sandbox_name)
 
         def _add(policy: dict) -> None:
             policy.setdefault("network_policies", {})[key] = rule
@@ -73,6 +81,7 @@ class PolicyService:
 
     def delete_network_rule(self, sandbox_name: str, key: str) -> dict[str, Any]:
         """Delete a single network rule (read-modify-write)."""
+        logger.info("Deleting network rule '%s' from sandbox '%s'", key, sandbox_name)
 
         def _delete(policy: dict) -> None:
             policy.get("network_policies", {}).pop(key, None)
@@ -83,6 +92,12 @@ class PolicyService:
 
     def add_filesystem_path(self, sandbox_name: str, path: str, access: str) -> dict[str, Any]:
         """Add a filesystem path (read-modify-write)."""
+        logger.info(
+            "Adding filesystem path '%s' (access=%s) to sandbox '%s'",
+            path,
+            access,
+            sandbox_name,
+        )
 
         def _add(policy: dict) -> None:
             if "filesystem" not in policy:
@@ -100,6 +115,7 @@ class PolicyService:
 
     def delete_filesystem_path(self, sandbox_name: str, path: str) -> dict[str, Any]:
         """Delete a filesystem path (read-modify-write)."""
+        logger.info("Deleting filesystem path '%s' from sandbox '%s'", path, sandbox_name)
 
         def _delete(policy: dict) -> None:
             if "filesystem" in policy:
@@ -120,6 +136,7 @@ class PolicyService:
         landlock_compatibility: str | None = None,
     ) -> dict[str, Any]:
         """Update process and landlock settings (read-modify-write)."""
+        logger.info("Updating process policy for sandbox '%s'", sandbox_name)
 
         def _update(policy: dict) -> None:
             if "process" not in policy:

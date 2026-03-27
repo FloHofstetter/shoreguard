@@ -22,6 +22,11 @@
         <span id="gateway-status" class="topbar-status badge bg-secondary">
             <i class="bi bi-circle-fill me-1"></i>
         </span>
+        <button id="logout-btn" class="btn btn-sm btn-outline-secondary ms-2" style="display:none"
+                onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location.href='/login')"
+                title="Log out">
+            <i class="bi bi-box-arrow-right"></i>
+        </button>
     </nav>
 
     {% block subnav %}{% endblock %}
@@ -43,6 +48,11 @@
     <script src="/static/js/constants.js"></script>
     <script src="/static/js/components.js"></script>
     <script src="/static/js/app.js"></script>
+    <script>
+        fetch('/api/auth/check').then(r => r.json()).then(d => {
+            if (d.auth_enabled) document.getElementById('logout-btn').style.display = '';
+        }).catch(() => {});
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

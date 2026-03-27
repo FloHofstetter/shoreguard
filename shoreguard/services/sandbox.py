@@ -10,7 +10,7 @@ from typing import Any
 import grpc
 
 from shoreguard.client import ShoreGuardClient
-from shoreguard.exceptions import SandboxError, friendly_grpc_error
+from shoreguard.exceptions import SandboxError, ValidationError, friendly_grpc_error
 from shoreguard.services.policy import PolicyService
 
 logger = logging.getLogger("shoreguard")
@@ -55,7 +55,10 @@ class SandboxService:
         """
         sandbox = self._client.sandboxes.get(name)
         if isinstance(command, str):
-            command = shlex.split(command)
+            try:
+                command = shlex.split(command)
+            except ValueError as e:
+                raise ValidationError(f"Invalid command syntax: {e}") from e
         return self._client.sandboxes.exec(
             sandbox["id"],
             command,
@@ -142,8 +145,8 @@ class SandboxService:
                 if policy_data.get("policy"):
                     policy_ready = True
                     break
-            except grpc.RpcError:
-                pass
+            except grpc.RpcError as e:
+                logger.debug("Policy not yet available for '%s': %s", sandbox_name, e)
             time.sleep(1)
 
         if not policy_ready:
@@ -157,7 +160,7 @@ class SandboxService:
                 self._policy.apply_preset(sandbox_name, preset)
                 applied.append(preset)
             except Exception as e:
-                logger.warning("Failed to apply preset '%s': %s", preset, e)
+                logger.warning("Failed to apply preset '%s': %s", preset, e, exc_info=True)
                 failed.append({"preset": preset, "error": friendly_grpc_error(e)})
 
         result["presets_applied"] = applied

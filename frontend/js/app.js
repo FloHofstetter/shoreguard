@@ -241,6 +241,10 @@ async function checkGatewayHealth() {
 async function apiFetch(url, options = {}) {
     try {
         const resp = await fetch(url, options);
+        if (resp.status === 401) {
+            window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+            throw new Error('Authentication required');
+        }
         if (!resp.ok) {
             let detail = '';
             try {
@@ -254,7 +258,7 @@ async function apiFetch(url, options = {}) {
         const text = await resp.text();
         return text ? JSON.parse(text) : null;
     } catch (e) {
-        if (e.message && !e.message.startsWith('HTTP')) {
+        if (e.message && !e.message.startsWith('HTTP') && e.message !== 'Authentication required') {
             if (e instanceof TypeError && e.message.includes('fetch')) {
                 throw new Error('Network error — is the gateway running?');
             }

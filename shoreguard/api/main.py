@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -17,16 +18,30 @@ from pydantic import BaseModel
 
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import (
+    FeatureNotAvailableError,
     GatewayNotConnectedError,
     NotFoundError,
     PolicyError,
     SandboxError,
     ShoreGuardError,
+    ValidationError,
     friendly_grpc_error,
 )
 
+from .auth import (
+    COOKIE_NAME,
+    check_api_key,
+    check_request_auth,
+    create_session_token,
+    is_auth_enabled,
+    require_auth,
+    require_auth_ws,
+)
+from .auth import (
+    configure as configure_auth,
+)
 from .deps import get_client, resolve_gateway
-from .routes import approvals, gateway, policies, providers, sandboxes
+from .routes import approvals, gateway, operations, policies, providers, sandboxes
 
 logger = logging.getLogger("shoreguard")
 
@@ -54,14 +69,45 @@ templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan — no eager connection needed with multi-gateway."""
+    """Application lifespan — configure auth from env if not already set via CLI."""
+    import os
+
+    if not is_auth_enabled():
+        env_key = os.environ.get("SHOREGUARD_API_KEY")
+        if env_key:
+            configure_auth(env_key)
+            logger.info("API-key authentication enabled (from env)")
+
+    # Hide OpenAPI docs when authentication is enabled to avoid leaking
+    # the full API schema to unauthenticated users.
+    if is_auth_enabled():
+        app.openapi_url = None
+        app.docs_url = None
+        app.redoc_url = None
+
+    async def _cleanup_operations() -> None:
+        from shoreguard.services.operations import operation_store
+
+        while True:
+            await asyncio.sleep(600)
+            try:
+                operation_store.cleanup()
+            except Exception:
+                logger.exception("Operation cleanup failed")
+
+    cleanup_task = asyncio.create_task(_cleanup_operations())
     yield
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -73,14 +119,17 @@ _GRPC_STATUS_MAP = {
     grpc.StatusCode.UNAUTHENTICATED: 401,
     grpc.StatusCode.UNAVAILABLE: 503,
     grpc.StatusCode.UNIMPLEMENTED: 501,
+    grpc.StatusCode.DEADLINE_EXCEEDED: 504,
 }
 
 
 _DOMAIN_STATUS_MAP: dict[type, int] = {
     GatewayNotConnectedError: 503,
     NotFoundError: 404,
-    PolicyError: 500,
-    SandboxError: 500,
+    PolicyError: 400,
+    SandboxError: 409,
+    ValidationError: 400,
+    FeatureNotAvailableError: 501,
 }
 
 
@@ -88,24 +137,54 @@ _DOMAIN_STATUS_MAP: dict[type, int] = {
 async def shoreguard_error_handler(request: Request, exc: ShoreGuardError):
     """Return the appropriate HTTP status for domain errors."""
     status = _DOMAIN_STATUS_MAP.get(type(exc), 500)
+    if status >= 500:
+        logger.error("Unhandled domain error: %s (status=%d)", exc, status, exc_info=True)
+    else:
+        logger.warning("Domain error: %s (status=%d)", exc, status)
     return JSONResponse(status_code=status, content={"detail": str(exc)})
 
 
 @app.exception_handler(TimeoutError)
 async def timeout_error_handler(request: Request, exc: TimeoutError):
     """Return 504 for timeout errors."""
+    logger.warning("Timeout on %s: %s", request.url.path, exc)
     return JSONResponse(status_code=504, content={"detail": str(exc)})
 
 
-@app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception):
+def _detect_feature_from_path(path: str) -> str:
+    """Extract a human-readable feature name from the request URL path."""
+    if "/policy" in path:
+        return "Sandbox policy management"
+    if "/approvals" in path:
+        return "Policy approval workflow"
+    if "/inference" in path:
+        return "Inference routing"
+    return "This operation"
+
+
+@app.exception_handler(grpc.RpcError)
+async def grpc_exception_handler(request: Request, exc: grpc.RpcError):
     """Catch gRPC errors and return proper HTTP responses."""
-    if isinstance(exc, grpc.RpcError):
-        code = exc.code() if hasattr(exc, "code") else None
-        detail = friendly_grpc_error(exc)
-        http_status = _GRPC_STATUS_MAP.get(code, 500) if code is not None else 500
-        return JSONResponse(status_code=http_status, content={"detail": detail})
-    raise exc
+    code = exc.code() if hasattr(exc, "code") else None
+    logger.warning(
+        "gRPC error on %s (code=%s): %s",
+        request.url.path,
+        code,
+        friendly_grpc_error(exc),
+    )
+    if code == grpc.StatusCode.UNIMPLEMENTED:
+        feature = _detect_feature_from_path(request.url.path)
+        detail = (
+            f"{feature} is not supported by the current OpenShell gateway version. "
+            f"This feature requires a newer gateway."
+        )
+        return JSONResponse(
+            status_code=501,
+            content={"detail": detail, "feature": feature, "upgrade_required": True},
+        )
+    detail = friendly_grpc_error(exc)
+    http_status = _GRPC_STATUS_MAP.get(code, 500) if code is not None else 500
+    return JSONResponse(status_code=http_status, content={"detail": detail})
 
 
 # ─── Gateway-scoped API routes ──────────────────────────────────────────────
@@ -115,7 +194,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
 
 gw_api = APIRouter(
     prefix="/api/gateways/{gw}",
-    dependencies=[Depends(resolve_gateway)],
+    dependencies=[Depends(resolve_gateway), Depends(require_auth)],
 )
 gw_api.include_router(sandboxes.router, prefix="/sandboxes", tags=["sandboxes"])
 gw_api.include_router(policies.router, tags=["policies"])
@@ -169,24 +248,50 @@ app.include_router(gw_api)
 
 # ─── Global API routes (not gateway-scoped) ─────────────────────────────────
 
-app.include_router(gateway.router, prefix="/api/gateway", tags=["gateway"])
+app.include_router(
+    gateway.router,
+    prefix="/api/gateway",
+    tags=["gateway"],
+    dependencies=[Depends(require_auth)],
+)
 
 # Presets are local YAML files, not gateway-scoped — mount globally too
-app.include_router(policies.router, prefix="/api", tags=["policies-global"])
+app.include_router(
+    policies.router,
+    prefix="/api",
+    tags=["policies-global"],
+    dependencies=[Depends(require_auth)],
+)
+
+app.include_router(
+    operations.router,
+    prefix="/api/operations",
+    tags=["operations"],
+    dependencies=[Depends(require_auth)],
+)
 
 
 # ─── WebSocket (gateway-scoped) ─────────────────────────────────────────────
 
 
 @app.websocket("/ws/{gw}/{sandbox_name}")
-async def sandbox_events(websocket: WebSocket, gw: str, sandbox_name: str):
+async def sandbox_events(
+    websocket: WebSocket,
+    gw: str,
+    sandbox_name: str,
+    _auth: None = Depends(require_auth_ws),
+):
     """Stream live sandbox events over WebSocket."""
-    await websocket.accept()
+    try:
+        await websocket.accept()
+    except RuntimeError:
+        logger.debug("WebSocket closed before accept: %s/%s", gw, sandbox_name)
+        return
     from .deps import _current_gateway
 
     _current_gateway.set(gw)
     try:
-        client = get_client()
+        client = await asyncio.to_thread(get_client)
     except GatewayNotConnectedError:
         await websocket.send_json(
             {"type": "error", "data": {"message": f"Gateway '{gw}' not connected"}}
@@ -197,8 +302,8 @@ async def sandbox_events(websocket: WebSocket, gw: str, sandbox_name: str):
         sandbox = await asyncio.to_thread(client.sandboxes.get, sandbox_name)
         sandbox_id = sandbox["id"]
 
-        queue: asyncio.Queue[dict | None] = asyncio.Queue()
-        cancel_event = asyncio.Event()
+        queue: asyncio.Queue[dict | None] = asyncio.Queue(maxsize=1000)
+        cancel_event = threading.Event()
 
         async def _producer():
             def _iter_watch():
@@ -211,17 +316,33 @@ async def sandbox_events(websocket: WebSocket, gw: str, sandbox_name: str):
                     ):
                         if cancel_event.is_set():
                             break
-                        queue.put_nowait(event)
+                        try:
+                            queue.put_nowait(event)
+                        except asyncio.QueueFull:
+                            logger.warning(
+                                "WebSocket event queue full for %s, dropping event",
+                                sandbox_name,
+                            )
                 except grpc.RpcError as exc:
                     if cancel_event.is_set():
                         return
                     detail = exc.details() if hasattr(exc, "details") else str(exc)
                     logger.warning("WatchSandbox stream error for %s: %s", sandbox_name, detail)
-                    queue.put_nowait(
-                        {"type": "error", "data": {"message": f"Stream error: {detail}"}}
-                    )
+                    try:
+                        queue.put_nowait(
+                            {"type": "error", "data": {"message": f"Stream error: {detail}"}}
+                        )
+                    except asyncio.QueueFull:
+                        pass
                 finally:
-                    queue.put_nowait(None)
+                    try:
+                        queue.put_nowait(None)
+                    except asyncio.QueueFull:
+                        logger.warning(
+                            "Could not send sentinel for %s, setting cancel event",
+                            sandbox_name,
+                        )
+                        cancel_event.set()
 
             await asyncio.to_thread(_iter_watch)
 
@@ -229,21 +350,104 @@ async def sandbox_events(websocket: WebSocket, gw: str, sandbox_name: str):
 
         try:
             while True:
-                event = await queue.get()
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=1.0)
+                except TimeoutError:
+                    if cancel_event.is_set():
+                        break
+                    continue
                 if event is None:
                     break
                 await websocket.send_json(event)
         finally:
             cancel_event.set()
             producer_task.cancel()
+            try:
+                await producer_task
+            except asyncio.CancelledError:
+                pass
 
     except WebSocketDisconnect:
-        pass
-    except Exception as e:
+        logger.debug("WebSocket disconnected: %s/%s", gw, sandbox_name)
+    except grpc.RpcError as e:
+        code = e.code() if hasattr(e, "code") else None
+        if code == grpc.StatusCode.NOT_FOUND:
+            msg = f"Sandbox '{sandbox_name}' not found"
+        else:
+            msg = friendly_grpc_error(e)
+        logger.error("WebSocket gRPC error for %s/%s: %s", gw, sandbox_name, msg, exc_info=True)
         try:
-            await websocket.send_json({"type": "error", "data": {"message": str(e)}})
+            await websocket.send_json({"type": "error", "data": {"message": msg}})
         except (WebSocketDisconnect, RuntimeError):
             pass
+    except Exception as e:
+        logger.error("WebSocket error for %s/%s: %s", gw, sandbox_name, e, exc_info=True)
+        try:
+            await websocket.send_json({"type": "error", "data": {"message": "Internal error"}})
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+
+
+# ─── Auth endpoints ──────────────────────────────────────────────────────────
+
+
+class LoginRequest(BaseModel):
+    """Request body for the login endpoint."""
+
+    key: str
+
+
+@app.post("/api/auth/login")
+async def login(request: Request, body: LoginRequest):
+    """Validate the API key and set a session cookie."""
+    if not is_auth_enabled():
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "Authentication is not enabled"},
+        )
+    if not check_api_key(body.key):
+        client_ip = request.client.host if request.client else "unknown"
+        logger.warning("Login failed: invalid API key (client=%s)", client_ip)
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid API key"},
+        )
+    logger.info("Login successful")
+    token = create_session_token()
+    response = JSONResponse(content={"ok": True})
+    secure = request.url.scheme == "https"
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        max_age=86400 * 7,
+        path="/",
+    )
+    return response
+
+
+@app.post("/api/auth/logout")
+async def logout():
+    """Clear the session cookie."""
+    logger.debug("Logout")
+    response = JSONResponse(content={"ok": True})
+    response.delete_cookie(COOKIE_NAME, path="/")
+    return response
+
+
+@app.get("/api/auth/check")
+async def auth_check(request: Request):
+    """Return whether the current request is authenticated.
+
+    Used by the frontend to decide whether to show the login page.
+    """
+    if not is_auth_enabled():
+        return {"authenticated": True, "auth_enabled": False}
+
+    authenticated = check_request_auth(request)
+    return {"authenticated": authenticated, "auth_enabled": True}
 
 
 # ─── Page routes ─────────────────────────────────────────────────────────────
@@ -264,9 +468,31 @@ def _gw_ctx(gw: str, **extra: object) -> dict:
 # ── Global pages ─────────────────────────────────────────────────────────────
 
 
+@app.get("/login")
+async def login_page(request: Request):
+    """Serve the login page."""
+    return templates.TemplateResponse(request, "pages/login.html", {})
+
+
+def _require_page_auth(request: Request):
+    """Redirect to /login if auth is enabled and the request has no valid session."""
+    if not is_auth_enabled():
+        return None
+    if check_request_auth(request):
+        return None
+    from urllib.parse import quote
+
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(url=f"/login?next={quote(request.url.path)}", status_code=302)
+
+
 @app.get("/")
-async def dashboard_redirect():
+async def dashboard_redirect(request: Request):
     """Redirect root to gateways list."""
+    redirect = _require_page_auth(request)
+    if redirect:
+        return redirect
     from fastapi.responses import RedirectResponse
 
     return RedirectResponse(url="/gateways", status_code=302)
@@ -275,6 +501,9 @@ async def dashboard_redirect():
 @app.get("/gateways")
 async def gateways_page(request: Request):
     """Gateway list page."""
+    redirect = _require_page_auth(request)
+    if redirect:
+        return redirect
     return templates.TemplateResponse(
         request,
         "pages/gateways.html",
@@ -284,15 +513,10 @@ async def gateways_page(request: Request):
 
 @app.get("/gateways/{name:path}")
 async def gateway_detail_or_sub(request: Request, name: str):
-    """Gateway detail page or gateway-scoped sub-pages.
-
-    Matches:
-      /gateways/mygateway                          → gateway detail
-      /gateways/mygateway/sandboxes                → sandbox list
-      /gateways/mygateway/sandboxes/foo             → sandbox detail
-      /gateways/mygateway/sandboxes/foo/policy      → sandbox policy
-      etc.
-    """
+    """Gateway detail page or gateway-scoped sub-pages."""
+    redirect = _require_page_auth(request)
+    if redirect:
+        return redirect
     parts = name.split("/", 1)
     gw = parts[0]
     rest = parts[1] if len(parts) > 1 else ""
@@ -403,6 +627,9 @@ async def gateway_detail_or_sub(request: Request, name: str):
 @app.get("/policies")
 async def policies_page(request: Request):
     """Policy presets list page (global, not gateway-scoped)."""
+    redirect = _require_page_auth(request)
+    if redirect:
+        return redirect
     return templates.TemplateResponse(
         request,
         "pages/policies.html",
@@ -413,6 +640,9 @@ async def policies_page(request: Request):
 @app.get("/policies/{name}")
 async def preset_detail_page(request: Request, name: str):
     """Preset detail page (global)."""
+    redirect = _require_page_auth(request)
+    if redirect:
+        return redirect
     return templates.TemplateResponse(
         request,
         "pages/preset_detail.html",
@@ -474,6 +704,15 @@ def main(
             rich_help_panel="Server",
         ),
     ] = "info",
+    api_key: Annotated[
+        str | None,
+        typer.Option(
+            "--api-key",
+            envvar="SHOREGUARD_API_KEY",
+            help="Shared API key for authentication. All API and UI access requires this key.",
+            rich_help_panel="Security",
+        ),
+    ] = None,
     reload: Annotated[
         bool,
         typer.Option(
@@ -497,6 +736,13 @@ def main(
     import uvicorn
 
     logging.basicConfig(level=getattr(logging, log_level.upper(), logging.INFO))
+
+    configure_auth(api_key)
+    if api_key:
+        logger.info("API-key authentication enabled")
+    else:
+        logger.info("No API key set — authentication disabled")
+
     uvicorn.run(
         "shoreguard.api.main:app",
         host=host,

@@ -31,7 +31,7 @@ def test_add_network_rule(policy_svc, mock_client):
 
     result = policy_svc.add_network_rule("sb1", "new_rule", {"hosts": ["test.com"]})
 
-    assert result == {"revision": 2}
+    assert "policy" in result
     call_args = mock_client.policies.update.call_args
     updated_policy = call_args[0][1]
     # Should contain both old and new rules
@@ -97,13 +97,15 @@ def test_get_policy(policy_svc, mock_client):
 
 
 def test_update_policy(policy_svc, mock_client):
-    """update() converts dict to protobuf and calls client.policies.update."""
-    mock_client.policies.update.return_value = {"revision": 5}
+    """update() converts dict to protobuf, calls update, then re-fetches full policy."""
+    mock_client.policies.update.return_value = {"version": 5, "policy_hash": "abc"}
+    mock_client.policies.get.return_value = _make_policy()
 
     result = policy_svc.update("sb1", {"network_policies": {}})
 
-    assert result == {"revision": 5}
     assert mock_client.policies.update.called
+    mock_client.policies.get.assert_called_with("sb1")
+    assert result == _make_policy()
 
 
 def test_list_revisions(policy_svc, mock_client):
