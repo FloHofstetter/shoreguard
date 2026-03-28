@@ -127,7 +127,7 @@ async def test_timeout_returns_504(api_client, mock_client):
 
 async def test_grpc_error_handler_maps_status_codes():
     """Verify the gRPC status code mapping dict is correct."""
-    from shoreguard.api.main import _GRPC_STATUS_MAP
+    from shoreguard.api.errors import _GRPC_STATUS_MAP
 
     assert _GRPC_STATUS_MAP[grpc.StatusCode.NOT_FOUND] == 404
     assert _GRPC_STATUS_MAP[grpc.StatusCode.ALREADY_EXISTS] == 409
@@ -153,7 +153,7 @@ async def test_grpc_unimplemented_returns_501(api_client, mock_client):
 
 async def test_domain_error_status_map():
     """Verify domain exception → HTTP status mapping."""
-    from shoreguard.api.main import _DOMAIN_STATUS_MAP
+    from shoreguard.api.errors import _DOMAIN_STATUS_MAP
     from shoreguard.exceptions import FeatureNotAvailableError
 
     assert _DOMAIN_STATUS_MAP[GatewayNotConnectedError] == 503
@@ -164,26 +164,26 @@ async def test_domain_error_status_map():
 
 
 def test_detect_feature_from_path_policy():
-    from shoreguard.api.main import _detect_feature_from_path
+    from shoreguard.api.errors import _detect_feature_from_path
 
     assert "policy" in _detect_feature_from_path("/api/gateways/gw/sandboxes/sb/policy").lower()
 
 
 def test_detect_feature_from_path_approvals():
-    from shoreguard.api.main import _detect_feature_from_path
+    from shoreguard.api.errors import _detect_feature_from_path
 
     result = _detect_feature_from_path("/api/gateways/gw/sandboxes/sb/approvals")
     assert "approval" in result.lower()
 
 
 def test_detect_feature_from_path_inference():
-    from shoreguard.api.main import _detect_feature_from_path
+    from shoreguard.api.errors import _detect_feature_from_path
 
     assert "inference" in _detect_feature_from_path("/api/gateways/gw/inference").lower()
 
 
 def test_detect_feature_from_path_unknown():
-    from shoreguard.api.main import _detect_feature_from_path
+    from shoreguard.api.errors import _detect_feature_from_path
 
     assert _detect_feature_from_path("/api/gateways/gw/sandboxes") == "This operation"
 
@@ -337,7 +337,7 @@ def test_ws_streams_sandbox_events():
         ]
     )
 
-    with patch("shoreguard.api.main.get_client", return_value=mock_client):
+    with patch("shoreguard.api.websocket.get_client", return_value=mock_client):
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb") as ws:
             msg1 = ws.receive_json()
@@ -365,7 +365,7 @@ def test_ws_handles_grpc_stream_error():
 
     mock_client.sandboxes.watch.side_effect = _FakeRpcError()
 
-    with patch("shoreguard.api.main.get_client", return_value=mock_client):
+    with patch("shoreguard.api.websocket.get_client", return_value=mock_client):
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb") as ws:
             msg = ws.receive_json()
@@ -392,7 +392,7 @@ def test_ws_client_disconnect():
 
     mock_client.sandboxes.watch.return_value = slow_watch()
 
-    with patch("shoreguard.api.main.get_client", return_value=mock_client):
+    with patch("shoreguard.api.websocket.get_client", return_value=mock_client):
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb") as ws:
             # Receive at least one event then disconnect
@@ -411,7 +411,7 @@ def _cli_runner():
 
 
 def test_cli_defaults():
-    from shoreguard.api.main import cli
+    from shoreguard.api.cli import cli
 
     runner = _cli_runner()
     with patch("uvicorn.run") as mock_run:
@@ -423,7 +423,7 @@ def test_cli_defaults():
 
 
 def test_cli_all_flags():
-    from shoreguard.api.main import cli
+    from shoreguard.api.cli import cli
 
     runner = _cli_runner()
     with patch("uvicorn.run") as mock_run:
@@ -439,7 +439,7 @@ def test_cli_all_flags():
 
 
 def test_cli_version():
-    from shoreguard.api.main import cli
+    from shoreguard.api.cli import cli
 
     runner = _cli_runner()
     result = runner.invoke(cli, ["--version"])
@@ -448,7 +448,7 @@ def test_cli_version():
 
 
 def test_cli_env_fallback():
-    from shoreguard.api.main import cli
+    from shoreguard.api.cli import cli
 
     runner = _cli_runner()
     with patch.dict("os.environ", {"SHOREGUARD_HOST": "10.0.0.1", "SHOREGUARD_PORT": "7777"}):
@@ -460,7 +460,7 @@ def test_cli_env_fallback():
 
 
 def test_cli_overrides_env():
-    from shoreguard.api.main import cli
+    from shoreguard.api.cli import cli
 
     runner = _cli_runner()
     with patch.dict("os.environ", {"SHOREGUARD_HOST": "10.0.0.1"}):
@@ -471,11 +471,11 @@ def test_cli_overrides_env():
 
 
 def test_cli_api_key_flag():
-    from shoreguard.api.main import cli
+    from shoreguard.api.cli import cli
 
     runner = _cli_runner()
     with patch("uvicorn.run"):
-        with patch("shoreguard.api.main.configure_auth") as mock_configure:
+        with patch("shoreguard.api.auth.configure") as mock_configure:
             result = runner.invoke(cli, ["--api-key", "my-secret-key"])
             assert result.exit_code == 0
             mock_configure.assert_called_once_with("my-secret-key")
@@ -485,7 +485,7 @@ def test_cli_api_key_flag():
 
 
 def test_resolve_frontend_dir_dev():
-    from shoreguard.api.main import _resolve_frontend_dir
+    from shoreguard.api.pages import _resolve_frontend_dir
 
     result = _resolve_frontend_dir()
     assert result.is_dir()
@@ -494,7 +494,7 @@ def test_resolve_frontend_dir_dev():
 
 
 def test_resolve_frontend_dir_missing():
-    from shoreguard.api.main import _resolve_frontend_dir
+    from shoreguard.api.pages import _resolve_frontend_dir
 
     with patch("pathlib.Path.is_dir", return_value=False):
         with pytest.raises(FileNotFoundError, match="Frontend directory not found"):

@@ -54,8 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and select routes now log at INFO/WARNING level. `LocalGatewayManager` logs
   Docker daemon errors, port conflicts, missing openshell CLI, and openshell
   command failures.
+- **`api/main.py` split into modules** — extracted `cli.py` (Typer CLI +
+  import logic), `pages.py` (HTML routes + auth endpoints), `websocket.py`
+  (WebSocket handler), and `errors.py` (exception handlers). `main.py`
+  reduced from 1 084 to ~190 lines (pure wiring).
 - Version bumped to `0.3.0`.
-- Test suite rewritten for registry-backed architecture (610 tests).
+- Test suite rewritten for registry-backed architecture (635 tests).
 - **Logger names standardised** — all modules now use `getLogger(__name__)`
   instead of hardcoded `"shoreguard"`. Removes duplicate log lines caused
   by parent-logger propagation.
