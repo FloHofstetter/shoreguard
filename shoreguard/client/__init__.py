@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import pathlib
 from urllib.parse import urlparse
@@ -23,6 +24,8 @@ from .approvals import ApprovalManager
 from .policies import PolicyManager
 from .providers import ProviderManager
 from .sandboxes import SandboxManager
+
+logger = logging.getLogger(__name__)
 
 
 class ShoreGuardClient:
@@ -60,6 +63,41 @@ class ShoreGuardClient:
         self.providers = ProviderManager(self._stub, timeout=timeout)
 
     @classmethod
+    def from_credentials(
+        cls,
+        endpoint: str,
+        *,
+        ca_cert: bytes | None = None,
+        client_cert: bytes | None = None,
+        client_key: bytes | None = None,
+        timeout: float = 30.0,
+    ) -> ShoreGuardClient:
+        """Connect using raw certificate bytes (from DB or registry)."""
+        instance = cls.__new__(cls)
+        instance._endpoint = endpoint
+        instance._timeout = timeout
+
+        if ca_cert and client_cert and client_key:
+            credentials = grpc.ssl_channel_credentials(
+                root_certificates=ca_cert,
+                private_key=client_key,
+                certificate_chain=client_cert,
+            )
+            instance._channel = grpc.secure_channel(endpoint, credentials)
+            logger.debug("Creating secure gRPC channel to %s", endpoint)
+        else:
+            instance._channel = grpc.insecure_channel(endpoint)
+            logger.debug("Creating insecure gRPC channel to %s", endpoint)
+
+        instance._stub = openshell_pb2_grpc.OpenShellStub(instance._channel)
+        instance._inference_stub = inference_pb2_grpc.InferenceStub(instance._channel)
+        instance.sandboxes = SandboxManager(instance._stub, timeout=timeout)
+        instance.policies = PolicyManager(instance._stub, timeout=timeout)
+        instance.approvals = ApprovalManager(instance._stub, timeout=timeout)
+        instance.providers = ProviderManager(instance._stub, timeout=timeout)
+        return instance
+
+    @classmethod
     def from_active_cluster(
         cls,
         *,
@@ -70,8 +108,18 @@ class ShoreGuardClient:
         cluster_name = cluster or _resolve_active_cluster()
         gateway_dir = openshell_config_dir() / "gateways" / cluster_name
 
-        metadata = json.loads((gateway_dir / "metadata.json").read_text())
-        parsed = urlparse(metadata["gateway_endpoint"])
+        try:
+            metadata = json.loads((gateway_dir / "metadata.json").read_text())
+        except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
+            raise GatewayNotConnectedError(
+                f"Failed to load metadata for gateway '{cluster_name}': {e}"
+            ) from e
+        gateway_endpoint = metadata.get("gateway_endpoint")
+        if not gateway_endpoint:
+            raise GatewayNotConnectedError(
+                f"Missing 'gateway_endpoint' in metadata for gateway '{cluster_name}'"
+            )
+        parsed = urlparse(gateway_endpoint)
         host = parsed.hostname or "127.0.0.1"
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         endpoint = f"{host}:{port}"

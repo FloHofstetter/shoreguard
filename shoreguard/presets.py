@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-logger = logging.getLogger("shoreguard")
+logger = logging.getLogger(__name__)
 
 _PRESETS_DIR = pathlib.Path(__file__).parent / "presets"
 

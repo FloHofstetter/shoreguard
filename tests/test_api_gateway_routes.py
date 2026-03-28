@@ -1,7 +1,8 @@
-"""Integration tests for gateway management API routes."""
+"""Tests for gateway management API routes (v0.3 — registration model)."""
 
 from __future__ import annotations
 
+import base64
 from unittest.mock import patch
 
 import pytest
@@ -10,306 +11,432 @@ from httpx import ASGITransport, AsyncClient
 
 @pytest.fixture
 def mock_gw_svc():
-    """Mock the module-level gateway_service singleton used by gateway routes."""
-    with patch("shoreguard.api.routes.gateway.gateway_service") as mock:
+    """Mock the gateway_service used by routes."""
+    with patch("shoreguard.services.gateway.gateway_service") as mock:
         yield mock
 
 
 @pytest.fixture
 async def gw_client():
-    """Async HTTP client hitting the real FastAPI app (no dependency overrides needed)."""
+    """Async HTTP client hitting the real FastAPI app."""
     from shoreguard.api.main import app
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
 
 
+# ─── Queries ─────────────────────────────────────────────────────────────────
+
+
 async def test_gateway_list(gw_client, mock_gw_svc):
-    """GET /api/gateway/list delegates to gateway_service.list_all()."""
     mock_gw_svc.list_all.return_value = [{"name": "gw1", "status": "connected"}]
-
     resp = await gw_client.get("/api/gateway/list")
-
     assert resp.status_code == 200
-    data = resp.json()
-    assert len(data) == 1
-    assert data[0]["name"] == "gw1"
+    assert resp.json()[0]["name"] == "gw1"
     mock_gw_svc.list_all.assert_called_once()
 
 
 async def test_gateway_info(gw_client, mock_gw_svc):
-    """GET /api/gateway/info delegates to gateway_service.get_info()."""
     mock_gw_svc.get_info.return_value = {"name": "gw1", "connected": True}
-
     resp = await gw_client.get("/api/gateway/info")
-
     assert resp.status_code == 200
     assert resp.json()["connected"] is True
 
 
 async def test_gateway_config(gw_client, mock_gw_svc):
-    """GET /api/gateway/config delegates to gateway_service.get_config()."""
-    mock_gw_svc.get_config.return_value = {
-        "settings": {"log_level": "info"},
-        "settings_revision": 1,
-    }
-
+    mock_gw_svc.get_config.return_value = {"settings": {"log_level": "info"}}
     resp = await gw_client.get("/api/gateway/config")
-
     assert resp.status_code == 200
     assert resp.json()["settings"]["log_level"] == "info"
 
 
-async def test_gateway_diagnostics(gw_client, mock_gw_svc):
-    """GET /api/gateway/diagnostics delegates to gateway_service.diagnostics()."""
-    mock_gw_svc.diagnostics.return_value = {"docker_installed": True}
-
-    resp = await gw_client.get("/api/gateway/diagnostics")
-
-    assert resp.status_code == 200
-    assert resp.json()["docker_installed"] is True
+# ─── Registration ────────────────────────────────────────────────────────────
 
 
-async def test_gateway_select(gw_client, mock_gw_svc):
-    """POST /api/gateway/{name}/select delegates to gateway_service.select(name)."""
-    mock_gw_svc.select.return_value = {"name": "my-gw", "active": True}
-
-    resp = await gw_client.post("/api/gateway/my-gw/select")
-
-    assert resp.status_code == 200
-    mock_gw_svc.select.assert_called_once_with("my-gw")
-
-
-# ─── Lifecycle actions (active gateway) ──────────────────────────────────────
-
-
-async def test_gateway_start_active(gw_client, mock_gw_svc):
-    mock_gw_svc.start.return_value = {"success": True, "output": "started"}
-    resp = await gw_client.post("/api/gateway/start")
-    assert resp.status_code == 200
-    mock_gw_svc.start.assert_called_once()
-
-
-async def test_gateway_stop_active(gw_client, mock_gw_svc):
-    mock_gw_svc.stop.return_value = {"success": True, "output": "stopped"}
-    resp = await gw_client.post("/api/gateway/stop")
-    assert resp.status_code == 200
-    mock_gw_svc.stop.assert_called_once()
-
-
-async def test_gateway_restart_active(gw_client, mock_gw_svc):
-    mock_gw_svc.restart.return_value = {"success": True}
-    resp = await gw_client.post("/api/gateway/restart")
-    assert resp.status_code == 200
-    mock_gw_svc.restart.assert_called_once()
-
-
-# ─── Lifecycle actions (named gateway) ───────────────────────────────────────
-
-
-async def test_gateway_start_named(gw_client, mock_gw_svc):
-    mock_gw_svc.start.return_value = {"success": True}
-    resp = await gw_client.post("/api/gateway/my-gw/start")
-    assert resp.status_code == 200
-    mock_gw_svc.start.assert_called_once_with("my-gw")
-
-
-async def test_gateway_stop_named(gw_client, mock_gw_svc):
-    mock_gw_svc.stop.return_value = {"success": True}
-    resp = await gw_client.post("/api/gateway/my-gw/stop")
-    assert resp.status_code == 200
-    mock_gw_svc.stop.assert_called_once_with("my-gw")
-
-
-async def test_gateway_restart_named(gw_client, mock_gw_svc):
-    mock_gw_svc.restart.return_value = {"success": True}
-    resp = await gw_client.post("/api/gateway/my-gw/restart")
-    assert resp.status_code == 200
-    mock_gw_svc.restart.assert_called_once_with("my-gw")
-
-
-async def test_gateway_destroy(gw_client, mock_gw_svc):
-    mock_gw_svc.destroy.return_value = {"success": True}
-    resp = await gw_client.post("/api/gateway/my-gw/destroy")
-    assert resp.status_code == 200
-    mock_gw_svc.destroy.assert_called_once_with("my-gw", force=False)
-
-
-async def test_gateway_destroy_with_force(gw_client, mock_gw_svc):
-    mock_gw_svc.destroy.return_value = {"success": True}
-    resp = await gw_client.post("/api/gateway/my-gw/destroy?force=true")
-    assert resp.status_code == 200
-    mock_gw_svc.destroy.assert_called_once_with("my-gw", force=True)
-
-
-async def test_gateway_destroy_blocked(gw_client, mock_gw_svc):
-    mock_gw_svc.destroy.return_value = {
-        "success": False,
-        "error": "Gateway 'my-gw' still has 2 sandbox(es). Use force=true.",
-        "sandboxes": ["sb1", "sb2"],
-        "providers": [],
+async def test_gateway_register(gw_client, mock_gw_svc):
+    mock_gw_svc.register.return_value = {
+        "name": "new-gw",
+        "endpoint": "8.8.8.8:8443",
+        "connected": False,
+        "status": "unreachable",
     }
-    resp = await gw_client.post("/api/gateway/my-gw/destroy")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["success"] is False
-    assert "sandbox(es)" in data["error"]
-
-
-async def test_gateway_create(gw_client, mock_gw_svc):
     resp = await gw_client.post(
-        "/api/gateway/create",
-        json={"name": "new-gw", "port": 9090, "gpu": True},
+        "/api/gateway/register",
+        json={"name": "new-gw", "endpoint": "8.8.8.8:8443", "auth_mode": "insecure"},
     )
-    assert resp.status_code == 202
-    data = resp.json()
-    assert "operation_id" in data
-    assert data["status"] == "running"
-    assert data["resource_type"] == "gateway"
+    assert resp.status_code == 201
+    assert resp.json()["name"] == "new-gw"
+    mock_gw_svc.register.assert_called_once()
 
 
-async def test_gateway_create_duplicate_returns_409(gw_client, mock_gw_svc):
-    import asyncio
-    import time
-
-    # Make the mock block so the operation stays "running"
-    def _slow_create(**kwargs):
-        time.sleep(10)
-        return {"success": True}
-
-    mock_gw_svc.create.side_effect = _slow_create
-
-    # First create starts an operation
-    resp1 = await gw_client.post(
-        "/api/gateway/create",
-        json={"name": "dup-gw", "port": 9090},
-    )
-    assert resp1.status_code == 202
-
-    # Give the event loop a tick so the task starts
-    await asyncio.sleep(0.05)
-
-    # Second create with same name returns 409
-    resp2 = await gw_client.post(
-        "/api/gateway/create",
-        json={"name": "dup-gw", "port": 9091},
-    )
-    assert resp2.status_code == 409
-
-
-async def test_gateway_create_lro_success(gw_client, mock_gw_svc):
-    """Gateway LRO completes and operation transitions to succeeded."""
-    import asyncio
-
-    mock_gw_svc.create.return_value = {"name": "new-gw", "success": True}
-
+async def test_gateway_register_with_certs(gw_client, mock_gw_svc):
+    mock_gw_svc.register.return_value = {"name": "tls-gw", "connected": False}
+    ca = base64.b64encode(b"ca-data").decode()
+    cert = base64.b64encode(b"cert-data").decode()
+    key = base64.b64encode(b"key-data").decode()
     resp = await gw_client.post(
-        "/api/gateway/create",
-        json={"name": "new-gw", "port": 9090},
+        "/api/gateway/register",
+        json={
+            "name": "tls-gw",
+            "endpoint": "8.8.8.8:8443",
+            "ca_cert": ca,
+            "client_cert": cert,
+            "client_key": key,
+        },
     )
-    assert resp.status_code == 202
-    op_id = resp.json()["operation_id"]
-
-    await asyncio.sleep(0.2)
-
-    resp2 = await gw_client.get(f"/api/operations/{op_id}")
-    assert resp2.status_code == 200
-    assert resp2.json()["status"] == "succeeded"
+    assert resp.status_code == 201
+    call_kwargs = mock_gw_svc.register.call_args
+    assert call_kwargs.kwargs["ca_cert"] == b"ca-data"
+    assert call_kwargs.kwargs["client_cert"] == b"cert-data"
+    assert call_kwargs.kwargs["client_key"] == b"key-data"
 
 
-async def test_gateway_create_lro_failure(gw_client, mock_gw_svc):
-    """Gateway LRO that raises marks the operation as failed."""
-    import asyncio
-
-    mock_gw_svc.create.side_effect = RuntimeError("docker not found")
-
+async def test_gateway_register_invalid_name(gw_client, mock_gw_svc):
     resp = await gw_client.post(
-        "/api/gateway/create",
-        json={"name": "fail-gw"},
-    )
-    assert resp.status_code == 202
-    op_id = resp.json()["operation_id"]
-
-    await asyncio.sleep(0.2)
-
-    resp2 = await gw_client.get(f"/api/operations/{op_id}")
-    assert resp2.status_code == 200
-    assert resp2.json()["status"] == "failed"
-
-
-async def test_gateway_create_success_false(gw_client, mock_gw_svc):
-    """Gateway create returning success=False marks operation as failed."""
-    import asyncio
-
-    mock_gw_svc.create.return_value = {"success": False, "error": "openshell CLI not found"}
-
-    resp = await gw_client.post(
-        "/api/gateway/create",
-        json={"name": "bad-gw"},
-    )
-    assert resp.status_code == 202
-    op_id = resp.json()["operation_id"]
-
-    await asyncio.sleep(0.2)
-
-    resp2 = await gw_client.get(f"/api/operations/{op_id}")
-    assert resp2.status_code == 200
-    assert resp2.json()["status"] == "failed"
-
-
-async def test_gateway_create_invalid_name(gw_client, mock_gw_svc):
-    """Gateway create with invalid name returns 400."""
-    resp = await gw_client.post(
-        "/api/gateway/create",
-        json={"name": "--malicious"},
+        "/api/gateway/register",
+        json={"name": "--malicious", "endpoint": "8.8.8.8:8443"},
     )
     assert resp.status_code == 400
     assert "Invalid gateway name" in resp.json()["detail"]
 
 
-async def test_gateway_create_lro_catch_all(gw_client, mock_gw_svc):
-    """Unexpected exception type in background task still marks operation as failed."""
-    import asyncio
+async def test_gateway_register_duplicate_returns_409(gw_client, mock_gw_svc):
+    mock_gw_svc.register.side_effect = ValueError("Gateway 'dup' is already registered")
+    resp = await gw_client.post(
+        "/api/gateway/register",
+        json={"name": "dup", "endpoint": "8.8.8.8:8443"},
+    )
+    assert resp.status_code == 409
 
-    mock_gw_svc.create.side_effect = ValueError("totally unexpected")
 
+async def test_gateway_register_invalid_base64(gw_client, mock_gw_svc):
+    resp = await gw_client.post(
+        "/api/gateway/register",
+        json={"name": "gw1", "endpoint": "8.8.8.8:8443", "ca_cert": "not-valid-b64!!!"},
+    )
+    assert resp.status_code == 400
+    assert "base64" in resp.json()["detail"].lower()
+
+
+async def test_gateway_register_invalid_scheme(gw_client, mock_gw_svc):
+    resp = await gw_client.post(
+        "/api/gateway/register",
+        json={"name": "gw1", "endpoint": "8.8.8.8:8443", "scheme": "ftp"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_gateway_register_invalid_auth_mode(gw_client, mock_gw_svc):
+    resp = await gw_client.post(
+        "/api/gateway/register",
+        json={"name": "gw1", "endpoint": "8.8.8.8:8443", "auth_mode": "magic"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_gateway_register_empty_endpoint(gw_client, mock_gw_svc):
+    resp = await gw_client.post(
+        "/api/gateway/register",
+        json={"name": "gw1", "endpoint": "   "},
+    )
+    assert resp.status_code == 422
+
+
+async def test_gateway_register_name_too_long(gw_client, mock_gw_svc):
+    resp = await gw_client.post(
+        "/api/gateway/register",
+        json={"name": "a" * 300, "endpoint": "8.8.8.8:8443"},
+    )
+    assert resp.status_code == 400
+    assert "Invalid gateway name" in resp.json()["detail"]
+
+
+async def test_gateway_register_cert_too_large(gw_client, mock_gw_svc):
+    import base64
+
+    huge = base64.b64encode(b"x" * 70_000).decode()
+    resp = await gw_client.post(
+        "/api/gateway/register",
+        json={"name": "gw1", "endpoint": "8.8.8.8:8443", "ca_cert": huge},
+    )
+    assert resp.status_code == 400
+    assert "exceeds maximum size" in resp.json()["detail"]
+
+
+async def test_gateway_register_metadata_too_large(gw_client, mock_gw_svc):
+    big_meta = {"key": "x" * 20_000}
+    resp = await gw_client.post(
+        "/api/gateway/register",
+        json={"name": "gw1", "endpoint": "8.8.8.8:8443", "metadata": big_meta},
+    )
+    assert resp.status_code == 400
+    assert "metadata exceeds" in resp.json()["detail"]
+
+
+# ─── Unregister ──────────────────────────────────────────────────────────────
+
+
+async def test_gateway_unregister(gw_client, mock_gw_svc):
+    mock_gw_svc.unregister.return_value = True
+    resp = await gw_client.delete("/api/gateway/my-gw")
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    mock_gw_svc.unregister.assert_called_once_with("my-gw")
+
+
+async def test_gateway_unregister_not_found(gw_client, mock_gw_svc):
+    mock_gw_svc.unregister.return_value = False
+    resp = await gw_client.delete("/api/gateway/unknown")
+    assert resp.status_code == 404
+
+
+# ─── Test connection ─────────────────────────────────────────────────────────
+
+
+async def test_gateway_test_connection(gw_client, mock_gw_svc):
+    mock_gw_svc.test_connection.return_value = {
+        "success": True,
+        "connected": True,
+        "version": "1.0",
+    }
+    resp = await gw_client.post("/api/gateway/my-gw/test-connection")
+    assert resp.status_code == 200
+    assert resp.json()["connected"] is True
+    mock_gw_svc.test_connection.assert_called_once_with("my-gw")
+
+
+# ─── Select ──────────────────────────────────────────────────────────────────
+
+
+async def test_gateway_select(gw_client, mock_gw_svc):
+    mock_gw_svc.select.return_value = {"success": True, "connected": True}
+    resp = await gw_client.post("/api/gateway/my-gw/select")
+    assert resp.status_code == 200
+    mock_gw_svc.select.assert_called_once_with("my-gw")
+
+
+# ─── Local mode routes (without SHOREGUARD_LOCAL_MODE) ───────────────────────
+
+
+async def test_local_routes_return_404_without_local_mode(gw_client):
+    """Local lifecycle routes return 404 when not in local mode."""
+    for path in [
+        "/api/gateway/start",
+        "/api/gateway/stop",
+        "/api/gateway/restart",
+        "/api/gateway/diagnostics",
+        "/api/gateway/my-gw/start",
+        "/api/gateway/my-gw/stop",
+        "/api/gateway/my-gw/restart",
+        "/api/gateway/my-gw/destroy",
+    ]:
+        method = "post" if path != "/api/gateway/diagnostics" else "get"
+        resp = await getattr(gw_client, method)(path)
+        assert resp.status_code == 404, f"Expected 404 for {path}, got {resp.status_code}"
+
+
+async def test_create_returns_404_without_local_mode(gw_client):
+    resp = await gw_client.post("/api/gateway/create", json={"name": "new-gw"})
+    assert resp.status_code == 404
+
+
+# ─── Path parameter validation ──────────────────────────────────────────────
+
+
+async def test_invalid_name_on_delete(gw_client, mock_gw_svc):
+    resp = await gw_client.delete("/api/gateway/--bad")
+    assert resp.status_code == 400
+    assert "Invalid gateway name" in resp.json()["detail"]
+
+
+async def test_invalid_name_on_select(gw_client, mock_gw_svc):
+    resp = await gw_client.post("/api/gateway/--bad/select")
+    assert resp.status_code == 400
+
+
+async def test_invalid_name_on_test_connection(gw_client, mock_gw_svc):
+    resp = await gw_client.post("/api/gateway/--bad/test-connection")
+    assert resp.status_code == 400
+
+
+# ─── SSRF endpoint validation ────────────────────────────────────────────────
+
+
+async def test_gateway_register_private_ip_rejected(gw_client, mock_gw_svc):
+    resp = await gw_client.post(
+        "/api/gateway/register",
+        json={"name": "evil", "endpoint": "127.0.0.1:8443"},
+    )
+    assert resp.status_code == 422
+    assert "private" in resp.text.lower() or "loopback" in resp.text.lower()
+
+
+async def test_gateway_register_localhost_rejected(gw_client, mock_gw_svc):
+    resp = await gw_client.post(
+        "/api/gateway/register",
+        json={"name": "evil", "endpoint": "localhost:8443"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_gateway_register_rfc1918_rejected(gw_client, mock_gw_svc):
+    for ip in ["10.0.0.1:8443", "192.168.1.1:8443", "172.16.0.1:8443"]:
+        resp = await gw_client.post(
+            "/api/gateway/register",
+            json={"name": "evil", "endpoint": ip},
+        )
+        assert resp.status_code == 422, f"Expected 422 for {ip}, got {resp.status_code}"
+
+
+async def test_gateway_register_bad_format_rejected(gw_client, mock_gw_svc):
+    for ep in ["just-a-host", "http://host:443", ":8443", "host:99999"]:
+        resp = await gw_client.post(
+            "/api/gateway/register",
+            json={"name": "gw1", "endpoint": ep},
+        )
+        assert resp.status_code == 422, f"Expected 422 for '{ep}', got {resp.status_code}"
+
+
+# ─── Local mode routes (with mock manager) ──────────────────────────────────
+
+
+@pytest.fixture
+def mock_local_mgr():
+    """Patch _get_local_manager to return a mock LocalGatewayManager."""
+    from unittest.mock import MagicMock
+
+    mgr = MagicMock()
+    with patch("shoreguard.api.routes.gateway._get_local_manager", return_value=mgr):
+        yield mgr
+
+
+async def test_gateway_diagnostics_local_mode(gw_client, mock_local_mgr):
+    mock_local_mgr.diagnostics.return_value = {
+        "docker_installed": True,
+        "docker_daemon_running": True,
+    }
+    resp = await gw_client.get("/api/gateway/diagnostics")
+    assert resp.status_code == 200
+    assert resp.json()["docker_installed"] is True
+    mock_local_mgr.diagnostics.assert_called_once()
+
+
+async def test_gateway_start_active_local_mode(gw_client, mock_local_mgr):
+    mock_local_mgr.start.return_value = {"success": True, "output": "Started"}
+    resp = await gw_client.post("/api/gateway/start")
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    mock_local_mgr.start.assert_called_once()
+
+
+async def test_gateway_stop_active_local_mode(gw_client, mock_local_mgr):
+    mock_local_mgr.stop.return_value = {"success": True, "output": "Stopped"}
+    resp = await gw_client.post("/api/gateway/stop")
+    assert resp.status_code == 200
+    mock_local_mgr.stop.assert_called_once()
+
+
+async def test_gateway_restart_active_local_mode(gw_client, mock_local_mgr):
+    mock_local_mgr.restart.return_value = {"success": True, "output": "Restarted"}
+    resp = await gw_client.post("/api/gateway/restart")
+    assert resp.status_code == 200
+    mock_local_mgr.restart.assert_called_once()
+
+
+async def test_gateway_start_named_local_mode(gw_client, mock_local_mgr):
+    mock_local_mgr.start.return_value = {"success": True, "output": "Started my-gw"}
+    resp = await gw_client.post("/api/gateway/my-gw/start")
+    assert resp.status_code == 200
+    mock_local_mgr.start.assert_called_once_with("my-gw")
+
+
+async def test_gateway_stop_named_local_mode(gw_client, mock_local_mgr):
+    mock_local_mgr.stop.return_value = {"success": True, "output": "Stopped"}
+    resp = await gw_client.post("/api/gateway/my-gw/stop")
+    assert resp.status_code == 200
+    mock_local_mgr.stop.assert_called_once_with("my-gw")
+
+
+async def test_gateway_restart_named_local_mode(gw_client, mock_local_mgr):
+    mock_local_mgr.restart.return_value = {"success": True, "output": "Restarted"}
+    resp = await gw_client.post("/api/gateway/my-gw/restart")
+    assert resp.status_code == 200
+    mock_local_mgr.restart.assert_called_once_with("my-gw")
+
+
+async def test_gateway_destroy_local_mode(gw_client, mock_local_mgr):
+    mock_local_mgr.destroy.return_value = {"success": True, "output": "Destroyed"}
+    resp = await gw_client.post("/api/gateway/my-gw/destroy")
+    assert resp.status_code == 200
+    mock_local_mgr.destroy.assert_called_once_with("my-gw", force=False)
+
+
+async def test_gateway_destroy_force_local_mode(gw_client, mock_local_mgr):
+    mock_local_mgr.destroy.return_value = {"success": True, "output": "Force destroyed"}
+    resp = await gw_client.post("/api/gateway/my-gw/destroy?force=true")
+    assert resp.status_code == 200
+    mock_local_mgr.destroy.assert_called_once_with("my-gw", force=True)
+
+
+async def test_gateway_destroy_invalid_name_local_mode(gw_client, mock_local_mgr):
+    resp = await gw_client.post("/api/gateway/--bad/destroy")
+    assert resp.status_code == 400
+
+
+async def test_gateway_start_error_local_mode(gw_client, mock_local_mgr):
+    mock_local_mgr.start.return_value = {"success": False, "error": "Docker not running"}
+    resp = await gw_client.post("/api/gateway/start")
+    assert resp.status_code == 200
+    assert resp.json()["success"] is False
+
+
+async def test_gateway_create_local_mode(gw_client, mock_local_mgr):
+    mock_local_mgr.create.return_value = {"success": True, "name": "new-gw"}
+    resp = await gw_client.post("/api/gateway/create", json={"name": "new-gw"})
+    assert resp.status_code == 202
+    assert "operation_id" in resp.json()
+
+
+# ─── NotFoundError → 404 mapping ──────────────────────────────────────────────
+
+
+async def test_gateway_select_not_found(gw_client, mock_gw_svc):
+    """select returns 404 when gateway is not registered."""
+    from shoreguard.exceptions import NotFoundError
+
+    mock_gw_svc.select.side_effect = NotFoundError("Gateway 'nope' not registered")
+    resp = await gw_client.post("/api/gateway/nope/select")
+    assert resp.status_code == 404
+    assert "not registered" in resp.json()["detail"]
+
+
+async def test_gateway_test_connection_not_found(gw_client, mock_gw_svc):
+    """test-connection returns 404 when gateway is not registered."""
+    from shoreguard.exceptions import NotFoundError
+
+    mock_gw_svc.test_connection.side_effect = NotFoundError("Gateway 'nope' not registered")
+    resp = await gw_client.post("/api/gateway/nope/test-connection")
+    assert resp.status_code == 404
+    assert "not registered" in resp.json()["detail"]
+
+
+# ─── remote_host validation ──────────────────────────────────────────────────
+
+
+async def test_create_gateway_invalid_remote_host(gw_client, mock_local_mgr):
+    """Create rejects invalid remote_host."""
     resp = await gw_client.post(
         "/api/gateway/create",
-        json={"name": "catchall-gw"},
+        json={"name": "new-gw", "remote_host": "host; rm -rf /"},
     )
-    assert resp.status_code == 202
-    op_id = resp.json()["operation_id"]
-
-    await asyncio.sleep(0.3)
-
-    resp2 = await gw_client.get(f"/api/operations/{op_id}")
-    assert resp2.status_code == 200
-    assert resp2.json()["status"] == "failed"
+    assert resp.status_code == 422
 
 
-async def test_gateway_create_lro_cancelled(gw_client, mock_gw_svc):
-    """CancelledError during gateway LRO marks the operation as failed."""
-    import asyncio
-    import time
-
-    async def _cancel_task():
-        await asyncio.sleep(0.05)
-        for task in asyncio.all_tasks():
-            if task is not asyncio.current_task() and "_run" in repr(task):
-                task.cancel()
-
-    mock_gw_svc.create.side_effect = lambda **kw: time.sleep(10)
-
+async def test_create_gateway_valid_remote_host(gw_client, mock_local_mgr):
+    """Create accepts valid remote_host."""
+    mock_local_mgr.create.return_value = {"success": True, "name": "new-gw"}
     resp = await gw_client.post(
         "/api/gateway/create",
-        json={"name": "cancel-gw"},
+        json={"name": "new-gw", "remote_host": "192.168.1.100"},
     )
     assert resp.status_code == 202
-    op_id = resp.json()["operation_id"]
-
-    await _cancel_task()
-    await asyncio.sleep(0.2)
-
-    resp2 = await gw_client.get(f"/api/operations/{op_id}")
-    assert resp2.status_code == 200
-    assert resp2.json()["status"] == "failed"

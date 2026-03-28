@@ -13,7 +13,7 @@ from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import SandboxError, ValidationError, friendly_grpc_error
 from shoreguard.services.policy import PolicyService
 
-logger = logging.getLogger("shoreguard")
+logger = logging.getLogger(__name__)
 
 
 class SandboxService:

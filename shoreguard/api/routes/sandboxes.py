@@ -17,7 +17,7 @@ from shoreguard.exceptions import friendly_grpc_error
 from shoreguard.services.operations import operation_store
 from shoreguard.services.sandbox import SandboxService
 
-logger = logging.getLogger("shoreguard")
+logger = logging.getLogger(__name__)
 
 _VALID_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 

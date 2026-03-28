@@ -31,6 +31,32 @@ def mock_client():
 
 
 @pytest.fixture(autouse=True)
+def _init_gateway_service():
+    """Initialize gateway_service with in-memory DB for all tests."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    import shoreguard.services.gateway as gw_mod
+    from shoreguard.models import Base
+    from shoreguard.services.gateway import _reset_clients
+    from shoreguard.services.registry import GatewayRegistry
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    registry = GatewayRegistry(factory)
+    gw_mod.gateway_service = gw_mod.GatewayService(registry)
+    yield
+    _reset_clients()
+    engine.dispose()
+
+
+@pytest.fixture(autouse=True)
 def _disable_auth():
     """Disable authentication for all tests by default."""
     from shoreguard.api import auth

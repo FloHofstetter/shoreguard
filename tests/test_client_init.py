@@ -267,3 +267,44 @@ def test_context_manager(client):
     with client as c:
         assert c is client
     client._channel.close.assert_called_once()
+
+
+# ─── from_credentials ─────────────────────────────────────────────────────────
+
+
+def test_from_credentials_insecure(monkeypatch):
+    """from_credentials without certs creates insecure channel."""
+    mock_channel = MagicMock()
+    monkeypatch.setattr("grpc.insecure_channel", lambda ep: mock_channel)
+
+    c = ShoreGuardClient.from_credentials("host:8443")
+
+    assert c._endpoint == "host:8443"
+    assert c._channel is mock_channel
+
+
+def test_from_credentials_secure(monkeypatch):
+    """from_credentials with all certs creates secure channel."""
+    mock_creds = MagicMock()
+    mock_channel = MagicMock()
+    monkeypatch.setattr("grpc.ssl_channel_credentials", lambda **kw: mock_creds)
+    monkeypatch.setattr("grpc.secure_channel", lambda ep, creds: mock_channel)
+
+    c = ShoreGuardClient.from_credentials(
+        "host:8443",
+        ca_cert=b"ca-data",
+        client_cert=b"cert-data",
+        client_key=b"key-data",
+    )
+
+    assert c._channel is mock_channel
+
+
+def test_from_credentials_partial_certs_uses_insecure(monkeypatch):
+    """from_credentials with only some certs falls back to insecure channel."""
+    mock_channel = MagicMock()
+    monkeypatch.setattr("grpc.insecure_channel", lambda ep: mock_channel)
+
+    c = ShoreGuardClient.from_credentials("host:8443", ca_cert=b"ca-data")
+
+    assert c._channel is mock_channel

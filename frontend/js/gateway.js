@@ -1,6 +1,6 @@
 /**
- * Shoreguard — Multi-Gateway Management
- * List, detail, create, start/stop/restart/destroy, inference config.
+ * Shoreguard v0.3 — Multi-Gateway Management
+ * Register/unregister remote gateways, test connections, inference config.
  */
 
 // Gateway type icons and inference providers loaded from constants/API
@@ -12,27 +12,23 @@ async function loadGatewayPage() {
     const container = document.getElementById('gateway-page-content');
     container.innerHTML = renderSpinner('Loading gateways...');
 
-    // Load inference providers from API if not cached
-    if (_knownProviders.length === 0) {
+    // Load inference providers from API if not cached (only when a gateway is selected)
+    if (_knownProviders.length === 0 && GW) {
         try { _knownProviders = await apiFetch(`${API}/providers/inference-providers`); } catch {}
     }
 
     try {
-        const [gateways, diag] = await Promise.all([
-            apiFetch(`${API_GLOBAL}/gateway/list`),
-            apiFetch(`${API_GLOBAL}/gateway/diagnostics`),
-        ]);
+        const gateways = await apiFetch(`${API_GLOBAL}/gateway/list`);
 
         if (gateways.length === 0) {
             container.innerHTML = `
                 <div class="text-center text-muted py-5">
                     <i class="bi bi-hdd-network fs-1 d-block mb-3"></i>
-                    <p>No gateways configured.</p>
-                    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#createGatewayModal">
-                        <i class="bi bi-plus me-1"></i>Create Gateway
+                    <p>No gateways registered.</p>
+                    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#registerGatewayModal">
+                        <i class="bi bi-plus me-1"></i>Register Gateway
                     </button>
                 </div>
-                ${renderDiagnostics(diag)}
             `;
             return;
         }
@@ -43,10 +39,10 @@ async function loadGatewayPage() {
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Type</th>
                             <th>Endpoint</th>
-                            <th class="d-none d-md-table-cell">Port</th>
+                            <th>Auth</th>
                             <th>Status</th>
+                            <th class="d-none d-md-table-cell">Last Seen</th>
                             <th class="text-end" style="width:60px"></th>
                         </tr>
                     </thead>
@@ -57,12 +53,12 @@ async function loadGatewayPage() {
                                 <td>
                                     <strong>${escapeHtml(gw.name)}</strong>
                                 </td>
-                                <td>${renderGatewayTypeIcon(gw.type)}</td>
                                 <td class="font-monospace small">${escapeHtml(gw.endpoint || '—')}</td>
-                                <td class="d-none d-md-table-cell">${gw.port || '—'}</td>
+                                <td class="small">${escapeHtml(gw.auth_mode || '—')}</td>
                                 <td>${renderGatewayStatusBadge(gw)}</td>
+                                <td class="d-none d-md-table-cell small text-muted">${gw.last_seen ? formatTimeAgo(gw.last_seen) : '—'}</td>
                                 <td class="text-end" onclick="event.stopPropagation()">
-                                    <button class="btn btn-sm text-muted delete-btn" onclick="destroyGateway('${escapeHtml(gw.name)}')" title="Destroy">
+                                    <button class="btn btn-sm text-muted delete-btn" onclick="unregisterGateway('${escapeHtml(gw.name)}')" title="Unregister">
                                         <i class="bi bi-trash3"></i>
                                     </button>
                                 </td>
@@ -71,57 +67,10 @@ async function loadGatewayPage() {
                     </tbody>
                 </table>
             </div>
-            ${renderDiagnostics(diag)}
         `;
     } catch (e) {
         container.innerHTML = `<div class="alert alert-danger">${escapeHtml(e.message)}</div>`;
     }
-}
-
-function renderDiagnostics(diag) {
-    return `
-        <div class="card" class="sg-card-themed">
-            <div class="card-body">
-                <h6 class="text-muted mb-3"><i class="bi bi-wrench me-2"></i>System Diagnostics</h6>
-                <table class="table table-dark table-sm table-borderless mb-0">
-                    <tr>
-                        <td class="text-muted" style="width:130px">OpenShell CLI</td>
-                        <td>
-                            ${diag.openshell_installed
-                                ? `<span class="badge text-bg-success">Installed</span> <span class="text-muted small ms-1">${escapeHtml(diag.openshell_version || '')}</span>`
-                                : '<span class="badge text-bg-danger">Not found</span>'}
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Docker</td>
-                        <td>
-                            ${!diag.docker_installed
-                                ? '<span class="badge text-bg-danger">Not installed</span>'
-                                : !diag.docker_daemon_running
-                                    ? '<span class="badge text-bg-danger">Daemon stopped</span>'
-                                    : diag.docker_accessible
-                                        ? `<span class="badge text-bg-success">Running</span> <span class="text-muted small ms-1">v${escapeHtml(diag.docker_version || '')}</span>`
-                                        : '<span class="badge text-bg-warning">No access</span>'}
-                        </td>
-                    </tr>
-                    ${diag.docker_error ? `
-                    <tr>
-                        <td class="text-muted">Error</td>
-                        <td class="text-warning small">${escapeHtml(diag.docker_error)}</td>
-                    </tr>` : ''}
-                    <tr>
-                        <td class="text-muted">Docker Group</td>
-                        <td>
-                            ${diag.in_docker_group
-                                ? '<span class="badge text-bg-success">Member</span>'
-                                : '<span class="badge text-bg-warning">Not a member</span>'}
-                            <span class="text-muted small ms-1">(user: ${escapeHtml(diag.user)})</span>
-                        </td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-    `;
 }
 
 // ─── Gateway Detail Page ────────────────────────────────────────────────────
@@ -146,19 +95,9 @@ async function loadGatewayDetail(name) {
                     ${gw.version ? `<span class="text-muted">v${escapeHtml(gw.version)}</span>` : ''}
                 </div>
                 <div class="d-flex gap-2">
-                    <div class="btn-group btn-group-sm">
-                        <button class="btn btn-success" onclick="gatewayAction('start', '${escapeHtml(name)}')" id="gw-start-btn"
-                                ${gw.container_status === 'running' ? 'disabled' : ''}>
-                            <i class="bi bi-play-fill me-1"></i>Start
-                        </button>
-                        <button class="btn btn-outline-warning" onclick="gatewayAction('stop', '${escapeHtml(name)}')" id="gw-stop-btn"
-                                ${gw.container_status !== 'running' ? 'disabled' : ''}>
-                            <i class="bi bi-stop-fill me-1"></i>Stop
-                        </button>
-                        <button class="btn btn-outline-secondary" onclick="gatewayAction('restart', '${escapeHtml(name)}')" id="gw-restart-btn">
-                            <i class="bi bi-arrow-repeat me-1"></i>Restart
-                        </button>
-                    </div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="testConnection('${escapeHtml(name)}')">
+                        <i class="bi bi-plug me-1"></i>Test Connection
+                    </button>
                     <button class="btn btn-outline-secondary btn-sm" onclick="loadGatewayDetail('${escapeHtml(name)}')" title="Refresh">
                         <i class="bi bi-arrow-clockwise"></i>
                     </button>
@@ -188,31 +127,30 @@ async function loadGatewayDetail(name) {
             <!-- Details -->
             <h6 class="text-muted mb-3">Details</h6>
             <dl class="row mb-4">
-                <dt class="col-sm-3 text-muted fw-normal">Type</dt>
-                <dd class="col-sm-9">${renderGatewayTypeIcon(gw.type)}</dd>
-                ${gw.endpoint ? `
                 <dt class="col-sm-3 text-muted fw-normal">Endpoint</dt>
-                <dd class="col-sm-9 font-monospace small">${escapeHtml(gw.endpoint)}</dd>` : ''}
-                ${gw.port ? `
-                <dt class="col-sm-3 text-muted fw-normal">Port</dt>
-                <dd class="col-sm-9">${gw.port}</dd>` : ''}
-                ${gw.remote_host ? `
-                <dt class="col-sm-3 text-muted fw-normal">Remote Host</dt>
-                <dd class="col-sm-9 font-monospace small">${escapeHtml(gw.remote_host)}</dd>` : ''}
+                <dd class="col-sm-9 font-monospace small">${escapeHtml(gw.endpoint || '—')}</dd>
+                <dt class="col-sm-3 text-muted fw-normal">Scheme</dt>
+                <dd class="col-sm-9">${escapeHtml(gw.scheme || '—')}</dd>
                 ${gw.auth_mode ? `
                 <dt class="col-sm-3 text-muted fw-normal">Auth</dt>
                 <dd class="col-sm-9">${escapeHtml(gw.auth_mode)}</dd>` : ''}
+                ${gw.registered_at ? `
+                <dt class="col-sm-3 text-muted fw-normal">Registered</dt>
+                <dd class="col-sm-9 small text-muted">${escapeHtml(gw.registered_at)}</dd>` : ''}
+                ${gw.last_seen ? `
+                <dt class="col-sm-3 text-muted fw-normal">Last Seen</dt>
+                <dd class="col-sm-9 small text-muted">${formatTimeAgo(gw.last_seen)}</dd>` : ''}
             </dl>
 
             <div class="border-top pt-3" style="border-color:var(--sg-border)!important">
-                <button class="btn btn-outline-danger btn-sm" onclick="destroyGateway('${escapeHtml(name)}')">
-                    <i class="bi bi-trash me-1"></i>Destroy Gateway
+                <button class="btn btn-outline-danger btn-sm" onclick="unregisterGateway('${escapeHtml(name)}')">
+                    <i class="bi bi-trash me-1"></i>Unregister Gateway
                 </button>
             </div>
 
             <!-- Inference Provider (only for active gateway) -->
             ${gw.active ? `
-            <div class="card mb-4" class="sg-card-themed">
+            <div class="card mb-4 sg-card-themed">
                 <div class="card-body">
                     <h6 class="text-muted mb-3"><i class="bi bi-cpu me-2"></i>Inference Provider</h6>
                     <div id="inference-config">
@@ -234,76 +172,48 @@ async function loadGatewayDetail(name) {
 
 // ─── Gateway Actions ────────────────────────────────────────────────────────
 
-const _actionLabels = {
-    start: 'Starting',
-    stop: 'Stopping',
-    restart: 'Restarting',
-};
-
-async function gatewayAction(action, name) {
+async function testConnection(name) {
     const output = document.getElementById('gw-action-output');
-    const startBtn = document.getElementById('gw-start-btn');
-    const stopBtn = document.getElementById('gw-stop-btn');
-    const restartBtn = document.getElementById('gw-restart-btn');
-
-    if (startBtn) startBtn.disabled = true;
-    if (stopBtn) stopBtn.disabled = true;
-    if (restartBtn) restartBtn.disabled = true;
-
-    const label = _actionLabels[action] || action;
     output.innerHTML = `
         <div class="log-output small">
-            <div class="log-line"><div class="spinner-border spinner-border-sm me-2"></div>${label} gateway... This may take a minute.</div>
+            <div class="log-line"><div class="spinner-border spinner-border-sm me-2"></div>Testing connection...</div>
         </div>`;
 
     try {
-        const url = name ? `${API_GLOBAL}/gateway/${name}/${action}` : `${API_GLOBAL}/gateway/${action}`;
-        const result = await apiFetch(url, { method: 'POST' });
+        const result = await apiFetch(`${API_GLOBAL}/gateway/${name}/test-connection`, { method: 'POST' });
 
         if (result.success) {
             output.innerHTML = `
                 <div class="log-output small">
-                    <div class="log-line log-info">${label} gateway... done!</div>
-                    ${result.output ? `<div class="log-line">${escapeHtml(result.output)}</div>` : ''}
+                    <div class="log-line log-info">Connected! ${result.version ? `v${escapeHtml(result.version)}` : ''} (${escapeHtml(result.health_status || 'ok')})</div>
                 </div>`;
-            showToast(`Gateway ${action}ed successfully.`, 'success');
-            setTimeout(async () => {
-                await checkGatewayHealth();
-                if (name) loadGatewayDetail(name);
-                else loadGatewayPage();
-            }, SG.config.actionRefreshDelay);
+            showToast('Connection successful.', 'success');
+            setTimeout(() => loadGatewayDetail(name), SG.config.actionRefreshDelay);
         } else {
             output.innerHTML = `
                 <div class="log-output small">
-                    <div class="log-line log-error">${label} gateway... failed!</div>
-                    <div class="log-line log-error">${escapeHtml(result.error || 'Unknown error')}</div>
+                    <div class="log-line log-error">Connection failed: ${escapeHtml(result.error || 'Unknown error')}</div>
                 </div>`;
-            showToast(`Gateway ${action} failed.`, 'danger');
-            if (startBtn) startBtn.disabled = false;
-            if (stopBtn) stopBtn.disabled = false;
-            if (restartBtn) restartBtn.disabled = false;
+            showToast('Connection failed.', 'danger');
         }
     } catch (e) {
         output.innerHTML = `
             <div class="log-output small">
                 <div class="log-line log-error">Error: ${escapeHtml(e.message)}</div>
             </div>`;
-        if (startBtn) startBtn.disabled = false;
-        if (stopBtn) stopBtn.disabled = false;
-        if (restartBtn) restartBtn.disabled = false;
     }
 }
 
-async function destroyGateway(name) {
+async function unregisterGateway(name) {
     const confirmed = await showConfirm(
-        `Destroy gateway "${name}"? This removes all state and certificates.`,
-        { icon: 'trash', iconColor: 'text-danger', btnClass: 'btn-danger', btnLabel: 'Destroy' }
+        `Unregister gateway "${name}"? This removes it from Shoreguard but does not affect the running gateway.`,
+        { icon: 'trash', iconColor: 'text-danger', btnClass: 'btn-danger', btnLabel: 'Unregister' }
     );
     if (!confirmed) return;
     try {
-        const result = await apiFetch(`${API_GLOBAL}/gateway/${name}/destroy`, { method: 'POST' });
+        const result = await apiFetch(`${API_GLOBAL}/gateway/${name}`, { method: 'DELETE' });
         if (result.success) {
-            showToast(`Gateway "${name}" destroyed.`, 'success');
+            showToast(`Gateway "${name}" unregistered.`, 'success');
             checkGatewayHealth();
             navigateTo('/gateways');
         } else {
@@ -314,45 +224,85 @@ async function destroyGateway(name) {
     }
 }
 
-async function createGateway(e) {
+async function registerGateway(e) {
     if (e) e.preventDefault();
 
-    const name = document.getElementById('new-gw-name').value.trim();
-    const port = parseInt(document.getElementById('new-gw-port').value) || 8080;
-    const remote = document.getElementById('new-gw-remote').value.trim();
-    const gpu = document.getElementById('new-gw-gpu').checked;
-    const output = document.getElementById('create-gw-output');
-    const btn = document.getElementById('create-gw-btn');
+    const name = document.getElementById('reg-gw-name').value.trim();
+    const endpoint = document.getElementById('reg-gw-endpoint').value.trim();
+    const scheme = document.getElementById('reg-gw-scheme').value;
+    const authMode = document.getElementById('reg-gw-auth-mode').value;
+    const gpu = document.getElementById('reg-gw-gpu').checked;
+    const output = document.getElementById('register-gw-output');
+    const btn = document.getElementById('register-gw-btn');
 
     if (!name) {
         output.innerHTML = '<div class="text-danger small">Name is required.</div>';
         return;
     }
+    if (!endpoint) {
+        output.innerHTML = '<div class="text-danger small">Endpoint is required.</div>';
+        return;
+    }
 
     btn.disabled = true;
-    output.innerHTML = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Creating gateway... This may take a few minutes.</div>';
+    output.innerHTML = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Registering gateway...</div>';
 
     try {
-        const result = await apiFetch(`${API_GLOBAL}/gateway/create`, {
+        const body = { name, endpoint, scheme, auth_mode: authMode, metadata: { gpu } };
+
+        // Read certificates if provided
+        const caFile = document.getElementById('reg-gw-ca').files[0];
+        const certFile = document.getElementById('reg-gw-cert').files[0];
+        const keyFile = document.getElementById('reg-gw-key').files[0];
+
+        if (caFile) body.ca_cert = await readFileAsBase64(caFile);
+        if (certFile) body.client_cert = await readFileAsBase64(certFile);
+        if (keyFile) body.client_key = await readFileAsBase64(keyFile);
+
+        const result = await apiFetch(`${API_GLOBAL}/gateway/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, port, remote_host: remote || null, gpu }),
+            body: JSON.stringify(body),
         });
 
-        if (result.success) {
-            output.innerHTML = '<div class="text-success small"><i class="bi bi-check-circle me-1"></i>Gateway created!</div>';
-            showToast(`Gateway "${name}" created.`, 'success');
-            bootstrap.Modal.getInstance(document.getElementById('createGatewayModal'))?.hide();
-            checkGatewayHealth();
-            loadGatewayPage();
-        } else {
-            output.innerHTML = `<div class="text-danger small"><i class="bi bi-x-circle me-1"></i>${escapeHtml(result.error)}</div>`;
-        }
+        output.innerHTML = '<div class="text-success small"><i class="bi bi-check-circle me-1"></i>Gateway registered!</div>';
+        showToast(`Gateway "${name}" registered.`, 'success');
+        bootstrap.Modal.getInstance(document.getElementById('registerGatewayModal'))?.hide();
+        checkGatewayHealth();
+        loadGatewayPage();
     } catch (e) {
         output.innerHTML = `<div class="text-danger small">${escapeHtml(e.message)}</div>`;
     } finally {
         btn.disabled = false;
     }
+}
+
+function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            // Strip data URL prefix to get raw base64
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+function formatTimeAgo(isoString) {
+    if (!isoString) return '—';
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return 'just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    return `${diffDay}d ago`;
 }
 
 // ─── Inference Provider Config ──────────────────────────────────────────────
@@ -402,7 +352,7 @@ function renderInferenceForm(container, config) {
         <div class="mt-2 small text-muted">
             <i class="bi bi-info-circle me-1"></i>
             API key must be set as environment variable
-            ${currentProvider ? `<code>${currentProvider.envVar}</code>` : ''}
+            ${currentProvider ? `<code>${currentProvider.env_var}</code>` : ''}
             on the gateway host.
         </div>` : `
         <div class="mt-2 small text-warning">

@@ -21,6 +21,7 @@ const SG = {
         gateway: {
             connected: 'text-bg-success',
             running: 'text-bg-info',
+            unreachable: 'text-bg-warning',
             stopped: 'text-bg-secondary',
             offline: 'text-bg-danger',
         },

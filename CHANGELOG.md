@@ -5,7 +5,131 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — v0.2.0
+## [0.3.0] — 2026-03-28
+
+### Added
+
+- **Central gateway management** — Shoreguard transforms from a local sidecar
+  into a central management plane for multiple remote OpenShell gateways (like
+  Rancher for Kubernetes clusters). Gateways are deployed independently and
+  registered with Shoreguard via API.
+- **SQLAlchemy ORM + Alembic** — persistent gateway registry backed by
+  SQLAlchemy with automatic embedded migrations on startup. SQLite by default,
+  PostgreSQL via `SHOREGUARD_DATABASE_URL` for container deployments.
+- **Gateway registration API** — `POST /api/gateway/register` to register
+  remote gateways with endpoint, auth mode, and mTLS certificates.
+  `DELETE /api/gateway/{name}` to unregister. `POST /{name}/test-connection`
+  to explicitly test connectivity.
+- **`ShoreGuardClient.from_credentials()`** — new factory method that accepts
+  raw certificate bytes from the database instead of filesystem paths.
+- **Background health monitor** — probes all registered gateways every 30
+  seconds and updates health status (`last_seen`, `last_status`) in the
+  registry.
+- **`import-gateways` CLI command** — imports gateways from openshell filesystem
+  config (`~/.config/openshell/gateways/`) into the database, including mTLS
+  certificates. Replaces the old `migrate-v2` command.
+- **`SHOREGUARD_DATABASE_URL`** — environment variable to configure an external
+  database (PostgreSQL) for container/multi-instance deployments.
+- **`--local` / `SHOREGUARD_LOCAL_MODE`** — opt-in flag to enable local Docker
+  container lifecycle management (start/stop/restart/create/destroy). In local
+  mode, filesystem gateways are auto-imported into the database on startup.
+- **`--database-url` / `SHOREGUARD_DATABASE_URL`** — all env vars now also
+  available as CLI flags.
+
+### Changed
+
+- **GatewayService refactored** — reduced from ~800 to ~250 lines. Gateway
+  discovery now queries the SQLAlchemy registry instead of scanning the
+  filesystem. Connection management (backoff, health checks) preserved.
+- **Docker/CLI methods extracted** to `LocalGatewayManager`
+  (`shoreguard/services/local_gateway.py`), only active in local mode.
+- **Frontend updated** — "Create Gateway" replaced with "Register Gateway"
+  modal (endpoint, auth mode, PEM certificate upload). Start/Stop/Restart
+  buttons replaced with "Test Connection". "Destroy" renamed to "Unregister".
+  New "Last Seen" column, Port column removed.
+- **API route changes** — `POST /create` (202 LRO) → `POST /register` (201
+  sync). `POST /{name}/destroy` → `DELETE /{name}`. Local lifecycle routes
+  (start/stop/restart/diagnostics) return 404 unless `SHOREGUARD_LOCAL_MODE=1`.
+- **Request-level logging** — gateway register, unregister, test-connection,
+  and select routes now log at INFO/WARNING level. `LocalGatewayManager` logs
+  Docker daemon errors, port conflicts, missing openshell CLI, and openshell
+  command failures.
+- Version bumped to `0.3.0`.
+- Test suite rewritten for registry-backed architecture (610 tests).
+- **Logger names standardised** — all modules now use `getLogger(__name__)`
+  instead of hardcoded `"shoreguard"`. Removes duplicate log lines caused
+  by parent-logger propagation.
+- **Unified log format** — single format (`HH:MM:SS LEVEL module message`)
+  shared by shoreguard and uvicorn loggers with fixed-width aligned columns.
+- Duplicate "API-key authentication enabled" log line removed.
+
+### Fixed
+
+- **SSRF protection** — `_is_private_ip()` now performs real DNS resolution
+  instead of `AI_NUMERICHOST`. Hostnames that resolve to private/loopback/
+  link-local addresses are correctly blocked. Includes a 2 s DNS timeout.
+- **`import-gateways` crash on single gateway** — `registry.register()` failures
+  no longer abort the entire import; individual errors are logged and
+  skipped.
+- **`from_active_cluster` error handling** — missing metadata files, corrupt
+  JSON, and missing `gateway_endpoint` keys now raise
+  `GatewayNotConnectedError` with a clear message instead of raw
+  `FileNotFoundError` / `KeyError`.
+- **`init_db()` failure logging** — database initialisation errors in the
+  FastAPI lifespan are now logged before re-raising.
+- **`_get_gateway_service()` guard** — raises `RuntimeError` if called before
+  the app lifespan has initialised the service (instead of `AttributeError`
+  on `None`).
+- **WebSocket `RuntimeError` swallowed** — `RuntimeError` during
+  `websocket.send_json()` is now debug-logged instead of silently passed.
+- **SQLite pragma errors** — failures setting WAL/busy_timeout/synchronous
+  pragmas are now logged as warnings.
+- **`_import_filesystem_gateways` SSRF gap** — filesystem-imported gateways
+  were not checked against `is_private_ip()`. Now blocked in non-local mode,
+  consistent with the API registration endpoint.
+- **`_import_filesystem_gateways` skipped count** — corrupt metadata JSON was
+  logged but not counted in the `skipped` total, making the summary misleading.
+- **`_import_filesystem_gateways` mTLS read error** — `read_bytes()` on cert
+  files had no error handling (TOCTOU race). Now wrapped in try/except with
+  a 64 KB size limit matching the API route.
+- **`check_all_health` DB error isolation** — a database error updating health
+  for one gateway no longer prevents health updates for all remaining gateways.
+- **`select()` implicit name resolution** — `get_client()` was called without
+  `name=`, relying on a filesystem round-trip via `active_gateway` file. Now
+  passes the name explicitly.
+- **CLI `import-gateways` NameError** — if `init_db()` failed, `engine` was
+  undefined and `engine.dispose()` in the `finally` block raised `NameError`.
+- **DB engine not disposed on shutdown** — the SQLAlchemy engine was not
+  disposed during FastAPI lifespan shutdown, skipping the SQLite WAL
+  checkpoint.
+- **Docker start/stop errors silently swallowed** — `SubprocessError`/`OSError`
+  in `_docker_start_container`/`_docker_stop_container` was caught but never
+  logged.
+- **Gateway start retry without summary** — when all 10 connection retries
+  failed after a gateway start, no warning was logged.
+- **Frontend 404 on gateway list page** — `inference-providers` was fetched
+  without a gateway context, hitting a non-existent global route.
+
+### Security
+
+- SSRF DNS resolution bypass fixed (hostnames resolving to RFC 1918 / loopback
+  addresses were not blocked).
+- SSRF validation includes DNS timeout protection (2 s) to prevent slow-DNS
+  attacks.
+- **`remote_host` input validation** — `CreateGatewayRequest.remote_host` is
+  now validated with a hostname regex (max 253 chars) before being passed to
+  subprocess.
+- **SSRF check skipped in local mode** — `is_private_ip()` checks at
+  connect-time and import-time now allow private/loopback addresses when
+  `SHOREGUARD_LOCAL_MODE` is set, since locally managed gateways always run
+  on `127.0.0.1`.
+
+### Dependencies
+
+- Added `sqlalchemy >= 2.0` (runtime) — ORM and database abstraction.
+- Added `alembic >= 1.15` (runtime) — embedded schema migrations on startup.
+
+## [0.2.0] — 2026-03-27
 
 ### Added
 

@@ -22,7 +22,7 @@ import time
 
 from fastapi import Cookie, HTTPException, Query, Request, WebSocket, status
 
-logger = logging.getLogger("shoreguard")
+logger = logging.getLogger(__name__)
 
 # ─── Module state (set once at startup via configure()) ──────────────────────
 

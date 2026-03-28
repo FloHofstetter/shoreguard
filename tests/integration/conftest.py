@@ -241,6 +241,14 @@ def policy_service(sg_client: ShoreGuardClient):
 
 @pytest.fixture
 def gateway_service(sg_client: ShoreGuardClient):
-    svc = GatewayService()
+    from sqlalchemy.orm import sessionmaker as sa_sessionmaker
+
+    from shoreguard.db import init_db
+    from shoreguard.services.registry import GatewayRegistry
+
+    engine = init_db("sqlite:///:memory:")
+    session_factory = sa_sessionmaker(bind=engine)
+    registry = GatewayRegistry(session_factory)
+    svc = GatewayService(registry)
     svc.set_client(sg_client)
     return svc

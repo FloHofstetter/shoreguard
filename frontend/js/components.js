@@ -47,6 +47,7 @@ function renderGatewayStatusBadge(gw) {
     const icons = {
         connected: 'circle-fill',
         running: 'circle-fill',
+        unreachable: 'exclamation-circle',
         stopped: 'stop-circle',
         offline: 'circle',
     };
@@ -54,6 +55,7 @@ function renderGatewayStatusBadge(gw) {
     const labels = {
         connected: 'Connected',
         running: 'Running',
+        unreachable: 'Unreachable',
         stopped: 'Stopped',
         offline: 'Offline',
     };

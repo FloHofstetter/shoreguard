@@ -3,10 +3,13 @@
 import asyncio
 import logging
 import threading
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from shoreguard.services.registry import GatewayRegistry
 
 import grpc
 import typer
@@ -43,7 +46,7 @@ from .auth import (
 from .deps import get_client, resolve_gateway
 from .routes import approvals, gateway, operations, policies, providers, sandboxes
 
-logger = logging.getLogger("shoreguard")
+logger = logging.getLogger(__name__)
 
 
 def _resolve_frontend_dir() -> Path:
@@ -69,9 +72,38 @@ templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan — configure auth from env if not already set via CLI."""
+    """Application lifespan — initialise DB, services, and background tasks."""
     import os
 
+    from sqlalchemy.orm import sessionmaker as sa_sessionmaker
+
+    import shoreguard.services.gateway as gw_mod
+    from shoreguard.db import init_db
+    from shoreguard.services.registry import GatewayRegistry
+
+    try:
+        engine = init_db()
+    except Exception:
+        logger.exception("Failed to initialise database")
+        raise
+    session_factory = sa_sessionmaker(bind=engine)
+    registry = GatewayRegistry(session_factory)
+    gw_mod.gateway_service = gw_mod.GatewayService(registry)
+    logger.info("Gateway service initialised")
+
+    if os.environ.get("SHOREGUARD_LOCAL_MODE"):
+        import shoreguard.services.local_gateway as local_mod
+
+        local_mod.local_gateway_manager = local_mod.LocalGatewayManager(gw_mod.gateway_service)
+        logger.info("Local gateway mode enabled")
+
+        # Auto-import filesystem gateways so locally managed gateways
+        # appear in the DB without a manual import-gateways step.
+        imported, skipped = _import_filesystem_gateways(registry)
+        if imported:
+            logger.info("Auto-imported %d gateway(s) from filesystem", imported)
+
+    # ── Auth ─────────────────────────────────────────────────────────────
     if not is_auth_enabled():
         env_key = os.environ.get("SHOREGUARD_API_KEY")
         if env_key:
@@ -85,29 +117,55 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.docs_url = None
         app.redoc_url = None
 
+    # ── Background tasks ─────────────────────────────────────────────────
     async def _cleanup_operations() -> None:
         from shoreguard.services.operations import operation_store
 
+        consecutive_failures = 0
         while True:
             await asyncio.sleep(600)
             try:
                 operation_store.cleanup()
+                consecutive_failures = 0
             except Exception:
-                logger.exception("Operation cleanup failed")
+                consecutive_failures += 1
+                logger.exception(
+                    "Operation cleanup failed (consecutive failures: %d)",
+                    consecutive_failures,
+                )
+
+    async def _health_monitor() -> None:
+        consecutive_failures = 0
+        while True:
+            await asyncio.sleep(30)
+            try:
+                await asyncio.to_thread(gw_mod.gateway_service.check_all_health)
+                consecutive_failures = 0
+            except Exception:
+                consecutive_failures += 1
+                logger.exception(
+                    "Health monitor error (consecutive failures: %d)",
+                    consecutive_failures,
+                )
 
     cleanup_task = asyncio.create_task(_cleanup_operations())
+    health_task = asyncio.create_task(_health_monitor())
     yield
     cleanup_task.cancel()
-    try:
-        await cleanup_task
-    except asyncio.CancelledError:
-        pass
+    health_task.cancel()
+    for task in (cleanup_task, health_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    engine.dispose()
+    logger.debug("Database engine disposed")
 
 
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -285,17 +343,33 @@ async def sandbox_events(
     try:
         await websocket.accept()
     except RuntimeError:
-        logger.debug("WebSocket closed before accept: %s/%s", gw, sandbox_name)
+        logger.warning("WebSocket closed before accept: %s/%s", gw, sandbox_name, exc_info=True)
         return
-    from .deps import _current_gateway
+    from .deps import _VALID_GW_RE, _current_gateway
+
+    if not _VALID_GW_RE.match(gw):
+        try:
+            await websocket.send_json(
+                {"type": "error", "data": {"message": "Invalid gateway name"}}
+            )
+        except (RuntimeError, WebSocketDisconnect):
+            logger.debug(
+                "WebSocket closed before sending validation error: %s/%s",
+                gw,
+                sandbox_name,
+            )
+        return
 
     _current_gateway.set(gw)
     try:
         client = await asyncio.to_thread(get_client)
     except GatewayNotConnectedError:
-        await websocket.send_json(
-            {"type": "error", "data": {"message": f"Gateway '{gw}' not connected"}}
-        )
+        try:
+            await websocket.send_json(
+                {"type": "error", "data": {"message": f"Gateway '{gw}' not connected"}}
+            )
+        except (RuntimeError, WebSocketDisconnect):
+            logger.debug("WebSocket closed before sending error: %s/%s", gw, sandbox_name)
         return
 
     try:
@@ -378,14 +452,18 @@ async def sandbox_events(
         logger.error("WebSocket gRPC error for %s/%s: %s", gw, sandbox_name, msg, exc_info=True)
         try:
             await websocket.send_json({"type": "error", "data": {"message": msg}})
-        except (WebSocketDisconnect, RuntimeError):
+        except WebSocketDisconnect:
             pass
+        except RuntimeError as ws_err:
+            logger.debug("WebSocket send failed for %s/%s: %s", gw, sandbox_name, ws_err)
     except Exception as e:
         logger.error("WebSocket error for %s/%s: %s", gw, sandbox_name, e, exc_info=True)
         try:
             await websocket.send_json({"type": "error", "data": {"message": "Internal error"}})
-        except (WebSocketDisconnect, RuntimeError):
+        except WebSocketDisconnect:
             pass
+        except RuntimeError as ws_err:
+            logger.debug("WebSocket send failed for %s/%s: %s", gw, sandbox_name, ws_err)
 
 
 # ─── Auth endpoints ──────────────────────────────────────────────────────────
@@ -412,7 +490,8 @@ async def login(request: Request, body: LoginRequest):
             status_code=401,
             content={"detail": "Invalid API key"},
         )
-    logger.info("Login successful")
+    client_ip = request.client.host if request.client else "unknown"
+    logger.info("Login successful (client=%s)", client_ip)
     token = create_session_token()
     response = JSONResponse(content={"ok": True})
     secure = request.url.scheme == "https"
@@ -722,6 +801,24 @@ def main(
             rich_help_panel="Development",
         ),
     ] = True,
+    local: Annotated[
+        bool,
+        typer.Option(
+            "--local/--no-local",
+            envvar="SHOREGUARD_LOCAL_MODE",
+            help="Enable local mode: Docker lifecycle management for gateways.",
+            rich_help_panel="Server",
+        ),
+    ] = False,
+    database_url: Annotated[
+        str | None,
+        typer.Option(
+            "--database-url",
+            envvar="SHOREGUARD_DATABASE_URL",
+            help="Database URL. Defaults to SQLite at ~/.config/shoreguard/shoreguard.db.",
+            rich_help_panel="Server",
+        ),
+    ] = None,
     version: Annotated[
         bool | None,
         typer.Option(
@@ -733,15 +830,59 @@ def main(
     ] = None,
 ) -> None:
     """Start the Shoreguard server."""
+    import os
+
     import uvicorn
 
-    logging.basicConfig(level=getattr(logging, log_level.upper(), logging.INFO))
+    _LOG_FORMAT = "%(asctime)s %(levelname)-5s %(name)-20s  %(message)s"
+    _LOG_DATE = "%H:%M:%S"
+
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper(), logging.INFO),
+        format=_LOG_FORMAT,
+        datefmt=_LOG_DATE,
+    )
+    # Shorten our own logger names: "shoreguard.api.main" → "api.main"
+    for name in logging.root.manager.loggerDict:
+        if name.startswith("shoreguard."):
+            logging.getLogger(name).name = name.removeprefix("shoreguard.")
+
+    # Propagate CLI flags to env so the lifespan picks them up
+    if local:
+        os.environ["SHOREGUARD_LOCAL_MODE"] = "1"
+        logger.info("Local mode enabled")
+    if database_url:
+        os.environ["SHOREGUARD_DATABASE_URL"] = database_url
+        logger.info("Using database: %s", database_url.split("://")[0])
 
     configure_auth(api_key)
-    if api_key:
-        logger.info("API-key authentication enabled")
-    else:
+    if not api_key:
         logger.info("No API key set — authentication disabled")
+
+    # Unified log config for uvicorn so all output uses the same format
+    _uvicorn_log_config: dict = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {"format": _LOG_FORMAT, "datefmt": _LOG_DATE},
+        },
+        "handlers": {
+            "default": {
+                "formatter": "default",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stderr",
+            },
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["default"], "level": log_level.upper(), "propagate": False},
+            "uvicorn.error": {"level": log_level.upper(), "propagate": False},
+            "uvicorn.access": {
+                "handlers": ["default"],
+                "level": log_level.upper(),
+                "propagate": False,
+            },
+        },
+    }
 
     uvicorn.run(
         "shoreguard.api.main:app",
@@ -749,8 +890,194 @@ def main(
         port=port,
         reload=reload,
         log_level=log_level,
+        log_config=_uvicorn_log_config,
         timeout_graceful_shutdown=5,
     )
+
+
+def _import_filesystem_gateways(
+    registry: "GatewayRegistry",
+    *,
+    log_fn: "Callable[[str], None] | None" = None,
+) -> tuple[int, int]:
+    """Import gateways from openshell filesystem config into the DB registry.
+
+    Returns (imported, skipped) counts.  Gateways already in the DB are
+    silently skipped.  *log_fn* receives human-readable status lines; when
+    ``None``, messages go to the module logger instead.
+    """
+    import json as json_mod
+    import os
+    from urllib.parse import urlparse
+
+    from shoreguard.config import (
+        ENDPOINT_RE as _ENDPOINT_RE,
+    )
+    from shoreguard.config import (
+        VALID_GATEWAY_NAME_RE as _VALID_IMPORT_NAME_RE,
+    )
+    from shoreguard.config import is_private_ip, openshell_config_dir
+
+    def _log(msg: str, *, level: int = logging.INFO) -> None:
+        if log_fn is not None:
+            log_fn(msg)
+        else:
+            logger.log(level, msg)
+
+    gateways_dir = openshell_config_dir() / "gateways"
+    if not gateways_dir.exists():
+        _log(f"No filesystem gateways found at {gateways_dir}")
+        return 0, 0
+
+    imported = 0
+    skipped = 0
+    for entry in sorted(gateways_dir.iterdir()):
+        if not entry.is_dir():
+            continue
+        metadata_file = entry / "metadata.json"
+        if not metadata_file.exists():
+            continue
+
+        name = entry.name
+        if not _VALID_IMPORT_NAME_RE.match(name):
+            _log(f"  skip  {name} (invalid name format)")
+            skipped += 1
+            continue
+        if registry.get(name) is not None:
+            _log(f"  skip  {name} (already registered)")
+            skipped += 1
+            continue
+
+        try:
+            metadata = json_mod.loads(metadata_file.read_text())
+        except (json_mod.JSONDecodeError, OSError) as e:
+            _log(f"  error {name}: {e}", level=logging.WARNING)
+            skipped += 1
+            continue
+
+        endpoint = metadata.get("gateway_endpoint", "")
+        scheme = "https" if "https" in endpoint else "http"
+        auth_mode = metadata.get("auth_mode")
+
+        ca_cert = None
+        client_cert = None
+        client_key = None
+        _max_cert = 65_536  # 64 KB — same limit as the API route
+        mtls_dir = entry / "mtls"
+        if mtls_dir.exists():
+            ca_file = mtls_dir / "ca.crt"
+            cert_file = mtls_dir / "tls.crt"
+            key_file = mtls_dir / "tls.key"
+            try:
+                if ca_file.exists():
+                    ca_cert = ca_file.read_bytes()
+                if cert_file.exists():
+                    client_cert = cert_file.read_bytes()
+                if key_file.exists():
+                    client_key = key_file.read_bytes()
+            except OSError as e:
+                _log(f"  error {name}: failed to read mTLS certs: {e}", level=logging.WARNING)
+                skipped += 1
+                continue
+            cert_fields = [
+                ("ca_cert", ca_cert),
+                ("client_cert", client_cert),
+                ("client_key", client_key),
+            ]
+            for label, blob in cert_fields:
+                if blob is not None and len(blob) > _max_cert:
+                    _log(
+                        f"  skip  {name} ({label} exceeds {_max_cert} bytes)",
+                        level=logging.WARNING,
+                    )
+                    skipped += 1
+                    break
+            else:
+                # Only reached when no cert exceeded the limit (no break).
+                pass
+            if any(
+                blob is not None and len(blob) > _max_cert
+                for blob in (ca_cert, client_cert, client_key)
+            ):
+                continue
+
+        meta = {
+            "gpu": metadata.get("gpu", False),
+            "is_remote": metadata.get("is_remote", False),
+            "remote_host": metadata.get("remote_host"),
+        }
+
+        parsed = urlparse(endpoint)
+        host = parsed.hostname
+        if not host:
+            _log(f"  skip  {name} (no hostname in endpoint '{endpoint}')")
+            skipped += 1
+            continue
+        port = parsed.port or (443 if scheme == "https" else 80)
+        clean_endpoint = f"{host}:{port}"
+
+        if is_private_ip(host) and not os.environ.get("SHOREGUARD_LOCAL_MODE"):
+            _log(f"  skip  {name} (private/loopback address: '{host}')", level=logging.WARNING)
+            skipped += 1
+            continue
+        if not _ENDPOINT_RE.match(clean_endpoint):
+            _log(f"  skip  {name} (invalid endpoint format: '{clean_endpoint}')")
+            skipped += 1
+            continue
+        ep_port = int(clean_endpoint.rsplit(":", 1)[1])
+        if ep_port < 1 or ep_port > 65535:
+            _log(f"  skip  {name} (port out of range: {ep_port})")
+            skipped += 1
+            continue
+
+        try:
+            registry.register(
+                name,
+                clean_endpoint,
+                scheme,
+                auth_mode,
+                ca_cert=ca_cert,
+                client_cert=client_cert,
+                client_key=client_key,
+                metadata=meta,
+            )
+        except ValueError as e:
+            _log(f"  error  {name}: {e}", level=logging.WARNING)
+            skipped += 1
+            continue
+        except Exception as e:
+            _log(f"  error  {name}: unexpected error: {e}", level=logging.ERROR)
+            skipped += 1
+            continue
+        _log(f"  imported {name} ({clean_endpoint})")
+        imported += 1
+
+    return imported, skipped
+
+
+@cli.command("import-gateways")
+def import_gateways() -> None:
+    """Import gateways from openshell filesystem config into the database."""
+    from sqlalchemy.orm import sessionmaker as sa_sessionmaker
+
+    from shoreguard.db import init_db
+    from shoreguard.services.registry import GatewayRegistry
+
+    logging.basicConfig(level=logging.INFO)
+
+    try:
+        engine = init_db()
+    except Exception as e:
+        typer.echo(f"Error: failed to initialise database: {e}", err=True)
+        raise typer.Exit(1) from e
+
+    try:
+        factory = sa_sessionmaker(bind=engine)
+        registry = GatewayRegistry(factory)
+        imported, skipped = _import_filesystem_gateways(registry, log_fn=typer.echo)
+        typer.echo(f"\nDone: {imported} imported, {skipped} skipped.")
+    finally:
+        engine.dispose()
 
 
 if __name__ == "__main__":

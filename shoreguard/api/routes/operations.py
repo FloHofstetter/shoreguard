@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 
 from shoreguard.services.operations import operation_store
 
-logger = logging.getLogger("shoreguard")
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

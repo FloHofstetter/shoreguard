@@ -11,7 +11,7 @@ from shoreguard.client._converters import _dict_to_policy
 from shoreguard.exceptions import NotFoundError, PolicyError
 from shoreguard.presets import get_preset
 
-logger = logging.getLogger("shoreguard")
+logger = logging.getLogger(__name__)
 
 
 class PolicyService:

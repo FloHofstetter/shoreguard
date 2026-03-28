@@ -4,10 +4,10 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 
-Open source control plane for [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell). A web-based GUI to manage AI agent sandboxes, security policies, and approval flows.
+Open source control plane for [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell). A web-based management UI to register and manage multiple remote OpenShell gateways, AI agent sandboxes, security policies, and approval flows.
 
 > [!WARNING]
-> **Weekend project.** This UI was vibe-coded in a weekend as a proof of concept. It works, it has tests, but it is not production-hardened. There is no authentication, no rate limiting, and no audit logging. Use it for local development and demos — not to secure anything that matters.
+> **Weekend project.** This UI was vibe-coded in a weekend as a proof of concept. It works, it has tests, but it is not production-hardened. There is no rate limiting and no audit logging. Use it for local development and demos — not to secure anything that matters.
 
 ![Sandbox Overview](docs/screenshots/sandbox-overview.png)
 
@@ -15,6 +15,7 @@ Open source control plane for [NVIDIA OpenShell](https://github.com/NVIDIA/OpenS
 
 OpenShell provides secure, sandboxed environments for AI agents (OpenClaw, Claude Code, Cursor, etc.). Shoreguard gives you a dashboard to:
 
+- **Central gateway management** — Register and manage multiple remote OpenShell gateways from a single dashboard (like Rancher for Kubernetes)
 - **Manage sandboxes** — Create, monitor, and delete agent sandboxes
 - **Edit security policies** — Visual network policy editor instead of raw YAML
 - **Approve access requests** — iOS-style permission dialogs when agents try to reach blocked endpoints
@@ -43,7 +44,7 @@ uv run shoreguard
 
 Open [http://localhost:8888](http://localhost:8888) in your browser.
 
-> Shoreguard auto-discovers your OpenShell gateway via `~/.config/openshell/active_gateway`. If no gateway is configured, the UI loads but API calls will fail.
+> On first run, Shoreguard creates a SQLite database at `~/.config/shoreguard/shoreguard.db`. Register your OpenShell gateways through the web UI or API.
 
 ### CLI Options
 
@@ -58,15 +59,26 @@ shoreguard --log-level debug --no-reload
 | `--host` | `SHOREGUARD_HOST` | `0.0.0.0` | Bind address |
 | `--port` | `SHOREGUARD_PORT` | `8888` | Bind port |
 | `--log-level` | `SHOREGUARD_LOG_LEVEL` | `info` | Log level (debug/info/warning/error) |
+| `--api-key` | `SHOREGUARD_API_KEY` | — | Shared API key for authentication |
 | `--no-reload` | `SHOREGUARD_RELOAD` | reload on | Disable auto-reload |
+| — | `SHOREGUARD_DATABASE_URL` | SQLite | Database URL (e.g. `postgresql://...`) |
+| — | `SHOREGUARD_LOCAL_MODE` | — | Enable local Docker gateway lifecycle |
 
 CLI arguments take priority over environment variables.
+
+### Migrating from v0.2
+
+If you have existing gateways configured via `~/.config/openshell/gateways/`, import them:
+
+```bash
+shoreguard migrate-v2
+```
 
 ## Features
 
 ### Gateway Management
 
-Multi-gateway support with status monitoring, start/stop controls, and system diagnostics.
+Register and manage multiple remote OpenShell gateways. Health monitoring with automatic probing every 30 seconds. Test connections, view last-seen timestamps, and switch between gateways.
 
 ![Gateways](docs/screenshots/gateways.png)
 
@@ -112,6 +124,8 @@ Step-by-step sandbox creation with agent type selection, configuration, policy p
 
 ## Architecture
 
+Shoreguard is a central management plane that connects to one or more remote OpenShell gateways via gRPC. Gateways are deployed independently and registered with Shoreguard.
+
 ```
 ┌─────────────────────────────────────────────┐
 │  Browser (:8888)                            │
@@ -126,19 +140,25 @@ Step-by-step sandbox creation with agent type selection, configuration, policy p
 │  └── Static files     /static/*             │
 ├─────────────────────────────────────────────┤
 │  Service Layer        (Business Logic)      │
-│  ├── GatewayService   Docker, ports, health │
+│  ├── GatewayService   Registry, health      │
 │  ├── SandboxService   Create + presets      │
 │  ├── PolicyService    Rule CRUD, merge      │
 │  └── ProviderService  Types, credentials    │
+├─────────────────────────────────────────────┤
+│  Persistence          (SQLAlchemy ORM)      │
+│  ├── Gateway registry SQLite / PostgreSQL   │
+│  └── Alembic          Auto-migration        │
 ├─────────────────────────────────────────────┤
 │  Client Layer         (gRPC + mTLS)         │
 │  ├── SandboxManager   CRUD, exec, logs      │
 │  ├── PolicyManager    policies, presets      │
 │  └── ApprovalManager  draft policy flow     │
-├─────────────────────────────────────────────┤
-│  OpenShell Gateway    (gRPC)                │
-│  └── Docker / Kubernetes Sandboxes          │
-└─────────────────────────────────────────────┘
+├──────────┬──────────┬───────────────────────┘
+│          │          │
+▼          ▼          ▼
+┌────────┐ ┌────────┐ ┌────────┐
+│  GW-1  │ │  GW-2  │ │  GW-3  │  ← deployed independently
+└────────┘ └────────┘ └────────┘
 ```
 
 ## API
@@ -147,20 +167,29 @@ Shoreguard exposes a REST API on port 8888. Interactive docs are available at [/
 
 ### Key endpoints
 
+**Gateway management:**
+
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/sandboxes` | List all sandboxes |
-| `POST` | `/api/sandboxes` | Create a sandbox |
-| `GET` | `/api/sandboxes/{name}` | Get sandbox details |
-| `DELETE` | `/api/sandboxes/{name}` | Delete a sandbox |
-| `POST` | `/api/sandboxes/{name}/exec` | Execute a command |
-| `GET` | `/api/sandboxes/{name}/policy` | Get active policy |
-| `PUT` | `/api/sandboxes/{name}/policy` | Update policy |
-| `GET` | `/api/sandboxes/{name}/approvals/pending` | Get pending approvals |
-| `POST` | `/api/sandboxes/{name}/approvals/{id}/approve` | Approve a request |
-| `POST` | `/api/sandboxes/{name}/approvals/{id}/reject` | Reject a request |
+| `GET` | `/api/gateway/list` | List all registered gateways |
+| `POST` | `/api/gateway/register` | Register a remote gateway |
+| `DELETE` | `/api/gateway/{name}` | Unregister a gateway |
+| `POST` | `/api/gateway/{name}/select` | Set active gateway |
+| `POST` | `/api/gateway/{name}/test-connection` | Test gateway connectivity |
+
+**Sandbox & policy operations** (gateway-scoped):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/gateways/{gw}/sandboxes` | List sandboxes |
+| `POST` | `/api/gateways/{gw}/sandboxes` | Create a sandbox |
+| `DELETE` | `/api/gateways/{gw}/sandboxes/{name}` | Delete a sandbox |
+| `POST` | `/api/gateways/{gw}/sandboxes/{name}/exec` | Execute a command |
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy` | Get active policy |
+| `PUT` | `/api/gateways/{gw}/sandboxes/{name}/policy` | Update policy |
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/approvals/pending` | Pending approvals |
 | `GET` | `/api/policies/presets` | List available presets |
-| `WS` | `/ws/{name}` | Live sandbox events |
+| `WS` | `/ws/{gw}/{name}` | Live sandbox events |
 
 ## Development
 
@@ -195,7 +224,7 @@ uv run mutmut run
 
 | Category | Tests | Description |
 |----------|-------|-------------|
-| Unit | 425 | Client managers, services, API routes, converters, CLI |
+| Unit | 448 | Client managers, services, API routes, DB, registry, converters |
 | Integration | 35 | Live gRPC against real OpenShell gateway |
 | Mutation | 72% kill rate | Via mutmut, measures test quality |
 
@@ -222,10 +251,11 @@ uv run python scripts/generate_proto.py /path/to/OpenShell/proto
 
 ## Roadmap
 
-- [ ] Multi-cluster support
+- [x] Multi-gateway management (v0.3)
+- [x] API-key authentication (v0.2)
+- [ ] RBAC — role-based access control with user/role/permission management
 - [ ] Policy diff viewer
 - [ ] Audit log export
-- [ ] User authentication
 
 ## Contributing
 
