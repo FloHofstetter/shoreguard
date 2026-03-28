@@ -167,8 +167,8 @@ class GatewayService:
         self, name: str, creds: dict[str, str | bytes | None]
     ) -> ShoreGuardClient | None:
         """Connect using credentials from the database."""
-        endpoint = creds["endpoint"]
-        host = str(endpoint).rsplit(":", 1)[0] if ":" in str(endpoint) else str(endpoint)
+        endpoint = str(creds["endpoint"])
+        host = endpoint.rsplit(":", 1)[0] if ":" in endpoint else endpoint
         if is_private_ip(host) and not os.environ.get("SHOREGUARD_LOCAL_MODE"):
             logger.warning(
                 "Gateway '%s' endpoint '%s' resolves to a private IP — blocking connection",
@@ -176,12 +176,15 @@ class GatewayService:
                 endpoint,
             )
             return None
+        ca_cert = creds.get("ca_cert")
+        client_cert = creds.get("client_cert")
+        client_key = creds.get("client_key")
         try:
             client = ShoreGuardClient.from_credentials(
                 endpoint,
-                ca_cert=creds.get("ca_cert"),
-                client_cert=creds.get("client_cert"),
-                client_key=creds.get("client_key"),
+                ca_cert=ca_cert if isinstance(ca_cert, bytes) else None,
+                client_cert=client_cert if isinstance(client_cert, bytes) else None,
+                client_key=client_key if isinstance(client_key, bytes) else None,
             )
         except (grpc.RpcError, OSError, ConnectionError, TimeoutError) as e:
             logger.debug("Gateway '%s' connection failed (type=%s): %s", name, type(e).__name__, e)

@@ -139,7 +139,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(30)
             try:
-                await asyncio.to_thread(gw_mod.gateway_service.check_all_health)
+                await asyncio.to_thread(gw_mod.gateway_service.check_all_health)  # type: ignore[union-attr]
                 consecutive_failures = 0
             except Exception:
                 consecutive_failures += 1
