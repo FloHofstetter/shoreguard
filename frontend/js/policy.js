@@ -206,9 +206,9 @@ async function loadFilesystemPolicy(name) {
         container.innerHTML = `
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Add or remove filesystem paths.</span>
-                <button class="btn btn-outline-success btn-sm" onclick="showAddFilesystemPath('${name}')">
+                ${_sgHasRole('operator') ? `<button class="btn btn-outline-success btn-sm" onclick="showAddFilesystemPath('${name}')">
                     <i class="bi bi-plus me-1"></i>Add Path
-                </button>
+                </button>` : ''}
             </div>
 
             <div id="fs-add-form" style="display:none" class="card sg-card-themed mb-3">
@@ -253,9 +253,9 @@ async function loadFilesystemPolicy(name) {
                                     <td class="font-monospace small">${escapeHtml(r.path)}</td>
                                     <td><span class="badge ${r.badge}">${r.label}</span></td>
                                     <td class="text-end">
-                                        <button class="btn btn-sm text-muted delete-btn" onclick="deleteFilesystemPath('${name}', '${escapeHtml(r.path)}')" title="Delete">
+                                        ${_sgHasRole('operator') ? `<button class="btn btn-sm text-muted delete-btn" onclick="deleteFilesystemPath('${name}', '${escapeHtml(r.path)}')" title="Delete">
                                             <i class="bi bi-trash3"></i>
-                                        </button>
+                                        </button>` : ''}
                                     </td>
                                 </tr>
                             `).join('')}
@@ -326,9 +326,9 @@ async function loadProcessPolicy(name) {
         container.innerHTML = `
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <span class="text-muted small"><i class="bi bi-cpu me-1"></i>Process and Landlock settings</span>
-                <button class="btn btn-outline-secondary btn-sm" id="proc-edit-toggle" onclick="toggleProcessEdit('${name}')">
+                ${_sgHasRole('operator') ? `<button class="btn btn-outline-secondary btn-sm" id="proc-edit-toggle" onclick="toggleProcessEdit('${name}')">
                     <i class="bi bi-pencil me-1"></i>Edit
-                </button>
+                </button>` : ''}
             </div>
 
             <div id="proc-view">

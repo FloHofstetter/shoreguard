@@ -22,6 +22,10 @@
         <span id="gateway-status" class="topbar-status badge bg-secondary">
             <i class="bi bi-circle-fill me-1"></i>
         </span>
+        <a id="keys-link" href="/keys" class="btn btn-sm btn-outline-secondary ms-2" style="display:none" title="API Keys">
+            <i class="bi bi-key"></i>
+        </a>
+        <span id="role-badge" class="badge bg-secondary ms-2" style="display:none"></span>
         <button id="logout-btn" class="btn btn-sm btn-outline-secondary ms-2" style="display:none"
                 onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location.href='/login')"
                 title="Log out">
@@ -49,9 +53,31 @@
     <script src="/static/js/components.js"></script>
     <script src="/static/js/app.js"></script>
     <script>
+        window.SG_ROLE = 'admin'; // default when auth disabled
         fetch('/api/auth/check').then(r => r.json()).then(d => {
-            if (d.auth_enabled) document.getElementById('logout-btn').style.display = '';
+            if (d.auth_enabled) {
+                document.getElementById('logout-btn').style.display = '';
+                if (d.role) {
+                    window.SG_ROLE = d.role;
+                    const badge = document.getElementById('role-badge');
+                    badge.textContent = d.role;
+                    badge.style.display = '';
+                    if (d.role === 'admin') {
+                        document.getElementById('keys-link').style.display = '';
+                    }
+                }
+            }
+            // Hide elements that require a higher role
+            document.querySelectorAll('[data-sg-min-role]').forEach(el => {
+                const minRole = el.getAttribute('data-sg-min-role');
+                if (!_sgHasRole(minRole)) el.style.display = 'none';
+            });
         }).catch(() => {});
+
+        function _sgHasRole(minimum) {
+            const ranks = { admin: 2, operator: 1, viewer: 0 };
+            return (ranks[window.SG_ROLE] || 0) >= (ranks[minimum] || 99);
+        }
     </script>
     {% block extra_js %}{% endblock %}
 </body>

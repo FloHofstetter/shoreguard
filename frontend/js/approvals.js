@@ -41,12 +41,13 @@ async function _loadApprovals(name, container) {
                     <button class="btn btn-outline-secondary" onclick="showApprovalHistory('${name}')" title="History">
                         <i class="bi bi-clock-history me-1"></i>History
                     </button>
+                    ${_sgHasRole('operator') ? `
                     <button class="btn btn-success" onclick="approveAllChunks('${name}')">
                         <i class="bi bi-check-all me-1"></i>Approve All
                     </button>
                     <button class="btn btn-outline-secondary" onclick="clearChunks('${name}')">
                         Clear All
-                    </button>
+                    </button>` : ''}
                 </div>
             </div>
 
@@ -85,7 +86,7 @@ function renderApprovalRow(sandboxName, chunk) {
     const detailId = `chunk-detail-${chunk.id}`;
 
     let actions = '';
-    if (chunk.status === 'pending') {
+    if (chunk.status === 'pending' && _sgHasRole('operator')) {
         actions = `
             <div class="btn-group btn-group-sm">
                 <button class="btn btn-outline-secondary" onclick="event.stopPropagation(); openEditChunk('${sandboxName}', '${chunk.id}')" title="Edit">
@@ -98,7 +99,7 @@ function renderApprovalRow(sandboxName, chunk) {
                     <i class="bi bi-x"></i>
                 </button>
             </div>`;
-    } else if (chunk.status === 'approved') {
+    } else if (chunk.status === 'approved' && _sgHasRole('operator')) {
         actions = `
             <button class="btn btn-outline-secondary btn-sm" onclick="event.stopPropagation(); undoChunk('${sandboxName}', '${chunk.id}')" title="Undo">
                 <i class="bi bi-arrow-counterclockwise"></i>

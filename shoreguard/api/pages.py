@@ -351,3 +351,19 @@ async def preset_detail_page(request: Request, name: str):
         "pages/preset_detail.html",
         {"active_page": "policies", "preset_name": name},
     )
+
+
+@router.get("/keys")
+async def keys_page(request: Request):
+    """API key management page (admin only)."""
+    redirect = _require_page_auth(request)
+    if redirect:
+        return redirect
+    role = check_request_auth(request)
+    if role != "admin":
+        return JSONResponse(status_code=403, content={"detail": "Admin access required"})
+    return templates.TemplateResponse(
+        request,
+        "pages/keys.html",
+        {"active_page": "keys"},
+    )

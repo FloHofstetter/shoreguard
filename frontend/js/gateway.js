@@ -25,9 +25,9 @@ async function loadGatewayPage() {
                 <div class="text-center text-muted py-5">
                     <i class="bi bi-hdd-network fs-1 d-block mb-3"></i>
                     <p>No gateways registered.</p>
-                    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#registerGatewayModal">
+                    ${_sgHasRole('admin') ? `<button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#registerGatewayModal">
                         <i class="bi bi-plus me-1"></i>Register Gateway
-                    </button>
+                    </button>` : ''}
                 </div>
             `;
             return;
@@ -58,9 +58,9 @@ async function loadGatewayPage() {
                                 <td>${renderGatewayStatusBadge(gw)}</td>
                                 <td class="d-none d-md-table-cell small text-muted">${gw.last_seen ? formatTimeAgo(gw.last_seen) : '—'}</td>
                                 <td class="text-end" onclick="event.stopPropagation()">
-                                    <button class="btn btn-sm text-muted delete-btn" onclick="unregisterGateway('${escapeHtml(gw.name)}')" title="Unregister">
+                                    ${_sgHasRole('admin') ? `<button class="btn btn-sm text-muted delete-btn" onclick="unregisterGateway('${escapeHtml(gw.name)}')" title="Unregister">
                                         <i class="bi bi-trash3"></i>
-                                    </button>
+                                    </button>` : ''}
                                 </td>
                             </tr>
                         `).join('')}

@@ -96,12 +96,13 @@ function renderProviderRow(provider) {
             <td class="d-none d-md-table-cell small font-monospace">${maskedCreds}</td>
             <td class="d-none d-md-table-cell small font-monospace">${configDisplay}</td>
             <td class="text-end">
+                ${_sgHasRole('operator') ? `
                 <button class="btn btn-sm text-muted" onclick="editProvider('${escapeHtml(provider.name)}')" title="Edit">
                     <i class="bi bi-pencil"></i>
                 </button>
                 <button class="btn btn-sm text-muted delete-btn" onclick="deleteProvider('${escapeHtml(provider.name)}')" title="Delete">
                     <i class="bi bi-trash3"></i>
-                </button>
+                </button>` : ''}
             </td>
         </tr>`;
 }
