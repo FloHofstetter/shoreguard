@@ -3,6 +3,8 @@
  * Table-based draft policy approval flow.
  */
 
+let _chunksCache = [];
+
 async function loadApprovalsPage(name) {
     const container = document.getElementById('approvals-content');
     return _loadApprovals(name, container);
@@ -17,6 +19,7 @@ async function _loadApprovals(name, container) {
     try {
         const data = await apiFetch(`${API}/sandboxes/${name}/approvals`);
         const chunks = data.chunks || [];
+        _chunksCache = chunks;
 
         if (chunks.length === 0) {
             container.innerHTML = `
@@ -35,6 +38,9 @@ async function _loadApprovals(name, container) {
                     <span class="text-muted">${pendingCount} pending of ${chunks.length} total</span>
                 </div>
                 <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary" onclick="showApprovalHistory('${name}')" title="History">
+                        <i class="bi bi-clock-history me-1"></i>History
+                    </button>
                     <button class="btn btn-success" onclick="approveAllChunks('${name}')">
                         <i class="bi bi-check-all me-1"></i>Approve All
                     </button>
@@ -82,6 +88,9 @@ function renderApprovalRow(sandboxName, chunk) {
     if (chunk.status === 'pending') {
         actions = `
             <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary" onclick="event.stopPropagation(); openEditChunk('${sandboxName}', '${chunk.id}')" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                </button>
                 <button class="btn btn-success" onclick="event.stopPropagation(); approveChunk('${sandboxName}', '${chunk.id}')" title="Approve">
                     <i class="bi bi-check"></i>
                 </button>
@@ -193,6 +202,156 @@ async function clearChunks(name) {
         showToast(`Clear failed: ${e.message}`, 'danger');
     }
     navigateTo('/sandboxes/' + name);
+}
+
+function openEditChunk(sandboxName, chunkId) {
+    const chunk = _chunksCache.find(c => c.id === chunkId);
+    if (!chunk) return;
+
+    const rule = chunk.proposed_rule || {};
+    const json = JSON.stringify(rule, null, 2);
+
+    // Create a modal dynamically
+    const existing = document.getElementById('editChunkModal');
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="editChunkModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content sg-modal-themed">
+                    <div class="modal-header border-bottom">
+                        <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Edit Proposed Rule</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small mb-2">Edit the proposed rule JSON. Changes are saved as a new proposal.</p>
+                        <textarea id="edit-chunk-json" class="form-control font-monospace" rows="14" spellcheck="false">${escapeHtml(json)}</textarea>
+                        <div id="edit-chunk-output" class="mt-2"></div>
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-success" id="edit-chunk-save-btn" onclick="saveEditChunk('${sandboxName}', '${chunkId}')">
+                            <i class="bi bi-check me-1"></i>Save
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `);
+
+    new bootstrap.Modal(document.getElementById('editChunkModal')).show();
+    // Cleanup on close
+    document.getElementById('editChunkModal').addEventListener('hidden.bs.modal', () => {
+        document.getElementById('editChunkModal')?.remove();
+    });
+}
+
+async function saveEditChunk(sandboxName, chunkId) {
+    const textarea = document.getElementById('edit-chunk-json');
+    const output = document.getElementById('edit-chunk-output');
+    const btn = document.getElementById('edit-chunk-save-btn');
+
+    let proposed_rule;
+    try {
+        proposed_rule = JSON.parse(textarea.value);
+    } catch (e) {
+        output.innerHTML = `<div class="text-danger small"><i class="bi bi-x-circle me-1"></i>Invalid JSON: ${escapeHtml(e.message)}</div>`;
+        return;
+    }
+
+    btn.disabled = true;
+    output.innerHTML = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Saving...</div>';
+
+    try {
+        await apiFetch(`${API}/sandboxes/${sandboxName}/approvals/${chunkId}/edit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ proposed_rule }),
+        });
+        showToast('Proposed rule updated.', 'success');
+        bootstrap.Modal.getInstance(document.getElementById('editChunkModal'))?.hide();
+        // Reload the approvals view
+        const container = document.getElementById('approvals-content');
+        if (container) _loadApprovals(sandboxName, container);
+    } catch (e) {
+        output.innerHTML = `<div class="text-danger small"><i class="bi bi-x-circle me-1"></i>${escapeHtml(e.message)}</div>`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function showApprovalHistory(sandboxName) {
+    // Create modal dynamically
+    const existing = document.getElementById('approvalHistoryModal');
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="approvalHistoryModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+                <div class="modal-content sg-modal-themed">
+                    <div class="modal-header border-bottom">
+                        <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>Approval History</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="approval-history-body">
+                        ${renderSpinner('Loading history...')}
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `);
+
+    const modal = new bootstrap.Modal(document.getElementById('approvalHistoryModal'));
+    modal.show();
+    document.getElementById('approvalHistoryModal').addEventListener('hidden.bs.modal', () => {
+        document.getElementById('approvalHistoryModal')?.remove();
+    });
+
+    try {
+        const history = await apiFetch(`${API}/sandboxes/${sandboxName}/approvals/history`);
+        const body = document.getElementById('approval-history-body');
+
+        if (!history || history.length === 0) {
+            body.innerHTML = renderEmptyState('clock-history', 'No approval history yet.');
+            return;
+        }
+
+        body.innerHTML = `
+            <div class="table-responsive">
+                <table class="table table-dark table-striped table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Rule</th>
+                            <th>Decision</th>
+                            <th>Timestamp</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${history.map(entry => {
+                            const badgeClass = SG.badges.approval[entry.status] || SG.badges.approval[entry.decision] || 'text-bg-secondary';
+                            const decision = entry.status || entry.decision || 'unknown';
+                            const ts = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '—';
+                            const rule = entry.rule_name || entry.chunk_id || '—';
+                            const reason = entry.reason || '';
+                            return `
+                                <tr>
+                                    <td><strong>${escapeHtml(rule)}</strong></td>
+                                    <td><span class="badge ${badgeClass}">${escapeHtml(decision)}</span></td>
+                                    <td class="text-muted small">${escapeHtml(ts)}</td>
+                                    <td class="text-muted small">${reason ? escapeHtml(reason) : '—'}</td>
+                                </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+    } catch (e) {
+        const body = document.getElementById('approval-history-body');
+        if (body) body.innerHTML = renderError(e.message);
+    }
 }
 
 async function undoChunk(name, chunkId) {
