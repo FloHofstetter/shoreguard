@@ -642,3 +642,39 @@ async def users_page(request: Request):
         "pages/users.html",
         {"active_page": "users"},
     )
+
+
+@router.get("/users/new")
+async def user_new_page(request: Request):
+    """Invite user form page (admin only)."""
+    redirect = _require_page_auth(request)
+    if redirect:
+        return redirect
+    role = check_request_auth(request)
+    if role != "admin":
+        return _render_error(
+            request,
+            403,
+            "Access Denied",
+            "You need admin privileges to invite users.",
+            icon="shield-lock",
+        )
+    return templates.TemplateResponse(request, "pages/user_new.html", {"active_page": "users"})
+
+
+@router.get("/users/new-service-principal")
+async def sp_new_page(request: Request):
+    """Create service principal form page (admin only)."""
+    redirect = _require_page_auth(request)
+    if redirect:
+        return redirect
+    role = check_request_auth(request)
+    if role != "admin":
+        return _render_error(
+            request,
+            403,
+            "Access Denied",
+            "You need admin privileges to create service principals.",
+            icon="shield-lock",
+        )
+    return templates.TemplateResponse(request, "pages/sp_new.html", {"active_page": "users"})

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}New Service Principal — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/users">Users</a></li>
+    <li class="breadcrumb-item active">New Service Principal</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <h5 class="mb-3"><i class="bi bi-key me-2"></i>New Service Principal</h5>
+
+        <div class="card sg-card-themed">
+            <div class="card-body">
+                <form id="create-sp-form">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" id="new-sp-name" placeholder="terraform-ci" autofocus required>
+                        <div class="form-text">A label to identify this service principal.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <select class="form-select" id="new-sp-role" required>
+                            <option value="viewer">Viewer — read-only access</option>
+                            <option value="operator">Operator — sandbox, policy, provider management</option>
+                            <option value="admin">Admin — full access</option>
+                        </select>
+                    </div>
+                    <div id="create-sp-output"></div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success" id="create-sp-btn">
+                            <i class="bi bi-plus me-1"></i>Create
+                        </button>
+                        <a href="/users" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/users.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('create-sp-form').addEventListener('submit', createNewSP);
+});
+</script>
+{% endblock %}

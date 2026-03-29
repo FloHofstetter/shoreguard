@@ -26,9 +26,9 @@ async function loadUsersPage() {
                     <button class="btn btn-outline-secondary" onclick="loadUsersPage()" title="Refresh">
                         <i class="bi bi-arrow-clockwise"></i>
                     </button>
-                    <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#createUserModal">
-                        <i class="bi bi-plus-lg me-1"></i>New User
-                    </button>
+                    <a href="/users/new" class="btn btn-outline-success">
+                        <i class="bi bi-plus-lg me-1"></i>Invite User
+                    </a>
                 </div>
             </div>
 
@@ -68,15 +68,15 @@ async function loadUsersPage() {
                     </table>
                 </div>
             ` : renderEmptyState('people', 'No users yet.',
-                `<button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#createUserModal">
-                    <i class="bi bi-plus me-1"></i>Create User</button>`)}
+                `<a href="/users/new" class="btn btn-success btn-sm">
+                    <i class="bi bi-plus me-1"></i>Invite User</a>`)}
 
             <!-- Service Principals Section -->
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="mb-0"><i class="bi bi-key me-2"></i>Service Principals</h5>
-                <button class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#createSPModal">
+                <a href="/users/new-service-principal" class="btn btn-outline-success btn-sm">
                     <i class="bi bi-plus-lg me-1"></i>New
-                </button>
+                </a>
             </div>
 
             ${sps.length > 0 ? `
@@ -113,8 +113,8 @@ async function loadUsersPage() {
                     </table>
                 </div>
             ` : renderEmptyState('key', 'No service principals yet.',
-                `<button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#createSPModal">
-                    <i class="bi bi-plus me-1"></i>Create Service Principal</button>`)}
+                `<a href="/users/new-service-principal" class="btn btn-success btn-sm">
+                    <i class="bi bi-plus me-1"></i>Create Service Principal</a>`)}
         `;
     } catch (e) {
         container.innerHTML = renderError(e.message);
@@ -145,7 +145,7 @@ async function createNewUser(e) {
 
         const inviteUrl = `${window.location.origin}/invite?token=${data.invite_token}`;
         output.innerHTML = `
-            <div class="alert alert-success small py-2 mb-0">
+            <div class="alert alert-success small py-2 mb-2">
                 <p class="mb-1"><i class="bi bi-check-circle me-1"></i>Invite created! Share this link with the user:</p>
                 <div class="input-group input-group-sm">
                     <input type="text" class="form-control font-monospace" value="${escapeHtml(inviteUrl)}" readonly id="invite-url-value">
@@ -153,9 +153,10 @@ async function createNewUser(e) {
                         <i class="bi bi-clipboard"></i>
                     </button>
                 </div>
-            </div>`;
-        showToast(`Invite sent to "${email}".`, 'success');
-        loadUsersPage();
+            </div>
+            <a href="/users" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back to Users</a>`;
+        showToast(`Invite for "${email}" created.`, 'success');
+        btn.style.display = 'none';
     } catch (e) {
         output.innerHTML = `<div class="text-danger small"><i class="bi bi-x-circle me-1"></i>${escapeHtml(e.message)}</div>`;
     } finally {
@@ -201,7 +202,7 @@ async function createNewSP(e) {
         });
 
         output.innerHTML = `
-            <div class="alert alert-success small py-2 mb-0">
+            <div class="alert alert-success small py-2 mb-2">
                 <p class="mb-1"><i class="bi bi-check-circle me-1"></i>Key created! Copy it now — it won't be shown again.</p>
                 <div class="input-group input-group-sm">
                     <input type="text" class="form-control font-monospace" value="${escapeHtml(data.key)}" readonly id="new-sp-key-value">
@@ -209,9 +210,10 @@ async function createNewSP(e) {
                         <i class="bi bi-clipboard"></i>
                     </button>
                 </div>
-            </div>`;
+            </div>
+            <a href="/users" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back to Users</a>`;
         showToast(`Service principal "${name}" created.`, 'success');
-        loadUsersPage();
+        btn.style.display = 'none';
     } catch (e) {
         output.innerHTML = `<div class="text-danger small"><i class="bi bi-x-circle me-1"></i>${escapeHtml(e.message)}</div>`;
     } finally {
