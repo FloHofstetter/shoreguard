@@ -144,7 +144,10 @@ async def create_key(request: Request, body: CreateKeyRequest):
     try:
         plaintext, info = create_api_key(body.name.strip(), body.role)
     except Exception as e:
-        return JSONResponse(status_code=409, content={"detail": str(e)})
+        detail = str(e)
+        if "UNIQUE" in detail or "unique" in detail.lower():
+            detail = f"A key named '{body.name.strip()}' already exists"
+        return JSONResponse(status_code=409, content={"detail": detail})
     return {"key": plaintext, **info}
 
 
