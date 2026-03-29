@@ -3,17 +3,21 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from .auth import (
     COOKIE_NAME,
+    ROLES,
     check_api_key,
     check_request_auth,
+    create_api_key,
     create_session_token,
+    delete_api_key,
     is_auth_enabled,
+    list_api_keys,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,7 +60,8 @@ async def login(request: Request, body: LoginRequest):
             status_code=400,
             content={"detail": "Authentication is not enabled"},
         )
-    if not check_api_key(body.key):
+    role = check_api_key(body.key)
+    if not role:
         client_ip = request.client.host if request.client else "unknown"
         logger.warning("Login failed: invalid API key (client=%s)", client_ip)
         return JSONResponse(
@@ -64,9 +69,9 @@ async def login(request: Request, body: LoginRequest):
             content={"detail": "Invalid API key"},
         )
     client_ip = request.client.host if request.client else "unknown"
-    logger.info("Login successful (client=%s)", client_ip)
-    token = create_session_token()
-    response = JSONResponse(content={"ok": True})
+    logger.info("Login successful (client=%s, role=%s)", client_ip, role)
+    token = create_session_token(role=role)
+    response = JSONResponse(content={"ok": True, "role": role})
     secure = request.url.scheme == "https"
     response.set_cookie(
         COOKIE_NAME,
@@ -96,10 +101,60 @@ async def auth_check(request: Request):
     Used by the frontend to decide whether to show the login page.
     """
     if not is_auth_enabled():
-        return {"authenticated": True, "auth_enabled": False}
+        return {"authenticated": True, "auth_enabled": False, "role": "admin"}
 
-    authenticated = check_request_auth(request)
-    return {"authenticated": authenticated, "auth_enabled": True}
+    role = check_request_auth(request)
+    return {"authenticated": role is not None, "auth_enabled": True, "role": role}
+
+
+# ─── API key management (admin-only) ─────────────────────────────────────────
+
+
+class CreateKeyRequest(BaseModel):
+    """Request body for creating an API key."""
+
+    name: str
+    role: str = "viewer"
+
+
+def _require_admin(request: Request) -> None:
+    role = check_request_auth(request)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
+@router.get("/api/auth/keys")
+async def list_keys(request: Request):
+    """List all API keys (admin only)."""
+    _require_admin(request)
+    return list_api_keys()
+
+
+@router.post("/api/auth/keys", status_code=201)
+async def create_key(request: Request, body: CreateKeyRequest):
+    """Create a new API key (admin only)."""
+    _require_admin(request)
+    if body.role not in ROLES:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": f"Invalid role: {body.role!r} (must be one of {ROLES})"},
+        )
+    if not body.name.strip():
+        return JSONResponse(status_code=400, content={"detail": "Name is required"})
+    try:
+        plaintext, info = create_api_key(body.name.strip(), body.role)
+    except Exception as e:
+        return JSONResponse(status_code=409, content={"detail": str(e)})
+    return {"key": plaintext, **info}
+
+
+@router.delete("/api/auth/keys/{name}")
+async def remove_key(request: Request, name: str):
+    """Delete an API key (admin only)."""
+    _require_admin(request)
+    if delete_api_key(name):
+        return {"ok": True}
+    return JSONResponse(status_code=404, content={"detail": f"Key '{name}' not found"})
 
 
 # ─── Page helpers ────────────────────────────────────────────────────────────

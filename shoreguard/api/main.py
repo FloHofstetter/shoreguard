@@ -14,11 +14,13 @@ from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import GatewayNotConnectedError
 
 from .auth import (
-    configure as configure_auth,
-)
-from .auth import (
+    bootstrap_admin_key,
     is_auth_enabled,
     require_auth,
+    require_role,
+)
+from .auth import (
+    configure as configure_auth,
 )
 from .cli import _import_filesystem_gateways, cli  # noqa: F401 — cli re-exported for entry point
 from .deps import get_client, resolve_gateway
@@ -65,11 +67,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("Auto-imported %d gateway(s) from filesystem", imported)
 
     # ── Auth ─────────────────────────────────────────────────────────────
-    if not is_auth_enabled():
-        env_key = os.environ.get("SHOREGUARD_API_KEY")
-        if env_key:
-            configure_auth(env_key)
-            logger.info("API-key authentication enabled (from env)")
+    env_key = os.environ.get("SHOREGUARD_API_KEY")
+    if not is_auth_enabled() and env_key:
+        configure_auth(env_key, session_factory=session_factory)
+        logger.info("API-key authentication enabled (from env)")
+    else:
+        # Key already configured (from CLI or test fixture) — just attach the DB
+        configure_auth(None, session_factory=session_factory)
+    bootstrap_admin_key(env_key)
 
     # Hide OpenAPI docs when authentication is enabled to avoid leaking
     # the full API schema to unauthenticated users.
@@ -174,7 +179,7 @@ async def get_inference(gw: str, client: ShoreGuardClient = Depends(get_client))
     return await asyncio.to_thread(client.get_cluster_inference)
 
 
-@gw_api.put("/inference")
+@gw_api.put("/inference", dependencies=[Depends(require_role("operator"))])
 async def set_inference(
     gw: str,
     body: SetInferenceRequest,

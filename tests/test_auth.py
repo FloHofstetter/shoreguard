@@ -10,19 +10,22 @@ from shoreguard.api.auth import (
     configure,
     create_session_token,
     is_auth_enabled,
+    reset,
     verify_session_token,
 )
 
 
 class TestConfigure:
+    def teardown_method(self):
+        reset()
+
     def test_no_key(self):
-        configure(None)
+        reset()
         assert not is_auth_enabled()
 
     def test_with_key(self):
         configure("test-key")
         assert is_auth_enabled()
-        configure(None)
 
 
 class TestSessionToken:
@@ -30,36 +33,43 @@ class TestSessionToken:
         configure("test-key-123")
 
     def teardown_method(self):
-        configure(None)
+        reset()
 
     def test_create_and_verify(self):
         token = create_session_token()
-        assert verify_session_token(token)
+        assert verify_session_token(token) == "admin"
+
+    def test_create_with_role(self):
+        token = create_session_token(role="viewer")
+        assert verify_session_token(token) == "viewer"
 
     def test_tampered_signature(self):
         token = create_session_token()
         parts = token.split(".")
-        parts[2] = "bad" * 20
-        assert not verify_session_token(".".join(parts))
+        parts[3] = "bad" * 20
+        assert verify_session_token(".".join(parts)) is None
 
     def test_expired_token(self):
         with patch("shoreguard.api.auth.time") as mock_time:
             mock_time.time.return_value = time.time() - 86400 * 8
             token = create_session_token()
-        assert not verify_session_token(token)
+        assert verify_session_token(token) is None
 
     def test_malformed_token(self):
-        assert not verify_session_token("")
-        assert not verify_session_token("a.b")
-        assert not verify_session_token("a.b.c.d")
+        assert verify_session_token("") is None
+        assert verify_session_token("a.b") is None
+        assert verify_session_token("a.b.c") is None  # 3 parts (old format)
+
+    def test_four_parts_with_invalid_role(self):
+        assert verify_session_token("a.b.invalid_role.d") is None
 
     def test_non_numeric_expiry(self):
-        assert not verify_session_token("nonce.notanumber.sig")
+        assert verify_session_token("nonce.notanumber.admin.sig") is None
 
     def test_different_key_rejects(self):
         token = create_session_token()
         configure("different-key")
-        assert not verify_session_token(token)
+        assert verify_session_token(token) is None
         configure("test-key-123")
 
 
@@ -68,14 +78,14 @@ class TestCheckApiKey:
         configure("my-secret")
 
     def teardown_method(self):
-        configure(None)
+        reset()
 
     def test_correct_key(self):
-        assert check_api_key("my-secret")
+        assert check_api_key("my-secret") == "admin"
 
     def test_wrong_key(self):
-        assert not check_api_key("wrong")
+        assert check_api_key("wrong") is None
 
     def test_no_key_configured(self):
-        configure(None)
-        assert not check_api_key("anything")
+        reset()
+        assert check_api_key("anything") is None

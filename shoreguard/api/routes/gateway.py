@@ -10,9 +10,10 @@ import os
 from typing import TYPE_CHECKING, Any
 
 import grpc
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
+from shoreguard.api.auth import require_role
 from shoreguard.api.deps import _get_gateway_service
 from shoreguard.config import ENDPOINT_RE, VALID_GATEWAY_NAME_RE, is_private_ip
 from shoreguard.exceptions import NotFoundError, friendly_grpc_error
@@ -153,7 +154,7 @@ async def gateway_config() -> dict[str, Any]:
 # ─── Registration (v0.3) ──────────────────────────────────────────────────
 
 
-@router.post("/register", status_code=201)
+@router.post("/register", status_code=201, dependencies=[Depends(require_role("admin"))])
 async def gateway_register(body: RegisterGatewayRequest) -> dict[str, Any]:
     """Register a remote gateway."""
     if not _VALID_NAME_RE.match(body.name):
@@ -217,7 +218,7 @@ def _validate_name_param(name: str) -> None:
         )
 
 
-@router.delete("/{name}")
+@router.delete("/{name}", dependencies=[Depends(require_role("admin"))])
 async def gateway_unregister(name: str) -> dict[str, Any]:
     """Unregister a gateway."""
     _validate_name_param(name)
@@ -229,7 +230,7 @@ async def gateway_unregister(name: str) -> dict[str, Any]:
     return {"success": True, "name": name}
 
 
-@router.post("/{name}/test-connection")
+@router.post("/{name}/test-connection", dependencies=[Depends(require_role("admin"))])
 async def gateway_test_connection(name: str) -> dict[str, Any]:
     """Explicitly test connectivity to a registered gateway."""
     _validate_name_param(name)
@@ -247,7 +248,7 @@ async def gateway_test_connection(name: str) -> dict[str, Any]:
 # ─── Actions on any gateway ───────────────────────────────────────────────
 
 
-@router.post("/{name}/select")
+@router.post("/{name}/select", dependencies=[Depends(require_role("admin"))])
 async def gateway_select(name: str) -> dict[str, Any]:
     """Set a gateway as active and reconnect."""
     _validate_name_param(name)
@@ -270,7 +271,7 @@ async def gateway_diagnostics() -> dict[str, Any]:
     return await asyncio.to_thread(mgr.diagnostics)
 
 
-@router.post("/start")
+@router.post("/start", dependencies=[Depends(require_role("admin"))])
 async def gateway_start_active() -> dict[str, Any]:
     """Start the active gateway (local mode)."""
     mgr = _get_local_manager()
@@ -280,7 +281,7 @@ async def gateway_start_active() -> dict[str, Any]:
     return await asyncio.to_thread(mgr.start)
 
 
-@router.post("/stop")
+@router.post("/stop", dependencies=[Depends(require_role("admin"))])
 async def gateway_stop_active() -> dict[str, Any]:
     """Stop the active gateway (local mode)."""
     mgr = _get_local_manager()
@@ -290,7 +291,7 @@ async def gateway_stop_active() -> dict[str, Any]:
     return await asyncio.to_thread(mgr.stop)
 
 
-@router.post("/restart")
+@router.post("/restart", dependencies=[Depends(require_role("admin"))])
 async def gateway_restart_active() -> dict[str, Any]:
     """Restart the active gateway (local mode)."""
     mgr = _get_local_manager()
@@ -300,7 +301,7 @@ async def gateway_restart_active() -> dict[str, Any]:
     return await asyncio.to_thread(mgr.restart)
 
 
-@router.post("/{name}/start")
+@router.post("/{name}/start", dependencies=[Depends(require_role("admin"))])
 async def gateway_start_named(name: str) -> dict[str, Any]:
     """Start a specific gateway by name (local mode)."""
     _validate_name_param(name)
@@ -311,7 +312,7 @@ async def gateway_start_named(name: str) -> dict[str, Any]:
     return await asyncio.to_thread(mgr.start, name)
 
 
-@router.post("/{name}/stop")
+@router.post("/{name}/stop", dependencies=[Depends(require_role("admin"))])
 async def gateway_stop_named(name: str) -> dict[str, Any]:
     """Stop a specific gateway by name (local mode)."""
     _validate_name_param(name)
@@ -322,7 +323,7 @@ async def gateway_stop_named(name: str) -> dict[str, Any]:
     return await asyncio.to_thread(mgr.stop, name)
 
 
-@router.post("/{name}/restart")
+@router.post("/{name}/restart", dependencies=[Depends(require_role("admin"))])
 async def gateway_restart_named(name: str) -> dict[str, Any]:
     """Restart a specific gateway by name (local mode)."""
     _validate_name_param(name)
@@ -333,7 +334,7 @@ async def gateway_restart_named(name: str) -> dict[str, Any]:
     return await asyncio.to_thread(mgr.restart, name)
 
 
-@router.post("/{name}/destroy")
+@router.post("/{name}/destroy", dependencies=[Depends(require_role("admin"))])
 async def gateway_destroy(name: str, force: bool = False) -> dict[str, Any]:
     """Destroy a gateway and remove its configuration (local mode)."""
     _validate_name_param(name)
@@ -344,7 +345,7 @@ async def gateway_destroy(name: str, force: bool = False) -> dict[str, Any]:
     return await asyncio.to_thread(mgr.destroy, name, force=force)
 
 
-@router.post("/create", status_code=202)
+@router.post("/create", status_code=202, dependencies=[Depends(require_role("admin"))])
 async def gateway_create(body: CreateGatewayRequest) -> dict[str, Any]:
     """Create a new local gateway. Returns 202 with operation ID (local mode)."""
     mgr = _get_local_manager()

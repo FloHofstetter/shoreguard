@@ -8,6 +8,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_client
 from shoreguard.client import ShoreGuardClient
 from shoreguard.presets import get_preset as _get_preset
@@ -52,7 +53,7 @@ async def get_policy(
     return await asyncio.to_thread(svc.get, name)
 
 
-@router.put("/sandboxes/{name}/policy")
+@router.put("/sandboxes/{name}/policy", dependencies=[Depends(require_role("operator"))])
 async def update_policy(
     name: str,
     body: dict[str, Any],
@@ -76,7 +77,9 @@ async def list_policy_revisions(
 # ─── Network Rule CRUD ───────────────────────────────────────────────────────
 
 
-@router.post("/sandboxes/{name}/policy/network-rules")
+@router.post(
+    "/sandboxes/{name}/policy/network-rules", dependencies=[Depends(require_role("operator"))]
+)
 async def add_network_rule(
     name: str,
     body: NetworkRuleRequest,
@@ -86,7 +89,9 @@ async def add_network_rule(
     return await asyncio.to_thread(svc.add_network_rule, name, body.key, body.rule)
 
 
-@router.delete("/sandboxes/{name}/policy/network-rules/{key}")
+@router.delete(
+    "/sandboxes/{name}/policy/network-rules/{key}", dependencies=[Depends(require_role("operator"))]
+)
 async def delete_network_rule(
     name: str,
     key: str,
@@ -99,7 +104,9 @@ async def delete_network_rule(
 # ─── Filesystem Path CRUD ─────────────────────────────────────────────
 
 
-@router.post("/sandboxes/{name}/policy/filesystem")
+@router.post(
+    "/sandboxes/{name}/policy/filesystem", dependencies=[Depends(require_role("operator"))]
+)
 async def add_filesystem_path(
     name: str,
     body: FilesystemPathRequest,
@@ -109,7 +116,9 @@ async def add_filesystem_path(
     return await asyncio.to_thread(svc.add_filesystem_path, name, body.path, body.access)
 
 
-@router.delete("/sandboxes/{name}/policy/filesystem")
+@router.delete(
+    "/sandboxes/{name}/policy/filesystem", dependencies=[Depends(require_role("operator"))]
+)
 async def delete_filesystem_path(
     name: str,
     path: str,
@@ -122,7 +131,7 @@ async def delete_filesystem_path(
 # ─── Process/Landlock Update ─────────────────────────────────────────
 
 
-@router.put("/sandboxes/{name}/policy/process")
+@router.put("/sandboxes/{name}/policy/process", dependencies=[Depends(require_role("operator"))])
 async def update_process_policy(
     name: str,
     body: ProcessPolicyRequest,
@@ -156,7 +165,10 @@ async def get_preset(preset_name: str) -> dict[str, Any]:
     return result
 
 
-@router.post("/sandboxes/{name}/policy/presets/{preset_name}")
+@router.post(
+    "/sandboxes/{name}/policy/presets/{preset_name}",
+    dependencies=[Depends(require_role("operator"))],
+)
 async def apply_preset(
     name: str,
     preset_name: str,

@@ -11,6 +11,7 @@ import grpc
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_client
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import friendly_grpc_error
@@ -67,7 +68,7 @@ async def list_sandboxes(
     return await asyncio.to_thread(svc.list, limit=limit, offset=offset)
 
 
-@router.post("", status_code=202)
+@router.post("", status_code=202, dependencies=[Depends(require_role("operator"))])
 async def create_sandbox(
     body: CreateSandboxRequest,
     svc: SandboxService = Depends(_get_sandbox_service),
@@ -143,7 +144,7 @@ async def get_sandbox(
     return await asyncio.to_thread(svc.get, name)
 
 
-@router.delete("/{name}")
+@router.delete("/{name}", dependencies=[Depends(require_role("operator"))])
 async def delete_sandbox(
     name: str,
     svc: SandboxService = Depends(_get_sandbox_service),
@@ -154,7 +155,7 @@ async def delete_sandbox(
     return {"deleted": deleted}
 
 
-@router.post("/{name}/exec")
+@router.post("/{name}/exec", dependencies=[Depends(require_role("operator"))])
 async def exec_in_sandbox(
     name: str,
     body: ExecRequest,
@@ -175,7 +176,7 @@ async def exec_in_sandbox(
     )
 
 
-@router.post("/{name}/ssh", status_code=201)
+@router.post("/{name}/ssh", status_code=201, dependencies=[Depends(require_role("operator"))])
 async def create_ssh_session(
     name: str,
     svc: SandboxService = Depends(_get_sandbox_service),
@@ -185,7 +186,7 @@ async def create_ssh_session(
     return await asyncio.to_thread(svc.create_ssh_session, name)
 
 
-@router.delete("/{name}/ssh")
+@router.delete("/{name}/ssh", dependencies=[Depends(require_role("operator"))])
 async def revoke_ssh_session(
     name: str,
     body: RevokeSshRequest,

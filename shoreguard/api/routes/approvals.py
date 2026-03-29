@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_client
 from shoreguard.client import ShoreGuardClient
 from shoreguard.services.approvals import ApprovalService
@@ -56,7 +57,9 @@ async def get_pending_approvals(
     return await asyncio.to_thread(svc.get_pending, name)
 
 
-@router.post("/{name}/approvals/{chunk_id}/approve")
+@router.post(
+    "/{name}/approvals/{chunk_id}/approve", dependencies=[Depends(require_role("operator"))]
+)
 async def approve_chunk(
     name: str,
     chunk_id: str,
@@ -66,7 +69,9 @@ async def approve_chunk(
     return await asyncio.to_thread(svc.approve, name, chunk_id)
 
 
-@router.post("/{name}/approvals/{chunk_id}/reject")
+@router.post(
+    "/{name}/approvals/{chunk_id}/reject", dependencies=[Depends(require_role("operator"))]
+)
 async def reject_chunk(
     name: str,
     chunk_id: str,
@@ -79,7 +84,7 @@ async def reject_chunk(
     return {"status": "rejected"}
 
 
-@router.post("/{name}/approvals/approve-all")
+@router.post("/{name}/approvals/approve-all", dependencies=[Depends(require_role("operator"))])
 async def approve_all(
     name: str,
     body: ApproveAllRequest | None = None,
@@ -90,7 +95,7 @@ async def approve_all(
     return await asyncio.to_thread(svc.approve_all, name, include_security_flagged=include_flagged)
 
 
-@router.post("/{name}/approvals/{chunk_id}/edit")
+@router.post("/{name}/approvals/{chunk_id}/edit", dependencies=[Depends(require_role("operator"))])
 async def edit_chunk(
     name: str,
     chunk_id: str,
@@ -102,7 +107,7 @@ async def edit_chunk(
     return {"status": "edited"}
 
 
-@router.post("/{name}/approvals/{chunk_id}/undo")
+@router.post("/{name}/approvals/{chunk_id}/undo", dependencies=[Depends(require_role("operator"))])
 async def undo_chunk(
     name: str,
     chunk_id: str,
@@ -112,7 +117,7 @@ async def undo_chunk(
     return await asyncio.to_thread(svc.undo, name, chunk_id)
 
 
-@router.post("/{name}/approvals/clear")
+@router.post("/{name}/approvals/clear", dependencies=[Depends(require_role("operator"))])
 async def clear_approvals(
     name: str,
     svc: ApprovalService = Depends(_get_approval_service),

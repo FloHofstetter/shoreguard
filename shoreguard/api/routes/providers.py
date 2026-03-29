@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_client
 from shoreguard.client import ShoreGuardClient
 from shoreguard.services.providers import ProviderService
@@ -65,7 +66,7 @@ async def list_providers(
     return await asyncio.to_thread(svc.list, limit=limit, offset=offset)
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[Depends(require_role("operator"))])
 async def create_provider(
     body: CreateProviderRequest,
     svc: ProviderService = Depends(_get_provider_service),
@@ -90,7 +91,7 @@ async def get_provider(
     return await asyncio.to_thread(svc.get, name)
 
 
-@router.put("/{name}")
+@router.put("/{name}", dependencies=[Depends(require_role("operator"))])
 async def update_provider(
     name: str,
     body: UpdateProviderRequest,
@@ -106,7 +107,7 @@ async def update_provider(
     )
 
 
-@router.delete("/{name}")
+@router.delete("/{name}", dependencies=[Depends(require_role("operator"))])
 async def delete_provider(
     name: str,
     svc: ProviderService = Depends(_get_provider_service),

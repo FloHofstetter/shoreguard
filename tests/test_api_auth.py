@@ -15,7 +15,7 @@ def _enable_auth():
     """Enable auth for all tests in this module."""
     auth.configure(TEST_KEY)
     yield
-    auth.configure(None)
+    auth.reset()
 
 
 @pytest.fixture
@@ -61,7 +61,7 @@ async def test_login_wrong_key(client):
 
 
 async def test_login_disabled():
-    auth.configure(None)
+    auth.reset()
     from shoreguard.api.main import app
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -101,7 +101,7 @@ async def test_auth_check_with_bearer(client):
 
 
 async def test_auth_check_disabled():
-    auth.configure(None)
+    auth.reset()
     from shoreguard.api.main import app
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -201,7 +201,7 @@ async def test_ws_auth_no_credentials():
 
 
 async def test_ws_auth_disabled():
-    auth.configure(None)
+    auth.reset()
     from starlette.testclient import TestClient
 
     from shoreguard.api.main import app

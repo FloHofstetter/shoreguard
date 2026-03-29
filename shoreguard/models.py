@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import LargeBinary, String, Text
+from sqlalchemy import Integer, LargeBinary, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -26,3 +26,16 @@ class Gateway(Base):
     registered_at: Mapped[str] = mapped_column(String, nullable=False)
     last_seen: Mapped[str | None] = mapped_column(String)
     last_status: Mapped[str] = mapped_column(String, default="unknown")
+
+
+class ApiKey(Base):
+    """An API key with an assigned role."""
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="viewer")
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    last_used: Mapped[str | None] = mapped_column(String)
