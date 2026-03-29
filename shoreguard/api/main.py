@@ -14,13 +14,11 @@ from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import GatewayNotConnectedError
 
 from .auth import (
-    bootstrap_admin_key,
-    is_auth_enabled,
+    bootstrap_admin_user,
+    init_auth,
+    is_setup_complete,
     require_auth,
     require_role,
-)
-from .auth import (
-    configure as configure_auth,
 )
 from .cli import _import_filesystem_gateways, cli  # noqa: F401 — cli re-exported for entry point
 from .deps import get_client, resolve_gateway
@@ -67,18 +65,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("Auto-imported %d gateway(s) from filesystem", imported)
 
     # ── Auth ─────────────────────────────────────────────────────────────
-    env_key = os.environ.get("SHOREGUARD_API_KEY")
-    if not is_auth_enabled() and env_key:
-        configure_auth(env_key, session_factory=session_factory)
-        logger.info("API-key authentication enabled (from env)")
-    else:
-        # Key already configured (from CLI or test fixture) — just attach the DB
-        configure_auth(None, session_factory=session_factory)
-    bootstrap_admin_key(env_key)
+    init_auth(session_factory)
+    bootstrap_admin_user()
 
     # Hide OpenAPI docs when authentication is enabled to avoid leaking
     # the full API schema to unauthenticated users.
-    if is_auth_enabled():
+    if is_setup_complete():
         app.openapi_url = None
         app.docs_url = None
         app.redoc_url = None
@@ -131,7 +123,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 

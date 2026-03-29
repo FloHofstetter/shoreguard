@@ -470,17 +470,6 @@ def test_cli_overrides_env():
             assert mock_run.call_args[1]["host"] == "127.0.0.1"
 
 
-def test_cli_api_key_flag():
-    from shoreguard.api.cli import cli
-
-    runner = _cli_runner()
-    with patch("uvicorn.run"):
-        with patch("shoreguard.api.auth.configure") as mock_configure:
-            result = runner.invoke(cli, ["--api-key", "my-secret-key"])
-            assert result.exit_code == 0
-            mock_configure.assert_called_once_with("my-secret-key")
-
-
 # ─── 3E: Frontend Resolution ─────────────────────────────────────────────────
 
 

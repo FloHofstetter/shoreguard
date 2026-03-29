@@ -11,13 +11,17 @@ from pydantic import BaseModel
 from .auth import (
     COOKIE_NAME,
     ROLES,
-    check_api_key,
+    accept_invite,
+    authenticate_user,
     check_request_auth,
-    create_api_key,
+    create_service_principal,
     create_session_token,
-    delete_api_key,
-    is_auth_enabled,
-    list_api_keys,
+    create_user,
+    delete_service_principal,
+    delete_user,
+    is_setup_complete,
+    list_service_principals,
+    list_users,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,29 +53,32 @@ router = APIRouter()
 class LoginRequest(BaseModel):
     """Request body for the login endpoint."""
 
-    key: str
+    email: str
+    password: str
 
 
 @router.post("/api/auth/login")
 async def login(request: Request, body: LoginRequest):
-    """Validate the API key and set a session cookie."""
-    if not is_auth_enabled():
+    """Validate credentials and set a session cookie."""
+    if not is_setup_complete():
         return JSONResponse(
             status_code=400,
-            content={"detail": "Authentication is not enabled"},
+            content={"detail": "Setup not complete — create an admin user first"},
         )
-    role = check_api_key(body.key)
-    if not role:
+    user = authenticate_user(body.email, body.password)
+    if not user:
         client_ip = request.client.host if request.client else "unknown"
-        logger.warning("Login failed: invalid API key (client=%s)", client_ip)
+        logger.warning("Login failed: invalid credentials (client=%s)", client_ip)
         return JSONResponse(
             status_code=401,
-            content={"detail": "Invalid API key"},
+            content={"detail": "Invalid email or password"},
         )
     client_ip = request.client.host if request.client else "unknown"
-    logger.info("Login successful (client=%s, role=%s)", client_ip, role)
-    token = create_session_token(role=role)
-    response = JSONResponse(content={"ok": True, "role": role})
+    logger.info(
+        "Login successful (client=%s, email=%s, role=%s)", client_ip, user["email"], user["role"]
+    )
+    token = create_session_token(user_id=user["id"], role=user["role"])
+    response = JSONResponse(content={"ok": True, "role": user["role"], "email": user["email"]})
     secure = request.url.scheme == "https"
     response.set_cookie(
         COOKIE_NAME,
@@ -96,24 +103,65 @@ async def logout():
 
 @router.get("/api/auth/check")
 async def auth_check(request: Request):
-    """Return whether the current request is authenticated.
-
-    Used by the frontend to decide whether to show the login page.
-    """
-    if not is_auth_enabled():
-        return {"authenticated": True, "auth_enabled": False, "role": "admin"}
+    """Return auth status, role, and whether setup is needed."""
+    needs_setup = not is_setup_complete()
+    if needs_setup:
+        return {"authenticated": False, "auth_enabled": False, "role": None, "needs_setup": True}
 
     role = check_request_auth(request)
-    return {"authenticated": role is not None, "auth_enabled": True, "role": role}
+    return {
+        "authenticated": role is not None,
+        "auth_enabled": True,
+        "role": role,
+        "needs_setup": False,
+    }
 
 
-# ─── API key management (admin-only) ─────────────────────────────────────────
+# ─── Setup wizard ───────────────────────────────────────────────────────────
 
 
-class CreateKeyRequest(BaseModel):
-    """Request body for creating an API key."""
+class SetupRequest(BaseModel):
+    """Request body for the initial admin setup."""
 
-    name: str
+    email: str
+    password: str
+
+
+@router.post("/api/auth/setup")
+async def setup(request: Request, body: SetupRequest):
+    """Create the first admin user. Only works when no users exist."""
+    if is_setup_complete():
+        return JSONResponse(status_code=400, content={"detail": "Setup already complete"})
+    if not body.email.strip() or not body.password:
+        return JSONResponse(status_code=400, content={"detail": "Email and password are required"})
+    try:
+        info = create_user(body.email.strip(), body.password, "admin")
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"detail": str(e)})
+
+    logger.info("Setup complete: admin user created (%s)", info["email"])
+    token = create_session_token(user_id=info["id"], role="admin")
+    response = JSONResponse(content={"ok": True, "role": "admin", "email": info["email"]})
+    secure = request.url.scheme == "https"
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        max_age=86400 * 7,
+        path="/",
+    )
+    return response
+
+
+# ─── User management (admin-only) ───────────────────────────────────────────
+
+
+class CreateUserRequest(BaseModel):
+    """Request body for inviting a user."""
+
+    email: str
     role: str = "viewer"
 
 
@@ -123,16 +171,100 @@ def _require_admin(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Admin access required")
 
 
-@router.get("/api/auth/keys")
-async def list_keys(request: Request):
-    """List all API keys (admin only)."""
+@router.get("/api/auth/users")
+async def get_users(request: Request):
+    """List all users (admin only)."""
     _require_admin(request)
-    return list_api_keys()
+    return list_users()
 
 
-@router.post("/api/auth/keys", status_code=201)
-async def create_key(request: Request, body: CreateKeyRequest):
-    """Create a new API key (admin only)."""
+@router.post("/api/auth/users", status_code=201)
+async def create_user_endpoint(request: Request, body: CreateUserRequest):
+    """Invite a new user (admin only). Returns an invite token."""
+    _require_admin(request)
+    if body.role not in ROLES:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": f"Invalid role: {body.role!r} (must be one of {ROLES})"},
+        )
+    if not body.email.strip():
+        return JSONResponse(status_code=400, content={"detail": "Email is required"})
+    try:
+        info = create_user(body.email.strip(), None, body.role)
+    except Exception as e:
+        detail = str(e)
+        if "UNIQUE" in detail or "unique" in detail.lower():
+            detail = f"A user with email '{body.email.strip()}' already exists"
+        return JSONResponse(status_code=409, content={"detail": detail})
+    return info
+
+
+@router.delete("/api/auth/users/{user_id}")
+async def delete_user_endpoint(request: Request, user_id: int):
+    """Delete a user (admin only)."""
+    _require_admin(request)
+    if delete_user(user_id):
+        return {"ok": True}
+    return JSONResponse(status_code=404, content={"detail": "User not found"})
+
+
+# ─── Invite acceptance (public) ─────────────────────────────────────────────
+
+
+class AcceptInviteRequest(BaseModel):
+    """Request body for accepting an invite."""
+
+    token: str
+    password: str
+
+
+@router.post("/api/auth/accept-invite")
+async def accept_invite_endpoint(request: Request, body: AcceptInviteRequest):
+    """Accept an invite and set password. Returns session cookie."""
+    if not body.password or len(body.password) < 8:
+        return JSONResponse(
+            status_code=400, content={"detail": "Password must be at least 8 characters"}
+        )
+    user = accept_invite(body.token, body.password)
+    if not user:
+        return JSONResponse(status_code=400, content={"detail": "Invalid or expired invite token"})
+
+    logger.info("Invite accepted (email=%s, role=%s)", user["email"], user["role"])
+    token = create_session_token(user_id=user["id"], role=user["role"])
+    response = JSONResponse(content={"ok": True, "role": user["role"], "email": user["email"]})
+    secure = request.url.scheme == "https"
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        max_age=86400 * 7,
+        path="/",
+    )
+    return response
+
+
+# ─── Service principal management (admin-only) ─────────────────────────────
+
+
+class CreateSPRequest(BaseModel):
+    """Request body for creating a service principal."""
+
+    name: str
+    role: str = "viewer"
+
+
+@router.get("/api/auth/service-principals")
+async def get_sps(request: Request):
+    """List all service principals (admin only)."""
+    _require_admin(request)
+    return list_service_principals()
+
+
+@router.post("/api/auth/service-principals", status_code=201)
+async def create_sp_endpoint(request: Request, body: CreateSPRequest):
+    """Create a new service principal (admin only)."""
     _require_admin(request)
     if body.role not in ROLES:
         return JSONResponse(
@@ -142,22 +274,22 @@ async def create_key(request: Request, body: CreateKeyRequest):
     if not body.name.strip():
         return JSONResponse(status_code=400, content={"detail": "Name is required"})
     try:
-        plaintext, info = create_api_key(body.name.strip(), body.role)
+        plaintext, info = create_service_principal(body.name.strip(), body.role)
     except Exception as e:
         detail = str(e)
         if "UNIQUE" in detail or "unique" in detail.lower():
-            detail = f"A key named '{body.name.strip()}' already exists"
+            detail = f"A service principal named '{body.name.strip()}' already exists"
         return JSONResponse(status_code=409, content={"detail": detail})
     return {"key": plaintext, **info}
 
 
-@router.delete("/api/auth/keys/{name}")
-async def remove_key(request: Request, name: str):
-    """Delete an API key (admin only)."""
+@router.delete("/api/auth/service-principals/{sp_id}")
+async def delete_sp_endpoint(request: Request, sp_id: int):
+    """Delete a service principal (admin only)."""
     _require_admin(request)
-    if delete_api_key(name):
+    if delete_service_principal(sp_id):
         return {"ok": True}
-    return JSONResponse(status_code=404, content={"detail": f"Key '{name}' not found"})
+    return JSONResponse(status_code=404, content={"detail": "Service principal not found"})
 
 
 # ─── Page helpers ────────────────────────────────────────────────────────────
@@ -176,14 +308,21 @@ def _gw_ctx(gw: str, **extra: object) -> dict:
 
 
 def _require_page_auth(request: Request):
-    """Redirect to /login if auth is enabled and the request has no valid session."""
-    if not is_auth_enabled():
-        return None
-    if check_request_auth(request):
-        return None
-    from urllib.parse import quote
+    """Redirect to /login or /setup based on auth state."""
+    from shoreguard.api.auth import _session_factory
 
-    return RedirectResponse(url=f"/login?next={quote(request.url.path)}", status_code=302)
+    # If a DB is configured but no users exist yet → setup wizard
+    if _session_factory is not None and not is_setup_complete():
+        from urllib.parse import quote
+
+        return RedirectResponse(url=f"/setup?next={quote(request.url.path)}", status_code=302)
+
+    role = check_request_auth(request)
+    if role is None:
+        from urllib.parse import quote
+
+        return RedirectResponse(url=f"/login?next={quote(request.url.path)}", status_code=302)
+    return None
 
 
 # ─── Global pages ────────────────────────────────────────────────────────────
@@ -193,6 +332,20 @@ def _require_page_auth(request: Request):
 async def login_page(request: Request):
     """Serve the login page."""
     return templates.TemplateResponse(request, "pages/login.html", {})
+
+
+@router.get("/invite")
+async def invite_page(request: Request):
+    """Serve the invite acceptance page."""
+    return templates.TemplateResponse(request, "pages/invite.html", {})
+
+
+@router.get("/setup")
+async def setup_page(request: Request):
+    """Serve the setup wizard (only when no users exist)."""
+    if is_setup_complete():
+        return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse(request, "pages/setup.html", {})
 
 
 @router.get("/")
@@ -356,9 +509,9 @@ async def preset_detail_page(request: Request, name: str):
     )
 
 
-@router.get("/keys")
-async def keys_page(request: Request):
-    """API key management page (admin only)."""
+@router.get("/users")
+async def users_page(request: Request):
+    """User and service principal management page (admin only)."""
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
@@ -367,6 +520,6 @@ async def keys_page(request: Request):
         return JSONResponse(status_code=403, content={"detail": "Admin access required"})
     return templates.TemplateResponse(
         request,
-        "pages/keys.html",
-        {"active_page": "keys"},
+        "pages/users.html",
+        {"active_page": "users"},
     )

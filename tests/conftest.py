@@ -58,13 +58,12 @@ def _init_gateway_service():
 
 @pytest.fixture(autouse=True)
 def _disable_auth():
-    """Disable authentication for all tests by default."""
+    """Reset auth state so tests start without authentication by default."""
     from shoreguard.api import auth
 
-    original = auth._api_key
-    auth._api_key = None
+    auth.reset()
     yield
-    auth._api_key = original
+    auth.reset()
 
 
 @pytest.fixture(autouse=True)

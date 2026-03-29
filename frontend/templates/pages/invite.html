@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accept Invite — Shoreguard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+    <style>
+        body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .invite-card { max-width: 420px; width: 100%; }
+    </style>
+</head>
+<body>
+    <div class="invite-card">
+        <div class="card sg-card-themed">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <i class="bi bi-shield-check fs-1" style="color: var(--sg-accent)"></i>
+                    <h4 class="mt-2 mb-1">Welcome to Shoreguard</h4>
+                    <p class="text-muted small">Set your password to activate your account.</p>
+                </div>
+
+                <form id="invite-form">
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <input
+                            type="password"
+                            id="invite-password"
+                            class="form-control"
+                            placeholder="Choose a strong password"
+                            autocomplete="new-password"
+                            minlength="8"
+                            autofocus
+                            required
+                        >
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirm Password</label>
+                        <input
+                            type="password"
+                            id="invite-confirm"
+                            class="form-control"
+                            placeholder="Repeat password"
+                            autocomplete="new-password"
+                            required
+                        >
+                    </div>
+                    <div id="invite-error" class="text-danger small mb-3" style="display:none"></div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-check-circle me-1"></i>Set Password & Login
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('invite-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('invite-password').value;
+            const confirm = document.getElementById('invite-confirm').value;
+            const errEl = document.getElementById('invite-error');
+            errEl.style.display = 'none';
+
+            if (password !== confirm) {
+                errEl.textContent = 'Passwords do not match';
+                errEl.style.display = '';
+                return;
+            }
+            if (password.length < 8) {
+                errEl.textContent = 'Password must be at least 8 characters';
+                errEl.style.display = '';
+                return;
+            }
+
+            const token = new URLSearchParams(window.location.search).get('token');
+            if (!token) {
+                errEl.textContent = 'Missing invite token';
+                errEl.style.display = '';
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/auth/accept-invite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, password }),
+                });
+                if (resp.ok) {
+                    window.location.href = '/';
+                } else {
+                    const body = await resp.json().catch(() => ({}));
+                    errEl.textContent = body.detail || 'Failed to accept invite';
+                    errEl.style.display = '';
+                }
+            } catch {
+                errEl.textContent = 'Network error — is the server running?';
+                errEl.style.display = '';
+            }
+        });
+    </script>
+</body>
+</html>

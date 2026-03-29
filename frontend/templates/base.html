@@ -22,8 +22,8 @@
         <span id="gateway-status" class="topbar-status badge bg-secondary">
             <i class="bi bi-circle-fill me-1"></i>
         </span>
-        <a id="keys-link" href="/keys" class="btn btn-sm btn-outline-secondary ms-2" style="display:none" title="API Keys">
-            <i class="bi bi-key"></i>
+        <a id="users-link" href="/users" class="btn btn-sm btn-outline-secondary ms-2" style="display:none" title="Users">
+            <i class="bi bi-people"></i>
         </a>
         <span id="role-badge" class="badge bg-secondary ms-2" style="display:none"></span>
         <button id="logout-btn" class="btn btn-sm btn-outline-secondary ms-2" style="display:none"
@@ -53,9 +53,15 @@
     <script src="/static/js/components.js"></script>
     <script src="/static/js/app.js"></script>
     <script>
-        window.SG_ROLE = 'admin'; // default when auth disabled
+        window.SG_ROLE = 'admin'; // default until auth check completes
         fetch('/api/auth/check').then(r => r.json()).then(d => {
-            if (d.auth_enabled) {
+            if (d.needs_setup) {
+                if (!window.location.pathname.startsWith('/setup')) {
+                    window.location.href = '/setup?next=' + encodeURIComponent(window.location.pathname);
+                }
+                return;
+            }
+            if (d.authenticated) {
                 document.getElementById('logout-btn').style.display = '';
                 if (d.role) {
                     window.SG_ROLE = d.role;
@@ -63,7 +69,7 @@
                     badge.textContent = d.role;
                     badge.style.display = '';
                     if (d.role === 'admin') {
-                        document.getElementById('keys-link').style.display = '';
+                        document.getElementById('users-link').style.display = '';
                     }
                 }
             }

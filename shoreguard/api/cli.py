@@ -63,15 +63,6 @@ def main(
             rich_help_panel="Server",
         ),
     ] = "info",
-    api_key: Annotated[
-        str | None,
-        typer.Option(
-            "--api-key",
-            envvar="SHOREGUARD_API_KEY",
-            help="Shared API key for authentication. All API and UI access requires this key.",
-            rich_help_panel="Security",
-        ),
-    ] = None,
     reload: Annotated[
         bool,
         typer.Option(
@@ -114,8 +105,6 @@ def main(
 
     import uvicorn
 
-    from .auth import configure as configure_auth
-
     _LOG_FORMAT = "%(asctime)s %(levelname)-5s %(name)-20s  %(message)s"
     _LOG_DATE = "%H:%M:%S"
 
@@ -136,10 +125,6 @@ def main(
     if database_url:
         os.environ["SHOREGUARD_DATABASE_URL"] = database_url
         logger.info("Using database: %s", database_url.split("://")[0])
-
-    configure_auth(api_key)
-    if not api_key:
-        logger.info("No API key set — authentication disabled")
 
     # Unified log config for uvicorn so all output uses the same format
     _uvicorn_log_config: dict = {
@@ -335,6 +320,64 @@ def _import_filesystem_gateways(
         imported += 1
 
     return imported, skipped
+
+
+@cli.command("create-user")
+def create_user_cmd(
+    email: Annotated[str, typer.Argument(help="Email address for the new user")],
+    role: Annotated[
+        str,
+        typer.Option("--role", help="Role: admin, operator, or viewer"),
+    ] = "admin",
+    password: Annotated[
+        str | None,
+        typer.Option("--password", help="Password (prompted if omitted)"),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option(
+            "--database-url",
+            envvar="SHOREGUARD_DATABASE_URL",
+            help="Database URL.",
+        ),
+    ] = None,
+) -> None:
+    """Create a user account (for initial setup or headless deployments)."""
+    import os
+
+    from sqlalchemy.orm import sessionmaker as sa_sessionmaker
+
+    from shoreguard.api.auth import ROLES, create_user, init_auth
+    from shoreguard.db import init_db
+
+    logging.basicConfig(level=logging.INFO)
+
+    if role not in ROLES:
+        typer.echo(f"Error: invalid role '{role}' (must be one of {ROLES})", err=True)
+        raise typer.Exit(1)
+
+    if password is None:
+        password = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
+
+    if database_url:
+        os.environ["SHOREGUARD_DATABASE_URL"] = database_url
+
+    try:
+        engine = init_db()
+    except Exception as e:
+        typer.echo(f"Error: failed to initialise database: {e}", err=True)
+        raise typer.Exit(1) from e
+
+    try:
+        factory = sa_sessionmaker(bind=engine)
+        init_auth(factory)
+        info = create_user(email, password, role)
+        typer.echo(f"User created: {info['email']} (role={info['role']})")
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1) from e
+    finally:
+        engine.dispose()
 
 
 @cli.command("import-gateways")
