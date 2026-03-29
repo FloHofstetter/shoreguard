@@ -19,9 +19,11 @@ from .auth import (
     create_user,
     delete_service_principal,
     delete_user,
+    is_registration_enabled,
     is_setup_complete,
     list_service_principals,
     list_users,
+    verify_session_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,14 +108,39 @@ async def auth_check(request: Request):
     """Return auth status, role, and whether setup is needed."""
     needs_setup = not is_setup_complete()
     if needs_setup:
-        return {"authenticated": False, "auth_enabled": False, "role": None, "needs_setup": True}
+        return {
+            "authenticated": False,
+            "auth_enabled": False,
+            "role": None,
+            "needs_setup": True,
+            "registration_enabled": False,
+        }
 
     role = check_request_auth(request)
+    email = None
+    # Extract email from session cookie if present
+    cookie = request.cookies.get(COOKIE_NAME)
+    if cookie and role:
+        result = verify_session_token(cookie)
+        if result:
+            from shoreguard.api.auth import _session_factory
+            from shoreguard.models import User
+
+            if _session_factory:
+                session = _session_factory()
+                try:
+                    user = session.query(User).filter(User.id == result[0]).first()
+                    if user:
+                        email = user.email
+                finally:
+                    session.close()
     return {
         "authenticated": role is not None,
         "auth_enabled": True,
         "role": role,
+        "email": email,
         "needs_setup": False,
+        "registration_enabled": is_registration_enabled(),
     }
 
 
@@ -245,6 +272,57 @@ async def accept_invite_endpoint(request: Request, body: AcceptInviteRequest):
     return response
 
 
+# ─── Self-registration (opt-in) ─────────────────────────────────────────────
+
+
+class RegisterRequest(BaseModel):
+    """Request body for self-registration."""
+
+    email: str
+    password: str
+
+
+@router.post("/api/auth/register")
+async def register_endpoint(request: Request, body: RegisterRequest):
+    """Self-register a new viewer account. Requires SHOREGUARD_ALLOW_REGISTRATION."""
+    if not is_registration_enabled():
+        return JSONResponse(status_code=403, content={"detail": "Registration is disabled"})
+    if not is_setup_complete():
+        return JSONResponse(
+            status_code=400, content={"detail": "Setup not complete — use /setup first"}
+        )
+    if not body.email.strip() or not body.password:
+        return JSONResponse(status_code=400, content={"detail": "Email and password are required"})
+    if len(body.password) < 8:
+        return JSONResponse(
+            status_code=400, content={"detail": "Password must be at least 8 characters"}
+        )
+    try:
+        info = create_user(body.email.strip(), body.password, "viewer")
+    except Exception as e:
+        detail = str(e)
+        if "UNIQUE" in detail or "unique" in detail.lower():
+            detail = f"An account with email '{body.email.strip()}' already exists"
+        return JSONResponse(status_code=409, content={"detail": detail})
+
+    logger.info("Self-registration (email=%s)", info["email"])
+    token = create_session_token(user_id=info["id"], role="viewer")
+    response = JSONResponse(
+        content={"ok": True, "role": "viewer", "email": info["email"]}, status_code=201
+    )
+    secure = request.url.scheme == "https"
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        max_age=86400 * 7,
+        path="/",
+    )
+    return response
+
+
 # ─── Service principal management (admin-only) ─────────────────────────────
 
 
@@ -307,6 +385,20 @@ def _gw_ctx(gw: str, **extra: object) -> dict:
     return {"active_page": "sandboxes", "gateway_name": gw, **extra}
 
 
+def _render_error(
+    request: Request, status_code: int, title: str, message: str, icon: str = "exclamation-triangle"
+):
+    """Render a styled error page."""
+    from starlette.responses import HTMLResponse
+
+    resp = templates.TemplateResponse(
+        request,
+        "pages/error.html",
+        {"error_title": title, "error_message": message, "error_icon": icon},
+    )
+    return HTMLResponse(content=resp.body, status_code=status_code, headers=dict(resp.headers))
+
+
 def _require_page_auth(request: Request):
     """Redirect to /login or /setup based on auth state."""
     from shoreguard.api.auth import _session_factory
@@ -332,6 +424,21 @@ def _require_page_auth(request: Request):
 async def login_page(request: Request):
     """Serve the login page."""
     return templates.TemplateResponse(request, "pages/login.html", {})
+
+
+@router.get("/register")
+async def register_page(request: Request):
+    """Serve the self-registration page."""
+    if not is_registration_enabled():
+        return _render_error(
+            request,
+            403,
+            "Registration Disabled",
+            "Self-registration is not enabled on this instance. "
+            "Ask an administrator for an invite.",
+            icon="person-x",
+        )
+    return templates.TemplateResponse(request, "pages/register.html", {})
 
 
 @router.get("/invite")
@@ -480,7 +587,13 @@ async def gateway_detail_or_sub(request: Request, name: str):
         ctx["community_sandboxes"] = meta.community_sandboxes
         return templates.TemplateResponse(request, "pages/wizard.html", ctx)
 
-    return JSONResponse(status_code=404, content={"detail": "Page not found"})
+    return _render_error(
+        request,
+        404,
+        "Page Not Found",
+        "The page you are looking for does not exist.",
+        icon="question-circle",
+    )
 
 
 @router.get("/policies")
@@ -517,7 +630,13 @@ async def users_page(request: Request):
         return redirect
     role = check_request_auth(request)
     if role != "admin":
-        return JSONResponse(status_code=403, content={"detail": "Admin access required"})
+        return _render_error(
+            request,
+            403,
+            "Access Denied",
+            "You need admin privileges to manage users and service principals.",
+            icon="shield-lock",
+        )
     return templates.TemplateResponse(
         request,
         "pages/users.html",

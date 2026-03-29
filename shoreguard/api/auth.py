@@ -105,6 +105,11 @@ def init_auth_for_test(session_factory: SessionMaker) -> None:
     _hmac_secret = b"test-secret-key-for-unit-tests!!"
 
 
+def is_registration_enabled() -> bool:
+    """Return True when self-registration is allowed."""
+    return os.environ.get("SHOREGUARD_ALLOW_REGISTRATION", "").lower() in ("1", "true", "yes")
+
+
 def is_setup_complete() -> bool:
     """Return True when at least one user exists in the database."""
     if _session_factory is None:

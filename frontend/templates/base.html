@@ -25,6 +25,7 @@
         <a id="users-link" href="/users" class="btn btn-sm btn-outline-secondary ms-2" style="display:none" title="Users">
             <i class="bi bi-people"></i>
         </a>
+        <span id="user-email" class="text-muted small ms-2" style="display:none"></span>
         <span id="role-badge" class="badge bg-secondary ms-2" style="display:none"></span>
         <button id="logout-btn" class="btn btn-sm btn-outline-secondary ms-2" style="display:none"
                 onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location.href='/login')"
@@ -63,6 +64,11 @@
             }
             if (d.authenticated) {
                 document.getElementById('logout-btn').style.display = '';
+                if (d.email) {
+                    const emailEl = document.getElementById('user-email');
+                    emailEl.textContent = d.email;
+                    emailEl.style.display = '';
+                }
                 if (d.role) {
                     window.SG_ROLE = d.role;
                     const badge = document.getElementById('role-badge');
