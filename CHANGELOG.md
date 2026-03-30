@@ -5,6 +5,96 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-03-30
+
+### Added
+
+- **User-based RBAC** — three-tier role hierarchy (admin → operator → viewer)
+  replaces the single shared API key. Users authenticate with email + password
+  via session cookies; service principals use Bearer tokens for API/CI access.
+- **Invite flow** — admins invite users by email. The invite generates a
+  single-use, time-limited token (7 days). The invitee sets their password on
+  the `/invite` page and receives a session cookie.
+- **Self-registration** — opt-in via `SHOREGUARD_ALLOW_REGISTRATION=1`.
+  New users register as viewers. Disabled by default.
+- **Setup wizard** — first-run `/setup` page creates the initial admin account.
+  All API access is blocked until setup is complete.
+- **Service principals** — named API keys with roles, created by admins.
+  Keys are SHA-256 hashed (never stored in plaintext). `last_used` timestamp
+  tracked on each request.
+- **User management UI** — `/users` page for admins with invite form, role
+  badges, and delete actions. Dedicated `/users/new` and
+  `/users/new-service-principal` pages replace the old modal dialogs.
+- **Error pages** — styled error pages for 403, 404, and other HTTP errors
+  instead of raw JSON responses in the browser.
+- **User email in navbar** — logged-in user email and role badge shown in the
+  navigation bar.
+- **Alembic migrations 002–004** — `api_keys` table, `users` +
+  `service_principals` tables with FK constraints, invite token hashing.
+- **CLI commands** — `create-user`, `delete-user`, `list-users`,
+  `create-service-principal`, `delete-service-principal`, `list-service-principals`.
+- **710 tests** (up from 635), including comprehensive RBAC, auth flow,
+  invite expiry, self-deletion guard, and last-admin protection tests.
+
+### Changed
+
+- **Auth module rewritten** — `shoreguard/api/auth.py` expanded from ~100
+  to ~700 lines. Session tokens are HMAC-signed with a 5-part format
+  (`nonce.expiry.user_id.role.signature`). Roles are always verified against
+  the database, not the session token, so demotions take effect immediately.
+- **All state-changing endpoints** now enforce minimum role via
+  `require_role()` FastAPI dependency (admin for user/SP management and
+  gateway registration; operator for sandbox/policy/provider operations).
+- **Frontend role-based UI** — buttons and nav items hidden based on role
+  via `data-sg-min-role` attributes. `escapeHtml()` used consistently
+  across all JavaScript files.
+- **Policies router split** — preset routes (`/api/policies/presets`) are
+  mounted globally; sandbox policy routes remain gateway-scoped only.
+  Fixes a bug where `/api/sandboxes/{name}/policy` was reachable without
+  gateway context.
+- **Audit logging standardised** — all log messages use `actor=` consistently.
+  Role denials now include method, path, and actor. IntegrityError on
+  duplicate user/SP creation is logged. Logout resolves email instead of
+  numeric user ID.
+
+### Fixed
+
+- **Timing attack in `authenticate_user()`** — bcrypt verification now runs
+  against a dummy hash when the user does not exist, preventing email
+  enumeration via response time analysis.
+- **Policies router double-inclusion** — the full policies router was mounted
+  both globally and under the gateway prefix, exposing sandbox policy routes
+  without gateway context. Now only preset routes are global.
+- **Missing exception handling** — `is_setup_complete()`, `list_users()`, and
+  `list_service_principals()` now catch `SQLAlchemyError` instead of letting
+  database errors propagate as 500s.
+- **`verify_password()` bare Exception catch** — narrowed to
+  `(ValueError, TypeError)` to avoid masking unexpected errors.
+- **WebSocket XSS** — `sandboxName` in toast messages is now escaped with
+  `escapeHtml()`. Log level CSS class validated against a whitelist.
+- **`delete_filesystem_path` missing Query annotation** — `path` parameter
+  now uses explicit `Query(...)` instead of relying on FastAPI inference.
+- **Migration 004 downgrade** documented as non-reversible (SHA-256 hashes
+  cannot be reversed; pending invites are invalidated on downgrade).
+
+### Security
+
+- Constant-time authentication prevents timing-based email enumeration.
+- Invite tokens are SHA-256 hashed in the database (migration 004).
+- Session invalidation on user deletion and deactivation — existing sessions
+  are rejected on the next request.
+- Last-admin guard with database-level `FOR UPDATE` lock prevents TOCTOU race.
+- Self-deletion guard prevents admins from deleting their own account.
+- Email normalisation (`.strip().lower()`) prevents duplicate accounts.
+- Password length enforced (8–128 characters) on all auth endpoints.
+- XSS escaping hardened across all frontend JavaScript files.
+
+### Dependencies
+
+- Added `pwdlib[bcrypt]` — password hashing with bcrypt.
+
+---
+
 ## [0.3.0] — 2026-03-28
 
 ### Added

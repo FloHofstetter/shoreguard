@@ -22,9 +22,9 @@ class _FakeRpcError(grpc.RpcError):
 
 
 def test_grpc_error_with_details():
-    """When gRPC error has details(), return the detail string."""
+    """Unknown code with details returns generic code name, not raw details."""
     exc = _FakeRpcError(grpc.StatusCode.INTERNAL, "something broke")
-    assert friendly_grpc_error(exc) == "something broke"
+    assert friendly_grpc_error(exc) == "gRPC error: INTERNAL"
 
 
 def test_grpc_error_known_code_no_details():
@@ -43,6 +43,6 @@ def test_grpc_error_unknown_code_no_details():
 
 
 def test_non_grpc_exception():
-    """Non-gRPC exceptions return str(exc)."""
+    """Non-gRPC exceptions return a generic message (no internal leak)."""
     exc = ValueError("bad value")
-    assert friendly_grpc_error(exc) == "bad value"
+    assert friendly_grpc_error(exc) == "An unexpected gateway communication error occurred."

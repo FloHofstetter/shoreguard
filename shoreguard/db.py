@@ -67,6 +67,7 @@ def init_db(url: str | None = None) -> Engine:
                 cursor.execute("PRAGMA journal_mode=WAL")
                 cursor.execute("PRAGMA busy_timeout=5000")
                 cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA foreign_keys=ON")
             except (OSError, RuntimeError) as e:
                 logger.warning("Failed to set SQLite pragmas: %s", e)
             finally:

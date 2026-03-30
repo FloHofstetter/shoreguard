@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
+from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_client
 from shoreguard.client import ShoreGuardClient
 from shoreguard.services.approvals import ApprovalService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -56,18 +60,26 @@ async def get_pending_approvals(
     return await asyncio.to_thread(svc.get_pending, name)
 
 
-@router.post("/{name}/approvals/{chunk_id}/approve")
+@router.post(
+    "/{name}/approvals/{chunk_id}/approve", dependencies=[Depends(require_role("operator"))]
+)
 async def approve_chunk(
+    request: Request,
     name: str,
     chunk_id: str,
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, Any]:
     """Approve a single draft policy chunk."""
+    actor = getattr(request.state, "user_id", "unknown")
+    logger.info("Chunk approved (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
     return await asyncio.to_thread(svc.approve, name, chunk_id)
 
 
-@router.post("/{name}/approvals/{chunk_id}/reject")
+@router.post(
+    "/{name}/approvals/{chunk_id}/reject", dependencies=[Depends(require_role("operator"))]
+)
 async def reject_chunk(
+    request: Request,
     name: str,
     chunk_id: str,
     body: RejectRequest | None = None,
@@ -75,49 +87,63 @@ async def reject_chunk(
 ) -> dict:
     """Reject a single draft policy chunk."""
     reason = body.reason if body else ""
+    actor = getattr(request.state, "user_id", "unknown")
+    logger.info("Chunk rejected (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
     await asyncio.to_thread(svc.reject, name, chunk_id, reason=reason)
     return {"status": "rejected"}
 
 
-@router.post("/{name}/approvals/approve-all")
+@router.post("/{name}/approvals/approve-all", dependencies=[Depends(require_role("operator"))])
 async def approve_all(
+    request: Request,
     name: str,
     body: ApproveAllRequest | None = None,
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, Any]:
     """Approve all pending draft chunks for a sandbox."""
+    actor = getattr(request.state, "user_id", "unknown")
+    logger.info("All chunks approved (sandbox=%s, actor=%s)", name, actor)
     include_flagged = body.include_security_flagged if body else False
     return await asyncio.to_thread(svc.approve_all, name, include_security_flagged=include_flagged)
 
 
-@router.post("/{name}/approvals/{chunk_id}/edit")
+@router.post("/{name}/approvals/{chunk_id}/edit", dependencies=[Depends(require_role("operator"))])
 async def edit_chunk(
+    request: Request,
     name: str,
     chunk_id: str,
     body: EditChunkRequest,
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict:
     """Edit a pending draft chunk's proposed rule."""
+    actor = getattr(request.state, "user_id", "unknown")
+    logger.info("Chunk edited (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
     await asyncio.to_thread(svc.edit, name, chunk_id, body.proposed_rule)
     return {"status": "edited"}
 
 
-@router.post("/{name}/approvals/{chunk_id}/undo")
+@router.post("/{name}/approvals/{chunk_id}/undo", dependencies=[Depends(require_role("operator"))])
 async def undo_chunk(
+    request: Request,
     name: str,
     chunk_id: str,
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, Any]:
     """Reverse an approval decision."""
+    actor = getattr(request.state, "user_id", "unknown")
+    logger.info("Chunk undone (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
     return await asyncio.to_thread(svc.undo, name, chunk_id)
 
 
-@router.post("/{name}/approvals/clear")
+@router.post("/{name}/approvals/clear", dependencies=[Depends(require_role("operator"))])
 async def clear_approvals(
+    request: Request,
     name: str,
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, int]:
     """Clear all pending draft chunks for a sandbox."""
+    actor = getattr(request.state, "user_id", "unknown")
+    logger.info("Chunks cleared (sandbox=%s, actor=%s)", name, actor)
     return await asyncio.to_thread(svc.clear, name)
 
 

@@ -83,7 +83,7 @@ async def sandbox_events(
                 except grpc.RpcError as exc:
                     if cancel_event.is_set():
                         return
-                    detail = exc.details() if hasattr(exc, "details") else str(exc)
+                    detail = friendly_grpc_error(exc)
                     logger.warning("WatchSandbox stream error for %s: %s", sandbox_name, detail)
                     try:
                         queue.put_nowait(

@@ -8,9 +8,10 @@ import re
 from typing import Any
 
 import grpc
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_client
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import friendly_grpc_error
@@ -24,6 +25,10 @@ _VALID_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 router = APIRouter()
 
 _background_tasks: set[asyncio.Task] = set()
+
+
+def _actor(request: Request) -> str:
+    return getattr(request.state, "user_id", "unknown")
 
 
 def _get_sandbox_service(client: ShoreGuardClient = Depends(get_client)) -> SandboxService:
@@ -59,17 +64,18 @@ class RevokeSshRequest(BaseModel):
 
 @router.get("")
 async def list_sandboxes(
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> list[dict[str, Any]]:
     """List all sandboxes with pagination."""
     return await asyncio.to_thread(svc.list, limit=limit, offset=offset)
 
 
-@router.post("", status_code=202)
+@router.post("", status_code=202, dependencies=[Depends(require_role("operator"))])
 async def create_sandbox(
     body: CreateSandboxRequest,
+    request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
     client: ShoreGuardClient = Depends(get_client),
 ) -> dict[str, Any]:
@@ -77,12 +83,13 @@ async def create_sandbox(
     if body.name and not _VALID_NAME_RE.match(body.name):
         raise HTTPException(400, "Invalid sandbox name: must match [a-zA-Z0-9][a-zA-Z0-9._-]*")
     sandbox_name = body.name or "unnamed"
+    actor = _actor(request)
     op = operation_store.create_if_not_running("sandbox", sandbox_name)
     if op is None:
         raise HTTPException(409, f"Sandbox '{sandbox_name}' creation already in progress")
 
     async def _run() -> None:
-        logger.info("Starting sandbox creation: '%s' (op=%s)", sandbox_name, op.id)
+        logger.info("Starting sandbox creation: '%s' (op=%s, actor=%s)", sandbox_name, op.id, actor)
         try:
             result = await asyncio.to_thread(
                 svc.create,
@@ -105,7 +112,12 @@ async def create_sandbox(
                     result = await asyncio.to_thread(svc.get, sb_name)
                 except TimeoutError:
                     result["warning"] = "Sandbox created but did not become ready within 180s"
-            logger.info("Sandbox creation completed: '%s' (op=%s)", sandbox_name, op.id)
+            logger.info(
+                "Sandbox creation completed: '%s' (op=%s, actor=%s)",
+                sandbox_name,
+                op.id,
+                actor,
+            )
             operation_store.complete(op.id, result)
         except asyncio.CancelledError:
             logger.warning("Sandbox creation cancelled for '%s'", sandbox_name)
@@ -143,29 +155,30 @@ async def get_sandbox(
     return await asyncio.to_thread(svc.get, name)
 
 
-@router.delete("/{name}")
+@router.delete("/{name}", dependencies=[Depends(require_role("operator"))])
 async def delete_sandbox(
     name: str,
+    request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> dict[str, bool]:
     """Delete a sandbox by name."""
-    logger.info("Deleting sandbox '%s'", name)
     deleted = await asyncio.to_thread(svc.delete, name)
+    logger.info("Sandbox deleted (sandbox=%s, actor=%s)", name, _actor(request))
     return {"deleted": deleted}
 
 
-@router.post("/{name}/exec")
+@router.post("/{name}/exec", dependencies=[Depends(require_role("operator"))])
 async def exec_in_sandbox(
     name: str,
     body: ExecRequest,
+    request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> dict[str, Any]:
     """Execute a command inside a running sandbox.
 
     Accepts command as a string (parsed with shlex) or a list of args.
     """
-    logger.info("Executing command in sandbox '%s'", name)
-    return await asyncio.to_thread(
+    result = await asyncio.to_thread(
         svc.exec,
         name,
         body.command,
@@ -173,34 +186,39 @@ async def exec_in_sandbox(
         env=body.env or None,
         timeout_seconds=body.timeout_seconds,
     )
+    logger.info("Command executed in sandbox (sandbox=%s, actor=%s)", name, _actor(request))
+    return result
 
 
-@router.post("/{name}/ssh", status_code=201)
+@router.post("/{name}/ssh", status_code=201, dependencies=[Depends(require_role("operator"))])
 async def create_ssh_session(
     name: str,
+    request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> dict[str, Any]:
     """Create a temporary SSH session for shell access to a sandbox."""
-    logger.info("Creating SSH session for sandbox '%s'", name)
-    return await asyncio.to_thread(svc.create_ssh_session, name)
+    result = await asyncio.to_thread(svc.create_ssh_session, name)
+    logger.info("SSH session created (sandbox=%s, actor=%s)", name, _actor(request))
+    return result
 
 
-@router.delete("/{name}/ssh")
+@router.delete("/{name}/ssh", dependencies=[Depends(require_role("operator"))])
 async def revoke_ssh_session(
     name: str,
     body: RevokeSshRequest,
+    request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> dict[str, bool]:
     """Revoke an active SSH session."""
-    logger.info("Revoking SSH session for sandbox '%s'", name)
     revoked = await asyncio.to_thread(svc.revoke_ssh_session, body.token)
+    logger.info("SSH session revoked (sandbox=%s, actor=%s)", name, _actor(request))
     return {"revoked": revoked}
 
 
 @router.get("/{name}/logs")
 async def get_sandbox_logs(
     name: str,
-    lines: int = 200,
+    lines: int = Query(200, ge=1, le=10000),
     since_ms: int = 0,
     min_level: str = "",
     sources: str = "",

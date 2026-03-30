@@ -13,7 +13,7 @@
 <script src="/static/js/logs.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    loadLogsPage('{{ sandbox_name }}');
+    loadLogsPage({{ sandbox_name|tojson }});
 });
 </script>
 {% endblock %}

@@ -35,7 +35,7 @@ async function _loadLogs(name, container) {
                 <div class="d-flex gap-2">
                     <input type="text" class="form-control form-control-sm" placeholder="Filter..."
                            style="width:180px" oninput="filterLogText(this.value)">
-                    <button class="btn btn-outline-secondary btn-sm" onclick="loadLogsTab('${name}', document.getElementById('detail-tab-content'))" title="Refresh">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="loadLogsPage('${escapeHtml(name)}')" title="Refresh">
                         <i class="bi bi-arrow-clockwise"></i>
                     </button>
                 </div>

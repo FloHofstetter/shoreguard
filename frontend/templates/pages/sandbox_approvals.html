@@ -18,7 +18,7 @@
 <script src="/static/js/websocket.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    loadApprovalsPage('{{ sandbox_name }}');
+    loadApprovalsPage({{ sandbox_name|tojson }});
 });
 </script>
 {% endblock %}

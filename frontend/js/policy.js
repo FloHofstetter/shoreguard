@@ -25,8 +25,11 @@ async function loadPolicyTab(name, container) {
         const procRows = countProcessRows(policy);
 
         container.innerHTML = `
-            <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
                 <span class="text-muted">Policy v${policy.version || '?'}</span>
+                <button class="btn btn-outline-secondary btn-sm" onclick="showPolicyRevisions('${escapeHtml(name)}')">
+                    <i class="bi bi-clock-history me-1"></i>Revisions
+                </button>
             </div>
 
             <div class="row g-3 mb-4">
@@ -167,7 +170,7 @@ function renderNetworkRuleRow(sandboxName, key, rule) {
     const showKey = key !== rule.name && key !== normalizedName;
 
     return `
-        <tr onclick="navigateTo(gwUrl('/sandboxes/${sandboxName}/rules/${encodeURIComponent(key)}'))">
+        <tr onclick="navigateTo(gwUrl('/sandboxes/${escapeHtml(sandboxName)}/rules/${encodeURIComponent(key)}'))">
             <td>
                 <strong>${escapeHtml(rule.name || key)}</strong>
                 ${showKey ? `<div class="text-muted small">${escapeHtml(key)}</div>` : ''}
@@ -202,10 +205,10 @@ async function loadFilesystemPolicy(name) {
 
         container.innerHTML = `
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Existing paths cannot be removed or changed. New paths can be added.</span>
-                <button class="btn btn-outline-success btn-sm" onclick="showAddFilesystemPath('${name}')">
+                <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Add or remove filesystem paths.</span>
+                ${_sgHasRole('operator') ? `<button class="btn btn-outline-success btn-sm" onclick="showAddFilesystemPath('${escapeHtml(name)}')">
                     <i class="bi bi-plus me-1"></i>Add Path
-                </button>
+                </button>` : ''}
             </div>
 
             <div id="fs-add-form" style="display:none" class="card sg-card-themed mb-3">
@@ -223,7 +226,7 @@ async function loadFilesystemPolicy(name) {
                             </select>
                         </div>
                         <div class="col-md-3 d-flex gap-2">
-                            <button class="btn btn-success btn-sm" onclick="addFilesystemPath('${name}')">
+                            <button class="btn btn-success btn-sm" onclick="addFilesystemPath('${escapeHtml(name)}')">
                                 <i class="bi bi-check me-1"></i>Add
                             </button>
                             <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('fs-add-form').style.display='none'">
@@ -241,6 +244,7 @@ async function loadFilesystemPolicy(name) {
                             <tr>
                                 <th>Path</th>
                                 <th style="width:120px">Access</th>
+                                <th style="width:60px" class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -248,6 +252,11 @@ async function loadFilesystemPolicy(name) {
                                 <tr>
                                     <td class="font-monospace small">${escapeHtml(r.path)}</td>
                                     <td><span class="badge ${r.badge}">${r.label}</span></td>
+                                    <td class="text-end">
+                                        ${_sgHasRole('operator') ? `<button class="btn btn-sm text-muted delete-btn" onclick="deleteFilesystemPath('${escapeHtml(name)}', '${escapeHtml(r.path)}')" title="Delete">
+                                            <i class="bi bi-trash3"></i>
+                                        </button>` : ''}
+                                    </td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -263,6 +272,23 @@ function showAddFilesystemPath(name) {
     const form = document.getElementById('fs-add-form');
     form.style.display = '';
     document.getElementById('fs-new-path')?.focus();
+}
+
+async function deleteFilesystemPath(sandboxName, path) {
+    const confirmed = await showConfirm(
+        `Remove filesystem path "${path}"?`,
+        { icon: 'trash', iconColor: 'text-danger', btnClass: 'btn-danger', btnLabel: 'Remove' }
+    );
+    if (!confirmed) return;
+    try {
+        await apiFetch(`${API}/sandboxes/${sandboxName}/policy/filesystem?path=${encodeURIComponent(path)}`, {
+            method: 'DELETE',
+        });
+        showToast(`Path "${path}" removed.`, 'success');
+        loadFilesystemPolicy(sandboxName);
+    } catch (e) {
+        showToast(`Failed: ${e.message}`, 'danger');
+    }
 }
 
 async function addFilesystemPath(sandboxName) {
@@ -298,31 +324,67 @@ async function loadProcessPolicy(name) {
         const landlockCompat = policy.landlock?.compatibility || '';
 
         container.innerHTML = `
-            <p class="text-muted small mb-3"><i class="bi bi-lock me-1"></i>Process and Landlock settings are immutable after sandbox creation.</p>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="text-muted small"><i class="bi bi-cpu me-1"></i>Process and Landlock settings</span>
+                ${_sgHasRole('operator') ? `<button class="btn btn-outline-secondary btn-sm" id="proc-edit-toggle" onclick="toggleProcessEdit('${escapeHtml(name)}')">
+                    <i class="bi bi-pencil me-1"></i>Edit
+                </button>` : ''}
+            </div>
 
-            <div class="table-responsive">
-                <table class="table table-dark table-sm align-middle">
-                    <thead>
-                        <tr>
-                            <th>Setting</th>
-                            <th>Value</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Run as user</td>
-                            <td class="font-monospace">${escapeHtml(runAsUser) || '<span class="text-muted">—</span>'}</td>
-                        </tr>
-                        <tr>
-                            <td>Run as group</td>
-                            <td class="font-monospace">${escapeHtml(runAsGroup) || '<span class="text-muted">—</span>'}</td>
-                        </tr>
-                        <tr>
-                            <td>Landlock compatibility</td>
-                            <td class="font-monospace">${escapeHtml(landlockCompat) || '<span class="text-muted">—</span>'}</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div id="proc-view">
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Setting</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Run as user</td>
+                                <td class="font-monospace">${escapeHtml(runAsUser) || '<span class="text-muted">—</span>'}</td>
+                            </tr>
+                            <tr>
+                                <td>Run as group</td>
+                                <td class="font-monospace">${escapeHtml(runAsGroup) || '<span class="text-muted">—</span>'}</td>
+                            </tr>
+                            <tr>
+                                <td>Landlock compatibility</td>
+                                <td class="font-monospace">${escapeHtml(landlockCompat) || '<span class="text-muted">—</span>'}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="proc-edit" style="display:none">
+                <div class="card sg-card-themed">
+                    <div class="card-body sg-overlay-card">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label small">Run as user</label>
+                                <input type="text" id="proc-run-as-user" class="form-control form-control-sm font-monospace" value="${escapeHtml(runAsUser)}" placeholder="e.g. 1000">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small">Run as group</label>
+                                <input type="text" id="proc-run-as-group" class="form-control form-control-sm font-monospace" value="${escapeHtml(runAsGroup)}" placeholder="e.g. 1000">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small">Landlock compatibility</label>
+                                <input type="text" id="proc-landlock-compat" class="form-control form-control-sm font-monospace" value="${escapeHtml(landlockCompat)}" placeholder="e.g. 3">
+                            </div>
+                        </div>
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-success btn-sm" onclick="saveProcessPolicy('${escapeHtml(name)}')">
+                                <i class="bi bi-check me-1"></i>Save
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="toggleProcessEdit('${escapeHtml(name)}')">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>`;
     } catch (e) {
         container.innerHTML = renderError(e.message);
@@ -330,6 +392,113 @@ async function loadProcessPolicy(name) {
 }
 
 
+
+function toggleProcessEdit(sandboxName) {
+    const view = document.getElementById('proc-view');
+    const edit = document.getElementById('proc-edit');
+    const isEditing = edit.style.display !== 'none';
+    view.style.display = isEditing ? '' : 'none';
+    edit.style.display = isEditing ? 'none' : '';
+}
+
+async function saveProcessPolicy(sandboxName) {
+    const runAsUser = document.getElementById('proc-run-as-user').value.trim() || null;
+    const runAsGroup = document.getElementById('proc-run-as-group').value.trim() || null;
+    const landlockCompat = document.getElementById('proc-landlock-compat').value.trim() || null;
+
+    try {
+        await apiFetch(`${API}/sandboxes/${sandboxName}/policy/process`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                run_as_user: runAsUser,
+                run_as_group: runAsGroup,
+                landlock_compatibility: landlockCompat,
+            }),
+        });
+        showToast('Process policy updated.', 'success');
+        loadProcessPolicy(sandboxName);
+    } catch (e) {
+        showToast(`Failed: ${e.message}`, 'danger');
+    }
+}
+
+// ─── Policy Revisions ───────────────────────────────────────────────────────
+
+async function showPolicyRevisions(sandboxName) {
+    const existing = document.getElementById('policyRevisionsModal');
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="policyRevisionsModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+                <div class="modal-content sg-modal-themed">
+                    <div class="modal-header border-bottom">
+                        <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>Policy Revisions</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="policy-revisions-body">
+                        ${renderSpinner('Loading revisions...')}
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `);
+
+    const modal = new bootstrap.Modal(document.getElementById('policyRevisionsModal'));
+    modal.show();
+    document.getElementById('policyRevisionsModal').addEventListener('hidden.bs.modal', () => {
+        document.getElementById('policyRevisionsModal')?.remove();
+    });
+
+    try {
+        const revisions = await apiFetch(`${API}/sandboxes/${sandboxName}/policy/revisions`);
+        const body = document.getElementById('policy-revisions-body');
+
+        if (!revisions || revisions.length === 0) {
+            body.innerHTML = renderEmptyState('clock-history', 'No policy revisions recorded.');
+            return;
+        }
+
+        body.innerHTML = `
+            <div class="table-responsive">
+                <table class="table table-dark table-striped table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Version</th>
+                            <th>Timestamp</th>
+                            <th>Network Rules</th>
+                            <th>FS Paths</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${revisions.map(rev => {
+                            const ts = rev.timestamp ? new Date(rev.timestamp).toLocaleString() : '—';
+                            const version = rev.version || '—';
+                            const networkCount = rev.network_policies ? Object.keys(rev.network_policies).length : (rev.network_rule_count ?? '—');
+                            const fsCount = rev.filesystem ? countFilesystemPaths(rev.filesystem) : (rev.filesystem_path_count ?? '—');
+                            const summary = rev.summary || rev.description || '';
+                            return `
+                                <tr>
+                                    <td><strong>v${escapeHtml(String(version))}</strong></td>
+                                    <td class="text-muted small">${escapeHtml(ts)}</td>
+                                    <td>${networkCount}</td>
+                                    <td>${fsCount}</td>
+                                    <td class="text-muted small">${summary ? escapeHtml(summary) : '—'}</td>
+                                </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+    } catch (e) {
+        const body = document.getElementById('policy-revisions-body');
+        if (body) body.innerHTML = renderError(e.message);
+    }
+}
 
 // ─── Apply Preset Page ───────────────────────────────────────────────────────
 
@@ -354,7 +523,7 @@ async function loadPresetsPage(sandboxName) {
                                 <p class="text-muted small mb-0">${escapeHtml(p.description || '')}</p>
                             </div>
                             <div class="card-footer border-0 pt-0" style="background:transparent">
-                                <button class="btn btn-outline-success btn-sm" onclick="applyPreset('${sandboxName}', '${p.name}')">
+                                <button class="btn btn-outline-success btn-sm" onclick="applyPreset('${escapeHtml(sandboxName)}', '${escapeHtml(p.name)}')">
                                     <i class="bi bi-plus me-1"></i>Apply
                                 </button>
                             </div>
@@ -406,7 +575,7 @@ async function loadPresets() {
                     </thead>
                     <tbody>
                         ${presets.map(p => `
-                            <tr onclick="navigateTo('/policies/${p.name}')">
+                            <tr onclick="navigateTo('/policies/${escapeHtml(p.name)}')">
                                 <td><strong>${escapeHtml(p.name)}</strong></td>
                                 <td class="text-muted">${escapeHtml(p.description)}</td>
                             </tr>
@@ -449,7 +618,7 @@ async function showPresetDetail(presetName) {
                                 onchange="document.getElementById('preset-apply-btn').disabled = !this.value">
                             <option value="">Select a sandbox...</option>
                         </select>
-                        <button class="btn btn-success btn-sm" onclick="applyPresetFromDetail('${presetName}')"
+                        <button class="btn btn-success btn-sm" onclick="applyPresetFromDetail('${escapeHtml(presetName)}')"
                                 id="preset-apply-btn" disabled>
                             <i class="bi bi-shield-plus me-1"></i>Apply
                         </button>
@@ -479,10 +648,10 @@ async function showPresetDetail(presetName) {
                                         ${i === 0 ? `<td rowspan="${rule.endpoints.length}"><strong>${escapeHtml(rule.name || key)}</strong></td>` : ''}
                                         <td class="font-monospace">${escapeHtml(ep.host)}</td>
                                         <td>${ep.port}</td>
-                                        <td>${ep.protocol ? `<span class="badge text-bg-secondary">${ep.protocol}</span>` : '<span class="text-muted">—</span>'}</td>
-                                        <td>${ep.tls ? `<span class="badge text-bg-info">${ep.tls}</span>` : '<span class="text-muted">—</span>'}</td>
+                                        <td>${ep.protocol ? `<span class="badge text-bg-secondary">${escapeHtml(ep.protocol)}</span>` : '<span class="text-muted">—</span>'}</td>
+                                        <td>${ep.tls ? `<span class="badge text-bg-info">${escapeHtml(ep.tls)}</span>` : '<span class="text-muted">—</span>'}</td>
                                         <td>${(ep.rules || []).map(r =>
-                                            `<span class="badge endpoint-badge me-1">${r.allow?.method || '*'} ${r.allow?.path || '/*'}</span>`
+                                            `<span class="badge endpoint-badge me-1">${escapeHtml(r.allow?.method || '*')} ${escapeHtml(r.allow?.path || '/*')}</span>`
                                         ).join('') || '<span class="text-muted">—</span>'}</td>
                                     </tr>
                                 `)
@@ -511,7 +680,7 @@ async function loadPresetSandboxDropdown() {
             return;
         }
         select.innerHTML = '<option value="">Select a sandbox...</option>' +
-            ready.map(sb => `<option value="${sb.name}">${escapeHtml(sb.name)}</option>`).join('');
+            ready.map(sb => `<option value="${escapeHtml(sb.name)}">${escapeHtml(sb.name)}</option>`).join('');
     } catch {
         select.innerHTML = '<option value="" disabled>Could not load sandboxes</option>';
     }

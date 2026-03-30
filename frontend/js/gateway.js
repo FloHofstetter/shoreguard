@@ -25,9 +25,9 @@ async function loadGatewayPage() {
                 <div class="text-center text-muted py-5">
                     <i class="bi bi-hdd-network fs-1 d-block mb-3"></i>
                     <p>No gateways registered.</p>
-                    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#registerGatewayModal">
+                    ${_sgHasRole('admin') ? `<button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#registerGatewayModal">
                         <i class="bi bi-plus me-1"></i>Register Gateway
-                    </button>
+                    </button>` : ''}
                 </div>
             `;
             return;
@@ -58,9 +58,9 @@ async function loadGatewayPage() {
                                 <td>${renderGatewayStatusBadge(gw)}</td>
                                 <td class="d-none d-md-table-cell small text-muted">${gw.last_seen ? formatTimeAgo(gw.last_seen) : '—'}</td>
                                 <td class="text-end" onclick="event.stopPropagation()">
-                                    <button class="btn btn-sm text-muted delete-btn" onclick="unregisterGateway('${escapeHtml(gw.name)}')" title="Unregister">
+                                    ${_sgHasRole('admin') ? `<button class="btn btn-sm text-muted delete-btn" onclick="unregisterGateway('${escapeHtml(gw.name)}')" title="Unregister">
                                         <i class="bi bi-trash3"></i>
-                                    </button>
+                                    </button>` : ''}
                                 </td>
                             </tr>
                         `).join('')}
@@ -95,9 +95,9 @@ async function loadGatewayDetail(name) {
                     ${gw.version ? `<span class="text-muted">v${escapeHtml(gw.version)}</span>` : ''}
                 </div>
                 <div class="d-flex gap-2">
-                    <button class="btn btn-outline-primary btn-sm" onclick="testConnection('${escapeHtml(name)}')">
+                    ${_sgHasRole('admin') ? `<button class="btn btn-outline-primary btn-sm" onclick="testConnection('${escapeHtml(name)}')">
                         <i class="bi bi-plug me-1"></i>Test Connection
-                    </button>
+                    </button>` : ''}
                     <button class="btn btn-outline-secondary btn-sm" onclick="loadGatewayDetail('${escapeHtml(name)}')" title="Refresh">
                         <i class="bi bi-arrow-clockwise"></i>
                     </button>
@@ -142,11 +142,11 @@ async function loadGatewayDetail(name) {
                 <dd class="col-sm-9 small text-muted">${formatTimeAgo(gw.last_seen)}</dd>` : ''}
             </dl>
 
-            <div class="border-top pt-3" style="border-color:var(--sg-border)!important">
+            ${_sgHasRole('admin') ? `<div class="border-top pt-3" style="border-color:var(--sg-border)!important">
                 <button class="btn btn-outline-danger btn-sm" onclick="unregisterGateway('${escapeHtml(name)}')">
                     <i class="bi bi-trash me-1"></i>Unregister Gateway
                 </button>
-            </div>
+            </div>` : ''}
 
             <!-- Inference Provider (only for active gateway) -->
             ${gw.active ? `
@@ -288,21 +288,6 @@ function readFileAsBase64(file) {
         reader.onerror = reject;
         reader.readAsDataURL(file);
     });
-}
-
-function formatTimeAgo(isoString) {
-    if (!isoString) return '—';
-    const date = new Date(isoString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffSec = Math.floor(diffMs / 1000);
-    if (diffSec < 60) return 'just now';
-    const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `${diffMin}m ago`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ago`;
-    const diffDay = Math.floor(diffHr / 24);
-    return `${diffDay}d ago`;
 }
 
 // ─── Inference Provider Config ──────────────────────────────────────────────

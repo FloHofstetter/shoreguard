@@ -14,8 +14,8 @@
 <script src="/static/js/policy.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const section = '{{ section }}';
-    const name = '{{ sandbox_name }}';
+    const section = {{ section|tojson }};
+    const name = {{ sandbox_name|tojson }};
     if (section === 'network') loadNetworkPolicies(name);
     else if (section === 'filesystem') loadFilesystemPolicy(name);
     else if (section === 'process') loadProcessPolicy(name);

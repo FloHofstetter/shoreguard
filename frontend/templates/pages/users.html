@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Users — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item active">Users & Service Principals</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div id="users-page-content"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/users.js"></script>
+<script>document.addEventListener('DOMContentLoaded', loadUsersPage);</script>
+{% endblock %}

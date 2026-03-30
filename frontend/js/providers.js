@@ -6,6 +6,8 @@
 // Provider types loaded from API, cached after first fetch
 let _providerTypes = {};
 let _providerTypesLoaded = false;
+// Cached provider list for edit lookups
+let _providerCache = [];
 
 async function _ensureProviderTypes() {
     if (_providerTypesLoaded) return;
@@ -38,6 +40,7 @@ async function loadProvidersPage() {
 
     try {
         const providers = await apiFetch(`${API}/providers`);
+        _providerCache = providers;
 
         if (providers.length === 0) {
             container.innerHTML = `
@@ -93,9 +96,13 @@ function renderProviderRow(provider) {
             <td class="d-none d-md-table-cell small font-monospace">${maskedCreds}</td>
             <td class="d-none d-md-table-cell small font-monospace">${configDisplay}</td>
             <td class="text-end">
+                ${_sgHasRole('operator') ? `
+                <button class="btn btn-sm text-muted" onclick="editProvider('${escapeHtml(provider.name)}')" title="Edit">
+                    <i class="bi bi-pencil"></i>
+                </button>
                 <button class="btn btn-sm text-muted delete-btn" onclick="deleteProvider('${escapeHtml(provider.name)}')" title="Delete">
                     <i class="bi bi-trash3"></i>
-                </button>
+                </button>` : ''}
             </td>
         </tr>`;
 }
@@ -156,6 +163,92 @@ async function createProvider(e) {
         });
         output.innerHTML = '<div class="text-success small"><i class="bi bi-check-circle me-1"></i>Provider created!</div>';
         showToast(`Provider "${name}" created.`, 'success');
+        bootstrap.Modal.getInstance(document.getElementById('createProviderModal'))?.hide();
+        loadProvidersPage();
+    } catch (e) {
+        output.innerHTML = `<div class="text-danger small"><i class="bi bi-x-circle me-1"></i>${escapeHtml(e.message)}</div>`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function editProvider(name) {
+    const provider = _providerCache.find(p => p.name === name);
+    if (!provider) return;
+
+    // Reuse the create modal for editing
+    document.getElementById('new-prov-name').value = provider.name;
+    document.getElementById('new-prov-name').disabled = true;
+    document.getElementById('new-prov-type').value = provider.type;
+    document.getElementById('new-prov-type').disabled = true;
+    onProviderTypeChange();
+    document.getElementById('new-prov-apikey').value = '';
+    document.getElementById('new-prov-apikey').placeholder = '(leave blank to keep current)';
+    document.getElementById('new-prov-apikey').required = false;
+
+    const configObj = provider.config || {};
+    document.getElementById('new-prov-config').value =
+        Object.entries(configObj).map(([k, v]) => `${k}=${v}`).join('\n');
+    document.getElementById('new-prov-creds').value = '';
+
+    const title = document.querySelector('#createProviderModal .modal-title');
+    const btn = document.getElementById('create-prov-btn');
+    title.innerHTML = '<i class="bi bi-pencil me-2"></i>Edit Provider';
+    btn.innerHTML = '<i class="bi bi-check me-1"></i>Save';
+    btn.onclick = (ev) => updateProvider(ev, name);
+    document.getElementById('create-prov-output').innerHTML = '';
+
+    new bootstrap.Modal(document.getElementById('createProviderModal')).show();
+}
+
+function _resetProviderModal() {
+    document.getElementById('new-prov-name').disabled = false;
+    document.getElementById('new-prov-type').disabled = false;
+    document.getElementById('new-prov-apikey').placeholder = 'sk-...';
+    document.getElementById('new-prov-apikey').required = true;
+    const title = document.querySelector('#createProviderModal .modal-title');
+    const btn = document.getElementById('create-prov-btn');
+    title.innerHTML = '<i class="bi bi-key me-2"></i>New Provider';
+    btn.innerHTML = '<i class="bi bi-plus me-1"></i>Create';
+    btn.onclick = (ev) => createProvider(ev);
+    document.getElementById('create-provider-form').reset();
+    document.getElementById('create-prov-output').innerHTML = '';
+}
+
+async function updateProvider(e, name) {
+    if (e) e.preventDefault();
+
+    const apiKey = document.getElementById('new-prov-apikey').value.trim();
+    const configText = document.getElementById('new-prov-config').value;
+    const credsText = document.getElementById('new-prov-creds').value;
+    const output = document.getElementById('create-prov-output');
+    const btn = document.getElementById('create-prov-btn');
+
+    const config = _parseKeyValueLines(configText);
+    const extraCreds = _parseKeyValueLines(credsText);
+
+    const body = {
+        type: document.getElementById('new-prov-type').value,
+        config: Object.keys(config).length > 0 ? config : {},
+    };
+    // Only send credentials if user entered something
+    if (apiKey || Object.keys(extraCreds).length > 0) {
+        const keyName = _getProviderCredKey(body.type);
+        body.credentials = { ...extraCreds };
+        if (apiKey) body.credentials[keyName] = apiKey;
+    }
+
+    btn.disabled = true;
+    output.innerHTML = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Saving...</div>';
+
+    try {
+        await apiFetch(`${API}/providers/${name}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        output.innerHTML = '<div class="text-success small"><i class="bi bi-check-circle me-1"></i>Provider updated!</div>';
+        showToast(`Provider "${name}" updated.`, 'success');
         bootstrap.Modal.getInstance(document.getElementById('createProviderModal'))?.hide();
         loadProvidersPage();
     } catch (e) {

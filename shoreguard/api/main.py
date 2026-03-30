@@ -5,7 +5,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -14,11 +14,11 @@ from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import GatewayNotConnectedError
 
 from .auth import (
-    configure as configure_auth,
-)
-from .auth import (
-    is_auth_enabled,
+    bootstrap_admin_user,
+    init_auth,
+    is_setup_complete,
     require_auth,
+    require_role,
 )
 from .cli import _import_filesystem_gateways, cli  # noqa: F401 — cli re-exported for entry point
 from .deps import get_client, resolve_gateway
@@ -65,15 +65,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("Auto-imported %d gateway(s) from filesystem", imported)
 
     # ── Auth ─────────────────────────────────────────────────────────────
-    if not is_auth_enabled():
-        env_key = os.environ.get("SHOREGUARD_API_KEY")
-        if env_key:
-            configure_auth(env_key)
-            logger.info("API-key authentication enabled (from env)")
+    init_auth(session_factory)
+    bootstrap_admin_user()
 
     # Hide OpenAPI docs when authentication is enabled to avoid leaking
     # the full API schema to unauthenticated users.
-    if is_auth_enabled():
+    if is_setup_complete():
         app.openapi_url = None
         app.docs_url = None
         app.redoc_url = None
@@ -126,7 +123,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -174,13 +171,22 @@ async def get_inference(gw: str, client: ShoreGuardClient = Depends(get_client))
     return await asyncio.to_thread(client.get_cluster_inference)
 
 
-@gw_api.put("/inference")
+@gw_api.put("/inference", dependencies=[Depends(require_role("operator"))])
 async def set_inference(
     gw: str,
     body: SetInferenceRequest,
+    request: Request,
     client: ShoreGuardClient = Depends(get_client),
 ):
     """Update cluster inference configuration."""
+    actor = getattr(request.state, "user_id", "unknown")
+    logger.info(
+        "Inference config updated (gateway=%s, provider=%s, model=%s, actor=%s)",
+        gw,
+        body.provider_name,
+        body.model_id,
+        actor,
+    )
     return await asyncio.to_thread(
         client.set_cluster_inference,
         provider_name=body.provider_name,
@@ -201,9 +207,11 @@ app.include_router(
     dependencies=[Depends(require_auth)],
 )
 
-# Presets are local YAML files, not gateway-scoped — mount globally too
+# Presets are local YAML files, not gateway-scoped — mount only preset
+# routes globally.  The sandbox-scoped policy routes (/sandboxes/{name}/policy/*)
+# are already mounted under gw_api and must NOT be duplicated at the global level.
 app.include_router(
-    policies.router,
+    policies.preset_router,
     prefix="/api",
     tags=["policies-global"],
     dependencies=[Depends(require_auth)],

@@ -63,15 +63,6 @@ def main(
             rich_help_panel="Server",
         ),
     ] = "info",
-    api_key: Annotated[
-        str | None,
-        typer.Option(
-            "--api-key",
-            envvar="SHOREGUARD_API_KEY",
-            help="Shared API key for authentication. All API and UI access requires this key.",
-            rich_help_panel="Security",
-        ),
-    ] = None,
     reload: Annotated[
         bool,
         typer.Option(
@@ -88,6 +79,15 @@ def main(
             envvar="SHOREGUARD_LOCAL_MODE",
             help="Enable local mode: Docker lifecycle management for gateways.",
             rich_help_panel="Server",
+        ),
+    ] = False,
+    no_auth: Annotated[
+        bool,
+        typer.Option(
+            "--no-auth/--auth",
+            envvar="SHOREGUARD_NO_AUTH",
+            help="Disable authentication entirely (local development only).",
+            rich_help_panel="Development",
         ),
     ] = False,
     database_url: Annotated[
@@ -114,8 +114,6 @@ def main(
 
     import uvicorn
 
-    from .auth import configure as configure_auth
-
     _LOG_FORMAT = "%(asctime)s %(levelname)-5s %(name)-20s  %(message)s"
     _LOG_DATE = "%H:%M:%S"
 
@@ -130,16 +128,15 @@ def main(
             logging.getLogger(name).name = name.removeprefix("shoreguard.")
 
     # Propagate CLI flags to env so the lifespan picks them up
+    if no_auth:
+        os.environ["SHOREGUARD_NO_AUTH"] = "1"
+        logger.warning("Authentication DISABLED — do not use in production")
     if local:
         os.environ["SHOREGUARD_LOCAL_MODE"] = "1"
         logger.info("Local mode enabled")
     if database_url:
         os.environ["SHOREGUARD_DATABASE_URL"] = database_url
         logger.info("Using database: %s", database_url.split("://")[0])
-
-    configure_auth(api_key)
-    if not api_key:
-        logger.info("No API key set — authentication disabled")
 
     # Unified log config for uvicorn so all output uses the same format
     _uvicorn_log_config: dict = {
@@ -335,6 +332,179 @@ def _import_filesystem_gateways(
         imported += 1
 
     return imported, skipped
+
+
+def _cli_init_db(database_url: str | None):
+    """Init DB + auth for CLI commands. Returns engine (caller must .dispose())."""
+    import os
+
+    from sqlalchemy.orm import sessionmaker as sa_sessionmaker
+
+    from shoreguard.api.auth import init_auth
+    from shoreguard.db import init_db
+
+    if database_url:
+        os.environ["SHOREGUARD_DATABASE_URL"] = database_url
+    engine = init_db()
+    init_auth(sa_sessionmaker(bind=engine))
+    return engine
+
+
+@cli.command("create-user")
+def create_user_cmd(
+    email: Annotated[str, typer.Argument(help="Email address for the new user")],
+    role: Annotated[
+        str,
+        typer.Option("--role", help="Role: admin, operator, or viewer"),
+    ] = "admin",
+    password: Annotated[
+        str | None,
+        typer.Option("--password", help="Password (prompted if omitted)"),
+    ] = None,
+    database_url: Annotated[
+        str | None,
+        typer.Option(
+            "--database-url",
+            envvar="SHOREGUARD_DATABASE_URL",
+            help="Database URL.",
+        ),
+    ] = None,
+) -> None:
+    """Create a user account (for initial setup or headless deployments)."""
+    from shoreguard.api.auth import ROLES, create_user
+
+    logging.basicConfig(level=logging.INFO)
+
+    if role not in ROLES:
+        typer.echo(f"Error: invalid role '{role}' (must be one of {ROLES})", err=True)
+        raise typer.Exit(1)
+
+    if password is None:
+        password = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
+
+    try:
+        engine = _cli_init_db(database_url)
+    except Exception as e:
+        typer.echo(f"Error: failed to initialise database: {e}", err=True)
+        raise typer.Exit(1) from e
+
+    try:
+        info = create_user(email, password, role)
+        typer.echo(f"User created: {info['email']} (role={info['role']})")
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1) from e
+    finally:
+        engine.dispose()
+
+
+_DB_URL_OPT = typer.Option(
+    "--database-url",
+    envvar="SHOREGUARD_DATABASE_URL",
+    help="Database URL.",
+)
+
+
+@cli.command("list-users")
+def list_users_cmd(
+    database_url: Annotated[str | None, _DB_URL_OPT] = None,
+) -> None:
+    """List all user accounts."""
+    from shoreguard.api.auth import list_users
+
+    logging.basicConfig(level=logging.WARNING)
+    engine = _cli_init_db(database_url)
+    try:
+        users = list_users()
+        if not users:
+            typer.echo("No users found.")
+            return
+        for u in users:
+            status = (
+                "invited" if u["pending_invite"] else ("active" if u["is_active"] else "inactive")
+            )
+            typer.echo(f"  {u['email']:30s}  {u['role']:10s}  {status}")
+    finally:
+        engine.dispose()
+
+
+@cli.command("delete-user")
+def delete_user_cmd(
+    email: Annotated[str, typer.Argument(help="Email of the user to delete")],
+    database_url: Annotated[str | None, _DB_URL_OPT] = None,
+) -> None:
+    """Delete a user account by email."""
+    from shoreguard.api.auth import delete_user, list_users
+
+    logging.basicConfig(level=logging.WARNING)
+    engine = _cli_init_db(database_url)
+    try:
+        users = list_users()
+        match = [u for u in users if u["email"] == email.strip().lower()]
+        if not match:
+            typer.echo(f"Error: no user with email '{email}'", err=True)
+            raise typer.Exit(1)
+        try:
+            delete_user(match[0]["id"])
+        except ValueError as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(1)
+        typer.echo(f"User '{match[0]['email']}' deleted.")
+    finally:
+        engine.dispose()
+
+
+@cli.command("create-service-principal")
+def create_sp_cmd(
+    name: Annotated[str, typer.Argument(help="Name for the service principal")],
+    role: Annotated[
+        str,
+        typer.Option("--role", help="Role: admin, operator, or viewer"),
+    ] = "viewer",
+    database_url: Annotated[str | None, _DB_URL_OPT] = None,
+) -> None:
+    """Create a service principal and print its API key."""
+    from shoreguard.api.auth import ROLES, create_service_principal
+
+    logging.basicConfig(level=logging.WARNING)
+    if role not in ROLES:
+        typer.echo(f"Error: invalid role '{role}' (must be one of {ROLES})", err=True)
+        raise typer.Exit(1)
+    engine = _cli_init_db(database_url)
+    try:
+        key, info = create_service_principal(name.strip(), role)
+        typer.echo(f"Service principal created: {info['name']} (role={info['role']})")
+        typer.echo(f"API key: {key}")
+        typer.echo("Store this key securely — it will not be shown again.")
+    except Exception as e:
+        detail = str(e)
+        if "UNIQUE" in detail or "unique" in detail.lower():
+            detail = f"A service principal named '{name.strip()}' already exists"
+        typer.echo(f"Error: {detail}", err=True)
+        raise typer.Exit(1) from e
+    finally:
+        engine.dispose()
+
+
+@cli.command("list-service-principals")
+def list_sps_cmd(
+    database_url: Annotated[str | None, _DB_URL_OPT] = None,
+) -> None:
+    """List all service principals."""
+    from shoreguard.api.auth import list_service_principals
+
+    logging.basicConfig(level=logging.WARNING)
+    engine = _cli_init_db(database_url)
+    try:
+        sps = list_service_principals()
+        if not sps:
+            typer.echo("No service principals found.")
+            return
+        for sp in sps:
+            last = sp["last_used"] or "never"
+            typer.echo(f"  {sp['name']:30s}  {sp['role']:10s}  last_used={last}")
+    finally:
+        engine.dispose()
 
 
 @cli.command("import-gateways")

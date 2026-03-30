@@ -20,7 +20,13 @@ function _doConnect(sandboxName, sandboxId) {
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws/${GW}/${sandboxName}`);
 
     ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+        let data;
+        try {
+            data = JSON.parse(event.data);
+        } catch {
+            console.warn('WebSocket: failed to parse message', event.data);
+            return;
+        }
         // Reset reconnect counter on successful message
         if (_wsReconnectState[sandboxName]) _wsReconnectState[sandboxName].attempts = 0;
         handleWebSocketEvent(sandboxName, data);
@@ -29,13 +35,13 @@ function _doConnect(sandboxName, sandboxId) {
     ws.onclose = () => {
         delete activeWebSockets[sandboxName];
         // Reconnect if still on detail page for this sandbox
-        if (window.location.pathname.startsWith('/sandboxes/')) {
+        if (window.location.pathname.includes('/sandboxes/')) {
             const state = _wsReconnectState[sandboxName];
             if (state) {
                 state.attempts++;
                 const backoff = Math.min(1000 * Math.pow(2, state.attempts - 1), SG.config.wsMaxBackoff);
                 setTimeout(() => {
-                    if (window.location.pathname.startsWith('/sandboxes/')) {
+                    if (window.location.pathname.includes('/sandboxes/')) {
                         _doConnect(sandboxName, state.sandboxId);
                     }
                 }, backoff);
@@ -47,7 +53,7 @@ function _doConnect(sandboxName, sandboxId) {
         // Only toast on first error, not every reconnect attempt
         const state = _wsReconnectState[sandboxName];
         if (state && state.attempts === 0) {
-            showToast(`WebSocket error for ${sandboxName}`, 'warning');
+            showToast(`WebSocket error for ${escapeHtml(sandboxName)}`, 'warning');
         }
     };
 
@@ -57,18 +63,18 @@ function _doConnect(sandboxName, sandboxId) {
 function handleWebSocketEvent(sandboxName, event) {
     // Live status updates
     if (event.type === 'status' && event.data) {
-        const phaseBadge = document.getElementById('detail-phase-badge');
+        const phaseBadge = document.getElementById('sandbox-phase-badge');
         if (phaseBadge) {
             const badgeClass = SG.badges.phase[event.data.phase] || 'text-bg-secondary';
             phaseBadge.className = `badge ${badgeClass}`;
             phaseBadge.textContent = event.data.phase;
         }
-        const policyVersion = document.getElementById('detail-policy-version');
+        const policyVersion = document.getElementById('sandbox-policy-version');
         if (policyVersion && event.data.current_policy_version !== undefined) {
             policyVersion.textContent = `v${event.data.current_policy_version}`;
         }
         if (event.data.phase === 'error') {
-            showToast(`Sandbox ${sandboxName} entered error state.`, 'danger');
+            showToast(`Sandbox ${escapeHtml(sandboxName)} entered error state.`, 'danger');
         }
     }
 
@@ -76,28 +82,26 @@ function handleWebSocketEvent(sandboxName, event) {
     if (event.type === 'draft_policy_update' && event.data.total_pending > 0) {
         showApprovalToast(sandboxName, event.data);
         // Auto-refresh approvals tab if currently visible
-        const activeTab = document.querySelector('.detail-tabs .nav-link.active');
-        if (activeTab && activeTab.textContent.includes('Approvals')) {
-            const content = document.getElementById('detail-tab-content');
-            if (content) loadApprovalsTab(sandboxName, content);
-        }
+        const content = document.getElementById('approvals-content');
+        if (content) loadApprovalsTab(sandboxName, content);
     }
 
     // Live log streaming
-    if (event.type === 'log' && window.location.pathname.startsWith('/sandboxes/')) {
+    if (event.type === 'log' && window.location.pathname.includes('/sandboxes/')) {
         const logContainer = document.getElementById('log-container');
         if (logContainer) {
-            const level = event.data.level?.toLowerCase() || 'info';
-            logContainer.innerHTML += `<div class="log-line log-${level}"><span class="text-muted">${formatTimestamp(event.data.timestamp_ms)}</span> <span class="badge text-bg-secondary me-1">${event.data.source || 'gateway'}</span> ${escapeHtml(event.data.message)}</div>`;
+            const rawLevel = event.data.level?.toLowerCase() || 'info';
+            const level = ['debug', 'info', 'warn', 'warning', 'error', 'critical'].includes(rawLevel) ? rawLevel : 'info';
+            logContainer.insertAdjacentHTML('beforeend', `<div class="log-line log-${level}"><span class="text-muted">${formatTimestamp(event.data.timestamp_ms)}</span> <span class="badge text-bg-secondary me-1">${event.data.source || 'gateway'}</span> ${escapeHtml(event.data.message)}</div>`);
             logContainer.scrollTop = logContainer.scrollHeight;
         }
     }
 
     // Platform events
-    if (event.type === 'event' && window.location.pathname.startsWith('/sandboxes/')) {
+    if (event.type === 'event' && window.location.pathname.includes('/sandboxes/')) {
         const logContainer = document.getElementById('log-container');
         if (logContainer) {
-            logContainer.innerHTML += `<div class="log-line log-warn"><span class="text-muted">${formatTimestamp(event.data.timestamp_ms)}</span> <span class="badge text-bg-warning me-1">${event.data.type || 'event'}</span> ${escapeHtml(event.data.message)}</div>`;
+            logContainer.insertAdjacentHTML('beforeend', `<div class="log-line log-warn"><span class="text-muted">${formatTimestamp(event.data.timestamp_ms)}</span> <span class="badge text-bg-warning me-1">${event.data.type || 'event'}</span> ${escapeHtml(event.data.message)}</div>`);
             logContainer.scrollTop = logContainer.scrollHeight;
         }
     }
@@ -123,7 +127,7 @@ function showApprovalToast(sandboxName, data) {
                 ${data.total_pending} pending approval(s).
                 ${data.summary ? `<br><small class="text-muted">${escapeHtml(data.summary)}</small>` : ''}
                 <div class="mt-2">
-                    <button class="btn btn-warning btn-sm" onclick="navigateTo(gwUrl('/sandboxes/${sandboxName}'))">
+                    <button class="btn btn-warning btn-sm" onclick="navigateTo(gwUrl('/sandboxes/${escapeHtml(sandboxName)}'))">
                         Review
                     </button>
                 </div>

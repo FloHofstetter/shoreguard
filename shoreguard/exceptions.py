@@ -20,12 +20,9 @@ def friendly_grpc_error(exc: Exception) -> str:
             friendly = _GRPC_FRIENDLY.get(code)
             if friendly:
                 return friendly
-        detail = exc.details() if hasattr(exc, "details") else ""
-        if detail:
-            return detail
-        if code is not None:
             return f"gRPC error: {code.name}"
-    return str(exc)
+        return "An unexpected gateway communication error occurred."
+    return "An unexpected gateway communication error occurred."
 
 
 class ShoreGuardError(Exception):

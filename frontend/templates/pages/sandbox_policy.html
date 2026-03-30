@@ -13,7 +13,7 @@
 <script src="/static/js/policy.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    loadPolicyTab('{{ sandbox_name }}', document.getElementById('policy-content'));
+    loadPolicyTab({{ sandbox_name|tojson }}, document.getElementById('policy-content'));
 });
 </script>
 {% endblock %}

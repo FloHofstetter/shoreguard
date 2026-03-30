@@ -73,7 +73,7 @@ function renderDashboard(sandboxes, providers, gatewayInfo) {
     return `
         <div class="row g-3 mb-4">
             <div class="col-md-4">
-                <div class="card h-100" class="sg-card-themed">
+                <div class="card h-100 sg-card-themed">
                     <div class="card-body">
                         <h6 class="text-muted mb-2"><i class="bi bi-box me-1"></i>Sandboxes</h6>
                         <div class="fs-3 fw-bold mb-2">${sandboxes.length}</div>
@@ -85,7 +85,7 @@ function renderDashboard(sandboxes, providers, gatewayInfo) {
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="card h-100" class="sg-card-themed">
+                <div class="card h-100 sg-card-themed">
                     <div class="card-body">
                         <h6 class="text-muted mb-2"><i class="bi bi-hdd-network me-1"></i>Gateway</h6>
                         <div class="fs-5 fw-bold mb-2">${escapeHtml(gwName)}</div>
@@ -97,7 +97,7 @@ function renderDashboard(sandboxes, providers, gatewayInfo) {
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="card h-100" class="sg-card-themed">
+                <div class="card h-100 sg-card-themed">
                     <div class="card-body">
                         <h6 class="text-muted mb-2"><i class="bi bi-key me-1"></i>Providers</h6>
                         <div class="fs-3 fw-bold mb-2">${providers.length}</div>
@@ -120,7 +120,7 @@ function renderGettingStarted(providerCount) {
     return `
         <div class="row justify-content-center">
             <div class="col-lg-8 col-xl-6">
-                <div class="card" class="sg-card-themed">
+                <div class="card sg-card-themed">
                     <div class="card-body p-4">
                         <h4 class="mb-1">Getting Started</h4>
                         <p class="text-muted small mb-4">Set up your OpenShell environment in 3 steps.</p>
@@ -153,7 +153,7 @@ function renderGettingStarted(providerCount) {
                             <div class="flex-grow-1">
                                 <strong>Create a Sandbox</strong>
                                 <p class="text-muted small mb-2">An isolated environment for your AI agent.</p>
-                                <a class="btn btn-outline-primary btn-sm" href="/gateways" ${!gwDone ? 'class="disabled" aria-disabled="true"' : ''}>
+                                <a class="btn btn-outline-primary btn-sm${!gwDone ? ' disabled' : ''}" href="/gateways" ${!gwDone ? 'aria-disabled="true"' : ''}>
                                     <i class="bi bi-arrow-right me-1"></i>Create Sandbox
                                 </a>
                             </div>
@@ -177,7 +177,7 @@ async function checkGatewayHealth() {
     if (!badge) return;
 
     function setBadge(cls, html, mobileHtml) {
-        badge.className = `sidebar-status badge ${cls}`;
+        badge.className = `topbar-status badge ${cls}`;
         badge.innerHTML = html;
         if (mobileBadge) {
             mobileBadge.className = `badge ${cls}`;
@@ -328,7 +328,7 @@ function escapeHtml(str) {
     if (!str) return '';
     const div = document.createElement('div');
     div.textContent = String(str);
-    return div.innerHTML;
+    return div.innerHTML.replace(/'/g, '&#39;');
 }
 
 function formatTimestamp(ms) {

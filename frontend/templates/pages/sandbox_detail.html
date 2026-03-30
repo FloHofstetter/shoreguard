@@ -13,7 +13,7 @@
 <script src="/static/js/websocket.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    loadSandboxInfo('{{ sandbox_name }}');
+    loadSandboxInfo({{ sandbox_name|tojson }});
 });
 </script>
 {% endblock %}

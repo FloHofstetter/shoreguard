@@ -26,7 +26,7 @@ async function refreshSandboxes() {
         }
 
         tbody.innerHTML = sandboxes.map(sb => `
-            <tr onclick="navigateTo(gwUrl('/sandboxes/${sb.name}'))">
+            <tr onclick="navigateTo(gwUrl('/sandboxes/${escapeHtml(sb.name)}'))">
                 <td><strong>${escapeHtml(sb.name)}</strong></td>
                 <td class="d-none d-md-table-cell"><span class="font-monospace small cell-truncate" title="${escapeHtml(sb.image || '')}">${escapeHtml(sb.image || 'Default')}</span></td>
                 <td><span class="badge ${SG.badges.phase[sb.phase] || 'text-bg-secondary'}">${sb.phase}</span></td>
@@ -34,9 +34,9 @@ async function refreshSandboxes() {
                 <td class="d-none d-lg-table-cell">${sb.gpu ? '<i class="bi bi-gpu-card text-info"></i>' : '<span class="text-muted">—</span>'}</td>
                 <td class="text-end small text-muted d-none d-md-table-cell">${formatTimestamp(sb.created_at_ms)}</td>
                 <td class="text-end">
-                    <button class="btn btn-sm text-muted delete-btn" onclick="event.stopPropagation(); deleteSandbox('${sb.name}')" title="Delete">
+                    ${_sgHasRole('operator') ? `<button class="btn btn-sm text-muted delete-btn" onclick="event.stopPropagation(); deleteSandbox('${escapeHtml(sb.name)}')" title="Delete">
                         <i class="bi bi-trash3"></i>
-                    </button>
+                    </button>` : ''}
                 </td>
             </tr>
         `).join('');
@@ -169,9 +169,9 @@ function loadTerminalPage(sandboxName) {
                 <input type="text" class="form-control font-monospace" id="term-input"
                        placeholder="ls -la" autocomplete="off"
                        style="background:var(--sg-log-bg);border-color:var(--sg-border);color:var(--sg-log-text)"
-                       onkeydown="handleTermKey(event, '${sandboxName}')">
+                       onkeydown="handleTermKey(event, '${escapeHtml(sandboxName)}')">
             </div>
-            <button class="btn btn-success btn-sm" onclick="runTermCommand('${sandboxName}')">
+            <button class="btn btn-success btn-sm" onclick="runTermCommand('${escapeHtml(sandboxName)}')">
                 <i class="bi bi-play-fill me-1"></i>Run
             </button>
             <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('term-output').innerHTML = ''" title="Clear">
@@ -216,7 +216,7 @@ async function runTermCommand(sandboxName) {
     input.value = '';
     input.disabled = true;
 
-    output.innerHTML += `<div class="log-line" style="color:var(--sg-accent)">$ ${escapeHtml(cmd)}</div>`;
+    output.insertAdjacentHTML('beforeend', `<div class="log-line" style="color:var(--sg-accent)">$ ${escapeHtml(cmd)}</div>`);
     output.scrollTop = output.scrollHeight;
 
     try {
@@ -227,17 +227,17 @@ async function runTermCommand(sandboxName) {
         });
 
         if (result.stdout) {
-            output.innerHTML += `<div class="log-line" style="white-space:pre-wrap">${escapeHtml(result.stdout)}</div>`;
+            output.insertAdjacentHTML('beforeend', `<div class="log-line" style="white-space:pre-wrap">${escapeHtml(result.stdout)}</div>`);
         }
         if (result.stderr) {
-            output.innerHTML += `<div class="log-line log-error" style="white-space:pre-wrap">${escapeHtml(result.stderr)}</div>`;
+            output.insertAdjacentHTML('beforeend', `<div class="log-line log-error" style="white-space:pre-wrap">${escapeHtml(result.stderr)}</div>`);
         }
 
         if (result.exit_code !== 0) {
-            output.innerHTML += `<div class="log-line log-error">exit code: ${result.exit_code}</div>`;
+            output.insertAdjacentHTML('beforeend', `<div class="log-line log-error">exit code: ${result.exit_code}</div>`);
         }
     } catch (e) {
-        output.innerHTML += `<div class="log-line log-error">Error: ${escapeHtml(e.message)}</div>`;
+        output.insertAdjacentHTML('beforeend', `<div class="log-line log-error">Error: ${escapeHtml(e.message)}</div>`);
     }
 
     output.scrollTop = output.scrollHeight;

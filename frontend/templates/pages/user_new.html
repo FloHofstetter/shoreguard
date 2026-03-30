@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Invite User — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/users">Users</a></li>
+    <li class="breadcrumb-item active">Invite User</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <h5 class="mb-3"><i class="bi bi-person-plus me-2"></i>Invite User</h5>
+
+        <div class="card sg-card-themed">
+            <div class="card-body">
+                <form id="invite-user-form">
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="new-user-email" placeholder="user@example.com" autofocus required>
+                        <div class="form-text">The user will set their own password via the invite link.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <select class="form-select" id="new-user-role" required>
+                            <option value="viewer">Viewer — read-only access</option>
+                            <option value="operator">Operator — sandbox, policy, provider management</option>
+                            <option value="admin">Admin — full access including gateway and user management</option>
+                        </select>
+                    </div>
+                    <div id="create-user-output"></div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success" id="create-user-btn">
+                            <i class="bi bi-send me-1"></i>Create Invite
+                        </button>
+                        <a href="/users" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/users.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('invite-user-form').addEventListener('submit', createNewUser);
+});
+</script>
+{% endblock %}

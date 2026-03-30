@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
+from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_client
 from shoreguard.client import ShoreGuardClient
 from shoreguard.services.providers import ProviderService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+def _actor(request: Request) -> str:
+    return getattr(request.state, "user_id", "unknown")
 
 
 def _get_provider_service(client: ShoreGuardClient = Depends(get_client)) -> ProviderService:
@@ -57,21 +65,26 @@ async def list_community_sandboxes() -> list[dict[str, Any]]:
 
 @router.get("")
 async def list_providers(
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     svc: ProviderService = Depends(_get_provider_service),
 ) -> list[dict[str, Any]]:
     """List all providers."""
     return await asyncio.to_thread(svc.list, limit=limit, offset=offset)
 
 
-@router.post("", status_code=201)
+@router.post(
+    "",
+    status_code=201,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def create_provider(
     body: CreateProviderRequest,
+    request: Request,
     svc: ProviderService = Depends(_get_provider_service),
 ) -> dict[str, Any]:
     """Create a new provider."""
-    return await asyncio.to_thread(
+    result = await asyncio.to_thread(
         svc.create,
         name=body.name,
         provider_type=body.type,
@@ -79,6 +92,12 @@ async def create_provider(
         extra_credentials=body.credentials or None,
         config=body.config or None,
     )
+    logger.info(
+        "Provider created (provider=%s, actor=%s)",
+        body.name,
+        _actor(request),
+    )
+    return result
 
 
 @router.get("/{name}")
@@ -90,27 +109,46 @@ async def get_provider(
     return await asyncio.to_thread(svc.get, name)
 
 
-@router.put("/{name}")
+@router.put(
+    "/{name}",
+    dependencies=[Depends(require_role("operator"))],
+)
 async def update_provider(
     name: str,
     body: UpdateProviderRequest,
+    request: Request,
     svc: ProviderService = Depends(_get_provider_service),
 ) -> dict[str, Any]:
     """Update an existing provider."""
-    return await asyncio.to_thread(
+    result = await asyncio.to_thread(
         svc.update,
         name=name,
         provider_type=body.type,
         credentials=body.credentials or None,
         config=body.config or None,
     )
+    logger.info(
+        "Provider updated (provider=%s, actor=%s)",
+        name,
+        _actor(request),
+    )
+    return result
 
 
-@router.delete("/{name}")
+@router.delete(
+    "/{name}",
+    dependencies=[Depends(require_role("operator"))],
+)
 async def delete_provider(
     name: str,
+    request: Request,
     svc: ProviderService = Depends(_get_provider_service),
 ) -> dict[str, bool]:
     """Delete a provider by name."""
     deleted = await asyncio.to_thread(svc.delete, name)
+    logger.info(
+        "Provider deleted (provider=%s, actor=%s)",
+        name,
+        _actor(request),
+    )
     return {"deleted": deleted}

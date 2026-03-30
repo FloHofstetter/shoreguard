@@ -15,7 +15,7 @@
 <script src="/static/js/rule.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    loadRuleDetail('{{ sandbox_name }}', '{{ rule_key }}');
+    loadRuleDetail({{ sandbox_name|tojson }}, {{ rule_key|tojson }});
 });
 </script>
 {% endblock %}

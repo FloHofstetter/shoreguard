@@ -23,10 +23,10 @@ async function _loadCommunitySandboxes() {
     } catch {}
 }
 
-function selectAgent(type) {
+function selectAgent(type, event) {
     wizardState.agent = type;
     document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('selected'));
-    event.currentTarget.classList.add('selected');
+    if (event && event.currentTarget) event.currentTarget.classList.add('selected');
 
     const sandbox = _communitySandboxes.find(s => s.name === type);
     document.getElementById('wizard-image').value = sandbox?.image || '';
@@ -150,8 +150,8 @@ async function loadWizardPresets() {
                 </thead>
                 <tbody>
                     ${presets.map(p => `
-                        <tr class="table-clickable" onclick="toggleWizardPreset('${p.name}', this)">
-                            <td><input class="form-check-input" type="checkbox" ${wizardState.presets.has(p.name) ? 'checked' : ''} onclick="event.stopPropagation(); toggleWizardPreset('${p.name}', this.closest('tr'))"></td>
+                        <tr class="table-clickable" onclick="toggleWizardPreset('${escapeHtml(p.name)}', this)">
+                            <td><input class="form-check-input" type="checkbox" ${wizardState.presets.has(p.name) ? 'checked' : ''} onclick="event.stopPropagation(); toggleWizardPreset('${escapeHtml(p.name)}', this.closest('tr'))"></td>
                             <td><strong>${escapeHtml(p.name)}</strong></td>
                             <td class="text-muted small">${escapeHtml(p.description || '')}</td>
                         </tr>
@@ -223,7 +223,7 @@ async function launchSandbox() {
     const logEl = document.getElementById('wizard-log');
 
     const addLog = (msg, cls = '') => {
-        logEl.innerHTML += `<div class="log-line ${cls}">${escapeHtml(msg)}</div>`;
+        logEl.insertAdjacentHTML('beforeend', `<div class="log-line ${cls}">${escapeHtml(msg)}</div>`);
         logEl.scrollTop = logEl.scrollHeight;
     };
 
@@ -265,14 +265,14 @@ async function launchSandbox() {
         progressBar.classList.remove('progress-bar-animated');
         progressBar.classList.add('bg-success');
 
-        logEl.innerHTML += `
+        logEl.insertAdjacentHTML('beforeend', `
             <div class="mt-3 pt-3 border-top border-secondary">
                 <div class="d-flex align-items-center mb-3">
                     <i class="bi bi-check-circle-fill text-success fs-4 me-2"></i>
                     <strong>Sandbox "${escapeHtml(sandbox.name)}" is running.</strong>
                 </div>
                 <div class="d-flex gap-2">
-                    <button class="btn btn-success btn-sm" onclick="navigateTo(gwUrl('/sandboxes/${sandbox.name}'))">
+                    <button class="btn btn-success btn-sm" onclick="navigateTo(gwUrl('/sandboxes/${escapeHtml(sandbox.name)}'))">
                         <i class="bi bi-box-arrow-in-right me-1"></i>Open Sandbox
                     </button>
                     <button class="btn btn-outline-light btn-sm" onclick="navigateTo(gwUrl('/sandboxes'))">
@@ -282,14 +282,14 @@ async function launchSandbox() {
                         <i class="bi bi-plus-circle me-1"></i>Create Another
                     </button>
                 </div>
-            </div>`;
+            </div>`);
         logEl.scrollTop = logEl.scrollHeight;
     } catch (e) {
         addLog(`Error: ${e.message}`, 'log-error');
         progressBar.classList.add('bg-danger');
         progressBar.classList.remove('progress-bar-animated');
 
-        logEl.innerHTML += `
+        logEl.insertAdjacentHTML('beforeend', `
             <div class="mt-3 pt-3 border-top border-secondary">
                 <div class="d-flex gap-2">
                     <button class="btn btn-outline-light btn-sm" onclick="navigateTo(gwUrl('/wizard'))">

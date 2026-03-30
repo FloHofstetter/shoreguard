@@ -12,7 +12,7 @@
 {% block sandbox_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    loadTerminalPage('{{ sandbox_name }}');
+    loadTerminalPage({{ sandbox_name|tojson }});
 });
 </script>
 {% endblock %}

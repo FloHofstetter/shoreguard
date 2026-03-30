@@ -16,7 +16,7 @@
         <button class="btn btn-outline-secondary" onclick="loadProvidersPage()" title="Refresh">
             <i class="bi bi-arrow-clockwise"></i>
         </button>
-        <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#createProviderModal">
+        <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#createProviderModal" data-sg-min-role="operator">
             <i class="bi bi-plus-lg me-1"></i>New
         </button>
     </div>
@@ -79,5 +79,10 @@
 
 {% block extra_js %}
 <script src="/static/js/providers.js"></script>
-<script>document.addEventListener('DOMContentLoaded', loadProvidersPage);</script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    loadProvidersPage();
+    document.getElementById('createProviderModal').addEventListener('hidden.bs.modal', _resetProviderModal);
+});
+</script>
 {% endblock %}
