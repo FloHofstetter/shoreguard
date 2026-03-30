@@ -1,0 +1,71 @@
+# Sandbox Management
+
+## What is a sandbox?
+
+A **sandbox** is a secure, isolated environment for an AI agent. It provides a
+container with controlled network access, filesystem permissions, and process
+restrictions — all managed through the gateway's policy engine.
+
+![Wizard](../screenshots/wizard.png)
+
+## Creating a sandbox
+
+### Via the wizard
+
+The sandbox wizard walks you through creation step by step:
+
+1. **Agent type** — select the kind of agent (e.g., coding agent, research agent).
+2. **Image** — choose a community sandbox image or specify a custom one.
+3. **Providers** — configure credentials for services the agent needs (GitHub, Slack, etc.).
+4. **Presets** — apply bundled security policy templates with one click.
+
+### Via the REST API
+
+```http
+POST /api/gateways/{gw}/sandboxes
+Content-Type: application/json
+
+{
+  "name": "my-sandbox",
+  "image": "ghcr.io/nvidia/openshell-sandbox:latest",
+  "providers": ["github"],
+  "presets": ["pypi", "npm"]
+}
+```
+
+## Sandbox lifecycle
+
+A sandbox moves through these states:
+
+| State | Meaning |
+|-------|---------|
+| `creating` | Container is being provisioned on the gateway |
+| `running` | Sandbox is active and accepting commands |
+| `stopped` | Sandbox has been stopped gracefully |
+| `error` | Something went wrong — check logs for details |
+
+## Executing commands
+
+Run a command inside a running sandbox:
+
+```http
+POST /api/gateways/{gw}/sandboxes/{name}/exec
+Content-Type: application/json
+
+{
+  "command": ["ls", "-la", "/workspace"]
+}
+```
+
+The response contains `stdout`, `stderr`, and the exit code.
+
+## SSH sessions
+
+You can create a temporary SSH session for interactive access to a sandbox.
+The session credentials are generated on the fly and expire automatically.
+
+## Deleting a sandbox
+
+Delete a sandbox from the detail view in the Web UI or via the API. This stops
+the container and removes it from the gateway. Policy data is retained for
+audit purposes.

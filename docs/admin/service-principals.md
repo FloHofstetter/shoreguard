@@ -1,0 +1,81 @@
+# Service Principals
+
+## What are service principals?
+
+A **service principal** is a named API key with an assigned role, designed for
+programmatic access. Use service principals for CI/CD pipelines, Terraform
+runs, monitoring scripts, or any automation that needs to talk to the
+ShoreGuard API without a human login.
+
+## Creating a service principal
+
+### Via the Web UI
+
+Admins can create service principals at `/users/new-service-principal`. Choose
+a descriptive name and assign a role (the same Admin / Operator / Viewer roles
+used for human accounts).
+
+### Via the CLI
+
+```bash
+shoreguard create-service-principal my-ci-bot --role viewer
+```
+
+The API key is displayed **once** at creation time. Copy it immediately and
+store it in a secrets manager — ShoreGuard cannot show it again.
+
+## How keys are stored
+
+API keys are **SHA-256 hashed** before being written to the database. The
+plaintext key is never stored. On each request, ShoreGuard hashes the
+presented key and compares it to the stored hash.
+
+A `last_used` timestamp is updated on every successful authentication so you
+can audit which keys are active.
+
+## Using a service principal
+
+### REST API
+
+Pass the key in the `Authorization` header:
+
+```http
+GET /api/gateways
+Authorization: Bearer sg_live_abc123...
+```
+
+### Terraform provider
+
+Set the key as an environment variable:
+
+```bash
+export SHOREGUARD_API_KEY="sg_live_abc123..."
+terraform plan
+```
+
+Or configure it directly in the provider block:
+
+```hcl
+provider "shoreguard" {
+  api_key = var.shoreguard_api_key
+}
+```
+
+### WebSocket
+
+For WebSocket connections, pass the key as a query parameter:
+
+```
+ws://localhost:8888/ws/approvals?token=sg_live_abc123...
+```
+
+## Deleting a service principal
+
+Remove a service principal from the user management UI or via the API:
+
+```http
+DELETE /api/auth/service-principals/{id}
+```
+
+The key is invalidated immediately. Any in-flight requests using it will fail
+on the next authentication check.

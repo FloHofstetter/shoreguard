@@ -1,0 +1,101 @@
+site_name: ShoreGuard
+site_url: https://flohofstetter.github.io/shoreguard/
+site_description: Open-source control plane for NVIDIA OpenShell
+site_author: Florian Hofstetter
+repo_url: https://github.com/FloHofstetter/shoreguard
+repo_name: FloHofstetter/shoreguard
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; 2025–2026 Florian Hofstetter — Apache 2.0
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: green
+      accent: green
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: green
+      accent: green
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
+
+  icon:
+    repo: fontawesome/brands/github
+
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/FloHofstetter/shoreguard
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/shoreguard/
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: ["."]
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Migrating from v0.2: getting-started/migration.md
+  - User Guide:
+      - Overview: guide/overview.md
+      - Gateways: guide/gateways.md
+      - Sandboxes: guide/sandboxes.md
+      - Policies: guide/policies.md
+      - Approvals: guide/approvals.md
+      - Monitoring: guide/monitoring.md
+  - Admin Guide:
+      - RBAC & Users: admin/rbac.md
+      - Service Principals: admin/service-principals.md
+      - Deployment: admin/deployment.md
+      - Local Mode: admin/local-mode.md
+  - Reference:
+      - CLI: reference/cli.md
+      - REST API: reference/api.md
+      - Configuration: reference/configuration.md
+      - Policy Presets: reference/presets.md
+      - Terraform: reference/terraform.md
+  - Architecture: architecture.md
+  - Development:
+      - Contributing: development/contributing.md
+      - Testing: development/testing.md
+      - Code Structure: development/code-structure.md
+      - Proto Stubs: development/proto-stubs.md
+  - Changelog: changelog.md
