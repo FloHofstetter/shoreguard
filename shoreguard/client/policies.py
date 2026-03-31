@@ -103,6 +103,26 @@ class PolicyManager:
             result["policy"] = _policy_to_dict(resp.revision.policy)
         return result
 
+    def get_version(self, sandbox_name: str, version: int) -> dict[str, Any]:
+        """Get a specific policy revision by version number."""
+        resp = self._stub.GetSandboxPolicyStatus(
+            openshell_pb2.GetSandboxPolicyStatusRequest(name=sandbox_name, version=version),
+            timeout=self._timeout,
+        )
+        result: dict[str, Any] = {
+            "active_version": resp.active_version,
+            "revision": {
+                "version": resp.revision.version,
+                "status": POLICY_STATUS_NAMES.get(resp.revision.status, "unknown"),
+                "policy_hash": resp.revision.policy_hash,
+                "created_at_ms": resp.revision.created_at_ms,
+                "loaded_at_ms": resp.revision.loaded_at_ms,
+            },
+        }
+        if resp.revision.HasField("policy"):
+            result["policy"] = _policy_to_dict(resp.revision.policy)
+        return result
+
     def list_revisions(
         self, sandbox_name: str, *, limit: int = 20, offset: int = 0
     ) -> list[dict[str, Any]]:

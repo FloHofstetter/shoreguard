@@ -414,12 +414,14 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> dict[s
                 from shoreguard.services.audit import audit_service
 
                 if audit_service:
-                    audit_service.log(
+                    await asyncio.to_thread(
+                        audit_service.log,
                         actor=_audit_actor,
                         actor_role=_audit_role,
                         action="gateway.create",
                         resource_type="gateway",
                         resource_id=body.name,
+                        gateway=body.name,
                         client_ip=_audit_ip,
                     )
         except asyncio.CancelledError:

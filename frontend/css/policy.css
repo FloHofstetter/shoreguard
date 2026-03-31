@@ -40,3 +40,48 @@
     background-color: var(--sg-card) !important;
     border: 1px solid var(--sg-border) !important;
 }
+
+/* Policy Diff */
+.diff-added {
+    background-color: rgba(40, 167, 69, 0.15);
+    border-left: 3px solid #28a745;
+    padding-left: 0.5rem;
+}
+
+.diff-removed {
+    background-color: rgba(220, 53, 69, 0.15);
+    border-left: 3px solid #dc3545;
+    padding-left: 0.5rem;
+    text-decoration: line-through;
+    opacity: 0.8;
+}
+
+.diff-changed {
+    background-color: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid #ffc107;
+    padding-left: 0.5rem;
+}
+
+.diff-unchanged {
+    opacity: 0.5;
+}
+
+.diff-section-header {
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--sg-border);
+    margin-bottom: 0.5rem;
+    color: var(--sg-text-muted);
+}
+
+.diff-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.diff-label-added { color: #28a745; }
+.diff-label-removed { color: #dc3545; }
+.diff-label-changed { color: #ffc107; }

@@ -263,7 +263,7 @@ def _lookup_sp_identity(key: str) -> dict | None:
             return None
         row.last_used = datetime.datetime.now(datetime.UTC).isoformat()
         session.commit()
-        return {"name": row.name, "role": row.role}
+        return {"id": row.id, "name": row.name, "role": row.role}
     except SQLAlchemyError:
         session.rollback()
         logger.exception("SP key lookup failed")
@@ -305,6 +305,7 @@ def check_request_auth(request: Request) -> str | None:
         sp = _lookup_sp_identity(token)
         if sp:
             request.state.user_id = f"sp:{sp['name']}"
+            request.state.sp_db_id = sp["id"]
             logger.debug(
                 "Auth via SP Bearer token (path=%s, role=%s)", request.url.path, sp["role"]
             )
@@ -319,6 +320,7 @@ def check_request_auth(request: Request) -> str | None:
             user_info = _lookup_user(user_id)
             if user_info:
                 request.state.user_id = user_info["email"]
+                request.state.user_db_id = user_info["id"]
                 logger.debug(
                     "Auth via session cookie (path=%s, role=%s, user=%s)",
                     request.url.path,
@@ -329,6 +331,49 @@ def check_request_auth(request: Request) -> str | None:
             logger.warning("Session for inactive/deleted user_id=%d", user_id)
 
     return None
+
+
+# ─── Gateway-scoped role lookup ───────────────────────────────────────────
+
+
+class _GatewayRoleLookupError(Exception):
+    """Raised when the gateway role DB lookup fails — triggers a 503."""
+
+
+def _lookup_gateway_role(
+    *, user_id: int | None = None, sp_id: int | None = None, gateway: str
+) -> str | None:
+    """Return the gateway-scoped role override, or None if no override exists.
+
+    Raises ``_GatewayRoleLookupError`` on DB failure so the caller does NOT
+    silently fall back to the (possibly higher) global role (fail-closed).
+    """
+    if _session_factory is None:
+        return None
+    from shoreguard.models import SPGatewayRole, UserGatewayRole
+
+    session = _session_factory()
+    try:
+        if user_id is not None:
+            row = (
+                session.query(UserGatewayRole)
+                .filter(UserGatewayRole.user_id == user_id, UserGatewayRole.gateway_name == gateway)
+                .first()
+            )
+        elif sp_id is not None:
+            row = (
+                session.query(SPGatewayRole)
+                .filter(SPGatewayRole.sp_id == sp_id, SPGatewayRole.gateway_name == gateway)
+                .first()
+            )
+        else:
+            return None
+        return row.role if row else None
+    except SQLAlchemyError:
+        logger.exception("Gateway role lookup failed (gateway=%s)", gateway)
+        raise _GatewayRoleLookupError(f"Gateway role lookup failed for gateway={gateway}")
+    finally:
+        session.close()
 
 
 # ─── FastAPI dependencies ──────────────────────────────────────────────────
@@ -355,7 +400,12 @@ def require_auth(request: Request) -> None:
 
 
 def require_role(minimum: str):
-    """Return a FastAPI dependency that enforces a minimum role level."""
+    """Return a FastAPI dependency that enforces a minimum role level.
+
+    When inside a gateway-scoped route (``_current_gateway`` is set),
+    a per-gateway role override takes precedence over the global role.
+    """
+    from shoreguard.api.deps import _current_gateway
 
     async def _dependency(request: Request) -> None:
         role = getattr(request.state, "role", None)
@@ -368,6 +418,23 @@ def require_role(minimum: str):
                     headers={"WWW-Authenticate": "Bearer"},
                 )
             request.state.role = role
+
+        # Check for a gateway-scoped role override
+        gateway = _current_gateway.get()
+        if gateway:
+            user_db_id = getattr(request.state, "user_db_id", None)
+            sp_db_id = getattr(request.state, "sp_db_id", None)
+            try:
+                gw_role = _lookup_gateway_role(user_id=user_db_id, sp_id=sp_db_id, gateway=gateway)
+            except _GatewayRoleLookupError:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Gateway role lookup failed — try again later",
+                )
+            if gw_role:
+                role = gw_role
+                request.state.role = role
+
         if _ROLE_RANK.get(role, -1) < _ROLE_RANK[minimum]:
             actor = getattr(request.state, "user_id", "unknown")
             logger.warning(
@@ -712,6 +779,163 @@ def delete_service_principal(sp_id: int) -> bool:
         session.rollback()
         logger.exception("Failed to delete service principal (sp_id=%d)", sp_id)
         raise
+    finally:
+        session.close()
+
+
+# ─── Gateway-scoped role CRUD ─────────────────────────────────────────────
+
+
+def set_gateway_role(
+    *, user_id: int | None = None, sp_id: int | None = None, gateway_name: str, role: str
+) -> dict:
+    """Create or update a per-gateway role override. Returns the saved record."""
+    if role not in ROLES:
+        raise ValueError(f"Invalid role: {role!r}")
+    if _session_factory is None:
+        raise RuntimeError("Database not available")
+    from shoreguard.models import SPGatewayRole, UserGatewayRole
+
+    session = _session_factory()
+    try:
+        if user_id is not None:
+            row = (
+                session.query(UserGatewayRole)
+                .filter(
+                    UserGatewayRole.user_id == user_id,
+                    UserGatewayRole.gateway_name == gateway_name,
+                )
+                .first()
+            )
+            if row:
+                row.role = role
+            else:
+                row = UserGatewayRole(user_id=user_id, gateway_name=gateway_name, role=role)
+                session.add(row)
+            session.commit()
+            return {"user_id": user_id, "gateway_name": gateway_name, "role": role}
+        elif sp_id is not None:
+            row = (
+                session.query(SPGatewayRole)
+                .filter(
+                    SPGatewayRole.sp_id == sp_id,
+                    SPGatewayRole.gateway_name == gateway_name,
+                )
+                .first()
+            )
+            if row:
+                row.role = role
+            else:
+                row = SPGatewayRole(sp_id=sp_id, gateway_name=gateway_name, role=role)
+                session.add(row)
+            session.commit()
+            return {"sp_id": sp_id, "gateway_name": gateway_name, "role": role}
+        else:
+            raise ValueError("Either user_id or sp_id must be provided")
+    except IntegrityError:
+        session.rollback()
+        raise
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def remove_gateway_role(
+    *, user_id: int | None = None, sp_id: int | None = None, gateway_name: str
+) -> bool:
+    """Remove a per-gateway role override. Returns True if found."""
+    if _session_factory is None:
+        raise RuntimeError("Database not available")
+    from shoreguard.models import SPGatewayRole, UserGatewayRole
+
+    session = _session_factory()
+    try:
+        if user_id is not None:
+            row = (
+                session.query(UserGatewayRole)
+                .filter(
+                    UserGatewayRole.user_id == user_id,
+                    UserGatewayRole.gateway_name == gateway_name,
+                )
+                .first()
+            )
+        elif sp_id is not None:
+            row = (
+                session.query(SPGatewayRole)
+                .filter(
+                    SPGatewayRole.sp_id == sp_id,
+                    SPGatewayRole.gateway_name == gateway_name,
+                )
+                .first()
+            )
+        else:
+            return False
+        if row is None:
+            return False
+        session.delete(row)
+        session.commit()
+        logger.info(
+            "Gateway role removed (user_id=%s, sp_id=%s, gateway=%s)",
+            user_id,
+            sp_id,
+            gateway_name,
+        )
+        return True
+    except Exception:
+        session.rollback()
+        logger.exception(
+            "Failed to remove gateway role (user_id=%s, sp_id=%s, gateway=%s)",
+            user_id,
+            sp_id,
+            gateway_name,
+        )
+        raise
+    finally:
+        session.close()
+
+
+def list_gateway_roles_for_user(user_id: int) -> list[dict]:
+    """Return all gateway-scoped role overrides for a user."""
+    if _session_factory is None:
+        return []
+    from shoreguard.models import UserGatewayRole
+
+    session = _session_factory()
+    try:
+        rows = (
+            session.query(UserGatewayRole)
+            .filter(UserGatewayRole.user_id == user_id)
+            .order_by(UserGatewayRole.gateway_name)
+            .all()
+        )
+        return [{"gateway_name": r.gateway_name, "role": r.role} for r in rows]
+    except SQLAlchemyError:
+        logger.exception("Failed to list gateway roles for user %d", user_id)
+        return []
+    finally:
+        session.close()
+
+
+def list_gateway_roles_for_sp(sp_id: int) -> list[dict]:
+    """Return all gateway-scoped role overrides for a service principal."""
+    if _session_factory is None:
+        return []
+    from shoreguard.models import SPGatewayRole
+
+    session = _session_factory()
+    try:
+        rows = (
+            session.query(SPGatewayRole)
+            .filter(SPGatewayRole.sp_id == sp_id)
+            .order_by(SPGatewayRole.gateway_name)
+            .all()
+        )
+        return [{"gateway_name": r.gateway_name, "role": r.role} for r in rows]
+    except SQLAlchemyError:
+        logger.exception("Failed to list gateway roles for SP %d", sp_id)
+        return []
     finally:
         session.close()
 

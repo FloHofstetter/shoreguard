@@ -214,6 +214,7 @@ class GatewayService:
             client = ShoreGuardClient.from_active_cluster(cluster=name)
         except (
             grpc.RpcError,
+            GatewayNotConnectedError,
             OSError,
             ConnectionError,
             TimeoutError,

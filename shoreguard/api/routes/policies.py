@@ -94,6 +94,17 @@ async def list_policy_revisions(
     )
 
 
+@router.get("/sandboxes/{name}/policy/diff")
+async def diff_policy_revisions(
+    name: str,
+    version_a: int = Query(..., ge=1),
+    version_b: int = Query(..., ge=1),
+    svc: PolicyService = Depends(_get_policy_service),
+) -> dict[str, Any]:
+    """Compare two policy revisions side-by-side."""
+    return await asyncio.to_thread(svc.diff_revisions, name, version_a, version_b)
+
+
 # ─── Network Rule CRUD ───────────────────────────────────────────────────────
 
 

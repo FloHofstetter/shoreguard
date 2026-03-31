@@ -1,5 +1,6 @@
 """HTML page routes and auth API endpoints for the Shoreguard frontend."""
 
+import asyncio
 import logging
 import re
 from pathlib import Path
@@ -10,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
+from shoreguard.config import VALID_GATEWAY_NAME_RE
 from shoreguard.services.audit import audit_log
 
 from .auth import (
@@ -25,9 +27,13 @@ from .auth import (
     delete_user,
     is_registration_enabled,
     is_setup_complete,
+    list_gateway_roles_for_sp,
+    list_gateway_roles_for_user,
     list_service_principals,
     list_users,
+    remove_gateway_role,
     require_role,
+    set_gateway_role,
     verify_session_token,
 )
 
@@ -326,6 +332,134 @@ async def delete_user_endpoint(request: Request, user_id: int):
     return JSONResponse(status_code=404, content={"detail": "User not found"})
 
 
+# ─── Gateway-scoped role management (admin-only) ──────────────────────────
+
+
+class SetGatewayRoleRequest(BaseModel):
+    """Request body for setting a per-gateway role override."""
+
+    role: str
+
+
+@router.get(
+    "/api/auth/users/{user_id}/gateway-roles", dependencies=[Depends(require_role("admin"))]
+)
+async def get_user_gateway_roles(user_id: int):
+    """List all gateway-scoped role overrides for a user."""
+    return await asyncio.to_thread(list_gateway_roles_for_user, user_id)
+
+
+@router.put(
+    "/api/auth/users/{user_id}/gateway-roles/{gw}", dependencies=[Depends(require_role("admin"))]
+)
+async def set_user_gateway_role(
+    request: Request, user_id: int, gw: str, body: SetGatewayRoleRequest
+):
+    """Set or update a per-gateway role for a user."""
+    if not VALID_GATEWAY_NAME_RE.match(gw):
+        return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
+    if body.role not in ROLES:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": f"Invalid role: {body.role!r} (must be one of {ROLES})"},
+        )
+    try:
+        result = await asyncio.to_thread(
+            set_gateway_role, user_id=user_id, gateway_name=gw, role=body.role
+        )
+    except IntegrityError:
+        return JSONResponse(status_code=404, content={"detail": "User or gateway not found"})
+    await audit_log(
+        request,
+        "user.gateway_role.set",
+        "user",
+        str(user_id),
+        detail={"gateway": gw, "role": body.role},
+    )
+    return result
+
+
+@router.delete(
+    "/api/auth/users/{user_id}/gateway-roles/{gw}", dependencies=[Depends(require_role("admin"))]
+)
+async def delete_user_gateway_role(request: Request, user_id: int, gw: str):
+    """Remove a per-gateway role override for a user (falls back to global role)."""
+    if not VALID_GATEWAY_NAME_RE.match(gw):
+        return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
+    if await asyncio.to_thread(remove_gateway_role, user_id=user_id, gateway_name=gw):
+        await audit_log(
+            request,
+            "user.gateway_role.remove",
+            "user",
+            str(user_id),
+            detail={"gateway": gw},
+        )
+        return {"ok": True}
+    return JSONResponse(status_code=404, content={"detail": "Gateway role not found"})
+
+
+@router.get(
+    "/api/auth/service-principals/{sp_id}/gateway-roles",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def get_sp_gateway_roles(sp_id: int):
+    """List all gateway-scoped role overrides for a service principal."""
+    return await asyncio.to_thread(list_gateway_roles_for_sp, sp_id)
+
+
+@router.put(
+    "/api/auth/service-principals/{sp_id}/gateway-roles/{gw}",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def set_sp_gateway_role_endpoint(
+    request: Request, sp_id: int, gw: str, body: SetGatewayRoleRequest
+):
+    """Set or update a per-gateway role for a service principal."""
+    if not VALID_GATEWAY_NAME_RE.match(gw):
+        return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
+    if body.role not in ROLES:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": f"Invalid role: {body.role!r} (must be one of {ROLES})"},
+        )
+    try:
+        result = await asyncio.to_thread(
+            set_gateway_role, sp_id=sp_id, gateway_name=gw, role=body.role
+        )
+    except IntegrityError:
+        return JSONResponse(
+            status_code=404, content={"detail": "Service principal or gateway not found"}
+        )
+    await audit_log(
+        request,
+        "sp.gateway_role.set",
+        "service_principal",
+        str(sp_id),
+        detail={"gateway": gw, "role": body.role},
+    )
+    return result
+
+
+@router.delete(
+    "/api/auth/service-principals/{sp_id}/gateway-roles/{gw}",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def delete_sp_gateway_role(request: Request, sp_id: int, gw: str):
+    """Remove a per-gateway role override for a service principal."""
+    if not VALID_GATEWAY_NAME_RE.match(gw):
+        return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
+    if await asyncio.to_thread(remove_gateway_role, sp_id=sp_id, gateway_name=gw):
+        await audit_log(
+            request,
+            "sp.gateway_role.remove",
+            "service_principal",
+            str(sp_id),
+            detail={"gateway": gw},
+        )
+        return {"ok": True}
+    return JSONResponse(status_code=404, content={"detail": "Gateway role not found"})
+
+
 # ─── Invite acceptance (public) ─────────────────────────────────────────────
 
 
@@ -560,6 +694,7 @@ def _require_page_auth(request: Request):
         from urllib.parse import quote
 
         return RedirectResponse(url=f"/login?next={quote(request.url.path)}", status_code=302)
+    request.state.role = role
     return None
 
 
@@ -774,8 +909,7 @@ async def audit_page(request: Request):
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
-    role = check_request_auth(request)
-    if role != "admin":
+    if getattr(request.state, "role", None) != "admin":
         return _render_error(
             request,
             403,
@@ -796,8 +930,7 @@ async def users_page(request: Request):
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
-    role = check_request_auth(request)
-    if role != "admin":
+    if getattr(request.state, "role", None) != "admin":
         return _render_error(
             request,
             403,
@@ -818,8 +951,7 @@ async def user_new_page(request: Request):
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
-    role = check_request_auth(request)
-    if role != "admin":
+    if getattr(request.state, "role", None) != "admin":
         return _render_error(
             request,
             403,
@@ -836,8 +968,7 @@ async def sp_new_page(request: Request):
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
-    role = check_request_auth(request)
-    if role != "admin":
+    if getattr(request.state, "role", None) != "admin":
         return _render_error(
             request,
             403,

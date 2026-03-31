@@ -36,6 +36,23 @@ class PolicyService:
         self._client.policies.update(sandbox_name, proto_policy)
         return self._client.policies.get(sandbox_name)
 
+    def get_version(self, sandbox_name: str, version: int) -> dict[str, Any]:
+        """Get a specific policy revision by version number."""
+        return self._client.policies.get_version(sandbox_name, version)
+
+    def diff_revisions(self, sandbox_name: str, version_a: int, version_b: int) -> dict[str, Any]:
+        """Fetch two revisions and return both for client-side diffing."""
+        rev_a = self.get_version(sandbox_name, version_a)
+        rev_b = self.get_version(sandbox_name, version_b)
+        return {
+            "version_a": version_a,
+            "version_b": version_b,
+            "policy_a": rev_a.get("policy"),
+            "policy_b": rev_b.get("policy"),
+            "revision_a": rev_a.get("revision"),
+            "revision_b": rev_b.get("revision"),
+        }
+
     def list_revisions(
         self, sandbox_name: str, *, limit: int = 20, offset: int = 0
     ) -> list[dict[str, Any]]:

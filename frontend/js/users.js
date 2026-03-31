@@ -57,6 +57,11 @@ function usersPage() {
             }
         },
 
+        async showGatewayRoles(u) {
+            await openGatewayRolesModal('user', u.id, u.email);
+            this.load();
+        },
+
         async deleteSP(sp) {
             const confirmed = await showConfirm(
                 `Delete service principal "${sp.name}"? Existing tokens will stop working.`,
@@ -71,7 +76,161 @@ function usersPage() {
                 showToast(`Delete failed: ${e.message}`, 'danger');
             }
         },
+
+        async showSPGatewayRoles(sp) {
+            await openGatewayRolesModal('sp', sp.id, sp.name);
+            this.load();
+        },
     };
+}
+
+
+// ─── Gateway Roles Modal ───────────────────────────────────────────────────
+
+async function openGatewayRolesModal(entityType, entityId, entityLabel) {
+    const isUser = entityType === 'user';
+    const basePath = isUser
+        ? `/api/auth/users/${entityId}/gateway-roles`
+        : `/api/auth/service-principals/${entityId}/gateway-roles`;
+
+    const existing = document.getElementById('gatewayRolesModal');
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="gatewayRolesModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content sg-modal-themed">
+                    <div class="modal-header border-bottom">
+                        <h5 class="modal-title">
+                            <i class="bi bi-shield-lock me-2"></i>Gateway Roles: ${escapeHtml(entityLabel)}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="gw-roles-body">
+                        ${renderSpinner('Loading gateway roles...')}
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `);
+
+    const modalEl = document.getElementById('gatewayRolesModal');
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    async function renderRoles() {
+        const body = document.getElementById('gw-roles-body');
+        try {
+            const [roles, gateways] = await Promise.all([
+                apiFetch(basePath),
+                apiFetch('/api/gateway/list'),
+            ]);
+            const gwNames = gateways.map(g => g.name);
+
+            let html = '';
+            if (roles.length > 0) {
+                html += `<div class="table-responsive mb-3">
+                    <table class="table table-dark table-striped table-sm align-middle">
+                        <thead><tr><th>Gateway</th><th>Role</th><th class="text-end" style="width:60px"></th></tr></thead>
+                        <tbody>
+                            ${roles.map(r => `<tr>
+                                <td><strong>${escapeHtml(r.gateway_name)}</strong></td>
+                                <td><span class="badge ${_ROLE_BADGES[r.role] || 'text-bg-secondary'}">${escapeHtml(r.role)}</span></td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm text-muted delete-btn" data-gw="${escapeHtml(r.gateway_name)}" title="Remove override">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+            } else {
+                html += '<p class="text-muted mb-3">No gateway-specific role overrides. The global role applies everywhere.</p>';
+            }
+
+            // Add override form
+            const availableGws = gwNames.filter(n => !roles.some(r => r.gateway_name === n));
+            if (availableGws.length > 0) {
+                html += `<div class="card bg-dark border-secondary">
+                    <div class="card-body py-2">
+                        <div class="row g-2 align-items-end">
+                            <div class="col">
+                                <label class="form-label small text-muted mb-1">Gateway</label>
+                                <select id="gw-role-gw" class="form-select form-select-sm bg-dark text-light border-secondary">
+                                    ${availableGws.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="col">
+                                <label class="form-label small text-muted mb-1">Role</label>
+                                <select id="gw-role-role" class="form-select form-select-sm bg-dark text-light border-secondary">
+                                    <option value="admin">admin</option>
+                                    <option value="operator">operator</option>
+                                    <option value="viewer" selected>viewer</option>
+                                </select>
+                            </div>
+                            <div class="col-auto">
+                                <button id="gw-role-add" class="btn btn-sm btn-outline-success">
+                                    <i class="bi bi-plus-lg me-1"></i>Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }
+
+            body.innerHTML = html;
+
+            // Bind add button
+            const addBtn = document.getElementById('gw-role-add');
+            if (addBtn) {
+                addBtn.addEventListener('click', async () => {
+                    const gw = document.getElementById('gw-role-gw').value;
+                    const role = document.getElementById('gw-role-role').value;
+                    try {
+                        await apiFetch(`${basePath}/${gw}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ role }),
+                        });
+                        showToast(`Gateway role set: ${role} on ${gw}`, 'success');
+                        renderRoles();
+                    } catch (e) {
+                        showToast(`Failed: ${e.message}`, 'danger');
+                    }
+                });
+            }
+
+            // Bind delete buttons
+            body.querySelectorAll('.delete-btn[data-gw]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const gw = btn.dataset.gw;
+                    try {
+                        await apiFetch(`${basePath}/${gw}`, { method: 'DELETE' });
+                        showToast(`Gateway role removed for ${gw}`, 'success');
+                        renderRoles();
+                    } catch (e) {
+                        showToast(`Failed: ${e.message}`, 'danger');
+                    }
+                });
+            });
+        } catch (e) {
+            body.innerHTML = renderError(e.message);
+        }
+    }
+
+    await renderRoles();
+
+    // Return a promise that resolves when modal is hidden
+    return new Promise(resolve => {
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            modalEl.remove();
+            resolve();
+        });
+    });
 }
 
 // ─── Invite User Form ───────────────────────────────────────────────────────

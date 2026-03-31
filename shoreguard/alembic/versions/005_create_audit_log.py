@@ -35,10 +35,12 @@ def upgrade() -> None:
     op.create_index("ix_audit_log_actor", "audit_log", ["actor"])
     op.create_index("ix_audit_log_action", "audit_log", ["action"])
     op.create_index("ix_audit_log_resource_type", "audit_log", ["resource_type"])
+    op.create_index("ix_audit_log_gateway", "audit_log", ["gateway"])
 
 
 def downgrade() -> None:
     """Drop the audit_log table."""
+    op.drop_index("ix_audit_log_gateway", table_name="audit_log")
     op.drop_index("ix_audit_log_resource_type", table_name="audit_log")
     op.drop_index("ix_audit_log_action", table_name="audit_log")
     op.drop_index("ix_audit_log_actor", table_name="audit_log")

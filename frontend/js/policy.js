@@ -304,6 +304,12 @@ async function showPolicyRevisions(sandboxName) {
                         ${renderSpinner('Loading revisions...')}
                     </div>
                     <div class="modal-footer border-0">
+                        <button id="policy-diff-btn" class="btn btn-outline-info" disabled style="display:none">
+                            <i class="bi bi-arrow-left-right me-1"></i>Compare
+                        </button>
+                        <button id="policy-diff-back" class="btn btn-outline-secondary" style="display:none">
+                            <i class="bi bi-arrow-left me-1"></i>Back
+                        </button>
                         <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
@@ -317,6 +323,93 @@ async function showPolicyRevisions(sandboxName) {
         document.getElementById('policyRevisionsModal')?.remove();
     });
 
+    let selectedA = null;
+    let selectedB = null;
+
+    function updateCompareBtn() {
+        const btn = document.getElementById('policy-diff-btn');
+        if (btn) {
+            const enabled = selectedA != null && selectedB != null && selectedA !== selectedB;
+            btn.disabled = !enabled;
+            btn.style.display = '';
+        }
+    }
+
+    function renderRevisionsList(revisions) {
+        const body = document.getElementById('policy-revisions-body');
+        const backBtn = document.getElementById('policy-diff-back');
+        if (backBtn) backBtn.style.display = 'none';
+        document.getElementById('policy-diff-btn').style.display = '';
+
+        body.innerHTML = `
+            <p class="text-muted small mb-2">Select two versions to compare:</p>
+            <div class="table-responsive">
+                <table class="table table-dark table-striped table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th style="width:40px">A</th>
+                            <th style="width:40px">B</th>
+                            <th>Version</th>
+                            <th>Status</th>
+                            <th>Hash</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${revisions.map(rev => {
+                            const version = rev.version || '\u2014';
+                            const rstatus = rev.status || '\u2014';
+                            const hash = rev.policy_hash ? rev.policy_hash.substring(0, 8) : '\u2014';
+                            const ts = rev.created_at_ms ? new Date(rev.created_at_ms).toLocaleString() : '\u2014';
+                            return `
+                                <tr>
+                                    <td><input type="radio" name="diff-a" value="${version}" class="form-check-input"></td>
+                                    <td><input type="radio" name="diff-b" value="${version}" class="form-check-input"></td>
+                                    <td><strong>v${escapeHtml(String(version))}</strong></td>
+                                    <td><span class="badge text-bg-secondary">${escapeHtml(rstatus)}</span></td>
+                                    <td class="text-muted small font-monospace">${escapeHtml(hash)}</td>
+                                    <td class="text-muted small">${escapeHtml(ts)}</td>
+                                </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+
+        // Pre-select newest two if available
+        if (revisions.length >= 2) {
+            const radiosA = body.querySelectorAll('input[name="diff-a"]');
+            const radiosB = body.querySelectorAll('input[name="diff-b"]');
+            radiosB[0].checked = true;
+            radiosA[1].checked = true;
+            selectedB = revisions[0].version;
+            selectedA = revisions[1].version;
+            updateCompareBtn();
+        }
+
+        body.querySelectorAll('input[name="diff-a"]').forEach(r => {
+            r.addEventListener('change', () => { selectedA = parseInt(r.value); updateCompareBtn(); });
+        });
+        body.querySelectorAll('input[name="diff-b"]').forEach(r => {
+            r.addEventListener('change', () => { selectedB = parseInt(r.value); updateCompareBtn(); });
+        });
+    }
+
+    async function showDiff() {
+        const body = document.getElementById('policy-revisions-body');
+        body.innerHTML = renderSpinner('Loading policy diff...');
+        document.getElementById('policy-diff-btn').style.display = 'none';
+        document.getElementById('policy-diff-back').style.display = '';
+
+        try {
+            const data = await apiFetch(
+                `${API}/sandboxes/${sandboxName}/policy/diff?version_a=${selectedA}&version_b=${selectedB}`
+            );
+            body.innerHTML = renderPolicyDiff(data);
+        } catch (e) {
+            body.innerHTML = renderError(e.message);
+        }
+    }
+
     try {
         const revisions = await apiFetch(`${API}/sandboxes/${sandboxName}/policy/revisions`);
         const body = document.getElementById('policy-revisions-body');
@@ -326,41 +419,154 @@ async function showPolicyRevisions(sandboxName) {
             return;
         }
 
-        body.innerHTML = `
-            <div class="table-responsive">
-                <table class="table table-dark table-striped table-sm align-middle">
-                    <thead>
-                        <tr>
-                            <th>Version</th>
-                            <th>Timestamp</th>
-                            <th>Network Rules</th>
-                            <th>FS Paths</th>
-                            <th>Details</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${revisions.map(rev => {
-                            const ts = rev.timestamp ? new Date(rev.timestamp).toLocaleString() : '\u2014';
-                            const version = rev.version || '\u2014';
-                            const networkCount = rev.network_policies ? Object.keys(rev.network_policies).length : (rev.network_rule_count ?? '\u2014');
-                            const fsCount = rev.filesystem ? countFilesystemPaths(rev.filesystem) : (rev.filesystem_path_count ?? '\u2014');
-                            const summary = rev.summary || rev.description || '';
-                            return `
-                                <tr>
-                                    <td><strong>v${escapeHtml(String(version))}</strong></td>
-                                    <td class="text-muted small">${escapeHtml(ts)}</td>
-                                    <td>${networkCount}</td>
-                                    <td>${fsCount}</td>
-                                    <td class="text-muted small">${summary ? escapeHtml(summary) : '\u2014'}</td>
-                                </tr>`;
-                        }).join('')}
-                    </tbody>
-                </table>
-            </div>`;
+        renderRevisionsList(revisions);
+
+        document.getElementById('policy-diff-btn').addEventListener('click', showDiff);
+        document.getElementById('policy-diff-back').addEventListener('click', () => {
+            renderRevisionsList(revisions);
+        });
     } catch (e) {
         const body = document.getElementById('policy-revisions-body');
         if (body) body.innerHTML = renderError(e.message);
     }
+}
+
+
+// ─── Policy Diff Renderer ──────────────────────────────────────────────────
+
+function renderPolicyDiff(data) {
+    const { version_a, version_b, policy_a, policy_b } = data;
+    let html = `<h6 class="mb-3">v${version_a} &rarr; v${version_b}</h6>`;
+
+    // Network policies diff
+    const netA = (policy_a && policy_a.network_policies) || {};
+    const netB = (policy_b && policy_b.network_policies) || {};
+    const allNetKeys = [...new Set([...Object.keys(netA), ...Object.keys(netB)])].sort();
+
+    html += '<div class="diff-section-header"><i class="bi bi-globe me-1"></i>Network Policies</div>';
+    if (allNetKeys.length === 0) {
+        html += '<p class="text-muted small">No network policies in either version.</p>';
+    } else {
+        for (const key of allNetKeys) {
+            const inA = key in netA;
+            const inB = key in netB;
+            const label = (inA ? netA[key].name : netB[key].name) || key;
+
+            if (inA && !inB) {
+                html += `<div class="diff-removed p-2 mb-1 rounded">
+                    <span class="diff-label diff-label-removed">Removed</span>
+                    <strong class="ms-2">${escapeHtml(label)}</strong>
+                    <span class="text-muted small ms-2">${(netA[key].endpoints || []).length} endpoint(s)</span>
+                </div>`;
+            } else if (!inA && inB) {
+                html += `<div class="diff-added p-2 mb-1 rounded">
+                    <span class="diff-label diff-label-added">Added</span>
+                    <strong class="ms-2">${escapeHtml(label)}</strong>
+                    <span class="text-muted small ms-2">${(netB[key].endpoints || []).length} endpoint(s)</span>
+                </div>`;
+            } else {
+                const changed = JSON.stringify(netA[key]) !== JSON.stringify(netB[key]);
+                if (changed) {
+                    const epCountA = (netA[key].endpoints || []).length;
+                    const epCountB = (netB[key].endpoints || []).length;
+                    html += `<div class="diff-changed p-2 mb-1 rounded">
+                        <span class="diff-label diff-label-changed">Changed</span>
+                        <strong class="ms-2">${escapeHtml(label)}</strong>
+                        <span class="text-muted small ms-2">${epCountA} &rarr; ${epCountB} endpoint(s)</span>
+                    </div>`;
+                } else {
+                    html += `<div class="diff-unchanged p-2 mb-1 rounded">
+                        <strong>${escapeHtml(label)}</strong>
+                        <span class="text-muted small ms-2">unchanged</span>
+                    </div>`;
+                }
+            }
+        }
+    }
+
+    // Filesystem diff
+    html += '<div class="diff-section-header mt-3"><i class="bi bi-folder me-1"></i>Filesystem</div>';
+    const fsA = (policy_a && policy_a.filesystem) || {};
+    const fsB = (policy_b && policy_b.filesystem) || {};
+    const roA = new Set(fsA.read_only || []);
+    const roB = new Set(fsB.read_only || []);
+    const rwA = new Set(fsA.read_write || []);
+    const rwB = new Set(fsB.read_write || []);
+
+    const allPaths = [...new Set([...roA, ...roB, ...rwA, ...rwB])].sort();
+    if (allPaths.length === 0) {
+        html += '<p class="text-muted small">No filesystem paths in either version.</p>';
+    } else {
+        for (const p of allPaths) {
+            const accessA = roA.has(p) ? 'ro' : (rwA.has(p) ? 'rw' : null);
+            const accessB = roB.has(p) ? 'ro' : (rwB.has(p) ? 'rw' : null);
+
+            if (accessA && !accessB) {
+                html += `<div class="diff-removed p-1 mb-1 rounded small">
+                    <span class="diff-label diff-label-removed">Removed</span>
+                    <code class="ms-2">${escapeHtml(p)}</code> <span class="text-muted">(${accessA})</span>
+                </div>`;
+            } else if (!accessA && accessB) {
+                html += `<div class="diff-added p-1 mb-1 rounded small">
+                    <span class="diff-label diff-label-added">Added</span>
+                    <code class="ms-2">${escapeHtml(p)}</code> <span class="text-muted">(${accessB})</span>
+                </div>`;
+            } else if (accessA !== accessB) {
+                html += `<div class="diff-changed p-1 mb-1 rounded small">
+                    <span class="diff-label diff-label-changed">Changed</span>
+                    <code class="ms-2">${escapeHtml(p)}</code> <span class="text-muted">${accessA} &rarr; ${accessB}</span>
+                </div>`;
+            }
+        }
+        const unchangedCount = allPaths.filter(p => {
+            const aA = roA.has(p) ? 'ro' : (rwA.has(p) ? 'rw' : null);
+            const aB = roB.has(p) ? 'ro' : (rwB.has(p) ? 'rw' : null);
+            return aA === aB && aA != null;
+        }).length;
+        if (unchangedCount > 0) {
+            html += `<p class="diff-unchanged small mt-1">${unchangedCount} path(s) unchanged</p>`;
+        }
+    }
+
+    // Process / Landlock diff
+    html += '<div class="diff-section-header mt-3"><i class="bi bi-gear me-1"></i>Process & Landlock</div>';
+    const procA = (policy_a && policy_a.process) || {};
+    const procB = (policy_b && policy_b.process) || {};
+    const llA = (policy_a && policy_a.landlock) || {};
+    const llB = (policy_b && policy_b.landlock) || {};
+
+    const settingsFields = [
+        ['run_as_user', procA.run_as_user, procB.run_as_user],
+        ['run_as_group', procA.run_as_group, procB.run_as_group],
+        ['landlock.compatibility', llA.compatibility, llB.compatibility],
+    ];
+
+    let hasProcessChanges = false;
+    for (const [field, valA, valB] of settingsFields) {
+        if (valA === valB) continue;
+        hasProcessChanges = true;
+        if (valA && !valB) {
+            html += `<div class="diff-removed p-1 mb-1 rounded small">
+                <span class="diff-label diff-label-removed">Removed</span>
+                <strong class="ms-2">${escapeHtml(field)}</strong>: ${escapeHtml(String(valA))}
+            </div>`;
+        } else if (!valA && valB) {
+            html += `<div class="diff-added p-1 mb-1 rounded small">
+                <span class="diff-label diff-label-added">Added</span>
+                <strong class="ms-2">${escapeHtml(field)}</strong>: ${escapeHtml(String(valB))}
+            </div>`;
+        } else {
+            html += `<div class="diff-changed p-1 mb-1 rounded small">
+                <span class="diff-label diff-label-changed">Changed</span>
+                <strong class="ms-2">${escapeHtml(field)}</strong>: ${escapeHtml(String(valA))} &rarr; ${escapeHtml(String(valB))}
+            </div>`;
+        }
+    }
+    if (!hasProcessChanges) {
+        html += '<p class="text-muted small">No process/landlock changes.</p>';
+    }
+
+    return html;
 }
 
 
