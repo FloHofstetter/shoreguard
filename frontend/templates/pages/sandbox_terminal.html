@@ -6,13 +6,28 @@
 {% endblock %}
 
 {% block content %}
-<div id="terminal-content"></div>
-{% endblock %}
-
-{% block sandbox_js %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    loadTerminalPage({{ sandbox_name|tojson }});
-});
-</script>
+<div x-data='terminalPage({{ sandbox_name|tojson }})'>
+    <div class="d-flex gap-2 mb-2">
+        <div class="input-group input-group-sm flex-grow-1">
+            <span class="input-group-text font-monospace" style="background:var(--sg-card);border-color:var(--sg-border);color:var(--sg-accent)">$</span>
+            <input type="text" class="form-control font-monospace" x-ref="termInput"
+                   placeholder="ls -la" autocomplete="off"
+                   style="background:var(--sg-log-bg);border-color:var(--sg-border);color:var(--sg-log-text)"
+                   x-model="commandInput"
+                   @keydown="handleKey($event)"
+                   :disabled="running">
+        </div>
+        <button class="btn btn-success btn-sm" @click="runCommand()" :disabled="running">
+            <i class="bi bi-play-fill me-1"></i>Run
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" @click="clearOutput()" title="Clear">
+            <i class="bi bi-trash"></i>
+        </button>
+    </div>
+    <div class="log-output font-monospace" x-ref="termOutput" style="min-height:300px">
+        <template x-for="(line, i) in outputLines" :key="i">
+            <div class="log-line" :class="line.cls || ''" :style="line.css || ''" x-text="line.text"></div>
+        </template>
+    </div>
+</div>
 {% endblock %}

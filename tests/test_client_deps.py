@@ -78,12 +78,15 @@ def test_get_client_with_none_gateway():
 
 
 def test_get_gateway_service_raises_when_none():
-    """_get_gateway_service raises RuntimeError if gateway_service is None."""
+    """_get_gateway_service raises HTTPException(503) if gateway_service is None."""
+    from fastapi import HTTPException
+
     from shoreguard.api.deps import _get_gateway_service
 
     with patch("shoreguard.services.gateway.gateway_service", None):
-        with pytest.raises(RuntimeError, match="not initialised"):
+        with pytest.raises(HTTPException) as exc_info:
             _get_gateway_service()
+        assert exc_info.value.status_code == 503
 
 
 # ─── ShoreGuardClient.from_active_cluster error handling ──────────────────

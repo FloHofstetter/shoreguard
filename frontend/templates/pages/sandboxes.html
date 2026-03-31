@@ -10,40 +10,91 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h5 class="mb-0">Sandboxes</h5>
-    <div class="btn-group btn-group-sm">
-        <button class="btn btn-outline-secondary" onclick="refreshSandboxes()" title="Refresh">
-            <i class="bi bi-arrow-clockwise"></i>
-        </button>
-        <a class="btn btn-outline-success" href="/gateways/{{ gateway_name }}/wizard">
-            <i class="bi bi-plus-lg me-1"></i>New
-        </a>
+<div x-data="sandboxList()" x-init="load()">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">Sandboxes</h5>
+        <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" @click="load()" title="Refresh">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <a class="btn btn-outline-success" href="/gateways/{{ gateway_name }}/wizard">
+                <i class="bi bi-plus-lg me-1"></i>New
+            </a>
+        </div>
     </div>
-</div>
-<div class="table-responsive">
-    <table class="table table-dark table-striped table-hover table-sm align-middle table-clickable">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th class="d-none d-md-table-cell">Image</th>
-                <th>Phase</th>
-                <th class="d-none d-md-table-cell">Policy</th>
-                <th class="d-none d-lg-table-cell">GPU</th>
-                <th class="text-end d-none d-md-table-cell">Created</th>
-                <th class="text-end">Actions</th>
-            </tr>
-        </thead>
-        <tbody id="sandbox-list">
-            <tr><td colspan="7" class="text-center text-muted py-5">
-                <div class="spinner-border spinner-border-sm me-2"></div>Loading sandboxes...
-            </td></tr>
-        </tbody>
-    </table>
+
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading sandboxes...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="text-center text-muted py-5">
+        <i class="bi bi-exclamation-triangle fs-1 d-block mb-3 text-warning"></i>
+        <p>Could not load sandboxes.</p>
+        <p class="small" x-text="error"></p>
+    </div>
+
+    <!-- Empty state -->
+    <div x-show="!loading && !error && sandboxes.length === 0" x-cloak class="text-center text-muted py-5">
+        <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+        <p>No sandboxes running.</p>
+        <button class="btn btn-outline-success btn-sm" @click="navigateTo(gwUrl('/wizard'))">
+            <i class="bi bi-plus-circle me-1"></i>Create Sandbox
+        </button>
+    </div>
+
+    <!-- Sandbox table -->
+    <div x-show="!loading && !error && sandboxes.length > 0" x-cloak class="table-responsive">
+        <table class="table table-dark table-striped table-hover table-sm align-middle table-clickable">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th class="d-none d-md-table-cell">Image</th>
+                    <th>Phase</th>
+                    <th class="d-none d-md-table-cell">Policy</th>
+                    <th class="d-none d-lg-table-cell">GPU</th>
+                    <th class="text-end d-none d-md-table-cell">Created</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="sb in sandboxes" :key="sb.name">
+                    <tr @click="navigateTo(gwUrl('/sandboxes/' + sb.name))" style="cursor:pointer">
+                        <td><strong x-text="sb.name"></strong></td>
+                        <td class="d-none d-md-table-cell">
+                            <span class="font-monospace small cell-truncate" :title="sb.image || ''" x-text="sb.image || 'Default'"></span>
+                        </td>
+                        <td>
+                            <span class="badge" :class="SG.badges.phase[sb.phase] || 'text-bg-secondary'" x-text="sb.phase"></span>
+                        </td>
+                        <td class="d-none d-md-table-cell">
+                            <span class="badge text-bg-secondary" x-text="'v' + sb.current_policy_version"></span>
+                        </td>
+                        <td class="d-none d-lg-table-cell">
+                            <template x-if="sb.gpu">
+                                <i class="bi bi-gpu-card text-info"></i>
+                            </template>
+                            <template x-if="!sb.gpu">
+                                <span class="text-muted">&mdash;</span>
+                            </template>
+                        </td>
+                        <td class="text-end small text-muted d-none d-md-table-cell" x-text="formatTimestamp(sb.created_at_ms)"></td>
+                        <td class="text-end" @click.stop>
+                            <button x-show="$store.auth.hasRole('operator')" x-cloak
+                                    class="btn btn-sm text-muted delete-btn"
+                                    @click="deleteSandbox(sb.name)" title="Delete">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="/static/js/sandboxes.js"></script>
-<script>document.addEventListener('DOMContentLoaded', refreshSandboxes);</script>
 {% endblock %}

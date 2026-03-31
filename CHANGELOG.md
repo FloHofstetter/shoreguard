@@ -5,6 +5,75 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-03-30
+
+### Added
+
+- **Persistent audit log** — all state-changing operations (sandbox/policy/gateway
+  CRUD, user management, approvals, provider changes) are recorded in a database
+  table with actor, role, action, resource, gateway context, and client IP.
+- **Audit API** — `GET /api/audit` lists entries with filters (actor, action,
+  resource type, date range). `GET /api/audit/export?format=csv|json` exports
+  the full log. Both endpoints are admin-only.
+- **Audit page** — `/audit` admin page with filter inputs, pagination, and
+  CSV/JSON export buttons. Built with Alpine.js.
+- **Alembic migration 005** — `audit_log` table with indexes on timestamp,
+  actor, action, and resource type.
+- **Audit cleanup** — entries older than 90 days are automatically purged by
+  the existing background cleanup task.
+
+### Fixed
+
+- **Fail-closed auth** — when the database is unavailable, requests are now
+  denied with 503 instead of silently granting admin access.
+- **Async audit logging** — `audit_log()` is now async and runs DB writes in a
+  thread pool via `asyncio.to_thread`, preventing event-loop blocking on every
+  state-changing request.
+- **UnboundLocalError in AuditService** — `log()`, `list()`, and `cleanup()` no
+  longer crash if the session factory itself raises; session is now guarded with
+  `None` checks in except/finally blocks.
+- **Audit actor for auth events** — login, setup, register, and invite-accept
+  now set `request.state.user_id` before calling `audit_log()`, so the audit
+  trail records the actual user instead of "unknown".
+- **Failed login auditing** — failed login attempts now produce a
+  `user.login_failed` audit entry, enabling brute-force detection.
+- **Authorization failure auditing** — `require_role()` now writes an
+  `auth.forbidden` audit entry when a user is denied access.
+- **Audit ordering in approvals** — all six approval endpoints now log the audit
+  entry *after* the operation succeeds, preventing false entries on failure.
+- **Conditional delete audit** — `sandbox.delete` and `provider.delete` only
+  write audit/log entries when the resource was actually deleted.
+- **Async background cleanup** — the periodic cleanup task now uses
+  `asyncio.to_thread` for DB calls instead of blocking the event loop.
+- **Gateway retry button** — the "Retry" button in the gateway error banner now
+  correctly calls `Alpine.store('health').check()` instead of the removed
+  `checkGatewayHealth()` function.
+
+### Changed
+
+- **Frontend migrated to Alpine.js** — all 20+ pages rewritten from Vanilla JS
+  template-literal rendering (`innerHTML = renderX(data)`) to Alpine.js reactive
+  directives (`x-data`, `x-for`, `x-text`, `x-show`, `@click`). No build step
+  required — Alpine.js loaded via CDN.
+- **Three Alpine stores** replace scattered global state:
+  - `auth` — role, email, authenticated status (replaces inline script + `window.SG_ROLE`)
+  - `toasts` — notification queue (replaces `showToast()` DOM manipulation)
+  - `health` — gateway connectivity monitoring (replaces `checkGatewayHealth()` globals)
+- **XSS surface reduced** — Alpine's `x-text` auto-escapes all dynamic content,
+  eliminating the need for manual `escapeHtml()` calls in templates.
+- **Render functions removed** — `renderGatewayTable()`, `renderSandboxList()`,
+  `renderDashboard()`, and ~50 other `renderX()` functions replaced by declarative
+  Alpine templates in HTML.
+- **`app.js` slimmed** — reduced from ~340 lines to ~95 lines. Only retains
+  `apiFetch()`, `showConfirm()`, `escapeHtml()`, `formatTimestamp()`, `navigateTo()`,
+  and URL helpers.
+- **WebSocket integration** — sandbox detail, logs, and approvals pages receive
+  live updates via `CustomEvent` dispatching from `websocket.js` to Alpine components.
+- Version bumped to `0.5.0`.
+- **717 tests** (up from 710), including audit service, API route, and DB schema tests.
+
+---
+
 ## [0.4.0] — 2026-03-30
 
 ### Added

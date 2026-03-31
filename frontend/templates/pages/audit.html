@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Audit Log — Shoreguard{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" x-data="auditPage()" x-init="load()">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0"><i class="bi bi-journal-text me-2"></i>Audit Log</h4>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" @click="exportAudit('csv')">
+                <i class="bi bi-filetype-csv me-1"></i>Export CSV
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" @click="exportAudit('json')">
+                <i class="bi bi-filetype-json me-1"></i>Export JSON
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row g-2 mb-3">
+        <div class="col-md-3">
+            <input type="text" class="form-control form-control-sm" placeholder="Actor"
+                   x-model.debounce.300ms="filters.actor" @input="load()">
+        </div>
+        <div class="col-md-3">
+            <select class="form-select form-select-sm" x-model="filters.resource_type" @change="load()">
+                <option value="">All resources</option>
+                <option value="gateway">Gateway</option>
+                <option value="sandbox">Sandbox</option>
+                <option value="policy">Policy</option>
+                <option value="approval">Approval</option>
+                <option value="provider">Provider</option>
+                <option value="user">User</option>
+                <option value="service_principal">Service Principal</option>
+                <option value="inference">Inference</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <input type="text" class="form-control form-control-sm" placeholder="Action (e.g. sandbox.create)"
+                   x-model.debounce.300ms="filters.action" @input="load()">
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-sm btn-outline-secondary" @click="clearFilters()" x-show="hasFilters">
+                <i class="bi bi-x-circle me-1"></i>Clear
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading audit log...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" class="alert alert-danger" x-text="error"></div>
+
+    <!-- Empty -->
+    <div x-show="!loading && !error && entries.length === 0" class="text-center text-muted py-5">
+        <i class="bi bi-journal fs-1 d-block mb-3"></i>
+        <p>No audit entries found.</p>
+    </div>
+
+    <!-- Table -->
+    <div x-show="!loading && !error && entries.length > 0" class="table-responsive">
+        <table class="table table-dark table-striped table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Actor</th>
+                    <th>Role</th>
+                    <th>Action</th>
+                    <th>Resource</th>
+                    <th>ID</th>
+                    <th>Gateway</th>
+                    <th>IP</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="entry in entries" :key="entry.id">
+                    <tr>
+                        <td class="text-muted small text-nowrap" x-text="formatTs(entry.timestamp)"></td>
+                        <td x-text="entry.actor"></td>
+                        <td><span class="badge bg-secondary" x-text="entry.actor_role"></span></td>
+                        <td><code x-text="entry.action"></code></td>
+                        <td><span class="badge bg-dark" x-text="entry.resource_type"></span></td>
+                        <td class="font-monospace small" x-text="entry.resource_id || '—'"></td>
+                        <td class="text-muted small" x-text="entry.gateway || '—'"></td>
+                        <td class="text-muted small" x-text="entry.client_ip || '—'"></td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div x-show="entries.length > 0" class="d-flex justify-content-between align-items-center mt-2">
+        <span class="text-muted small" x-text="entries.length + ' entries shown'"></span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" :disabled="offset === 0" @click="offset -= limit; load()">
+                <i class="bi bi-chevron-left"></i> Prev
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" :disabled="entries.length < limit" @click="offset += limit; load()">
+                Next <i class="bi bi-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function auditPage() {
+    return {
+        entries: [],
+        loading: true,
+        error: null,
+        limit: 100,
+        offset: 0,
+        filters: { actor: '', action: '', resource_type: '' },
+
+        get hasFilters() {
+            return this.filters.actor || this.filters.action || this.filters.resource_type;
+        },
+
+        async load() {
+            this.loading = true;
+            this.error = null;
+            try {
+                const params = new URLSearchParams();
+                params.set('limit', this.limit);
+                params.set('offset', this.offset);
+                if (this.filters.actor) params.set('actor', this.filters.actor);
+                if (this.filters.action) params.set('action', this.filters.action);
+                if (this.filters.resource_type) params.set('resource_type', this.filters.resource_type);
+                this.entries = await apiFetch(`/api/audit?${params}`);
+            } catch (e) {
+                this.error = e.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        clearFilters() {
+            this.filters = { actor: '', action: '', resource_type: '' };
+            this.offset = 0;
+            this.load();
+        },
+
+        formatTs(iso) {
+            if (!iso) return '';
+            return new Date(iso).toLocaleString();
+        },
+
+        exportAudit(format) {
+            const params = new URLSearchParams();
+            params.set('format', format);
+            if (this.filters.actor) params.set('actor', this.filters.actor);
+            if (this.filters.action) params.set('action', this.filters.action);
+            if (this.filters.resource_type) params.set('resource_type', this.filters.resource_type);
+            window.open(`/api/audit/export?${params}`, '_blank');
+        },
+    };
+}
+</script>
+{% endblock %}

@@ -9,10 +9,161 @@
 {% endblock %}
 
 {% block content %}
-<div id="gateway-detail-content"></div>
+<div x-data='gatewayDetail({{ gateway_name | tojson }})' x-init="load()">
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading gateway...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <!-- Not found -->
+    <div x-show="!loading && !error && !gw" x-cloak class="alert alert-warning">
+        Gateway "<span x-text="name"></span>" not found.
+    </div>
+
+    <!-- Gateway detail -->
+    <div x-show="!loading && !error && gw" x-cloak>
+        <!-- Status bar -->
+        <div class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom" style="border-color:var(--sg-border)!important">
+            <div class="d-flex align-items-center gap-3">
+                <span class="badge" :class="SG.badges.gateway[gw?.status] || 'text-bg-secondary'">
+                    <i class="bi me-1" :class="'bi-' + statusIcon(gw?.status)"></i>
+                    <span x-text="statusLabel(gw?.status)"></span>
+                </span>
+                <span x-show="gw?.version" class="text-muted" x-text="'v' + (gw?.version || '')"></span>
+            </div>
+            <div class="d-flex gap-2">
+                <button x-show="$store.auth.hasRole('admin')" x-cloak
+                        class="btn btn-outline-primary btn-sm" @click="testConnection()">
+                    <i class="bi bi-plug me-1"></i>Test Connection
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" @click="load()" title="Refresh">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Action output -->
+        <div x-show="actionOutput" x-cloak class="mb-3">
+            <div class="log-output small">
+                <div class="log-line" :class="actionClass" x-html="actionOutput"></div>
+            </div>
+        </div>
+
+        <!-- Quick links -->
+        <div class="row g-3 mb-4">
+            <div class="col">
+                <a :href="gwUrl('/sandboxes')" class="btn btn-outline-secondary w-100 py-3">
+                    <i class="bi bi-grid me-2"></i>Sandboxes
+                </a>
+            </div>
+            <div class="col">
+                <a :href="gwUrl('/providers')" class="btn btn-outline-secondary w-100 py-3">
+                    <i class="bi bi-key me-2"></i>Providers
+                </a>
+            </div>
+            <div class="col">
+                <a :href="gwUrl('/wizard')" class="btn btn-outline-success w-100 py-3">
+                    <i class="bi bi-plus-circle me-2"></i>New Sandbox
+                </a>
+            </div>
+        </div>
+
+        <!-- Details -->
+        <h6 class="text-muted mb-3">Details</h6>
+        <dl class="row mb-4">
+            <dt class="col-sm-3 text-muted fw-normal">Endpoint</dt>
+            <dd class="col-sm-9 font-monospace small" x-text="gw?.endpoint || '\u2014'"></dd>
+            <dt class="col-sm-3 text-muted fw-normal">Scheme</dt>
+            <dd class="col-sm-9" x-text="gw?.scheme || '\u2014'"></dd>
+            <template x-if="gw?.auth_mode">
+                <dt class="col-sm-3 text-muted fw-normal">Auth</dt>
+            </template>
+            <template x-if="gw?.auth_mode">
+                <dd class="col-sm-9" x-text="gw.auth_mode"></dd>
+            </template>
+            <template x-if="gw?.registered_at">
+                <dt class="col-sm-3 text-muted fw-normal">Registered</dt>
+            </template>
+            <template x-if="gw?.registered_at">
+                <dd class="col-sm-9 small text-muted" x-text="gw.registered_at"></dd>
+            </template>
+            <template x-if="gw?.last_seen">
+                <dt class="col-sm-3 text-muted fw-normal">Last Seen</dt>
+            </template>
+            <template x-if="gw?.last_seen">
+                <dd class="col-sm-9 small text-muted" x-text="formatTimeAgo(gw.last_seen)"></dd>
+            </template>
+        </dl>
+
+        <!-- Unregister -->
+        <div x-show="$store.auth.hasRole('admin')" x-cloak class="border-top pt-3" style="border-color:var(--sg-border)!important">
+            <button class="btn btn-outline-danger btn-sm" @click="unregister()">
+                <i class="bi bi-trash me-1"></i>Unregister Gateway
+            </button>
+        </div>
+
+        <!-- Inference Provider (only for active gateway) -->
+        <div x-show="gw?.active" x-cloak class="card mb-4 mt-4 sg-card-themed"
+             x-data="inferenceConfig()" x-effect="if (gw?.active && gw?.connected && !loaded) load()">
+            <div class="card-body">
+                <h6 class="text-muted mb-3"><i class="bi bi-cpu me-2"></i>Inference Provider</h6>
+
+                <!-- Loading -->
+                <div x-show="loading" class="text-muted small">
+                    <div class="spinner-border spinner-border-sm me-2"></div>Loading provider config...
+                </div>
+
+                <!-- Not connected -->
+                <div x-show="!loading && !gw?.connected" class="text-muted small">
+                    Connect to gateway to configure inference provider.
+                </div>
+
+                <!-- Config form -->
+                <div x-show="!loading && gw?.connected" x-cloak>
+                    <form @submit.prevent="save()" class="row g-3 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label small text-muted">Provider</label>
+                            <select class="form-select form-select-sm" x-model="provider" @change="onProviderChange()">
+                                <option value="">— Select —</option>
+                                <template x-for="p in providers" :key="p.name">
+                                    <option :value="p.name" x-text="p.label" :selected="p.name === provider"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label small text-muted">Model ID</label>
+                            <input type="text" class="form-control form-control-sm" x-model="modelId"
+                                   :placeholder="placeholder">
+                        </div>
+                        <div class="col-md-3 d-flex gap-2">
+                            <button type="submit" class="btn btn-primary btn-sm" :disabled="saving">
+                                <i class="bi bi-check-lg me-1"></i>Save
+                            </button>
+                        </div>
+                    </form>
+                    <div x-show="provider" class="mt-2 small text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        API key must be set as environment variable
+                        <template x-if="currentProvider?.env_var">
+                            <code x-text="currentProvider.env_var"></code>
+                        </template>
+                        on the gateway host.
+                    </div>
+                    <div x-show="!provider" class="mt-2 small text-warning">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        No inference provider configured. Sandboxes need a provider to run agents.
+                    </div>
+                    <div x-show="saveOutput" class="mt-2" x-html="saveOutput"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="/static/js/gateway.js"></script>
-<script>document.addEventListener('DOMContentLoaded', function() { loadGatewayDetail({{ gateway_name | tojson }}); });</script>
 {% endblock %}

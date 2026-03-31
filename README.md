@@ -94,16 +94,17 @@ Full documentation is available at **[flohofstetter.github.io/shoreguard](https:
 - [x] Visual policy editor with revision history
 - [x] Approval flow with real-time notifications
 - [x] Terraform provider ([separate repo](https://github.com/FloHofstetter/terraform-provider-shoreguard))
+- [x] Alpine.js reactive frontend
+- [x] Persistent audit log with export
 
 **In Progress:**
 
-- [ ] Alpine.js reactive frontend
 - [ ] Policy diff viewer
-- [ ] Audit log export
+- [ ] Gateway-scoped RBAC for team isolation
 
 **Vision:**
 
-- [ ] Gateway-scoped RBAC for team isolation
+- [ ] Docker image and demo mode
 - [ ] DigitalOcean Marketplace integration
 - [ ] Paperclip adapter for agent orchestration
 - [ ] Multi-region gateway federation

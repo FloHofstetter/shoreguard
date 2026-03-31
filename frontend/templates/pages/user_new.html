@@ -10,31 +10,50 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-6 col-lg-5">
+    <div class="col-md-6 col-lg-5" x-data="userNewForm()">
         <h5 class="mb-3"><i class="bi bi-person-plus me-2"></i>Invite User</h5>
 
         <div class="card sg-card-themed">
             <div class="card-body">
-                <form id="invite-user-form">
+                <form @submit.prevent="submit">
                     <div class="mb-3">
                         <label class="form-label">Email</label>
-                        <input type="email" class="form-control" id="new-user-email" placeholder="user@example.com" autofocus required>
+                        <input type="email" class="form-control" x-model="email" placeholder="user@example.com" autofocus required>
                         <div class="form-text">The user will set their own password via the invite link.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Role</label>
-                        <select class="form-select" id="new-user-role" required>
+                        <select class="form-select" x-model="role" required>
                             <option value="viewer">Viewer — read-only access</option>
                             <option value="operator">Operator — sandbox, policy, provider management</option>
                             <option value="admin">Admin — full access including gateway and user management</option>
                         </select>
                     </div>
-                    <div id="create-user-output"></div>
+
+                    <!-- Error -->
+                    <div x-show="error" x-cloak class="text-danger small mb-3">
+                        <i class="bi bi-x-circle me-1"></i><span x-text="error"></span>
+                    </div>
+
+                    <!-- Success -->
+                    <div x-show="inviteUrl" x-cloak class="alert alert-success small py-2 mb-2">
+                        <p class="mb-1"><i class="bi bi-check-circle me-1"></i>Invite created! Share this link with the user:</p>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control font-monospace" :value="inviteUrl" readonly>
+                            <button type="button" class="btn btn-outline-secondary" @click="navigator.clipboard.writeText(inviteUrl); showToast('Copied!', 'success')">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-success" id="create-user-btn">
+                        <button x-show="!inviteUrl" type="submit" class="btn btn-success" :disabled="loading">
                             <i class="bi bi-send me-1"></i>Create Invite
                         </button>
-                        <a href="/users" class="btn btn-outline-secondary">Cancel</a>
+                        <a x-show="inviteUrl" href="/users" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-arrow-left me-1"></i>Back to Users
+                        </a>
+                        <a x-show="!inviteUrl" href="/users" class="btn btn-outline-secondary">Cancel</a>
                     </div>
                 </form>
             </div>
@@ -45,9 +64,4 @@
 
 {% block extra_js %}
 <script src="/static/js/users.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('invite-user-form').addEventListener('submit', createNewUser);
-});
-</script>
 {% endblock %}

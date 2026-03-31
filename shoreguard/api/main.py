@@ -25,7 +25,7 @@ from .deps import get_client, resolve_gateway
 from .errors import register_error_handlers
 from .pages import FRONTEND_DIR
 from .pages import router as pages_router
-from .routes import approvals, gateway, operations, policies, providers, sandboxes
+from .routes import approvals, audit, gateway, operations, policies, providers, sandboxes
 from .websocket import router as ws_router
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if imported:
             logger.info("Auto-imported %d gateway(s) from filesystem", imported)
 
+    # ── Audit ────────────────────────────────────────────────────────────
+    import shoreguard.services.audit as audit_mod
+
+    audit_mod.audit_service = audit_mod.AuditService(session_factory)
+    logger.info("Audit service initialised")
+
     # ── Auth ─────────────────────────────────────────────────────────────
     init_auth(session_factory)
     bootstrap_admin_user()
@@ -83,7 +89,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(600)
             try:
-                operation_store.cleanup()
+                await asyncio.to_thread(operation_store.cleanup)
+                if audit_mod.audit_service:
+                    await asyncio.to_thread(audit_mod.audit_service.cleanup)
                 consecutive_failures = 0
             except Exception:
                 consecutive_failures += 1
@@ -123,7 +131,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
 
@@ -187,12 +195,23 @@ async def set_inference(
         body.model_id,
         actor,
     )
-    return await asyncio.to_thread(
+    result = await asyncio.to_thread(
         client.set_cluster_inference,
         provider_name=body.provider_name,
         model_id=body.model_id,
         verify=body.verify,
     )
+    from shoreguard.services.audit import audit_log
+
+    await audit_log(
+        request,
+        "inference.update",
+        "inference",
+        gw,
+        gateway=gw,
+        detail={"provider": body.provider_name, "model": body.model_id},
+    )
+    return result
 
 
 app.include_router(gw_api)
@@ -222,6 +241,13 @@ app.include_router(
     prefix="/api/operations",
     tags=["operations"],
     dependencies=[Depends(require_auth)],
+)
+
+app.include_router(
+    audit.router,
+    prefix="/api/audit",
+    tags=["audit"],
+    dependencies=[Depends(require_auth), Depends(require_role("admin"))],
 )
 
 

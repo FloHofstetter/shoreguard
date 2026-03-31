@@ -4,6 +4,7 @@
  * logs, platform events, and draft policy updates.
  */
 
+const activeWebSockets = {};
 const _wsReconnectState = {};
 
 function connectWebSocket(sandboxName, sandboxId) {
@@ -53,7 +54,7 @@ function _doConnect(sandboxName, sandboxId) {
         // Only toast on first error, not every reconnect attempt
         const state = _wsReconnectState[sandboxName];
         if (state && state.attempts === 0) {
-            showToast(`WebSocket error for ${escapeHtml(sandboxName)}`, 'warning');
+            showToast(`WebSocket error for ${sandboxName}`, 'warning');
         }
     };
 
@@ -61,8 +62,13 @@ function _doConnect(sandboxName, sandboxId) {
 }
 
 function handleWebSocketEvent(sandboxName, event) {
-    // Live status updates
+    // Live status updates — dispatch Alpine event for reactive components
     if (event.type === 'status' && event.data) {
+        document.dispatchEvent(new CustomEvent('sg:sandbox-status', {
+            detail: { sandboxName, ...event.data },
+        }));
+
+        // Legacy DOM update for subnav phase badge
         const phaseBadge = document.getElementById('sandbox-phase-badge');
         if (phaseBadge) {
             const badgeClass = SG.badges.phase[event.data.phase] || 'text-bg-secondary';
@@ -74,16 +80,17 @@ function handleWebSocketEvent(sandboxName, event) {
             policyVersion.textContent = `v${event.data.current_policy_version}`;
         }
         if (event.data.phase === 'error') {
-            showToast(`Sandbox ${escapeHtml(sandboxName)} entered error state.`, 'danger');
+            showToast(`Sandbox ${sandboxName} entered error state.`, 'danger');
         }
     }
 
     // Draft policy updates
     if (event.type === 'draft_policy_update' && event.data.total_pending > 0) {
         showApprovalToast(sandboxName, event.data);
-        // Auto-refresh approvals tab if currently visible
-        const content = document.getElementById('approvals-content');
-        if (content) loadApprovalsTab(sandboxName, content);
+        // Dispatch Alpine event for approvals page to auto-refresh
+        document.dispatchEvent(new CustomEvent('sg:approvals-update', {
+            detail: { sandboxName, ...event.data },
+        }));
     }
 
     // Live log streaming
@@ -92,7 +99,7 @@ function handleWebSocketEvent(sandboxName, event) {
         if (logContainer) {
             const rawLevel = event.data.level?.toLowerCase() || 'info';
             const level = ['debug', 'info', 'warn', 'warning', 'error', 'critical'].includes(rawLevel) ? rawLevel : 'info';
-            logContainer.insertAdjacentHTML('beforeend', `<div class="log-line log-${level}"><span class="text-muted">${formatTimestamp(event.data.timestamp_ms)}</span> <span class="badge text-bg-secondary me-1">${event.data.source || 'gateway'}</span> ${escapeHtml(event.data.message)}</div>`);
+            logContainer.insertAdjacentHTML('beforeend', `<div class="log-line log-${level}"><span class="text-muted">${formatTimestamp(event.data.timestamp_ms)}</span> <span class="badge text-bg-secondary me-1">${escapeHtml(event.data.source || 'gateway')}</span> ${escapeHtml(event.data.message)}</div>`);
             logContainer.scrollTop = logContainer.scrollHeight;
         }
     }
@@ -101,7 +108,7 @@ function handleWebSocketEvent(sandboxName, event) {
     if (event.type === 'event' && window.location.pathname.includes('/sandboxes/')) {
         const logContainer = document.getElementById('log-container');
         if (logContainer) {
-            logContainer.insertAdjacentHTML('beforeend', `<div class="log-line log-warn"><span class="text-muted">${formatTimestamp(event.data.timestamp_ms)}</span> <span class="badge text-bg-warning me-1">${event.data.type || 'event'}</span> ${escapeHtml(event.data.message)}</div>`);
+            logContainer.insertAdjacentHTML('beforeend', `<div class="log-line log-warn"><span class="text-muted">${formatTimestamp(event.data.timestamp_ms)}</span> <span class="badge text-bg-warning me-1">${escapeHtml(event.data.type || 'event')}</span> ${escapeHtml(event.data.message)}</div>`);
             logContainer.scrollTop = logContainer.scrollHeight;
         }
     }

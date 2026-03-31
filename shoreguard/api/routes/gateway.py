@@ -7,6 +7,7 @@ import base64
 import binascii
 import logging
 import os
+import re
 from typing import TYPE_CHECKING, Any
 
 import grpc
@@ -14,19 +15,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import _get_gateway_service
+from shoreguard.api.deps import _get_gateway_service, get_actor
 from shoreguard.config import ENDPOINT_RE, VALID_GATEWAY_NAME_RE, is_private_ip
 from shoreguard.exceptions import NotFoundError, friendly_grpc_error
+from shoreguard.services.audit import audit_log
 from shoreguard.services.operations import operation_store
 
 if TYPE_CHECKING:
     from shoreguard.services.local_gateway import LocalGatewayManager
 
 logger = logging.getLogger(__name__)
-
-
-def _actor(request: Request) -> str:
-    return getattr(request.state, "user_id", "unknown")
 
 
 _VALID_NAME_RE = VALID_GATEWAY_NAME_RE
@@ -102,7 +100,7 @@ class RegisterGatewayRequest(BaseModel):
         return v
 
 
-_REMOTE_HOST_RE = __import__("re").compile(r"^[a-zA-Z0-9._-]{1,253}$")
+_REMOTE_HOST_RE = re.compile(r"^[a-zA-Z0-9._-]{1,253}$")
 
 
 class CreateGatewayRequest(BaseModel):
@@ -170,7 +168,7 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
         body.name,
         body.endpoint,
         body.auth_mode,
-        _actor(request),
+        get_actor(request),
     )
 
     try:
@@ -213,6 +211,13 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
     except ValueError as e:
         raise HTTPException(409, str(e)) from e
 
+    await audit_log(
+        request,
+        "gateway.register",
+        "gateway",
+        body.name,
+        detail={"endpoint": body.endpoint, "auth_mode": body.auth_mode},
+    )
     return result
 
 
@@ -228,11 +233,12 @@ def _validate_name_param(name: str) -> None:
 async def gateway_unregister(name: str, request: Request) -> dict[str, Any]:
     """Unregister a gateway."""
     _validate_name_param(name)
-    logger.info("Gateway unregistered (gateway=%s, actor=%s)", name, _actor(request))
     removed = await asyncio.to_thread(_get_gateway_service().unregister, name)
     if not removed:
         logger.warning("Unregister failed: gateway '%s' not found", name)
         raise HTTPException(404, f"Gateway '{name}' not found")
+    logger.info("Gateway unregistered (gateway=%s, actor=%s)", name, get_actor(request))
+    await audit_log(request, "gateway.unregister", "gateway", name)
     return {"success": True, "name": name}
 
 
@@ -258,11 +264,13 @@ async def gateway_test_connection(name: str, request: Request) -> dict[str, Any]
 async def gateway_select(name: str, request: Request) -> dict[str, Any]:
     """Set a gateway as active and reconnect."""
     _validate_name_param(name)
-    logger.info("Gateway selected (gateway=%s, actor=%s)", name, _actor(request))
+    logger.info("Gateway selected (gateway=%s, actor=%s)", name, get_actor(request))
     try:
-        return await asyncio.to_thread(_get_gateway_service().select, name)
+        result = await asyncio.to_thread(_get_gateway_service().select, name)
     except NotFoundError as e:
         raise HTTPException(404, str(e)) from e
+    await audit_log(request, "gateway.select", "gateway", name)
+    return result
 
 
 # ─── Local mode routes (SHOREGUARD_LOCAL_MODE=1) ─────────────────────────
@@ -283,8 +291,10 @@ async def gateway_start_active(request: Request) -> dict[str, Any]:
     mgr = _get_local_manager()
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
-    logger.info("Gateway start requested (gateway=active, actor=%s)", _actor(request))
-    return await asyncio.to_thread(mgr.start)
+    logger.info("Gateway start requested (gateway=active, actor=%s)", get_actor(request))
+    result = await asyncio.to_thread(mgr.start)
+    await audit_log(request, "gateway.start", "gateway", "active")
+    return result
 
 
 @router.post("/stop", dependencies=[Depends(require_role("admin"))])
@@ -293,8 +303,10 @@ async def gateway_stop_active(request: Request) -> dict[str, Any]:
     mgr = _get_local_manager()
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
-    logger.info("Gateway stop requested (gateway=active, actor=%s)", _actor(request))
-    return await asyncio.to_thread(mgr.stop)
+    logger.info("Gateway stop requested (gateway=active, actor=%s)", get_actor(request))
+    result = await asyncio.to_thread(mgr.stop)
+    await audit_log(request, "gateway.stop", "gateway", "active")
+    return result
 
 
 @router.post("/restart", dependencies=[Depends(require_role("admin"))])
@@ -303,8 +315,10 @@ async def gateway_restart_active(request: Request) -> dict[str, Any]:
     mgr = _get_local_manager()
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
-    logger.info("Gateway restart requested (gateway=active, actor=%s)", _actor(request))
-    return await asyncio.to_thread(mgr.restart)
+    logger.info("Gateway restart requested (gateway=active, actor=%s)", get_actor(request))
+    result = await asyncio.to_thread(mgr.restart)
+    await audit_log(request, "gateway.restart", "gateway", "active")
+    return result
 
 
 @router.post("/{name}/start", dependencies=[Depends(require_role("admin"))])
@@ -314,8 +328,10 @@ async def gateway_start_named(name: str, request: Request) -> dict[str, Any]:
     mgr = _get_local_manager()
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
-    logger.info("Gateway start requested (gateway=%s, actor=%s)", name, _actor(request))
-    return await asyncio.to_thread(mgr.start, name)
+    logger.info("Gateway start requested (gateway=%s, actor=%s)", name, get_actor(request))
+    result = await asyncio.to_thread(mgr.start, name)
+    await audit_log(request, "gateway.start", "gateway", name)
+    return result
 
 
 @router.post("/{name}/stop", dependencies=[Depends(require_role("admin"))])
@@ -325,8 +341,10 @@ async def gateway_stop_named(name: str, request: Request) -> dict[str, Any]:
     mgr = _get_local_manager()
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
-    logger.info("Gateway stop requested (gateway=%s, actor=%s)", name, _actor(request))
-    return await asyncio.to_thread(mgr.stop, name)
+    logger.info("Gateway stop requested (gateway=%s, actor=%s)", name, get_actor(request))
+    result = await asyncio.to_thread(mgr.stop, name)
+    await audit_log(request, "gateway.stop", "gateway", name)
+    return result
 
 
 @router.post("/{name}/restart", dependencies=[Depends(require_role("admin"))])
@@ -336,8 +354,10 @@ async def gateway_restart_named(name: str, request: Request) -> dict[str, Any]:
     mgr = _get_local_manager()
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
-    logger.info("Gateway restart requested (gateway=%s, actor=%s)", name, _actor(request))
-    return await asyncio.to_thread(mgr.restart, name)
+    logger.info("Gateway restart requested (gateway=%s, actor=%s)", name, get_actor(request))
+    result = await asyncio.to_thread(mgr.restart, name)
+    await audit_log(request, "gateway.restart", "gateway", name)
+    return result
 
 
 @router.post("/{name}/destroy", dependencies=[Depends(require_role("admin"))])
@@ -351,9 +371,11 @@ async def gateway_destroy(name: str, request: Request, force: bool = False) -> d
         "Gateway destroy requested (gateway=%s, force=%s, actor=%s)",
         name,
         force,
-        _actor(request),
+        get_actor(request),
     )
-    return await asyncio.to_thread(mgr.destroy, name, force=force)
+    result = await asyncio.to_thread(mgr.destroy, name, force=force)
+    await audit_log(request, "gateway.destroy", "gateway", name, detail={"force": force})
+    return result
 
 
 @router.post("/create", status_code=202, dependencies=[Depends(require_role("admin"))])
@@ -369,7 +391,10 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> dict[s
     if op is None:
         raise HTTPException(409, f"Gateway '{body.name}' creation already in progress")
 
-    actor = _actor(request)
+    actor = get_actor(request)
+    _audit_actor = actor
+    _audit_role = getattr(request.state, "role", "unknown")
+    _audit_ip = request.client.host if request.client else None
 
     async def _run() -> None:
         logger.info("Starting gateway creation: '%s' (op=%s, actor=%s)", body.name, op.id, actor)
@@ -386,6 +411,17 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> dict[s
             else:
                 logger.info("Gateway creation completed: '%s' (op=%s)", body.name, op.id)
                 operation_store.complete(op.id, result)
+                from shoreguard.services.audit import audit_service
+
+                if audit_service:
+                    audit_service.log(
+                        actor=_audit_actor,
+                        actor_role=_audit_role,
+                        action="gateway.create",
+                        resource_type="gateway",
+                        resource_id=body.name,
+                        client_ip=_audit_ip,
+                    )
         except asyncio.CancelledError:
             logger.warning("Gateway creation cancelled for '%s'", body.name)
             operation_store.fail(op.id, "Operation was cancelled")

@@ -12,9 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import get_client
+from shoreguard.api.deps import _current_gateway, get_actor, get_client
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import friendly_grpc_error
+from shoreguard.services.audit import audit_log
 from shoreguard.services.operations import operation_store
 from shoreguard.services.sandbox import SandboxService
 
@@ -25,10 +26,6 @@ _VALID_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 router = APIRouter()
 
 _background_tasks: set[asyncio.Task] = set()
-
-
-def _actor(request: Request) -> str:
-    return getattr(request.state, "user_id", "unknown")
 
 
 def _get_sandbox_service(client: ShoreGuardClient = Depends(get_client)) -> SandboxService:
@@ -83,7 +80,7 @@ async def create_sandbox(
     if body.name and not _VALID_NAME_RE.match(body.name):
         raise HTTPException(400, "Invalid sandbox name: must match [a-zA-Z0-9][a-zA-Z0-9._-]*")
     sandbox_name = body.name or "unnamed"
-    actor = _actor(request)
+    actor = get_actor(request)
     op = operation_store.create_if_not_running("sandbox", sandbox_name)
     if op is None:
         raise HTTPException(409, f"Sandbox '{sandbox_name}' creation already in progress")
@@ -119,6 +116,18 @@ async def create_sandbox(
                 actor,
             )
             operation_store.complete(op.id, result)
+            from shoreguard.services.audit import audit_service
+
+            if audit_service:
+                audit_service.log(
+                    actor=_audit_actor,
+                    actor_role=_audit_role,
+                    action="sandbox.create",
+                    resource_type="sandbox",
+                    resource_id=sandbox_name,
+                    gateway=_audit_gw,
+                    client_ip=_audit_ip,
+                )
         except asyncio.CancelledError:
             logger.warning("Sandbox creation cancelled for '%s'", sandbox_name)
             operation_store.fail(op.id, "Operation was cancelled")
@@ -139,6 +148,11 @@ async def create_sandbox(
                 operation_store.fail(op.id, "Unexpected internal error")
             except Exception:
                 logger.exception("Failed to record operation failure for %s", op.id)
+
+    _audit_actor = get_actor(request)
+    _audit_role = getattr(request.state, "role", "unknown")
+    _audit_ip = request.client.host if request.client else None
+    _audit_gw = _current_gateway.get()
 
     task = asyncio.create_task(_run())
     _background_tasks.add(task)
@@ -163,7 +177,9 @@ async def delete_sandbox(
 ) -> dict[str, bool]:
     """Delete a sandbox by name."""
     deleted = await asyncio.to_thread(svc.delete, name)
-    logger.info("Sandbox deleted (sandbox=%s, actor=%s)", name, _actor(request))
+    if deleted:
+        logger.info("Sandbox deleted (sandbox=%s, actor=%s)", name, get_actor(request))
+        await audit_log(request, "sandbox.delete", "sandbox", name, gateway=_current_gateway.get())
     return {"deleted": deleted}
 
 
@@ -186,7 +202,8 @@ async def exec_in_sandbox(
         env=body.env or None,
         timeout_seconds=body.timeout_seconds,
     )
-    logger.info("Command executed in sandbox (sandbox=%s, actor=%s)", name, _actor(request))
+    logger.info("Command executed in sandbox (sandbox=%s, actor=%s)", name, get_actor(request))
+    await audit_log(request, "sandbox.exec", "sandbox", name, gateway=_current_gateway.get())
     return result
 
 
@@ -198,7 +215,8 @@ async def create_ssh_session(
 ) -> dict[str, Any]:
     """Create a temporary SSH session for shell access to a sandbox."""
     result = await asyncio.to_thread(svc.create_ssh_session, name)
-    logger.info("SSH session created (sandbox=%s, actor=%s)", name, _actor(request))
+    logger.info("SSH session created (sandbox=%s, actor=%s)", name, get_actor(request))
+    await audit_log(request, "sandbox.ssh.create", "sandbox", name, gateway=_current_gateway.get())
     return result
 
 
@@ -211,7 +229,8 @@ async def revoke_ssh_session(
 ) -> dict[str, bool]:
     """Revoke an active SSH session."""
     revoked = await asyncio.to_thread(svc.revoke_ssh_session, body.token)
-    logger.info("SSH session revoked (sandbox=%s, actor=%s)", name, _actor(request))
+    logger.info("SSH session revoked (sandbox=%s, actor=%s)", name, get_actor(request))
+    await audit_log(request, "sandbox.ssh.revoke", "sandbox", name, gateway=_current_gateway.get())
     return {"revoked": revoked}
 
 

@@ -8,14 +8,212 @@
 {% endblock %}
 
 {% block content %}
-<div id="rule-content"></div>
+<div x-data='ruleDetailPage({{ sandbox_name|tojson }}, {{ rule_key|tojson }})' x-init="init()">
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading rule...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <!-- View mode -->
+    <template x-if="!loading && !error && rule && !editing">
+        <div>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h4 class="mb-1" x-text="rule.name || ruleKey"></h4>
+                    <span class="text-muted small">Key: <code x-text="ruleKey"></code></span>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" @click="switchToEdit()"
+                            x-show="$store.auth.hasRole('operator')" x-cloak>
+                        <i class="bi bi-pencil me-1"></i>Edit
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" @click="deleteRule()"
+                            x-show="$store.auth.hasRole('operator')" x-cloak>
+                        <i class="bi bi-trash me-1"></i>Delete
+                    </button>
+                </div>
+            </div>
+
+            <!-- Endpoints -->
+            <h6 class="text-muted mb-2">
+                <i class="bi bi-globe me-1"></i>Endpoints
+                <span class="badge text-bg-secondary ms-1" x-text="(rule.endpoints || []).length"></span>
+            </h6>
+            <template x-if="(rule.endpoints || []).length > 0">
+                <div class="table-responsive mb-4">
+                    <table class="table table-dark table-striped table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Host</th>
+                                <th>Port</th>
+                                <th>Protocol</th>
+                                <th>TLS</th>
+                                <th>Enforcement</th>
+                                <th>Access</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="ep in rule.endpoints" :key="ep.host + ':' + ep.port">
+                                <tr>
+                                    <td class="font-monospace" x-text="ep.host"></td>
+                                    <td x-text="ep.port || 443"></td>
+                                    <td>
+                                        <span x-show="ep.protocol" class="badge text-bg-secondary" x-text="ep.protocol"></span>
+                                        <span x-show="!ep.protocol" class="text-muted">&mdash;</span>
+                                    </td>
+                                    <td>
+                                        <span x-show="ep.tls" class="badge text-bg-info" x-text="ep.tls"></span>
+                                        <span x-show="!ep.tls" class="text-muted">&mdash;</span>
+                                    </td>
+                                    <td>
+                                        <span x-show="ep.enforcement" class="badge text-bg-warning" x-text="ep.enforcement"></span>
+                                        <span x-show="!ep.enforcement" class="text-muted">&mdash;</span>
+                                    </td>
+                                    <td>
+                                        <span x-show="ep.access" class="badge text-bg-success" x-text="ep.access"></span>
+                                        <span x-show="!ep.access" class="text-muted">&mdash;</span>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+            <p x-show="!(rule.endpoints || []).length" class="text-muted mb-4">No endpoints configured.</p>
+
+            <!-- Binaries -->
+            <h6 class="text-muted mb-2">
+                <i class="bi bi-terminal me-1"></i>Allowed Binaries
+                <span class="badge text-bg-secondary ms-1" x-text="(rule.binaries || []).length"></span>
+            </h6>
+            <template x-if="(rule.binaries || []).length > 0">
+                <div class="table-responsive">
+                    <table class="table table-dark table-striped table-sm align-middle mb-0">
+                        <thead><tr><th>Path</th></tr></thead>
+                        <tbody>
+                            <template x-for="b in rule.binaries" :key="b.path">
+                                <tr><td class="font-monospace small" x-text="b.path"></td></tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+            <p x-show="!(rule.binaries || []).length" class="text-muted">No binary restrictions.</p>
+        </div>
+    </template>
+
+    <!-- Edit mode -->
+    <template x-if="!loading && !error && editing">
+        <div>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0" x-text="isNew ? 'New Network Rule' : 'Edit: ' + (rule?.name || ruleKey)"></h4>
+                <button class="btn btn-outline-secondary btn-sm" @click="cancelEdit()" x-show="!isNew">
+                    <i class="bi bi-x me-1"></i>Cancel
+                </button>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label class="form-label">Rule Key</label>
+                    <input type="text" class="form-control form-control-sm" x-model="editKey"
+                           placeholder="e.g. allow-pypi" :readonly="!isNew">
+                    <div class="form-text">Unique identifier for this rule.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Display Name</label>
+                    <input type="text" class="form-control form-control-sm" x-model="editName"
+                           placeholder="e.g. PyPI Package Registry">
+                </div>
+            </div>
+
+            <!-- Endpoints -->
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0"><i class="bi bi-globe me-1"></i>Endpoints</h6>
+                <button class="btn btn-outline-success btn-sm" type="button" @click="addEndpoint()">
+                    <i class="bi bi-plus me-1"></i>Add Endpoint
+                </button>
+            </div>
+            <div class="mb-4">
+                <template x-for="ep in endpoints" :key="ep.id">
+                    <div class="card sg-overlay-card mb-2">
+                        <div class="card-body py-2 px-3">
+                            <div class="d-flex justify-content-end mb-2">
+                                <button class="btn btn-outline-danger btn-sm" type="button" @click="removeEndpoint(ep.id)" title="Remove endpoint">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted mb-1">Host</label>
+                                    <input type="text" class="form-control form-control-sm" placeholder="api.example.com" x-model="ep.host">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small text-muted mb-1">Port</label>
+                                    <input type="number" class="form-control form-control-sm" placeholder="443" x-model.number="ep.port">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted mb-1">Protocol</label>
+                                    <select class="form-select form-select-sm" x-model="ep.protocol">
+                                        <option value="">&mdash;</option>
+                                        <option value="rest">REST</option>
+                                        <option value="sql">SQL</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted mb-1">TLS</label>
+                                    <select class="form-select form-select-sm" x-model="ep.tls">
+                                        <option value="">&mdash;</option>
+                                        <option value="terminate">Terminate</option>
+                                        <option value="passthrough">Passthrough</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted mb-1">Enforcement</label>
+                                    <select class="form-select form-select-sm" x-model="ep.enforcement">
+                                        <option value="">&mdash;</option>
+                                        <option value="enforce">Enforce</option>
+                                        <option value="audit">Audit</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted mb-1">Access</label>
+                                    <select class="form-select form-select-sm" x-model="ep.access">
+                                        <option value="">&mdash;</option>
+                                        <option value="full">Full</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Binaries -->
+            <div class="mb-4">
+                <h6><i class="bi bi-terminal me-1"></i>Allowed Binaries</h6>
+                <textarea class="form-control form-control-sm font-monospace" rows="4"
+                          placeholder="One path per line, e.g.&#10;/usr/bin/curl&#10;/usr/bin/git"
+                          x-model="editBinaries"></textarea>
+                <div class="form-text">One binary path per line.</div>
+            </div>
+
+            <!-- Actions -->
+            <div class="d-flex gap-2">
+                <button class="btn btn-success" @click="save()">
+                    <i class="bi bi-check me-1"></i>Save Rule
+                </button>
+                <button class="btn btn-outline-secondary" @click="cancelEdit()">Cancel</button>
+            </div>
+        </div>
+    </template>
+</div>
 {% endblock %}
 
 {% block sandbox_js %}
 <script src="/static/js/rule.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    loadRuleDetail({{ sandbox_name|tojson }}, {{ rule_key|tojson }});
-});
-</script>
 {% endblock %}

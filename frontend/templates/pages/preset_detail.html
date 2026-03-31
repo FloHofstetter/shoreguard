@@ -9,10 +9,101 @@
 {% endblock %}
 
 {% block content %}
-<div id="preset-detail"></div>
+<div x-data='presetDetail({{ preset_name|tojson }})'>
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading preset...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <!-- Content -->
+    <template x-if="!loading && !error">
+        <div>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h4 class="mb-1 d-inline me-2" x-text="meta.name || presetName"></h4>
+                </div>
+            </div>
+
+            <p x-show="meta.description" class="text-muted mb-3" x-text="meta.description"></p>
+
+            <!-- Apply to Sandbox -->
+            <div class="card sg-card-themed mb-4">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-muted small">Apply to:</span>
+                        <select x-model="selectedSandbox" class="form-select form-select-sm" style="max-width:250px">
+                            <option value="">Select a sandbox...</option>
+                            <template x-for="sb in sandboxes" :key="sb.name">
+                                <option :value="sb.name" x-text="sb.name"></option>
+                            </template>
+                        </select>
+                        <button class="btn btn-success btn-sm" :disabled="!selectedSandbox" @click="applyToSandbox()">
+                            <i class="bi bi-shield-plus me-1"></i>Apply
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <h6 class="text-muted mb-2">Network Rules <span class="badge text-bg-secondary ms-1" x-text="ruleEntries.length"></span></h6>
+
+            <!-- Rules Table -->
+            <template x-if="ruleEntries.length > 0">
+                <div class="table-responsive">
+                    <table class="table table-dark table-striped table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Rule</th>
+                                <th>Host</th>
+                                <th>Port</th>
+                                <th>Protocol</th>
+                                <th>TLS</th>
+                                <th>L7 Rules</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="entry in ruleEntries" :key="entry.key">
+                                <template x-for="(ep, i) in entry.endpoints" :key="i">
+                                    <tr>
+                                        <td x-show="i === 0" :rowspan="entry.endpoints.length">
+                                            <strong x-text="entry.name"></strong>
+                                        </td>
+                                        <td class="font-monospace" x-text="ep.host"></td>
+                                        <td x-text="ep.port"></td>
+                                        <td>
+                                            <span x-show="ep.protocol" class="badge text-bg-secondary" x-text="ep.protocol"></span>
+                                            <span x-show="!ep.protocol" class="text-muted">&mdash;</span>
+                                        </td>
+                                        <td>
+                                            <span x-show="ep.tls" class="badge text-bg-info" x-text="ep.tls"></span>
+                                            <span x-show="!ep.tls" class="text-muted">&mdash;</span>
+                                        </td>
+                                        <td>
+                                            <template x-if="(ep.rules || []).length > 0">
+                                                <span>
+                                                    <template x-for="(r, ri) in (ep.rules || [])" :key="ri">
+                                                        <span class="badge endpoint-badge me-1" x-text="(r.allow?.method || '*') + ' ' + (r.allow?.path || '/*')"></span>
+                                                    </template>
+                                                </span>
+                                            </template>
+                                            <span x-show="!(ep.rules || []).length" class="text-muted">&mdash;</span>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+
+            <div x-show="ruleEntries.length === 0" class="text-muted">No network rules defined.</div>
+        </div>
+    </template>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="/static/js/policy.js"></script>
-<script>document.addEventListener('DOMContentLoaded', function() { showPresetDetail({{ preset_name|tojson }}); });</script>
 {% endblock %}

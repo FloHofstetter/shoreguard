@@ -6,7 +6,130 @@
 {% endblock %}
 
 {% block content %}
-<div id="approvals-content"></div>
+<div x-data='approvalsPage({{ sandbox_name|tojson }})' x-init="init()" id="approvals-content">
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading approvals...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <!-- Empty state -->
+    <div x-show="!loading && !error && chunks.length === 0" x-cloak class="text-center text-muted py-4">
+        <i class="bi bi-shield-check fs-1 d-block mb-2"></i>
+        <p>No draft policy recommendations.</p>
+    </div>
+
+    <!-- Approvals table -->
+    <template x-if="!loading && !error && chunks.length > 0">
+        <div>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <span class="text-muted" x-text="pendingCount + ' pending of ' + chunks.length + ' total'"></span>
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary" @click="showHistory()" title="History">
+                        <i class="bi bi-clock-history me-1"></i>History
+                    </button>
+                    <template x-if="$store.auth.hasRole('operator')">
+                        <button class="btn btn-success" @click="approveAll()">
+                            <i class="bi bi-check-all me-1"></i>Approve All
+                        </button>
+                    </template>
+                    <template x-if="$store.auth.hasRole('operator')">
+                        <button class="btn btn-outline-secondary" @click="clearAll()">
+                            Clear All
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <div x-show="rollingSummary" class="alert alert-info small py-2 mb-3">
+                <i class="bi bi-lightbulb me-1"></i><span x-text="rollingSummary"></span>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-dark table-striped table-hover table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Rule</th>
+                            <th>Binary</th>
+                            <th>Endpoints</th>
+                            <th class="text-end">Hits</th>
+                            <th class="text-center">Confidence</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="chunk in chunks" :key="chunk.id">
+                            <tr>
+                                <!-- Main row -->
+                                <td>
+                                    <span class="badge" :class="SG.badges.approval[chunk.status] || 'text-bg-secondary'" x-text="chunk.status"></span>
+                                </td>
+                                <td @click="hasDetail(chunk) && toggleDetail(chunk.id)" :class="hasDetail(chunk) ? 'table-clickable' : ''" style="cursor:pointer">
+                                    <strong x-text="chunk.rule_name"></strong>
+                                    <i x-show="hasDetail(chunk)" class="bi ms-1 small"
+                                       :class="isExpanded(chunk.id) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                                    <!-- Detail (inline) -->
+                                    <div x-show="isExpanded(chunk.id)" x-cloak class="mt-2">
+                                        <p x-show="chunk.rationale" class="small text-muted mb-1">
+                                            <i class="bi bi-chat-quote me-1"></i><span x-text="chunk.rationale"></span>
+                                        </p>
+                                        <div x-show="chunk.security_notes" class="alert alert-warning small py-1 px-2 mb-0">
+                                            <i class="bi bi-exclamation-triangle me-1"></i><span x-text="chunk.security_notes"></span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="font-monospace small text-muted" x-text="chunk.binary || '\u2014'"></td>
+                                <td>
+                                    <template x-for="badge in endpointBadges(chunk.proposed_rule?.endpoints)" :key="badge">
+                                        <span class="badge endpoint-badge me-1" x-text="badge"></span>
+                                    </template>
+                                    <span x-show="endpointMore(chunk.proposed_rule?.endpoints) > 0"
+                                          class="badge text-bg-secondary"
+                                          x-text="'+' + endpointMore(chunk.proposed_rule?.endpoints)"></span>
+                                    <span x-show="!chunk.proposed_rule?.endpoints?.length" class="text-muted">&mdash;</span>
+                                </td>
+                                <td class="text-end" x-text="chunk.hit_count > 1 ? chunk.hit_count : '\u2014'"></td>
+                                <td class="text-center">
+                                    <template x-if="chunk.confidence > 0">
+                                        <div class="progress confidence-bar d-inline-flex" :title="confidencePercent(chunk) + '%'">
+                                            <div class="progress-bar bg-info" :style="'width:' + confidencePercent(chunk) + '%'"></div>
+                                        </div>
+                                    </template>
+                                    <span x-show="!chunk.confidence" class="text-muted">&mdash;</span>
+                                </td>
+                                <td class="text-end">
+                                    <template x-if="chunk.status === 'pending' && $store.auth.hasRole('operator')">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-secondary" @click.stop="openEdit(chunk.id)" title="Edit">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-success" @click.stop="approve(chunk.id)" title="Approve">
+                                                <i class="bi bi-check"></i>
+                                            </button>
+                                            <button class="btn btn-outline-danger" @click.stop="reject(chunk.id)" title="Reject">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        </div>
+                                    </template>
+                                    <template x-if="chunk.status === 'approved' && $store.auth.hasRole('operator')">
+                                        <button class="btn btn-outline-secondary btn-sm" @click.stop="undo(chunk.id)" title="Undo">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    </template>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+</div>
 {% endblock %}
 
 {% block modals %}
@@ -15,10 +138,4 @@
 
 {% block sandbox_js %}
 <script src="/static/js/approvals.js"></script>
-<script src="/static/js/websocket.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    loadApprovalsPage({{ sandbox_name|tojson }});
-});
-</script>
 {% endblock %}

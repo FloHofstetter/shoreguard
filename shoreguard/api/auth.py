@@ -115,9 +115,10 @@ def reset() -> None:
 
 def init_auth_for_test(session_factory: SessionMaker) -> None:
     """Initialise auth with a test DB and a fixed HMAC secret."""
-    global _session_factory, _hmac_secret  # noqa: PLW0603
+    global _session_factory, _hmac_secret, _no_auth  # noqa: PLW0603
     _session_factory = session_factory
     _hmac_secret = b"test-secret-key-for-unit-tests!!"
+    _no_auth = False
 
 
 def is_registration_enabled() -> bool:
@@ -224,11 +225,8 @@ def authenticate_user(email: str, password: str) -> dict | None:
         )
         password_ok = verify_password(password, user.hashed_password if valid_user else _DUMMY_HASH)
 
-        if not valid_user:
-            logger.warning("Auth failed: unknown or inactive user (email=%s)", email)
-            return None
-        if not password_ok:
-            logger.warning("Auth failed: wrong password (email=%s)", email)
+        if not valid_user or not password_ok:
+            logger.warning("Auth failed: invalid credentials (email=%s)", email)
             return None
         return {"id": user.id, "email": user.email, "role": user.role}
     finally:
@@ -288,8 +286,8 @@ def check_request_auth(request: Request) -> str | None:
         request.state.user_id = "no-auth"
         return "admin"
     if _session_factory is None:
-        request.state.user_id = "no-auth"
-        return "admin"  # no DB configured → auth cannot be enforced
+        logger.error("Auth check with no DB session factory — denying request")
+        raise HTTPException(status_code=503, detail="Service not ready")
     if not is_setup_complete():
         request.state.user_id = "setup-pending"
         # Only allow setup-related paths before first user is created
@@ -359,7 +357,7 @@ def require_auth(request: Request) -> None:
 def require_role(minimum: str):
     """Return a FastAPI dependency that enforces a minimum role level."""
 
-    def _dependency(request: Request) -> None:
+    async def _dependency(request: Request) -> None:
         role = getattr(request.state, "role", None)
         if role is None:
             role = check_request_auth(request)
@@ -379,6 +377,15 @@ def require_role(minimum: str):
                 request.url.path,
                 request.method,
                 actor,
+            )
+            from shoreguard.services.audit import audit_log
+
+            await audit_log(
+                request,
+                "auth.forbidden",
+                "role",
+                minimum,
+                detail={"actor_role": role, "required_role": minimum},
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

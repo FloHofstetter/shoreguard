@@ -8,10 +8,132 @@
 {% endblock %}
 
 {% block content %}
-<div id="users-page-content"></div>
+<div x-data="usersPage()" x-init="load()">
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <!-- Content -->
+    <template x-if="!loading && !error">
+        <div>
+            <!-- Users Section -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0"><i class="bi bi-people me-2"></i>Users</h5>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary" @click="load()" title="Refresh">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <a href="/users/new" class="btn btn-outline-success">
+                        <i class="bi bi-plus-lg me-1"></i>Invite User
+                    </a>
+                </div>
+            </div>
+
+            <!-- Users Table -->
+            <template x-if="users.length > 0">
+                <div class="table-responsive mb-5">
+                    <table class="table table-dark table-striped table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th class="d-none d-md-table-cell">Created</th>
+                                <th class="text-end" style="width:60px">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="u in users" :key="u.id">
+                                <tr>
+                                    <td><strong x-text="u.email"></strong></td>
+                                    <td><span class="badge" :class="roleBadge(u.role)" x-text="u.role"></span></td>
+                                    <td>
+                                        <span x-show="u.pending_invite" class="badge text-bg-info">Invited</span>
+                                        <span x-show="!u.pending_invite" class="badge text-bg-success">Active</span>
+                                    </td>
+                                    <td class="d-none d-md-table-cell small text-muted" x-text="formatDate(u.created_at)"></td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm text-muted delete-btn" @click="deleteUser(u)" title="Delete">
+                                            <i class="bi bi-trash3"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+
+            <!-- Users Empty -->
+            <template x-if="users.length === 0">
+                <div class="text-center text-muted py-5 mb-5">
+                    <i class="bi bi-people fs-1 d-block mb-3"></i>
+                    <p>No users yet.</p>
+                    <a href="/users/new" class="btn btn-success btn-sm">
+                        <i class="bi bi-plus me-1"></i>Invite User
+                    </a>
+                </div>
+            </template>
+
+            <!-- Service Principals Section -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0"><i class="bi bi-key me-2"></i>Service Principals</h5>
+                <a href="/users/new-service-principal" class="btn btn-outline-success btn-sm">
+                    <i class="bi bi-plus-lg me-1"></i>New
+                </a>
+            </div>
+
+            <!-- SP Table -->
+            <template x-if="sps.length > 0">
+                <div class="table-responsive">
+                    <table class="table table-dark table-striped table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Role</th>
+                                <th class="d-none d-md-table-cell">Created</th>
+                                <th class="d-none d-md-table-cell">Last Used</th>
+                                <th class="text-end" style="width:60px">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="sp in sps" :key="sp.id">
+                                <tr>
+                                    <td><strong x-text="sp.name"></strong></td>
+                                    <td><span class="badge" :class="roleBadge(sp.role)" x-text="sp.role"></span></td>
+                                    <td class="d-none d-md-table-cell small text-muted" x-text="formatDate(sp.created_at)"></td>
+                                    <td class="d-none d-md-table-cell small text-muted" x-text="sp.last_used ? formatTimeAgo(sp.last_used) : 'Never'"></td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm text-muted delete-btn" @click="deleteSP(sp)" title="Delete">
+                                            <i class="bi bi-trash3"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+
+            <!-- SP Empty -->
+            <template x-if="sps.length === 0">
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-key fs-1 d-block mb-3"></i>
+                    <p>No service principals yet.</p>
+                    <a href="/users/new-service-principal" class="btn btn-success btn-sm">
+                        <i class="bi bi-plus me-1"></i>Create Service Principal
+                    </a>
+                </div>
+            </template>
+        </div>
+    </template>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="/static/js/users.js"></script>
-<script>document.addEventListener('DOMContentLoaded', loadUsersPage);</script>
 {% endblock %}

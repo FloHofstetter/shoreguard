@@ -8,22 +8,84 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h5 class="mb-0">Gateways</h5>
-    <div class="btn-group btn-group-sm">
-        <button class="btn btn-outline-secondary" onclick="loadGatewayPage()" title="Refresh">
-            <i class="bi bi-arrow-clockwise"></i>
-        </button>
-        <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#registerGatewayModal" data-sg-min-role="admin">
-            <i class="bi bi-plus-lg me-1"></i>Register
+<div x-data="gatewayList()" x-init="load()" @gateway-registered.window="load()">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">Gateways</h5>
+        <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" @click="load()" title="Refresh">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#registerGatewayModal"
+                    x-show="$store.auth.hasRole('admin')" x-cloak>
+                <i class="bi bi-plus-lg me-1"></i>Register
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading gateways...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <!-- Empty state -->
+    <div x-show="!loading && !error && gateways.length === 0" x-cloak class="text-center text-muted py-5">
+        <i class="bi bi-hdd-network fs-1 d-block mb-3"></i>
+        <p>No gateways registered.</p>
+        <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#registerGatewayModal"
+                x-show="$store.auth.hasRole('admin')">
+            <i class="bi bi-plus me-1"></i>Register Gateway
         </button>
     </div>
+
+    <!-- Gateway table -->
+    <div x-show="!loading && !error && gateways.length > 0" x-cloak class="table-responsive mb-4">
+        <table class="table table-dark table-striped table-hover table-sm align-middle table-clickable">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Endpoint</th>
+                    <th>Auth</th>
+                    <th>Status</th>
+                    <th class="d-none d-md-table-cell">Last Seen</th>
+                    <th class="text-end" style="width:60px"></th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="gw in gateways" :key="gw.name">
+                    <tr @click="navigateTo('/gateways/' + gw.name)" style="cursor:pointer"
+                        :class="gw.active ? 'table-active' : ''">
+                        <td><strong x-text="gw.name"></strong></td>
+                        <td class="font-monospace small" x-text="gw.endpoint || '\u2014'"></td>
+                        <td class="small" x-text="gw.auth_mode || '\u2014'"></td>
+                        <td>
+                            <span class="badge" :class="SG.badges.gateway[gw.status] || 'text-bg-secondary'">
+                                <i class="bi me-1" :class="'bi-' + statusIcon(gw.status)"></i>
+                                <span x-text="statusLabel(gw.status)"></span>
+                            </span>
+                            <span x-show="gw.status === 'connected' && gw.version" class="text-muted small ms-1" x-text="gw.version"></span>
+                        </td>
+                        <td class="d-none d-md-table-cell small text-muted" x-text="gw.last_seen ? formatTimeAgo(gw.last_seen) : '\u2014'"></td>
+                        <td class="text-end" @click.stop>
+                            <button x-show="$store.auth.hasRole('admin')" x-cloak
+                                    class="btn btn-sm text-muted delete-btn"
+                                    @click="unregister(gw.name)" title="Unregister">
+                                <i class="bi bi-trash3"></i>
+                            </button>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
 </div>
-<div id="gateway-page-content"></div>
 {% endblock %}
 
 {% block modals %}
-<div class="modal fade" id="registerGatewayModal" tabindex="-1">
+<div class="modal fade" id="registerGatewayModal" tabindex="-1"
+     x-data="gatewayRegister()" x-init="$el.addEventListener('hidden.bs.modal', () => resetForm())">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content sg-modal-themed">
             <div class="modal-header border-bottom">
@@ -31,60 +93,65 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="register-gateway-form" onsubmit="registerGateway(event)">
+                <form @submit.prevent="submit()">
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">Name</label>
-                            <input type="text" class="form-control" id="reg-gw-name" placeholder="my-gateway" required>
+                            <input type="text" class="form-control" x-model="form.name" placeholder="my-gateway" required>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Endpoint</label>
-                            <input type="text" class="form-control" id="reg-gw-endpoint" placeholder="10.0.0.5:8443" required>
+                            <input type="text" class="form-control" x-model="form.endpoint" placeholder="10.0.0.5:8443" required>
                             <div class="form-text">host:port of the OpenShell gateway</div>
                         </div>
                     </div>
                     <div class="row g-3 mt-1">
                         <div class="col-md-6">
                             <label class="form-label">Scheme</label>
-                            <select class="form-select" id="reg-gw-scheme">
+                            <select class="form-select" x-model="form.scheme">
                                 <option value="https" selected>https (mTLS)</option>
                                 <option value="http">http (insecure)</option>
                             </select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Auth Mode</label>
-                            <select class="form-select" id="reg-gw-auth-mode">
+                            <select class="form-select" x-model="form.auth_mode">
                                 <option value="mtls" selected>mTLS</option>
                                 <option value="insecure">Insecure</option>
                                 <option value="cloudflare_jwt">Cloudflare JWT</option>
                             </select>
                         </div>
                     </div>
-                    <div id="reg-gw-certs" class="mt-3">
+                    <div class="mt-3">
                         <h6 class="text-muted mb-2">mTLS Certificates</h6>
                         <div class="mb-2">
                             <label class="form-label small">CA Certificate (PEM)</label>
-                            <input type="file" class="form-control form-control-sm" id="reg-gw-ca" accept=".pem,.crt">
+                            <input type="file" class="form-control form-control-sm" accept=".pem,.crt"
+                                   @change="form.caFile = $event.target.files[0]" x-ref="caInput">
                         </div>
                         <div class="mb-2">
                             <label class="form-label small">Client Certificate (PEM)</label>
-                            <input type="file" class="form-control form-control-sm" id="reg-gw-cert" accept=".pem,.crt">
+                            <input type="file" class="form-control form-control-sm" accept=".pem,.crt"
+                                   @change="form.certFile = $event.target.files[0]" x-ref="certInput">
                         </div>
                         <div class="mb-2">
                             <label class="form-label small">Client Key (PEM)</label>
-                            <input type="file" class="form-control form-control-sm" id="reg-gw-key" accept=".pem,.key">
+                            <input type="file" class="form-control form-control-sm" accept=".pem,.key"
+                                   @change="form.keyFile = $event.target.files[0]" x-ref="keyInput">
                         </div>
                     </div>
                     <div class="form-check form-switch mt-3">
-                        <input class="form-check-input" type="checkbox" id="reg-gw-gpu">
+                        <input class="form-check-input" type="checkbox" id="reg-gw-gpu" x-model="form.gpu">
                         <label class="form-check-label" for="reg-gw-gpu">GPU passthrough</label>
                     </div>
-                    <div id="register-gw-output" class="mt-2"></div>
+                    <div class="mt-2">
+                        <div x-show="output" x-html="output"></div>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer border-0">
                 <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button class="btn btn-success" onclick="registerGateway(event)" id="register-gw-btn">
+                <button class="btn btn-success" @click="submit()" :disabled="submitting">
                     <i class="bi bi-plus me-1"></i>Register
                 </button>
             </div>
@@ -95,5 +162,4 @@
 
 {% block extra_js %}
 <script src="/static/js/gateway.js"></script>
-<script>document.addEventListener('DOMContentLoaded', loadGatewayPage);</script>
 {% endblock %}

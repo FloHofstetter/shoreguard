@@ -10,7 +10,7 @@ import logging
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from shoreguard.client import ShoreGuardClient
 from shoreguard.config import VALID_GATEWAY_NAME_RE
@@ -29,8 +29,13 @@ def _get_gateway_service() -> GatewayService:
     from shoreguard.services.gateway import gateway_service
 
     if gateway_service is None:
-        raise RuntimeError("GatewayService not initialised — app lifespan has not started")
+        raise HTTPException(503, "GatewayService not initialised — app lifespan has not started")
     return gateway_service
+
+
+def get_actor(request: Request) -> str:
+    """Extract the acting user identity from the request state."""
+    return getattr(request.state, "user_id", "unknown")
 
 
 def resolve_gateway(gw: str) -> None:

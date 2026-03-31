@@ -10,9 +10,10 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import get_client
+from shoreguard.api.deps import _current_gateway, get_actor, get_client
 from shoreguard.client import ShoreGuardClient
 from shoreguard.services.approvals import ApprovalService
+from shoreguard.services.audit import audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +71,18 @@ async def approve_chunk(
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, Any]:
     """Approve a single draft policy chunk."""
-    actor = getattr(request.state, "user_id", "unknown")
+    actor = get_actor(request)
     logger.info("Chunk approved (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
-    return await asyncio.to_thread(svc.approve, name, chunk_id)
+    result = await asyncio.to_thread(svc.approve, name, chunk_id)
+    await audit_log(
+        request,
+        "approval.approve",
+        "approval",
+        chunk_id,
+        gateway=_current_gateway.get(),
+        detail={"sandbox": name},
+    )
+    return result
 
 
 @router.post(
@@ -87,9 +97,17 @@ async def reject_chunk(
 ) -> dict:
     """Reject a single draft policy chunk."""
     reason = body.reason if body else ""
-    actor = getattr(request.state, "user_id", "unknown")
+    actor = get_actor(request)
     logger.info("Chunk rejected (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
     await asyncio.to_thread(svc.reject, name, chunk_id, reason=reason)
+    await audit_log(
+        request,
+        "approval.reject",
+        "approval",
+        chunk_id,
+        gateway=_current_gateway.get(),
+        detail={"sandbox": name, "reason": reason},
+    )
     return {"status": "rejected"}
 
 
@@ -101,10 +119,21 @@ async def approve_all(
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, Any]:
     """Approve all pending draft chunks for a sandbox."""
-    actor = getattr(request.state, "user_id", "unknown")
+    actor = get_actor(request)
     logger.info("All chunks approved (sandbox=%s, actor=%s)", name, actor)
     include_flagged = body.include_security_flagged if body else False
-    return await asyncio.to_thread(svc.approve_all, name, include_security_flagged=include_flagged)
+    result = await asyncio.to_thread(
+        svc.approve_all, name, include_security_flagged=include_flagged
+    )
+    await audit_log(
+        request,
+        "approval.approve_all",
+        "approval",
+        name,
+        gateway=_current_gateway.get(),
+        detail={"include_security_flagged": include_flagged},
+    )
+    return result
 
 
 @router.post("/{name}/approvals/{chunk_id}/edit", dependencies=[Depends(require_role("operator"))])
@@ -116,9 +145,17 @@ async def edit_chunk(
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict:
     """Edit a pending draft chunk's proposed rule."""
-    actor = getattr(request.state, "user_id", "unknown")
+    actor = get_actor(request)
     logger.info("Chunk edited (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
     await asyncio.to_thread(svc.edit, name, chunk_id, body.proposed_rule)
+    await audit_log(
+        request,
+        "approval.edit",
+        "approval",
+        chunk_id,
+        gateway=_current_gateway.get(),
+        detail={"sandbox": name},
+    )
     return {"status": "edited"}
 
 
@@ -130,9 +167,18 @@ async def undo_chunk(
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, Any]:
     """Reverse an approval decision."""
-    actor = getattr(request.state, "user_id", "unknown")
+    actor = get_actor(request)
     logger.info("Chunk undone (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
-    return await asyncio.to_thread(svc.undo, name, chunk_id)
+    result = await asyncio.to_thread(svc.undo, name, chunk_id)
+    await audit_log(
+        request,
+        "approval.undo",
+        "approval",
+        chunk_id,
+        gateway=_current_gateway.get(),
+        detail={"sandbox": name},
+    )
+    return result
 
 
 @router.post("/{name}/approvals/clear", dependencies=[Depends(require_role("operator"))])
@@ -142,9 +188,11 @@ async def clear_approvals(
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, int]:
     """Clear all pending draft chunks for a sandbox."""
-    actor = getattr(request.state, "user_id", "unknown")
+    actor = get_actor(request)
     logger.info("Chunks cleared (sandbox=%s, actor=%s)", name, actor)
-    return await asyncio.to_thread(svc.clear, name)
+    result = await asyncio.to_thread(svc.clear, name)
+    await audit_log(request, "approval.clear", "approval", name, gateway=_current_gateway.get())
+    return result
 
 
 @router.get("/{name}/approvals/history")

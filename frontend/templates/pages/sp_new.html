@@ -10,31 +10,51 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-6 col-lg-5">
+    <div class="col-md-6 col-lg-5" x-data="spNewForm()">
         <h5 class="mb-3"><i class="bi bi-key me-2"></i>New Service Principal</h5>
 
         <div class="card sg-card-themed">
             <div class="card-body">
-                <form id="create-sp-form">
+                <form @submit.prevent="submit">
                     <div class="mb-3">
                         <label class="form-label">Name</label>
-                        <input type="text" class="form-control" id="new-sp-name" placeholder="terraform-ci" autofocus required>
+                        <input type="text" class="form-control" x-model="name" placeholder="terraform-ci" autofocus required>
                         <div class="form-text">A label to identify this service principal.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Role</label>
-                        <select class="form-select" id="new-sp-role" required>
+                        <select class="form-select" x-model="role" required>
                             <option value="viewer">Viewer — read-only access</option>
                             <option value="operator">Operator — sandbox, policy, provider management</option>
                             <option value="admin">Admin — full access</option>
                         </select>
                     </div>
-                    <div id="create-sp-output"></div>
+
+                    <!-- Error -->
+                    <div x-show="error" x-cloak class="text-danger small mb-3">
+                        <i class="bi bi-x-circle me-1"></i><span x-text="error"></span>
+                    </div>
+
+                    <!-- Success -->
+                    <div x-show="spKey" x-cloak class="alert alert-success small py-2 mb-2">
+                        <p class="mb-1"><i class="bi bi-check-circle me-1"></i>Key created!</p>
+                        <span class="badge text-bg-warning mb-2"><i class="bi bi-exclamation-triangle me-1"></i>Show once — save this key now</span>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control font-monospace" :value="spKey" readonly>
+                            <button type="button" class="btn btn-outline-secondary" @click="navigator.clipboard.writeText(spKey); showToast('Copied!', 'success')">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-success" id="create-sp-btn">
+                        <button x-show="!spKey" type="submit" class="btn btn-success" :disabled="loading">
                             <i class="bi bi-plus me-1"></i>Create
                         </button>
-                        <a href="/users" class="btn btn-outline-secondary">Cancel</a>
+                        <a x-show="spKey" href="/users" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-arrow-left me-1"></i>Back to Users
+                        </a>
+                        <a x-show="!spKey" href="/users" class="btn btn-outline-secondary">Cancel</a>
                     </div>
                 </form>
             </div>
@@ -45,9 +65,4 @@
 
 {% block extra_js %}
 <script src="/static/js/users.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('create-sp-form').addEventListener('submit', createNewSP);
-});
-</script>
 {% endblock %}

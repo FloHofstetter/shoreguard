@@ -93,3 +93,9 @@ def register_error_handlers(app: FastAPI) -> None:
         detail = friendly_grpc_error(exc)
         http_status = _GRPC_STATUS_MAP.get(code, 500) if code is not None else 500
         return JSONResponse(status_code=http_status, content={"detail": detail})
+
+    @app.exception_handler(Exception)
+    async def generic_exception_handler(request: Request, exc: Exception):
+        """Catch-all for unhandled exceptions — return 500 without leaking internals."""
+        logger.error("Unhandled exception on %s: %s", request.url.path, exc, exc_info=True)
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})

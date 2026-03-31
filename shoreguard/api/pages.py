@@ -10,6 +10,8 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
+from shoreguard.services.audit import audit_log
+
 from .auth import (
     COOKIE_NAME,
     ROLES,
@@ -95,6 +97,9 @@ async def login(request: Request, body: LoginRequest):
     user = authenticate_user(body.email, body.password)
     if not user:
         logger.warning("Login failed: invalid credentials (client=%s)", _client_ip(request))
+        request.state.user_id = body.email
+        request.state.role = "unknown"
+        await audit_log(request, "user.login_failed", "user", body.email)
         return JSONResponse(
             status_code=401,
             content={"detail": "Invalid email or password"},
@@ -103,6 +108,9 @@ async def login(request: Request, body: LoginRequest):
     logger.info(
         "Login successful (client=%s, email=%s, role=%s)", client_ip, user["email"], user["role"]
     )
+    request.state.user_id = user["email"]
+    request.state.role = user["role"]
+    await audit_log(request, "user.login", "user", user["email"])
     token = create_session_token(user_id=user["id"], role=user["role"])
     response = JSONResponse(content={"ok": True, "role": user["role"], "email": user["email"]})
     secure = request.url.scheme == "https"
@@ -133,6 +141,7 @@ async def logout(request: Request):
             u = _lookup_user(user_id)
             user_info = u["email"] if u else f"user_id={user_id}"
     logger.info("Logout (actor=%s, client=%s)", user_info, _client_ip(request))
+    await audit_log(request, "user.logout", "user", user_info)
     response = JSONResponse(content={"ok": True})
     response.delete_cookie(COOKIE_NAME, path="/")
     return response
@@ -208,6 +217,12 @@ async def setup(request: Request, body: SetupRequest):
         )
     try:
         info = create_user(body.email.strip(), body.password, "admin")
+    except IntegrityError:
+        logger.warning("Setup failed: duplicate admin email (email=%s)", body.email.strip())
+        return JSONResponse(
+            status_code=409,
+            content={"detail": f"A user with email '{body.email.strip()}' already exists"},
+        )
     except Exception:
         logger.exception("Setup failed")
         return JSONResponse(status_code=500, content={"detail": "Setup failed"})
@@ -217,6 +232,9 @@ async def setup(request: Request, body: SetupRequest):
         info["email"],
         _client_ip(request),
     )
+    request.state.user_id = info["email"]
+    request.state.role = "admin"
+    await audit_log(request, "user.setup", "user", info["email"])
     token = create_session_token(user_id=info["id"], role="admin")
     response = JSONResponse(content={"ok": True, "role": "admin", "email": info["email"]})
     secure = request.url.scheme == "https"
@@ -278,6 +296,7 @@ async def create_user_endpoint(request: Request, body: CreateUserRequest):
     logger.info(
         "User invited (email=%s, role=%s, actor=%s)", info["email"], body.role, _get_actor(request)
     )
+    await audit_log(request, "user.invite", "user", info["email"], detail={"role": body.role})
     return info
 
 
@@ -302,6 +321,7 @@ async def delete_user_endpoint(request: Request, user_id: int):
         )
     if delete_user(user_id):
         logger.info("User deleted (user_id=%s, actor=%s)", user_id, _get_actor(request))
+        await audit_log(request, "user.delete", "user", str(user_id))
         return {"ok": True}
     return JSONResponse(status_code=404, content={"detail": "User not found"})
 
@@ -337,6 +357,9 @@ async def accept_invite_endpoint(request: Request, body: AcceptInviteRequest):
         user["role"],
         _client_ip(request),
     )
+    request.state.user_id = user["email"]
+    request.state.role = user["role"]
+    await audit_log(request, "user.invite.accept", "user", user["email"])
     token = create_session_token(user_id=user["id"], role=user["role"])
     response = JSONResponse(content={"ok": True, "role": user["role"], "email": user["email"]})
     secure = request.url.scheme == "https"
@@ -400,6 +423,9 @@ async def register_endpoint(request: Request, body: RegisterRequest):
         return JSONResponse(status_code=500, content={"detail": "Registration failed"})
 
     logger.info("Self-registration (email=%s, client=%s)", info["email"], _client_ip(request))
+    request.state.user_id = info["email"]
+    request.state.role = "viewer"
+    await audit_log(request, "user.register", "user", info["email"])
     token = create_session_token(user_id=info["id"], role="viewer")
     response = JSONResponse(
         content={"ok": True, "role": "viewer", "email": info["email"]}, status_code=201
@@ -468,6 +494,13 @@ async def create_sp_endpoint(request: Request, body: CreateSPRequest):
         body.role,
         _get_actor(request),
     )
+    await audit_log(
+        request,
+        "sp.create",
+        "service_principal",
+        body.name.strip(),
+        detail={"role": body.role},
+    )
     return {"key": plaintext, **info}
 
 
@@ -478,6 +511,7 @@ async def delete_sp_endpoint(request: Request, sp_id: int):
     """Delete a service principal (admin only)."""
     if delete_service_principal(sp_id):
         logger.info("Service principal deleted (sp_id=%s, actor=%s)", sp_id, _get_actor(request))
+        await audit_log(request, "sp.delete", "service_principal", str(sp_id))
         return {"ok": True}
     return JSONResponse(status_code=404, content={"detail": "Service principal not found"})
 
@@ -731,6 +765,28 @@ async def preset_detail_page(request: Request, name: str):
         request,
         "pages/preset_detail.html",
         {"active_page": "policies", "preset_name": name},
+    )
+
+
+@router.get("/audit")
+async def audit_page(request: Request):
+    """Audit log page (admin only)."""
+    redirect = _require_page_auth(request)
+    if redirect:
+        return redirect
+    role = check_request_auth(request)
+    if role != "admin":
+        return _render_error(
+            request,
+            403,
+            "Access Denied",
+            "You need admin privileges to view the audit log.",
+            icon="shield-lock",
+        )
+    return templates.TemplateResponse(
+        request,
+        "pages/audit.html",
+        {"active_page": "audit"},
     )
 
 

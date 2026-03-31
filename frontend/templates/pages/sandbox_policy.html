@@ -6,14 +6,100 @@
 {% endblock %}
 
 {% block content %}
-<div id="policy-content"></div>
+<div x-data='policyPage({{ sandbox_name|tojson }})' x-init="init()">
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading policy...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <!-- No policy -->
+    <div x-show="!loading && !error && !policy" x-cloak class="text-muted py-4">
+        <i class="bi bi-info-circle me-1"></i>No policy data available.
+    </div>
+
+    <!-- Policy content -->
+    <template x-if="!loading && !error && policy">
+        <div>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <span class="text-muted">Policy v<span x-text="policy.version || '?'"></span></span>
+                <button class="btn btn-outline-secondary btn-sm" @click="showRevisions()">
+                    <i class="bi bi-clock-history me-1"></i>Revisions
+                </button>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <a :href="gwUrl('/sandboxes/' + sandboxName + '/network-policies')" class="card text-decoration-none policy-overview-card sg-card-themed h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-globe text-info me-2"></i>
+                                <h6 class="mb-0">Network Policies</h6>
+                            </div>
+                            <div class="fs-2 fw-bold mb-1" x-text="networkCount"></div>
+                            <span class="text-muted small" x-text="networkLabel() + ' configured'"></span>
+                        </div>
+                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                            Manage rules <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a :href="gwUrl('/sandboxes/' + sandboxName + '/filesystem-policy')" class="card text-decoration-none policy-overview-card sg-card-themed h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-folder text-warning me-2"></i>
+                                <h6 class="mb-0">Filesystem</h6>
+                            </div>
+                            <div class="fs-2 fw-bold mb-1" x-text="fsCount"></div>
+                            <span class="text-muted small" x-text="fsLabel() + ' configured'"></span>
+                        </div>
+                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                            View paths <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a :href="gwUrl('/sandboxes/' + sandboxName + '/process-policy')" class="card text-decoration-none policy-overview-card sg-card-themed h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-cpu text-success me-2"></i>
+                                <h6 class="mb-0">Process & Landlock</h6>
+                            </div>
+                            <div class="fs-2 fw-bold mb-1" x-text="procCount"></div>
+                            <span class="text-muted small" x-text="procLabel() + ' configured'"></span>
+                        </div>
+                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                            View settings <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Presets -->
+            <div class="row g-3 mt-0">
+                <div class="col-12">
+                    <a :href="gwUrl('/sandboxes/' + sandboxName + '/apply-preset')" class="card text-decoration-none policy-overview-card sg-card-themed">
+                        <div class="card-body d-flex align-items-center">
+                            <div class="me-3">
+                                <i class="bi bi-shield-plus fs-4 text-info"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="mb-0">Apply Preset</h6>
+                                <span class="text-muted small">Add predefined network rules from a template</span>
+                            </div>
+                            <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>
 {% endblock %}
 
 {% block sandbox_js %}
 <script src="/static/js/policy.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    loadPolicyTab({{ sandbox_name|tojson }}, document.getElementById('policy-content'));
-});
-</script>
 {% endblock %}

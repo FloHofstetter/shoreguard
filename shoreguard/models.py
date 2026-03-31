@@ -56,3 +56,20 @@ class ServicePrincipal(Base):
     )
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     last_used: Mapped[str | None] = mapped_column(String)
+
+
+class AuditEntry(Base):
+    """A persistent audit log entry for state-changing operations."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    timestamp: Mapped[str] = mapped_column(String, nullable=False)
+    actor: Mapped[str] = mapped_column(String(254), nullable=False)
+    actor_role: Mapped[str] = mapped_column(String(20), nullable=False, default="unknown")
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    resource_id: Mapped[str] = mapped_column(String(253), nullable=False, default="")
+    gateway: Mapped[str | None] = mapped_column(String(253))
+    detail: Mapped[str | None] = mapped_column(Text)
+    client_ip: Mapped[str | None] = mapped_column(String(45))

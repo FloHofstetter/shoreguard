@@ -4,5 +4,5 @@
         <strong>Gateway disconnected.</strong>
         <span id="gateway-error-detail" class="ms-1">Attempting to reconnect...</span>
     </div>
-    <button class="btn btn-outline-light btn-sm" onclick="checkGatewayHealth()">Retry</button>
+    <button class="btn btn-outline-light btn-sm" onclick="Alpine.store('health').check()">Retry</button>
 </div>

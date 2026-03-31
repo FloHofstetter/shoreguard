@@ -2,9 +2,128 @@
 {% block title %}Dashboard — Shoreguard{% endblock %}
 
 {% block content %}
-<div id="dashboard-content"></div>
+<div x-data="dashboardPage()" x-init="init()">
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading dashboard...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <template x-if="!loading && !error">
+        <div>
+            <div class="row g-3 mb-4">
+                <!-- Gateways -->
+                <div class="col-md-4">
+                    <div class="card sg-card-themed h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-hdd-network text-info me-2"></i>
+                                <h6 class="mb-0">Gateways</h6>
+                            </div>
+                            <div class="fs-2 fw-bold mb-1" x-text="gateways.length"></div>
+                            <span class="text-muted small" x-text="connectedCount + ' connected'"></span>
+                        </div>
+                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                            <a href="/gateways" class="text-decoration-none">Manage <i class="bi bi-arrow-right"></i></a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sandboxes -->
+                <div class="col-md-4">
+                    <div class="card sg-card-themed h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-grid text-success me-2"></i>
+                                <h6 class="mb-0">Sandboxes</h6>
+                            </div>
+                            <div class="fs-2 fw-bold mb-1" x-text="sandboxCount"></div>
+                            <span class="text-muted small" x-text="sandboxCount === 1 ? '1 sandbox' : sandboxCount + ' sandboxes'"></span>
+                        </div>
+                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                            <a x-show="GW" :href="gwUrl('/sandboxes')" class="text-decoration-none">View <i class="bi bi-arrow-right"></i></a>
+                            <span x-show="!GW" class="text-muted">Select a gateway first</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Presets -->
+                <div class="col-md-4">
+                    <div class="card sg-card-themed h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-shield-plus text-warning me-2"></i>
+                                <h6 class="mb-0">Policy Presets</h6>
+                            </div>
+                            <div class="fs-2 fw-bold mb-1" x-text="presetCount"></div>
+                            <span class="text-muted small" x-text="presetCount === 1 ? '1 preset' : presetCount + ' presets'"></span>
+                        </div>
+                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                            <a href="/policies" class="text-decoration-none">Browse <i class="bi bi-arrow-right"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick actions -->
+            <template x-if="GW">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <a :href="gwUrl('/wizard')" class="btn btn-outline-success w-100 py-3">
+                            <i class="bi bi-plus-circle me-2"></i>Create Sandbox
+                        </a>
+                    </div>
+                    <div class="col-md-6">
+                        <a :href="gwUrl('/sandboxes')" class="btn btn-outline-secondary w-100 py-3">
+                            <i class="bi bi-grid me-2"></i>View Sandboxes
+                        </a>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </template>
+</div>
 {% endblock %}
 
 {% block extra_js %}
-<script>document.addEventListener('DOMContentLoaded', loadDashboard);</script>
+<script>
+function dashboardPage() {
+    return {
+        loading: true,
+        error: '',
+        gateways: [],
+        sandboxCount: 0,
+        presetCount: 0,
+
+        get connectedCount() {
+            return this.gateways.filter(g => g.status === 'connected').length;
+        },
+
+        async init() {
+            this.loading = true;
+            try {
+                const [gateways, presets] = await Promise.all([
+                    apiFetch(`${API_GLOBAL}/gateway/list`).catch(() => []),
+                    apiFetch(`${API_GLOBAL}/policies/presets`).catch(() => []),
+                ]);
+                this.gateways = gateways || [];
+                this.presetCount = (presets || []).length;
+
+                if (GW) {
+                    try {
+                        const sbs = await apiFetch(`${API}/sandboxes`);
+                        this.sandboxCount = (sbs || []).length;
+                    } catch { /* no gateway */ }
+                }
+            } catch (e) {
+                this.error = e.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+    };
+}
+</script>
 {% endblock %}

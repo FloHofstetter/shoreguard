@@ -86,6 +86,25 @@ def test_gateways_table_columns():
     engine.dispose()
 
 
+def test_audit_log_table_columns():
+    engine = init_db("sqlite:///:memory:")
+    columns = {c["name"] for c in inspect(engine).get_columns("audit_log")}
+    expected = {
+        "id",
+        "timestamp",
+        "actor",
+        "actor_role",
+        "action",
+        "resource_type",
+        "resource_id",
+        "gateway",
+        "detail",
+        "client_ip",
+    }
+    assert columns == expected
+    engine.dispose()
+
+
 def test_sqlite_parent_dir_permissions():
     """Parent directory should be created with 0o700."""
     with tempfile.TemporaryDirectory() as d:

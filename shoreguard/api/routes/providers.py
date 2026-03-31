@@ -10,17 +10,14 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import get_client
+from shoreguard.api.deps import _current_gateway, get_actor, get_client
 from shoreguard.client import ShoreGuardClient
+from shoreguard.services.audit import audit_log
 from shoreguard.services.providers import ProviderService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def _actor(request: Request) -> str:
-    return getattr(request.state, "user_id", "unknown")
 
 
 def _get_provider_service(client: ShoreGuardClient = Depends(get_client)) -> ProviderService:
@@ -95,7 +92,15 @@ async def create_provider(
     logger.info(
         "Provider created (provider=%s, actor=%s)",
         body.name,
-        _actor(request),
+        get_actor(request),
+    )
+    await audit_log(
+        request,
+        "provider.create",
+        "provider",
+        body.name,
+        gateway=_current_gateway.get(),
+        detail={"type": body.type},
     )
     return result
 
@@ -130,8 +135,9 @@ async def update_provider(
     logger.info(
         "Provider updated (provider=%s, actor=%s)",
         name,
-        _actor(request),
+        get_actor(request),
     )
+    await audit_log(request, "provider.update", "provider", name, gateway=_current_gateway.get())
     return result
 
 
@@ -146,9 +152,13 @@ async def delete_provider(
 ) -> dict[str, bool]:
     """Delete a provider by name."""
     deleted = await asyncio.to_thread(svc.delete, name)
-    logger.info(
-        "Provider deleted (provider=%s, actor=%s)",
-        name,
-        _actor(request),
-    )
+    if deleted:
+        logger.info(
+            "Provider deleted (provider=%s, actor=%s)",
+            name,
+            get_actor(request),
+        )
+        await audit_log(
+            request, "provider.delete", "provider", name, gateway=_current_gateway.get()
+        )
     return {"deleted": deleted}

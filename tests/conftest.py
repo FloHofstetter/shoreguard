@@ -32,11 +32,12 @@ def mock_client():
 
 @pytest.fixture(autouse=True)
 def _init_gateway_service():
-    """Initialize gateway_service with in-memory DB for all tests."""
+    """Initialize gateway_service and audit_service with shared in-memory DB."""
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
 
+    import shoreguard.services.audit as audit_mod
     import shoreguard.services.gateway as gw_mod
     from shoreguard.models import Base
     from shoreguard.services.gateway import _reset_clients
@@ -51,17 +52,24 @@ def _init_gateway_service():
     factory = sessionmaker(bind=engine)
     registry = GatewayRegistry(factory)
     gw_mod.gateway_service = gw_mod.GatewayService(registry)
+    audit_mod.audit_service = audit_mod.AuditService(factory)
     yield
     _reset_clients()
+    audit_mod.audit_service = None
     engine.dispose()
 
 
 @pytest.fixture(autouse=True)
 def _disable_auth():
-    """Reset auth state so tests start without authentication by default."""
+    """Reset auth state so tests start without authentication by default.
+
+    Sets ``_no_auth = True`` so routes that check auth get admin access
+    without requiring a DB-backed session factory.
+    """
     from shoreguard.api import auth
 
     auth.reset()
+    auth._no_auth = True  # noqa: SLF001
     yield
     auth.reset()
 

@@ -3,6 +3,9 @@
  * CSS variables, body, topbar, breadcrumbs, shared badges.
  */
 
+/* Alpine.js — prevent flash of unstyled content */
+[x-cloak] { display: none !important; }
+
 :root {
     /* Brand */
     --sg-accent: #76b900;

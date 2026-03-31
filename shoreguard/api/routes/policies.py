@@ -10,19 +10,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import get_client
+from shoreguard.api.deps import _current_gateway, get_actor, get_client
 from shoreguard.client import ShoreGuardClient
 from shoreguard.presets import get_preset as _get_preset
 from shoreguard.presets import list_presets as _list_presets
+from shoreguard.services.audit import audit_log
 from shoreguard.services.policy import PolicyService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def _actor(request: Request) -> str:
-    return getattr(request.state, "user_id", "unknown")
 
 
 def _get_policy_service(client: ShoreGuardClient = Depends(get_client)) -> PolicyService:
@@ -75,8 +72,9 @@ async def update_policy(
     logger.info(
         "Policy updated (sandbox=%s, actor=%s)",
         name,
-        _actor(request),
+        get_actor(request),
     )
+    await audit_log(request, "policy.update", "policy", name, gateway=_current_gateway.get())
     return result
 
 
@@ -119,7 +117,15 @@ async def add_network_rule(
     logger.info(
         "Network rule added (sandbox=%s, actor=%s)",
         name,
-        _actor(request),
+        get_actor(request),
+    )
+    await audit_log(
+        request,
+        "policy.network_rule.add",
+        "policy",
+        name,
+        gateway=_current_gateway.get(),
+        detail={"key": body.key},
     )
     return result
 
@@ -140,7 +146,15 @@ async def delete_network_rule(
         "Network rule deleted (sandbox=%s, key=%s, actor=%s)",
         name,
         key,
-        _actor(request),
+        get_actor(request),
+    )
+    await audit_log(
+        request,
+        "policy.network_rule.delete",
+        "policy",
+        name,
+        gateway=_current_gateway.get(),
+        detail={"key": key},
     )
     return result
 
@@ -168,7 +182,15 @@ async def add_filesystem_path(
     logger.info(
         "Filesystem path added (sandbox=%s, actor=%s)",
         name,
-        _actor(request),
+        get_actor(request),
+    )
+    await audit_log(
+        request,
+        "policy.filesystem.add",
+        "policy",
+        name,
+        gateway=_current_gateway.get(),
+        detail={"path": body.path, "access": body.access},
     )
     return result
 
@@ -188,7 +210,15 @@ async def delete_filesystem_path(
     logger.info(
         "Filesystem path deleted (sandbox=%s, actor=%s)",
         name,
-        _actor(request),
+        get_actor(request),
+    )
+    await audit_log(
+        request,
+        "policy.filesystem.delete",
+        "policy",
+        name,
+        gateway=_current_gateway.get(),
+        detail={"path": path},
     )
     return result
 
@@ -217,7 +247,14 @@ async def update_process_policy(
     logger.info(
         "Process policy updated (sandbox=%s, actor=%s)",
         name,
-        _actor(request),
+        get_actor(request),
+    )
+    await audit_log(
+        request,
+        "policy.process.update",
+        "policy",
+        name,
+        gateway=_current_gateway.get(),
     )
     return result
 
@@ -264,6 +301,14 @@ async def apply_preset(
         "Preset applied (sandbox=%s, preset=%s, actor=%s)",
         name,
         preset_name,
-        _actor(request),
+        get_actor(request),
+    )
+    await audit_log(
+        request,
+        "policy.preset.apply",
+        "policy",
+        name,
+        gateway=_current_gateway.get(),
+        detail={"preset": preset_name},
     )
     return result

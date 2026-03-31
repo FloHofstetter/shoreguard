@@ -2,18 +2,93 @@
 {% block title %}{{ sandbox_name }} — Shoreguard{% endblock %}
 
 {% block content %}
-<div id="sandbox-info"></div>
+<div x-data='sandboxDetail({{ sandbox_name|tojson }})' x-init="init()">
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading sandbox...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <!-- Content -->
+    <template x-if="!loading && !error && sandbox">
+        <div>
+            <!-- Hero Header -->
+            <div class="sandbox-hero">
+                <div class="d-flex align-items-center gap-3 mb-2">
+                    <h3 class="mb-0" x-text="sandbox.name"></h3>
+                    <span class="badge" :class="phaseBadge()" x-text="sandbox.phase"></span>
+                </div>
+                <div class="sandbox-meta">
+                    <span class="font-monospace" x-text="sandbox.image || 'Default image'"></span>
+                    <span x-text="sandbox.namespace || 'default'"></span>
+                    <span x-show="sandbox.created_at_ms" x-text="formatTimestamp(sandbox.created_at_ms)"></span>
+                    <span x-show="sandbox.gpu"><i class="bi bi-gpu-card text-info me-1"></i>GPU</span>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <a :href="gwUrl('/sandboxes/' + sandboxName + '/policy')" class="card text-decoration-none policy-overview-card sg-card-themed h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-shield-lock text-info me-2"></i>
+                                <h6 class="mb-0">Policy</h6>
+                            </div>
+                            <div class="fs-2 fw-bold mb-1" x-text="networkCount"></div>
+                            <span class="text-muted small" x-text="networkLabel() + ' \u00b7 v' + (sandbox.current_policy_version || '?')"></span>
+                        </div>
+                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                            Manage <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a :href="gwUrl('/sandboxes/' + sandboxName + '/approvals')" class="card text-decoration-none policy-overview-card sg-card-themed h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-check-circle me-2" :class="pendingCount > 0 ? 'text-warning' : 'text-success'"></i>
+                                <h6 class="mb-0">Approvals</h6>
+                            </div>
+                            <div class="fs-2 fw-bold mb-1" :class="pendingCount > 0 ? 'text-warning' : ''" x-text="pendingCount"></div>
+                            <span class="text-muted small" x-text="pendingLabel()"></span>
+                        </div>
+                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                            <span x-text="pendingCount > 0 ? 'Review' : 'View history'"></span> <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a :href="gwUrl('/sandboxes/' + sandboxName + '/logs')" class="card text-decoration-none policy-overview-card sg-card-themed h-100">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-journal-text text-muted me-2"></i>
+                                <h6 class="mb-0">Logs</h6>
+                            </div>
+                            <span class="text-muted small">Live log stream and history</span>
+                        </div>
+                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                            View <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Properties -->
+            <h6 class="text-muted mb-3">Properties</h6>
+            <dl class="row mb-0 small">
+                <dt class="col-sm-2 text-muted fw-normal">ID</dt>
+                <dd class="col-sm-10 font-monospace" x-text="sandbox.id"></dd>
+            </dl>
+        </div>
+    </template>
+</div>
 {% endblock %}
 
 {% block modals %}
 {% include "components/approval_modal.html" %}
 {% endblock %}
 
-{% block sandbox_js %}
-<script src="/static/js/websocket.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    loadSandboxInfo({{ sandbox_name|tojson }});
-});
-</script>
-{% endblock %}
+{% block sandbox_js %}{% endblock %}

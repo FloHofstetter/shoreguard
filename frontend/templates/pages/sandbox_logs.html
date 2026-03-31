@@ -6,14 +6,48 @@
 {% endblock %}
 
 {% block content %}
-<div id="logs-content"></div>
+<div x-data='logsPage({{ sandbox_name|tojson }})' x-init="init()">
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading logs...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <!-- Log viewer -->
+    <div x-show="!loading && !error" x-cloak>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="btn-group btn-group-sm" role="group">
+                <input type="checkbox" class="btn-check" id="log-filter-info" :checked="filters.info" @change="toggleLevel('info')">
+                <label class="btn btn-outline-info" for="log-filter-info">Info</label>
+                <input type="checkbox" class="btn-check" id="log-filter-warn" :checked="filters.warn" @change="toggleLevel('warn')">
+                <label class="btn btn-outline-warning" for="log-filter-warn">Warn</label>
+                <input type="checkbox" class="btn-check" id="log-filter-error" :checked="filters.error" @change="toggleLevel('error')">
+                <label class="btn btn-outline-danger" for="log-filter-error">Error</label>
+            </div>
+            <div class="d-flex gap-2">
+                <input type="text" class="form-control form-control-sm" placeholder="Filter..."
+                       style="width:180px" x-model="filters.text">
+                <button class="btn btn-outline-secondary btn-sm" @click="load()" title="Refresh">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        </div>
+        <div class="log-output" id="log-container" x-ref="logContainer">
+            <template x-for="(log, i) in filteredLogs" :key="i">
+                <div :class="logCss(log)">
+                    <span class="text-muted" x-text="formatTimestamp(log.timestamp_ms)"></span>
+                    <span class="badge text-bg-secondary me-1" x-text="log.source || 'gateway'"></span>
+                    <span x-text="log.message"></span>
+                </div>
+            </template>
+            <div x-show="filteredLogs.length === 0" class="text-muted">No logs match the current filters.</div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block sandbox_js %}
 <script src="/static/js/logs.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    loadLogsPage({{ sandbox_name|tojson }});
-});
-</script>
 {% endblock %}
