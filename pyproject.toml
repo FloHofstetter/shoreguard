@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "shoreguard"
-version = "0.7.0"
+version = "0.7.1"
 description = "Open source control plane for NVIDIA OpenShell"
 license = "Apache-2.0"
 readme = "README.md"
@@ -53,6 +53,7 @@ dev = [
 docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.6",
+    "mkdocstrings[python]>=0.29",
 ]
 
 [project.urls]

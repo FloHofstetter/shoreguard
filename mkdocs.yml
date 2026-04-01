@@ -47,6 +47,23 @@ extra:
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/shoreguard/
 
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_if_no_docstring: false
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            merge_init_into_class: true
+            show_signature_annotations: true
+            separate_signature: true
+
 markdown_extensions:
   - admonition
   - pymdownx.details
@@ -92,6 +109,12 @@ nav:
       - Configuration: reference/configuration.md
       - Policy Presets: reference/presets.md
       - Terraform: reference/terraform.md
+      - Python API:
+          - Client: reference/client.md
+          - Services: reference/services.md
+          - API Internals: reference/api-internals.md
+          - Models: reference/models.md
+          - Config & Exceptions: reference/config.md
   - Architecture: architecture.md
   - Development:
       - Contributing: development/contributing.md
