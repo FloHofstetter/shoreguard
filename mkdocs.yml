@@ -56,7 +56,7 @@ plugins:
           options:
             docstring_style: google
             show_if_no_docstring: false
-            show_source: true
+            show_source: false
             show_root_heading: true
             show_root_full_path: false
             members_order: source
