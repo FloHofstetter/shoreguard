@@ -29,9 +29,17 @@ logger = logging.getLogger(__name__)
 
 
 class ShoreGuardClient:
-    """Unified client for OpenShell gateway operations."""
+    """Unified client for OpenShell gateway operations.
 
-    def __init__(
+    Args:
+        endpoint: gRPC endpoint address (host:port).
+        ca_path: Path to CA certificate for TLS.
+        cert_path: Path to client certificate for mTLS.
+        key_path: Path to client private key for mTLS.
+        timeout: Default gRPC call timeout in seconds.
+    """
+
+    def __init__(  # noqa: D107
         self,
         endpoint: str,
         *,
@@ -40,7 +48,6 @@ class ShoreGuardClient:
         key_path: pathlib.Path | None = None,
         timeout: float = 30.0,
     ) -> None:
-        """Create a client connected to the given gRPC endpoint."""
         self._endpoint = endpoint
         self._timeout = timeout
 
@@ -72,7 +79,18 @@ class ShoreGuardClient:
         client_key: bytes | None = None,
         timeout: float = 30.0,
     ) -> ShoreGuardClient:
-        """Connect using raw certificate bytes (from DB or registry)."""
+        """Connect using raw certificate bytes (from DB or registry).
+
+        Args:
+            endpoint: gRPC endpoint address (host:port).
+            ca_cert: CA certificate bytes for TLS.
+            client_cert: Client certificate bytes for mTLS.
+            client_key: Client private key bytes for mTLS.
+            timeout: Default gRPC call timeout in seconds.
+
+        Returns:
+            ShoreGuardClient: Connected client instance.
+        """
         instance = cls.__new__(cls)
         instance._endpoint = endpoint
         instance._timeout = timeout
@@ -104,7 +122,19 @@ class ShoreGuardClient:
         cluster: str | None = None,
         timeout: float = 30.0,
     ) -> ShoreGuardClient:
-        """Connect to the active OpenShell gateway using mTLS credentials."""
+        """Connect to the active OpenShell gateway using mTLS credentials.
+
+        Args:
+            cluster: Cluster name override. Defaults to the active gateway.
+            timeout: Default gRPC call timeout in seconds.
+
+        Returns:
+            ShoreGuardClient: Connected client instance.
+
+        Raises:
+            GatewayNotConnectedError: If gateway metadata is missing or
+                invalid.
+        """
         cluster_name = cluster or _resolve_active_cluster()
         gateway_dir = openshell_config_dir() / "gateways" / cluster_name
 
@@ -136,13 +166,24 @@ class ShoreGuardClient:
         return cls(endpoint, timeout=timeout)
 
     def health(self) -> dict:
-        """Check gateway health."""
+        """Check gateway health.
+
+        Returns:
+            dict: Status and version of the gateway.
+        """
         resp = self._stub.Health(openshell_pb2.HealthRequest(), timeout=self._timeout)
         status_names = {0: "unspecified", 1: "healthy", 2: "degraded", 3: "unhealthy"}
         return {"status": status_names.get(resp.status, "unknown"), "version": resp.version}
 
     def get_cluster_inference(self, *, route_name: str = "") -> dict:
-        """Get current cluster inference configuration."""
+        """Get current cluster inference configuration.
+
+        Args:
+            route_name: Optional route name to filter by.
+
+        Returns:
+            dict: Inference configuration with provider, model, and route.
+        """
         resp = self._inference_stub.GetClusterInference(
             inference_pb2.GetClusterInferenceRequest(route_name=route_name),
             timeout=self._timeout,
@@ -155,7 +196,11 @@ class ShoreGuardClient:
         }
 
     def get_gateway_config(self) -> dict:
-        """Get the global gateway configuration (settings and revision)."""
+        """Get the global gateway configuration (settings and revision).
+
+        Returns:
+            dict: Settings map and settings revision number.
+        """
         resp = self._stub.GetGatewayConfig(
             sandbox_pb2.GetGatewayConfigRequest(), timeout=self._timeout
         )
@@ -180,7 +225,17 @@ class ShoreGuardClient:
         verify: bool = True,
         route_name: str = "",
     ) -> dict:
-        """Set cluster inference configuration."""
+        """Set cluster inference configuration.
+
+        Args:
+            provider_name: Name of the inference provider.
+            model_id: Model identifier to use.
+            verify: Whether to validate endpoints before saving.
+            route_name: Optional route name to configure.
+
+        Returns:
+            dict: Updated inference configuration with validation results.
+        """
         resp = self._inference_stub.SetClusterInference(
             inference_pb2.SetClusterInferenceRequest(
                 provider_name=provider_name,
@@ -210,15 +265,31 @@ class ShoreGuardClient:
         self._channel.close()
 
     def __enter__(self) -> ShoreGuardClient:
-        """Support usage as a context manager."""
+        """Support usage as a context manager.
+
+        Returns:
+            ShoreGuardClient: This client instance.
+        """
         return self
 
     def __exit__(self, *args: object) -> None:
-        """Close the channel on context exit."""
+        """Close the channel on context exit.
+
+        Args:
+            *args: Exception info (exc_type, exc_val, exc_tb).
+        """
         self.close()
 
 
 def _resolve_active_cluster() -> str:
+    """Resolve the active gateway cluster name from env or config file.
+
+    Returns:
+        str: Active cluster name.
+
+    Raises:
+        GatewayNotConnectedError: If no active gateway is configured.
+    """
     env_gateway = os.environ.get("OPENSHELL_GATEWAY")
     if env_gateway:
         return env_gateway

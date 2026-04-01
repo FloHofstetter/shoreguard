@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'edit' %}Edit {{ provider_name }}{% else %}New Provider{% endif %} — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/gateways">Gateways</a></li>
+    <li class="breadcrumb-item"><a href="/gateways/{{ gateway_name }}">{{ gateway_name }}</a></li>
+    <li class="breadcrumb-item"><a href="/gateways/{{ gateway_name }}/providers">Providers</a></li>
+    <li class="breadcrumb-item active">{% if mode == 'edit' %}Edit {{ provider_name }}{% else %}New Provider{% endif %}</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5" x-data='providerForm({{ mode|tojson }}, {{ provider_name|default("")|tojson }})' x-init="init()">
+        <h5 class="mb-3">
+            {% if mode == 'edit' %}
+            <i class="bi bi-pencil me-2"></i>Edit Provider
+            {% else %}
+            <i class="bi bi-key me-2"></i>New Provider
+            {% endif %}
+        </h5>
+
+        <div class="card sg-card-themed">
+            <div class="card-body">
+                <form @submit.prevent="submit()">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" x-model="form.name" placeholder="my-provider"
+                               {% if mode == 'edit' %}disabled{% endif %} required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type</label>
+                        <select class="form-select" x-model="form.type" @change="onTypeChange()"
+                                {% if mode == 'edit' %}disabled{% endif %} required>
+                            <option value="">Select type...</option>
+                            {% for ptype in provider_types %}
+                            <option value="{{ ptype.type }}">{{ ptype.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">API Key</label>
+                        <div class="input-group">
+                            <span class="input-group-text font-monospace small" x-text="credLabel"
+                                  style="background:var(--sg-card);border-color:var(--sg-border);color:var(--sg-accent);min-width:170px"></span>
+                            <input type="password" class="form-control font-monospace" x-model="form.apiKey"
+                                   :placeholder="apiKeyPlaceholder" autocomplete="off">
+                        </div>
+                        <template x-if="mode === 'edit'">
+                            <div class="form-text">Leave blank to keep the current key.</div>
+                        </template>
+                        <template x-if="mode === 'create'">
+                            <div class="form-text">The environment variable name is set automatically based on the provider type.</div>
+                        </template>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Additional Credentials <span class="text-muted small">(optional, KEY=value per line)</span></label>
+                        <textarea class="form-control font-monospace" x-model="form.creds" rows="2" placeholder="EXTRA_TOKEN=..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Config <span class="text-muted small">(optional, KEY=value per line)</span></label>
+                        <textarea class="form-control font-monospace" x-model="form.config" rows="2" placeholder="base_url=https://..."></textarea>
+                    </div>
+
+                    <!-- Status output -->
+                    <div x-show="output" x-html="output"></div>
+
+                    <div class="d-flex gap-2 mt-3">
+                        <button type="submit" class="btn btn-success" :disabled="submitting">
+                            {% if mode == 'edit' %}
+                            <i class="bi bi-check me-1"></i>Save
+                            {% else %}
+                            <i class="bi bi-plus me-1"></i>Create
+                            {% endif %}
+                        </button>
+                        <a href="/gateways/{{ gateway_name }}/providers" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/providers.js"></script>
+{% endblock %}

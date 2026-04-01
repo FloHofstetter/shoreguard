@@ -5,6 +5,59 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-04-01
+
+### Added
+
+- **pydoclint integration** — new `[tool.pydoclint]` section in `pyproject.toml`
+  with maximum strictness (Google-style, `skip-checking-short-docstrings = false`,
+  all checks enabled). Added `pydoclint >= 0.8` as dev dependency.
+- **Comprehensive Google-style docstrings** — all 1 193 pydoclint violations
+  resolved across the entire codebase. Every function, method, and class now
+  has `Args:`, `Returns:`, `Raises:`, and `Yields:` sections as appropriate.
+  Compatible with mkdocstrings for future API reference generation.
+- **Page templates** — dedicated HTML templates for approval edit, approval
+  history, gateway register, gateway roles, policy revisions, and provider
+  form pages, replacing Bootstrap modal dialogs.
+
+### Changed
+
+- **Database schema cleanup (migration 007):**
+  - Timestamp columns (`registered_at`, `last_seen`, `created_at`, `last_used`,
+    `timestamp`) converted from `String` to `DateTime(timezone=True)` across
+    `gateways`, `users`, `service_principals`, and `audit_log` tables.
+  - `gateways` table rebuilt with auto-incrementing integer primary key (`id`)
+    replacing the old `name`-based primary key.
+  - `user_gateway_roles` and `sp_gateway_roles` migrated from `gateway_name`
+    (String FK) to `gateway_id` (Integer FK) with `ON DELETE CASCADE`.
+  - `audit_log` column `gateway` renamed to `gateway_name`; new `gateway_id`
+    FK added with `ON DELETE SET NULL`.
+- **Audit service refactored** — uses `with session_factory()` context manager
+  instead of manual `session.close()` in finally blocks. Gateway ID resolution
+  via FK lookup on write.
+- Version bumped to `0.7.0`.
+
+### Fixed
+
+- **`GatewayNotConnectedError` in `_try_connect_from_config`** — exception is
+  now caught instead of propagating as an unhandled error.
+- **`request.state.role` not set from `_require_page_auth`** — page auth
+  guard now correctly stores the resolved role in request state.
+
+---
+
+## [0.6.0] — 2026-03-31
+
+### Added
+
+- **Gateway-scoped RBAC** — per-gateway role overrides for users and service
+  principals. Alembic migration 006 adds `user_gateway_roles` and
+  `sp_gateway_roles` tables.
+- **Policy diff viewer** — compare two policy revisions side-by-side.
+- **Hardened RBAC** — async correctness improvements and additional test coverage.
+
+---
+
 ## [0.5.0] — 2026-03-30
 
 ### Added

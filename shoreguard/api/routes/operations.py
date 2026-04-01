@@ -16,7 +16,17 @@ router = APIRouter()
 
 @router.get("/{operation_id}")
 async def get_operation(operation_id: str) -> dict[str, Any]:
-    """Get the current status of a long-running operation."""
+    """Get the current status of a long-running operation.
+
+    Args:
+        operation_id: The unique identifier of the operation.
+
+    Raises:
+        HTTPException: If the operation is not found.
+
+    Returns:
+        dict[str, Any]: The serialised operation state.
+    """
     op = operation_store.get(operation_id)
     if op is None:
         logger.debug("Operation not found: %s", operation_id)

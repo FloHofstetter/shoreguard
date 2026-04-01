@@ -29,7 +29,7 @@ class _ClientEntry:
 
     __slots__ = ("client", "last_attempt", "backoff")
 
-    def __init__(self) -> None:
+    def __init__(self) -> None:  # noqa: D107
         self.client: ShoreGuardClient | None = None
         self.last_attempt: float = 0.0
         self.backoff: float = 0.0
@@ -46,7 +46,15 @@ def _reset_clients() -> None:
 
 
 def _derive_status(connected: bool, last_status: str | None) -> str:
-    """Derive a single status string from connection and health state."""
+    """Derive a single status string from connection and health state.
+
+    Args:
+        connected: Whether the gateway is currently connected.
+        last_status: Last known health status from the registry.
+
+    Returns:
+        str: Derived status string.
+    """
     if connected:
         return "connected"
     if last_status in ("healthy", "degraded"):
@@ -62,15 +70,20 @@ class GatewayService:
 
     Handles gRPC client connections, backoff, health probing,
     and gateway registration/unregistration.
+
+    Args:
+        registry: Gateway registry for persistence.
+
+    Attributes:
+        registry: The underlying gateway registry.
     """
 
-    def __init__(self, registry: GatewayRegistry) -> None:
-        """Create a service backed by the given registry."""
+    def __init__(self, registry: GatewayRegistry) -> None:  # noqa: D107
         self._registry = registry
 
     @property
     def registry(self) -> GatewayRegistry:
-        """Expose registry for direct access (e.g. migration commands)."""
+        """The underlying gateway registry."""
         return self._registry
 
     # ── Connection management ─────────────────────────────────────────────
@@ -79,6 +92,16 @@ class GatewayService:
         """Return a client for the given gateway, attempting reconnect with backoff.
 
         If *name* is None, falls back to the active gateway from config.
+
+        Args:
+            name: Gateway name, or None for the active gateway.
+
+        Returns:
+            ShoreGuardClient: Connected gRPC client.
+
+        Raises:
+            GatewayNotConnectedError: If no gateway is specified or
+                connection fails.
         """
         gw_name = name or self.get_active_name()
         if not gw_name:
@@ -130,7 +153,12 @@ class GatewayService:
         return new_client
 
     def set_client(self, client: ShoreGuardClient | None, name: str | None = None) -> None:
-        """Set or clear a client for the given gateway."""
+        """Set or clear a client for the given gateway.
+
+        Args:
+            client: Client to cache, or None to clear.
+            name: Gateway name, or None for the active gateway.
+        """
         gw_name = name or self.get_active_name()
         if not gw_name:
             return
@@ -148,7 +176,11 @@ class GatewayService:
                 logger.debug("Set client for gateway '%s'", gw_name)
 
     def reset_backoff(self, name: str | None = None) -> None:
-        """Reset connection backoff for a gateway."""
+        """Reset connection backoff for a gateway.
+
+        Args:
+            name: Gateway name, or None for the active gateway.
+        """
         gw_name = name or self.get_active_name()
         with _clients_lock:
             if gw_name and gw_name in _clients:
@@ -157,7 +189,14 @@ class GatewayService:
                 logger.debug("Reset backoff for gateway '%s'", gw_name)
 
     def _try_connect(self, name: str) -> ShoreGuardClient | None:
-        """Attempt to create a client for a specific gateway."""
+        """Attempt to create a client for a specific gateway.
+
+        Args:
+            name: Gateway name.
+
+        Returns:
+            ShoreGuardClient | None: Connected client, or None on failure.
+        """
         creds = self._registry.get_credentials(name)
         if creds is not None:
             return self._try_connect_from_registry(name, creds)
@@ -166,7 +205,15 @@ class GatewayService:
     def _try_connect_from_registry(
         self, name: str, creds: dict[str, str | bytes | None]
     ) -> ShoreGuardClient | None:
-        """Connect using credentials from the database."""
+        """Connect using credentials from the database.
+
+        Args:
+            name: Gateway name.
+            creds: Credential dict from the registry.
+
+        Returns:
+            ShoreGuardClient | None: Connected client, or None on failure.
+        """
         endpoint = str(creds["endpoint"])
         host = endpoint.rsplit(":", 1)[0] if ":" in endpoint else endpoint
         if is_private_ip(host) and not os.environ.get("SHOREGUARD_LOCAL_MODE"):
@@ -207,7 +254,14 @@ class GatewayService:
             return None
 
     def _try_connect_from_config(self, name: str) -> ShoreGuardClient | None:
-        """Fallback: connect using filesystem config (local mode / backward compat)."""
+        """Fallback: connect using filesystem config (local mode / backward compat).
+
+        Args:
+            name: Gateway name.
+
+        Returns:
+            ShoreGuardClient | None: Connected client, or None on failure.
+        """
         import json
 
         try:
@@ -239,7 +293,11 @@ class GatewayService:
     # ── Gateway discovery ─────────────────────────────────────────────────
 
     def get_active_name(self) -> str | None:
-        """Read the active gateway name from config."""
+        """Read the active gateway name from config.
+
+        Returns:
+            str | None: Active gateway name, or None if not set.
+        """
         active_file = openshell_config_dir() / "active_gateway"
         try:
             name = active_file.read_text().strip()
@@ -261,7 +319,21 @@ class GatewayService:
         client_key: bytes | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Register a gateway and attempt initial connection."""
+        """Register a gateway and attempt initial connection.
+
+        Args:
+            name: Unique gateway name.
+            endpoint: Gateway endpoint address.
+            scheme: Connection scheme (e.g. "https").
+            auth_mode: Authentication mode (e.g. "mtls").
+            ca_cert: CA certificate bytes for TLS.
+            client_cert: Client certificate bytes for mTLS.
+            client_key: Client private key bytes for mTLS.
+            metadata: Optional metadata dict.
+
+        Returns:
+            dict[str, Any]: Gateway record with connection status.
+        """
         logger.info("Registering gateway '%s' (endpoint=%s)", name, endpoint)
         record = self._registry.register(
             name,
@@ -294,13 +366,30 @@ class GatewayService:
         return record
 
     def unregister(self, name: str) -> bool:
-        """Unregister a gateway and close its connection."""
+        """Unregister a gateway and close its connection.
+
+        Args:
+            name: Gateway name.
+
+        Returns:
+            bool: True if the gateway existed and was removed.
+        """
         logger.info("Unregistering gateway '%s'", name)
         self.set_client(None, name=name)
         return self._registry.unregister(name)
 
     def test_connection(self, name: str) -> dict[str, Any]:
-        """Explicitly test connectivity to a registered gateway."""
+        """Explicitly test connectivity to a registered gateway.
+
+        Args:
+            name: Gateway name.
+
+        Returns:
+            dict[str, Any]: Connection test result.
+
+        Raises:
+            NotFoundError: If the gateway is not registered.
+        """
         record = self._registry.get(name)
         if record is None:
             raise NotFoundError(f"Gateway '{name}' not registered")
@@ -326,6 +415,9 @@ class GatewayService:
         Uses the cached client state instead of live health probes to avoid
         N+1 blocking gRPC calls.  The background health monitor keeps
         ``last_status`` up-to-date.
+
+        Returns:
+            list[dict[str, Any]]: Gateway records with connection status.
         """
         gateways = self._registry.list_all()
         active_name = self.get_active_name()
@@ -343,7 +435,14 @@ class GatewayService:
         return gateways
 
     def get_info(self, name: str | None = None) -> dict[str, Any]:
-        """Get detailed info for a gateway (active if name is None)."""
+        """Get detailed info for a gateway (active if name is None).
+
+        Args:
+            name: Gateway name, or None for the active gateway.
+
+        Returns:
+            dict[str, Any]: Detailed gateway information.
+        """
         gw_name = name or self.get_active_name()
         if not gw_name:
             return {"configured": False, "error": "No active gateway configured"}
@@ -375,7 +474,11 @@ class GatewayService:
         return record
 
     def health(self) -> dict[str, Any]:
-        """Combined health + gateway info in one call."""
+        """Combined health + gateway info in one call.
+
+        Returns:
+            dict[str, Any]: Health and connection status.
+        """
         active_name = self.get_active_name()
         result: dict[str, Any] = {
             "connected": False,
@@ -394,7 +497,11 @@ class GatewayService:
         return result
 
     def get_config(self) -> dict[str, Any]:
-        """Fetch the global gateway configuration via gRPC."""
+        """Fetch the global gateway configuration via gRPC.
+
+        Returns:
+            dict[str, Any]: Gateway configuration.
+        """
         client = self.get_client()
         return client.get_gateway_config()
 
@@ -418,14 +525,24 @@ class GatewayService:
                 logger.debug("Health probe failed for '%s': %s", name, e)
                 status = "unreachable"
             try:
-                self._registry.update_health(name, status, datetime.now(UTC).isoformat())
+                self._registry.update_health(name, status, datetime.now(UTC))
             except Exception:
                 logger.warning("Failed to update health for '%s'", name, exc_info=True)
 
     # ── Select ────────────────────────────────────────────────────────────
 
     def select(self, name: str) -> dict[str, Any]:
-        """Set a gateway as active and attempt connection."""
+        """Set a gateway as active and attempt connection.
+
+        Args:
+            name: Gateway name to select.
+
+        Returns:
+            dict[str, Any]: Selection result with connection status.
+
+        Raises:
+            NotFoundError: If the gateway is not registered.
+        """
         record = self._registry.get(name)
         if record is None:
             raise NotFoundError(f"Gateway '{name}' not registered")
@@ -441,7 +558,14 @@ class GatewayService:
         return {"success": True, "connected": connected}
 
     def get_cached_client(self, name: str) -> ShoreGuardClient | None:
-        """Return the cached client for a gateway, or None if not connected."""
+        """Return the cached client for a gateway, or None if not connected.
+
+        Args:
+            name: Gateway name.
+
+        Returns:
+            ShoreGuardClient | None: Cached client, or None.
+        """
         with _clients_lock:
             entry = _clients.get(name)
             if entry is not None and entry.client is not None:
@@ -451,7 +575,14 @@ class GatewayService:
     # ── Internal helpers ──────────────────────────────────────────────────
 
     def write_active_gateway(self, name: str) -> None:
-        """Switch the active gateway file (for OpenShell CLI compat)."""
+        """Switch the active gateway file (for OpenShell CLI compat).
+
+        Args:
+            name: Gateway name to set as active.
+
+        Raises:
+            ShoreGuardError: If the active gateway file cannot be written.
+        """
         active_file = openshell_config_dir() / "active_gateway"
         try:
             active_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

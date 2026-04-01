@@ -383,7 +383,7 @@ class TestInviteTokenExpiry:
         try:
             user = session.query(User).filter(User.email == "invited@test.com").first()
             old_time = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=8)
-            user.created_at = old_time.isoformat()
+            user.created_at = old_time
             session.commit()
         finally:
             session.close()

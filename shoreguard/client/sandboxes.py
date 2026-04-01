@@ -22,7 +22,14 @@ PHASE_NAMES = {
 
 
 def _sandbox_to_dict(sb: datamodel_pb2.Sandbox) -> dict[str, Any]:
-    """Convert a protobuf Sandbox to a plain dict."""
+    """Convert a protobuf Sandbox to a plain dict.
+
+    Args:
+        sb: Sandbox protobuf message.
+
+    Returns:
+        dict[str, Any]: Sandbox data with id, name, phase, and spec fields.
+    """
     return {
         "id": sb.id,
         "name": sb.name,
@@ -37,15 +44,27 @@ def _sandbox_to_dict(sb: datamodel_pb2.Sandbox) -> dict[str, Any]:
 
 
 class SandboxManager:
-    """Sandbox CRUD, execution, and lifecycle operations."""
+    """Sandbox CRUD, execution, and lifecycle operations.
 
-    def __init__(self, stub: openshell_pb2_grpc.OpenShellStub, *, timeout: float = 30.0) -> None:
-        """Initialize with an OpenShell gRPC stub."""
+    Args:
+        stub: OpenShell gRPC stub.
+        timeout: gRPC call timeout in seconds.
+    """
+
+    def __init__(self, stub: openshell_pb2_grpc.OpenShellStub, *, timeout: float = 30.0) -> None:  # noqa: D107
         self._stub = stub
         self._timeout = timeout
 
     def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
-        """List all sandboxes."""
+        """List all sandboxes.
+
+        Args:
+            limit: Maximum number of sandboxes to return.
+            offset: Pagination offset.
+
+        Returns:
+            list[dict[str, Any]]: List of sandbox dicts.
+        """
         resp = self._stub.ListSandboxes(
             openshell_pb2.ListSandboxesRequest(limit=limit, offset=offset),
             timeout=self._timeout,
@@ -53,7 +72,14 @@ class SandboxManager:
         return [_sandbox_to_dict(sb) for sb in resp.sandboxes]
 
     def get(self, name: str) -> dict[str, Any]:
-        """Get a sandbox by name."""
+        """Get a sandbox by name.
+
+        Args:
+            name: Sandbox name.
+
+        Returns:
+            dict[str, Any]: Sandbox data dict.
+        """
         resp = self._stub.GetSandbox(
             openshell_pb2.GetSandboxRequest(name=name), timeout=self._timeout
         )
@@ -69,7 +95,19 @@ class SandboxManager:
         gpu: bool = False,
         environment: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """Create a new sandbox."""
+        """Create a new sandbox.
+
+        Args:
+            name: Sandbox name.
+            image: Container image to use.
+            policy: Optional sandbox policy dict.
+            providers: Optional list of provider names.
+            gpu: Whether to request GPU resources.
+            environment: Optional environment variable key-value pairs.
+
+        Returns:
+            dict[str, Any]: Created sandbox data dict.
+        """
         spec = datamodel_pb2.SandboxSpec(gpu=gpu)
         if image:
             spec.template.CopyFrom(datamodel_pb2.SandboxTemplate(image=image))
@@ -87,14 +125,33 @@ class SandboxManager:
         return _sandbox_to_dict(resp.sandbox)
 
     def delete(self, name: str) -> bool:
-        """Delete a sandbox by name."""
+        """Delete a sandbox by name.
+
+        Args:
+            name: Sandbox name.
+
+        Returns:
+            bool: True if the sandbox was deleted.
+        """
         resp = self._stub.DeleteSandbox(
             openshell_pb2.DeleteSandboxRequest(name=name), timeout=self._timeout
         )
         return bool(resp.deleted)
 
     def wait_ready(self, name: str, *, timeout_seconds: float = 300.0) -> dict[str, Any]:
-        """Block until a sandbox reaches READY phase."""
+        """Block until a sandbox reaches READY phase.
+
+        Args:
+            name: Sandbox name.
+            timeout_seconds: Maximum time to wait in seconds.
+
+        Returns:
+            dict[str, Any]: Sandbox data dict once ready.
+
+        Raises:
+            SandboxError: If the sandbox enters an error phase.
+            TimeoutError: If the sandbox is not ready within the timeout.
+        """
         deadline = time.time() + timeout_seconds
         while time.time() < deadline:
             sb = self.get(name)
@@ -114,7 +171,19 @@ class SandboxManager:
         env: dict[str, str] | None = None,
         timeout_seconds: int = 0,
     ) -> dict[str, Any]:
-        """Execute a command in a sandbox and return the result."""
+        """Execute a command in a sandbox and return the result.
+
+        Args:
+            sandbox_id: Sandbox identifier.
+            command: Command and arguments to execute.
+            workdir: Working directory inside the sandbox.
+            env: Optional environment variables for the command.
+            timeout_seconds: Command timeout in seconds (0 for default).
+
+        Returns:
+            dict[str, Any]: Execution result with exit_code, stdout,
+                and stderr.
+        """
         request = openshell_pb2.ExecSandboxRequest(
             sandbox_id=sandbox_id,
             command=command,
@@ -145,7 +214,15 @@ class SandboxManager:
         }
 
     def create_ssh_session(self, sandbox_id: str) -> dict[str, Any]:
-        """Create a temporary SSH session for shell access to a sandbox."""
+        """Create a temporary SSH session for shell access to a sandbox.
+
+        Args:
+            sandbox_id: Sandbox identifier.
+
+        Returns:
+            dict[str, Any]: SSH session details including token and
+                gateway connection info.
+        """
         resp = self._stub.CreateSshSession(
             openshell_pb2.CreateSshSessionRequest(sandbox_id=sandbox_id),
             timeout=self._timeout,
@@ -162,7 +239,14 @@ class SandboxManager:
         }
 
     def revoke_ssh_session(self, token: str) -> bool:
-        """Revoke an active SSH session."""
+        """Revoke an active SSH session.
+
+        Args:
+            token: Session token to revoke.
+
+        Returns:
+            bool: True if the session was revoked.
+        """
         resp = self._stub.RevokeSshSession(
             openshell_pb2.RevokeSshSessionRequest(token=token),
             timeout=self._timeout,
@@ -178,7 +262,18 @@ class SandboxManager:
         sources: list[str] | None = None,
         min_level: str = "",
     ) -> list[dict[str, Any]]:
-        """Fetch recent sandbox logs."""
+        """Fetch recent sandbox logs.
+
+        Args:
+            sandbox_id: Sandbox identifier.
+            lines: Maximum number of log lines to return.
+            since_ms: Only return logs after this timestamp (ms).
+            sources: Optional list of log sources to filter by.
+            min_level: Minimum log level to include.
+
+        Returns:
+            list[dict[str, Any]]: List of log entry dicts.
+        """
         resp = self._stub.GetSandboxLogs(
             openshell_pb2.GetSandboxLogsRequest(
                 sandbox_id=sandbox_id,
@@ -210,7 +305,18 @@ class SandboxManager:
         follow_events: bool = True,
         log_tail_lines: int = 50,
     ) -> Iterator[dict[str, Any]]:
-        """Stream live sandbox events (status, logs, platform events, draft updates)."""
+        """Stream live sandbox events (status, logs, platform events, draft updates).
+
+        Args:
+            sandbox_id: Sandbox identifier.
+            follow_status: Subscribe to status changes.
+            follow_logs: Subscribe to log output.
+            follow_events: Subscribe to platform events.
+            log_tail_lines: Number of existing log lines to replay.
+
+        Yields:
+            dict[str, Any]: Event dict with ``type`` and ``data`` keys.
+        """
         stream = self._stub.WatchSandbox(
             openshell_pb2.WatchSandboxRequest(
                 id=sandbox_id,

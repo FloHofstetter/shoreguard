@@ -13,7 +13,14 @@ _GRPC_FRIENDLY: dict[grpc.StatusCode, str] = {
 
 
 def friendly_grpc_error(exc: Exception) -> str:
-    """Return a user-friendly message for gRPC errors, or str(exc) for others."""
+    """Return a user-friendly message for gRPC errors, or str(exc) for others.
+
+    Args:
+        exc: The exception to translate.
+
+    Returns:
+        str: A human-readable error string suitable for UI display.
+    """
     if isinstance(exc, grpc.RpcError):
         code = exc.code() if hasattr(exc, "code") else None
         if code is not None:

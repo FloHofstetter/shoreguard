@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -33,7 +34,17 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan — initialise DB, services, and background tasks."""
+    """Application lifespan — initialise DB, services, and background tasks.
+
+    Args:
+        app: The FastAPI application instance.
+
+    Yields:
+        None: Control to the application while it is running.
+
+    Raises:
+        Exception: If database initialisation fails.
+    """
     import os
 
     from sqlalchemy.orm import sessionmaker as sa_sessionmaker
@@ -83,6 +94,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # ── Background tasks ─────────────────────────────────────────────────
     async def _cleanup_operations() -> None:
+        """Periodically purge expired operations and audit entries."""
         from shoreguard.services.operations import operation_store
 
         consecutive_failures = 0
@@ -101,6 +113,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 )
 
     async def _health_monitor() -> None:
+        """Periodically check health of all registered gateways."""
         consecutive_failures = 0
         while True:
             await asyncio.sleep(30)
@@ -154,8 +167,18 @@ gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
 
 
 @gw_api.get("/health")
-async def gw_health(gw: str, client: ShoreGuardClient = Depends(get_client)):
-    """Return gateway health status."""
+async def gw_health(
+    gw: str, client: ShoreGuardClient = Depends(get_client)
+) -> dict[str, Any] | JSONResponse:
+    """Return gateway health status.
+
+    Args:
+        gw: The gateway name.
+        client: The ShoreGuardClient for this gateway.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Health info or 503 if disconnected.
+    """
     try:
         return await asyncio.to_thread(client.health)
     except GatewayNotConnectedError:
@@ -166,7 +189,13 @@ async def gw_health(gw: str, client: ShoreGuardClient = Depends(get_client)):
 
 
 class SetInferenceRequest(BaseModel):
-    """Request body for setting cluster inference configuration."""
+    """Request body for setting cluster inference configuration.
+
+    Attributes:
+        provider_name: Name of the inference provider.
+        model_id: Identifier of the model to use.
+        verify: Whether to verify the configuration before applying.
+    """
 
     provider_name: str
     model_id: str
@@ -174,8 +203,16 @@ class SetInferenceRequest(BaseModel):
 
 
 @gw_api.get("/inference")
-async def get_inference(gw: str, client: ShoreGuardClient = Depends(get_client)):
-    """Return current cluster inference configuration."""
+async def get_inference(gw: str, client: ShoreGuardClient = Depends(get_client)) -> dict[str, Any]:
+    """Return current cluster inference configuration.
+
+    Args:
+        gw: The gateway name.
+        client: The ShoreGuardClient for this gateway.
+
+    Returns:
+        dict[str, Any]: Current inference provider and model settings.
+    """
     return await asyncio.to_thread(client.get_cluster_inference)
 
 
@@ -185,8 +222,18 @@ async def set_inference(
     body: SetInferenceRequest,
     request: Request,
     client: ShoreGuardClient = Depends(get_client),
-):
-    """Update cluster inference configuration."""
+) -> dict[str, Any]:
+    """Update cluster inference configuration.
+
+    Args:
+        gw: The gateway name.
+        body: The inference configuration to apply.
+        request: The incoming HTTP request (for audit logging).
+        client: The ShoreGuardClient for this gateway.
+
+    Returns:
+        dict[str, Any]: Updated inference configuration.
+    """
     actor = getattr(request.state, "user_id", "unknown")
     logger.info(
         "Inference config updated (gateway=%s, provider=%s, model=%s, actor=%s)",

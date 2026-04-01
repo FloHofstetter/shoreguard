@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine, event
@@ -58,7 +60,12 @@ def db():
 def _with_gateway(db):
     """Create a test gateway in the DB."""
     session = db()
-    gw = Gateway(name=GW_NAME, endpoint="10.0.0.1:8443", scheme="https", registered_at="2026-01-01")
+    gw = Gateway(
+        name=GW_NAME,
+        endpoint="10.0.0.1:8443",
+        scheme="https",
+        registered_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
     session.add(gw)
     session.commit()
     session.close()

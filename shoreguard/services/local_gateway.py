@@ -26,16 +26,23 @@ logger = logging.getLogger(__name__)
 
 
 class LocalGatewayManager:
-    """Docker and openshell CLI lifecycle for locally-managed gateways."""
+    """Docker and openshell CLI lifecycle for locally-managed gateways.
 
-    def __init__(self, gateway_service: GatewayService) -> None:
-        """Create a local manager wrapping the given gateway service."""
+    Args:
+        gateway_service: Gateway service for connection management.
+    """
+
+    def __init__(self, gateway_service: GatewayService) -> None:  # noqa: D107
         self._gw = gateway_service
 
     # ── Diagnostics ───────────────────────────────────────────────────────
 
     def diagnostics(self) -> dict[str, Any]:
-        """Check Docker availability, daemon status, and permissions."""
+        """Check Docker availability, daemon status, and permissions.
+
+        Returns:
+            dict[str, Any]: Diagnostic information about Docker and openshell.
+        """
         result: dict[str, Any] = {
             "docker_installed": False,
             "docker_daemon_running": False,
@@ -107,7 +114,14 @@ class LocalGatewayManager:
     # ── Lifecycle actions ─────────────────────────────────────────────────
 
     def start(self, name: str | None = None) -> dict[str, Any]:
-        """Start a gateway by name (or active if None)."""
+        """Start a gateway by name (or active if None).
+
+        Args:
+            name: Gateway name, or None for the active gateway.
+
+        Returns:
+            dict[str, Any]: Result with success status and output or error.
+        """
         gw_name = name or self._gw.get_active_name()
         if not gw_name:
             return {"success": False, "error": "No active gateway configured"}
@@ -193,7 +207,14 @@ class LocalGatewayManager:
         return result
 
     def stop(self, name: str | None = None) -> dict[str, Any]:
-        """Stop a gateway by name (or active if None)."""
+        """Stop a gateway by name (or active if None).
+
+        Args:
+            name: Gateway name, or None for the active gateway.
+
+        Returns:
+            dict[str, Any]: Result with success status and output or error.
+        """
         gw_name = name or self._gw.get_active_name()
         if not gw_name:
             return {"success": False, "error": "No active gateway configured"}
@@ -213,7 +234,14 @@ class LocalGatewayManager:
         return result
 
     def restart(self, name: str | None = None) -> dict[str, Any]:
-        """Restart a gateway (stop + start)."""
+        """Restart a gateway (stop + start).
+
+        Args:
+            name: Gateway name, or None for the active gateway.
+
+        Returns:
+            dict[str, Any]: Result from the start step.
+        """
         gw_name = name or self._gw.get_active_name()
         if not gw_name:
             return {"success": False, "error": "No active gateway configured"}
@@ -229,7 +257,17 @@ class LocalGatewayManager:
         remote_host: str | None = None,
         gpu: bool = False,
     ) -> dict[str, Any]:
-        """Create a new gateway via openshell CLI."""
+        """Create a new gateway via openshell CLI.
+
+        Args:
+            name: Gateway name.
+            port: Port number, or None for auto-selection.
+            remote_host: Remote host for the gateway.
+            gpu: Whether to enable GPU support.
+
+        Returns:
+            dict[str, Any]: Gateway info or error result.
+        """
         if not shutil.which("openshell"):
             logger.error("Cannot create gateway '%s': openshell CLI not found", name)
             return {"success": False, "error": "openshell CLI not found"}
@@ -277,7 +315,15 @@ class LocalGatewayManager:
         return result
 
     def destroy(self, name: str, *, force: bool = False) -> dict[str, Any]:
-        """Destroy a gateway and remove its configuration."""
+        """Destroy a gateway and remove its configuration.
+
+        Args:
+            name: Gateway name.
+            force: Force destruction even if resources still exist.
+
+        Returns:
+            dict[str, Any]: Result with success status.
+        """
         if not shutil.which("openshell"):
             logger.error("Cannot destroy gateway '%s': openshell CLI not found", name)
             return {"success": False, "error": "openshell CLI not found"}
@@ -351,9 +397,25 @@ class LocalGatewayManager:
     # ── Docker helpers ────────────────────────────────────────────────────
 
     def _get_container_name(self, gateway_name: str) -> str:
+        """Return the Docker container name for a gateway.
+
+        Args:
+            gateway_name: Gateway name.
+
+        Returns:
+            str: Container name.
+        """
         return f"openshell-cluster-{gateway_name}"
 
     def _get_container_status(self, gateway_name: str) -> str | None:
+        """Get the Docker container status for a gateway.
+
+        Args:
+            gateway_name: Gateway name.
+
+        Returns:
+            str | None: Container status string, or None if not found.
+        """
         container = self._get_container_name(gateway_name)
         try:
             proc = subprocess.run(
@@ -369,6 +431,14 @@ class LocalGatewayManager:
         return None
 
     def _docker_start_container(self, gateway_name: str) -> dict[str, Any]:
+        """Start a Docker container for a gateway.
+
+        Args:
+            gateway_name: Gateway name.
+
+        Returns:
+            dict[str, Any]: Result with success status.
+        """
         container = self._get_container_name(gateway_name)
         try:
             proc = subprocess.run(
@@ -391,6 +461,14 @@ class LocalGatewayManager:
             return {"success": False, "error": str(e)}
 
     def _docker_stop_container(self, gateway_name: str) -> dict[str, Any]:
+        """Stop a Docker container for a gateway.
+
+        Args:
+            gateway_name: Gateway name.
+
+        Returns:
+            dict[str, Any]: Result with success status.
+        """
         container = self._get_container_name(gateway_name)
         try:
             proc = subprocess.run(
@@ -413,6 +491,11 @@ class LocalGatewayManager:
             return {"success": False, "error": str(e)}
 
     def _check_docker_daemon(self) -> bool:
+        """Check if the Docker daemon is running and accessible.
+
+        Returns:
+            bool: True if the daemon is running.
+        """
         try:
             proc = subprocess.run(
                 ["docker", "info", "--format", "{{.ServerVersion}}"],
@@ -428,6 +511,14 @@ class LocalGatewayManager:
     # ── Port management ───────────────────────────────────────────────────
 
     def _get_port_for_gateway(self, gateway_name: str) -> int | None:
+        """Read the configured port for a gateway from its metadata file.
+
+        Args:
+            gateway_name: Gateway name.
+
+        Returns:
+            int | None: Port number, or None if not found.
+        """
         metadata_file = openshell_config_dir() / "gateways" / gateway_name / "metadata.json"
         if not metadata_file.exists():
             return None
@@ -439,6 +530,15 @@ class LocalGatewayManager:
             return None
 
     def _find_port_blocker(self, gateway_name: str, port: int) -> str | None:
+        """Find another running gateway that is using the given port.
+
+        Args:
+            gateway_name: Gateway name to exclude from the check.
+            port: Port number to check.
+
+        Returns:
+            str | None: Name of the blocking gateway, or None.
+        """
         gateways_dir = openshell_config_dir() / "gateways"
         if not gateways_dir.exists():
             return None
@@ -453,6 +553,11 @@ class LocalGatewayManager:
         return None
 
     def _get_used_ports(self) -> set[int]:
+        """Collect all ports configured across all gateways.
+
+        Returns:
+            set[int]: Set of port numbers in use.
+        """
         gateways_dir = openshell_config_dir() / "gateways"
         if not gateways_dir.exists():
             return set()
@@ -466,6 +571,17 @@ class LocalGatewayManager:
         return ports
 
     def _next_free_port(self, start: int = 8080) -> int:
+        """Find the next free port starting from the given number.
+
+        Args:
+            start: Port number to start searching from.
+
+        Returns:
+            int: First available port number.
+
+        Raises:
+            RuntimeError: If no free port is found in valid range.
+        """
         used = self._get_used_ports()
         port = start
         while port in used:
@@ -477,6 +593,15 @@ class LocalGatewayManager:
     # ── OpenShell CLI ─────────────────────────────────────────────────────
 
     def _run_openshell(self, args: list[str], *, timeout: int = 30) -> dict[str, Any]:
+        """Run an openshell CLI command and return the result.
+
+        Args:
+            args: Command arguments (without the "openshell" prefix).
+            timeout: Command timeout in seconds.
+
+        Returns:
+            dict[str, Any]: Result with success status and output or error.
+        """
         try:
             proc = subprocess.run(
                 ["openshell", *args],
@@ -505,6 +630,14 @@ class LocalGatewayManager:
     # ── Internal helpers ──────────────────────────────────────────────────
 
     def _get_client_if_connected(self, name: str) -> ShoreGuardClient | None:
+        """Return a connected client for the gateway, or None.
+
+        Args:
+            name: Gateway name.
+
+        Returns:
+            ShoreGuardClient | None: Connected client, or None.
+        """
         cached = self._gw.get_cached_client(name)
         if cached is not None:
             return cached
@@ -521,7 +654,14 @@ class LocalGatewayManager:
         return None
 
     def _list_resources_safe(self, list_fn: Callable[[], list[dict]]) -> list[dict] | None:
-        """Return resource list, or None if the listing call failed."""
+        """Return resource list, or None if the listing call failed.
+
+        Args:
+            list_fn: Callable that returns a list of resource dicts.
+
+        Returns:
+            list[dict] | None: Resource list, or None on failure.
+        """
         try:
             return list_fn()
         except (grpc.RpcError, OSError, ConnectionError):

@@ -41,7 +41,14 @@ _DOMAIN_STATUS_MAP: dict[type, int] = {
 
 
 def _detect_feature_from_path(path: str) -> str:
-    """Extract a human-readable feature name from the request URL path."""
+    """Extract a human-readable feature name from the request URL path.
+
+    Args:
+        path: The URL path of the incoming request.
+
+    Returns:
+        str: A human-readable feature name.
+    """
     if "/policy" in path:
         return "Sandbox policy management"
     if "/approvals" in path:
@@ -52,11 +59,23 @@ def _detect_feature_from_path(path: str) -> str:
 
 
 def register_error_handlers(app: FastAPI) -> None:
-    """Register all exception handlers on the FastAPI app."""
+    """Register all exception handlers on the FastAPI app.
+
+    Args:
+        app: The FastAPI application instance.
+    """
 
     @app.exception_handler(ShoreGuardError)
-    async def shoreguard_error_handler(request: Request, exc: ShoreGuardError):
-        """Return the appropriate HTTP status for domain errors."""
+    async def shoreguard_error_handler(request: Request, exc: ShoreGuardError) -> JSONResponse:
+        """Return the appropriate HTTP status for domain errors.
+
+        Args:
+            request: The incoming HTTP request.
+            exc: The domain-level exception that was raised.
+
+        Returns:
+            JSONResponse: Error response with status code and detail.
+        """
         status = _DOMAIN_STATUS_MAP.get(type(exc), 500)
         if status >= 500:
             logger.error("Unhandled domain error: %s (status=%d)", exc, status, exc_info=True)
@@ -65,14 +84,30 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=status, content={"detail": str(exc)})
 
     @app.exception_handler(TimeoutError)
-    async def timeout_error_handler(request: Request, exc: TimeoutError):
-        """Return 504 for timeout errors."""
+    async def timeout_error_handler(request: Request, exc: TimeoutError) -> JSONResponse:
+        """Return 504 for timeout errors.
+
+        Args:
+            request: The incoming HTTP request.
+            exc: The timeout exception that was raised.
+
+        Returns:
+            JSONResponse: 504 error response.
+        """
         logger.warning("Timeout on %s: %s", request.url.path, exc)
         return JSONResponse(status_code=504, content={"detail": str(exc)})
 
     @app.exception_handler(grpc.RpcError)
-    async def grpc_exception_handler(request: Request, exc: grpc.RpcError):
-        """Catch gRPC errors and return proper HTTP responses."""
+    async def grpc_exception_handler(request: Request, exc: grpc.RpcError) -> JSONResponse:
+        """Catch gRPC errors and return proper HTTP responses.
+
+        Args:
+            request: The incoming HTTP request.
+            exc: The gRPC error that was raised.
+
+        Returns:
+            JSONResponse: Mapped HTTP error response.
+        """
         code = exc.code() if hasattr(exc, "code") else None
         logger.warning(
             "gRPC error on %s (code=%s): %s",
@@ -95,7 +130,15 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=http_status, content={"detail": detail})
 
     @app.exception_handler(Exception)
-    async def generic_exception_handler(request: Request, exc: Exception):
-        """Catch-all for unhandled exceptions — return 500 without leaking internals."""
+    async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Catch-all for unhandled exceptions — return 500 without leaking internals.
+
+        Args:
+            request: The incoming HTTP request.
+            exc: The unhandled exception.
+
+        Returns:
+            JSONResponse: Generic 500 error response.
+        """
         logger.error("Unhandled exception on %s: %s", request.url.path, exc, exc_info=True)
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})

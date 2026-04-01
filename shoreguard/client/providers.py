@@ -8,7 +8,15 @@ from ._proto import datamodel_pb2, openshell_pb2, openshell_pb2_grpc
 
 
 def _provider_to_dict(provider: datamodel_pb2.Provider) -> dict[str, Any]:
-    """Convert a Provider protobuf to a plain dict."""
+    """Convert a Provider protobuf to a plain dict.
+
+    Args:
+        provider: Provider protobuf message.
+
+    Returns:
+        dict[str, Any]: Provider data with id, name, type, credentials,
+            and config.
+    """
     return {
         "id": provider.id,
         "name": provider.name,
@@ -19,15 +27,27 @@ def _provider_to_dict(provider: datamodel_pb2.Provider) -> dict[str, Any]:
 
 
 class ProviderManager:
-    """Provider CRUD operations against OpenShell gateway."""
+    """Provider CRUD operations against OpenShell gateway.
 
-    def __init__(self, stub: openshell_pb2_grpc.OpenShellStub, *, timeout: float = 30.0) -> None:
-        """Initialize with an OpenShell gRPC stub."""
+    Args:
+        stub: OpenShell gRPC stub.
+        timeout: gRPC call timeout in seconds.
+    """
+
+    def __init__(self, stub: openshell_pb2_grpc.OpenShellStub, *, timeout: float = 30.0) -> None:  # noqa: D107
         self._stub = stub
         self._timeout = timeout
 
     def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
-        """List all providers."""
+        """List all providers.
+
+        Args:
+            limit: Maximum number of providers to return.
+            offset: Pagination offset.
+
+        Returns:
+            list[dict[str, Any]]: List of provider dicts.
+        """
         resp = self._stub.ListProviders(
             openshell_pb2.ListProvidersRequest(limit=limit, offset=offset),
             timeout=self._timeout,
@@ -35,7 +55,14 @@ class ProviderManager:
         return [_provider_to_dict(p) for p in resp.providers]
 
     def get(self, name: str) -> dict[str, Any]:
-        """Get a provider by name."""
+        """Get a provider by name.
+
+        Args:
+            name: Provider name.
+
+        Returns:
+            dict[str, Any]: Provider data dict.
+        """
         resp = self._stub.GetProvider(
             openshell_pb2.GetProviderRequest(name=name), timeout=self._timeout
         )
@@ -49,7 +76,17 @@ class ProviderManager:
         credentials: dict[str, str] | None = None,
         config: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """Create a new provider."""
+        """Create a new provider.
+
+        Args:
+            name: Provider name.
+            provider_type: Provider type identifier.
+            credentials: Provider credential key-value pairs.
+            config: Provider configuration key-value pairs.
+
+        Returns:
+            dict[str, Any]: Created provider data dict.
+        """
         provider = datamodel_pb2.Provider(
             name=name,
             type=provider_type,
@@ -70,7 +107,17 @@ class ProviderManager:
         credentials: dict[str, str] | None = None,
         config: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """Update an existing provider."""
+        """Update an existing provider.
+
+        Args:
+            name: Provider name.
+            provider_type: Provider type identifier.
+            credentials: Provider credential key-value pairs.
+            config: Provider configuration key-value pairs.
+
+        Returns:
+            dict[str, Any]: Updated provider data dict.
+        """
         provider = datamodel_pb2.Provider(
             name=name,
             type=provider_type,
@@ -84,7 +131,14 @@ class ProviderManager:
         return _provider_to_dict(resp.provider)
 
     def delete(self, name: str) -> bool:
-        """Delete a provider by name."""
+        """Delete a provider by name.
+
+        Args:
+            name: Provider name.
+
+        Returns:
+            bool: True if the provider was deleted.
+        """
         resp = self._stub.DeleteProvider(
             openshell_pb2.DeleteProviderRequest(name=name), timeout=self._timeout
         )

@@ -21,11 +21,27 @@ router = APIRouter()
 
 
 def _get_provider_service(client: ShoreGuardClient = Depends(get_client)) -> ProviderService:
+    """Build a ProviderService from the injected client.
+
+    Args:
+        client: gRPC client for the active gateway.
+
+    Returns:
+        ProviderService: Service instance bound to the client.
+    """
     return ProviderService(client)
 
 
 class CreateProviderRequest(BaseModel):
-    """Body for creating a new provider."""
+    """Body for creating a new provider.
+
+    Attributes:
+        name: Provider name.
+        type: Provider type identifier.
+        api_key: Optional API key for the provider.
+        credentials: Extra credential key-value pairs.
+        config: Additional configuration key-value pairs.
+    """
 
     name: str
     type: str
@@ -35,7 +51,13 @@ class CreateProviderRequest(BaseModel):
 
 
 class UpdateProviderRequest(BaseModel):
-    """Body for updating a provider."""
+    """Body for updating a provider.
+
+    Attributes:
+        type: Provider type identifier.
+        credentials: Credential key-value pairs to update.
+        config: Configuration key-value pairs to update.
+    """
 
     type: str = ""
     credentials: dict[str, str] = {}
@@ -44,19 +66,31 @@ class UpdateProviderRequest(BaseModel):
 
 @router.get("/types")
 async def list_provider_types() -> list[dict[str, str]]:
-    """List known provider types with metadata (label, icon, cred_key)."""
+    """List known provider types with metadata (label, icon, cred_key).
+
+    Returns:
+        list[dict[str, str]]: Provider type definitions.
+    """
     return ProviderService.list_known_types()
 
 
 @router.get("/inference-providers")
 async def list_inference_providers() -> list[dict[str, str]]:
-    """List known inference provider options."""
+    """List known inference provider options.
+
+    Returns:
+        list[dict[str, str]]: Inference provider definitions.
+    """
     return ProviderService.list_inference_providers()
 
 
 @router.get("/community-sandboxes")
 async def list_community_sandboxes() -> list[dict[str, Any]]:
-    """List community sandbox templates from openshell.yaml."""
+    """List community sandbox templates from openshell.yaml.
+
+    Returns:
+        list[dict[str, Any]]: Community sandbox template definitions.
+    """
     return ProviderService.list_community_sandboxes()
 
 
@@ -66,7 +100,16 @@ async def list_providers(
     offset: int = Query(0, ge=0),
     svc: ProviderService = Depends(_get_provider_service),
 ) -> list[dict[str, Any]]:
-    """List all providers."""
+    """List all providers.
+
+    Args:
+        limit: Maximum number of results to return.
+        offset: Number of results to skip.
+        svc: Injected provider service.
+
+    Returns:
+        list[dict[str, Any]]: Provider records.
+    """
     return await asyncio.to_thread(svc.list, limit=limit, offset=offset)
 
 
@@ -80,7 +123,16 @@ async def create_provider(
     request: Request,
     svc: ProviderService = Depends(_get_provider_service),
 ) -> dict[str, Any]:
-    """Create a new provider."""
+    """Create a new provider.
+
+    Args:
+        body: Provider creation payload.
+        request: Incoming HTTP request.
+        svc: Injected provider service.
+
+    Returns:
+        dict[str, Any]: Created provider record.
+    """
     result = await asyncio.to_thread(
         svc.create,
         name=body.name,
@@ -110,7 +162,15 @@ async def get_provider(
     name: str,
     svc: ProviderService = Depends(_get_provider_service),
 ) -> dict[str, Any]:
-    """Get a provider by name."""
+    """Get a provider by name.
+
+    Args:
+        name: Provider name.
+        svc: Injected provider service.
+
+    Returns:
+        dict[str, Any]: Provider record.
+    """
     return await asyncio.to_thread(svc.get, name)
 
 
@@ -124,7 +184,17 @@ async def update_provider(
     request: Request,
     svc: ProviderService = Depends(_get_provider_service),
 ) -> dict[str, Any]:
-    """Update an existing provider."""
+    """Update an existing provider.
+
+    Args:
+        name: Provider name.
+        body: Provider update payload.
+        request: Incoming HTTP request.
+        svc: Injected provider service.
+
+    Returns:
+        dict[str, Any]: Updated provider record.
+    """
     result = await asyncio.to_thread(
         svc.update,
         name=name,
@@ -150,7 +220,16 @@ async def delete_provider(
     request: Request,
     svc: ProviderService = Depends(_get_provider_service),
 ) -> dict[str, bool]:
-    """Delete a provider by name."""
+    """Delete a provider by name.
+
+    Args:
+        name: Provider name.
+        request: Incoming HTTP request.
+        svc: Injected provider service.
+
+    Returns:
+        dict[str, bool]: Deletion status.
+    """
     deleted = await asyncio.to_thread(svc.delete, name)
     if deleted:
         logger.info(

@@ -39,7 +39,14 @@ _ENDPOINT_RE = ENDPOINT_RE
 
 
 def _validate_endpoint_format(endpoint: str) -> None:
-    """Validate that endpoint is host:port and not pointing at private networks."""
+    """Validate that endpoint is host:port and not pointing at private networks.
+
+    Args:
+        endpoint: Endpoint string in host:port format.
+
+    Raises:
+        ValueError: If format is invalid, port is out of range, or address is private.
+    """
     if not _ENDPOINT_RE.match(endpoint):
         raise ValueError("endpoint must be in host:port format (e.g. '10.0.0.5:8443')")
     host, port_str = endpoint.rsplit(":", 1)
@@ -53,6 +60,11 @@ def _validate_endpoint_format(endpoint: str) -> None:
 
 
 def _get_local_manager() -> LocalGatewayManager | None:
+    """Return the local gateway manager if running in local mode.
+
+    Returns:
+        LocalGatewayManager | None: Manager instance or None if not in local mode.
+    """
     if not os.environ.get("SHOREGUARD_LOCAL_MODE"):
         return None
     from shoreguard.services.local_gateway import local_gateway_manager
@@ -64,7 +76,18 @@ def _get_local_manager() -> LocalGatewayManager | None:
 
 
 class RegisterGatewayRequest(BaseModel):
-    """Request body for registering a remote gateway."""
+    """Request body for registering a remote gateway.
+
+    Attributes:
+        name: Gateway name.
+        endpoint: Gateway endpoint in host:port format.
+        scheme: Connection scheme (http or https).
+        auth_mode: Authentication mode (mtls, api_key, none, insecure).
+        ca_cert: Base64-encoded CA certificate.
+        client_cert: Base64-encoded client certificate.
+        client_key: Base64-encoded client private key.
+        metadata: Optional metadata dict for the gateway.
+    """
 
     name: str
     endpoint: str
@@ -104,7 +127,14 @@ _REMOTE_HOST_RE = re.compile(r"^[a-zA-Z0-9._-]{1,253}$")
 
 
 class CreateGatewayRequest(BaseModel):
-    """Request body for creating a local gateway (local mode only)."""
+    """Request body for creating a local gateway (local mode only).
+
+    Attributes:
+        name: Gateway name.
+        port: Optional port number for the gateway.
+        remote_host: Optional remote hostname or IP.
+        gpu: Whether to enable GPU access.
+    """
 
     name: str = "openshell"
     port: int | None = None
@@ -138,19 +168,31 @@ class CreateGatewayRequest(BaseModel):
 
 @router.get("/list")
 async def gateway_list() -> list[dict[str, Any]]:
-    """List all registered gateways with metadata and status."""
+    """List all registered gateways with metadata and status.
+
+    Returns:
+        list[dict[str, Any]]: Gateway records.
+    """
     return await asyncio.to_thread(_get_gateway_service().list_all)
 
 
 @router.get("/info")
 async def gateway_info() -> dict[str, Any]:
-    """Return active gateway configuration and connection status."""
+    """Return active gateway configuration and connection status.
+
+    Returns:
+        dict[str, Any]: Active gateway info.
+    """
     return await asyncio.to_thread(_get_gateway_service().get_info)
 
 
 @router.get("/config")
 async def gateway_config() -> dict[str, Any]:
-    """Get the global gateway configuration (settings and revision)."""
+    """Get the global gateway configuration (settings and revision).
+
+    Returns:
+        dict[str, Any]: Gateway configuration.
+    """
     return await asyncio.to_thread(_get_gateway_service().get_config)
 
 
@@ -159,7 +201,19 @@ async def gateway_config() -> dict[str, Any]:
 
 @router.post("/register", status_code=201, dependencies=[Depends(require_role("admin"))])
 async def gateway_register(body: RegisterGatewayRequest, request: Request) -> dict[str, Any]:
-    """Register a remote gateway."""
+    """Register a remote gateway.
+
+    Args:
+        body: Registration payload with endpoint and auth details.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Registered gateway record.
+
+    Raises:
+        HTTPException: If name is invalid, certs are malformed, metadata too large,
+            or a gateway with the same name already exists.
+    """
     if not _VALID_NAME_RE.match(body.name):
         raise HTTPException(400, "Invalid gateway name: must match [a-zA-Z0-9][a-zA-Z0-9._-]*")
 
@@ -222,7 +276,14 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
 
 
 def _validate_name_param(name: str) -> None:
-    """Validate a gateway name path parameter."""
+    """Validate a gateway name path parameter.
+
+    Args:
+        name: Gateway name to validate.
+
+    Raises:
+        HTTPException: If the name does not match the allowed pattern.
+    """
     if not _VALID_NAME_RE.match(name):
         raise HTTPException(
             400, "Invalid gateway name: must match [a-zA-Z0-9][a-zA-Z0-9._-]* (max 253)"
@@ -231,7 +292,18 @@ def _validate_name_param(name: str) -> None:
 
 @router.delete("/{name}", dependencies=[Depends(require_role("admin"))])
 async def gateway_unregister(name: str, request: Request) -> dict[str, Any]:
-    """Unregister a gateway."""
+    """Unregister a gateway.
+
+    Args:
+        name: Gateway name.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Confirmation with gateway name.
+
+    Raises:
+        HTTPException: If the gateway is not found.
+    """
     _validate_name_param(name)
     removed = await asyncio.to_thread(_get_gateway_service().unregister, name)
     if not removed:
@@ -244,7 +316,18 @@ async def gateway_unregister(name: str, request: Request) -> dict[str, Any]:
 
 @router.post("/{name}/test-connection", dependencies=[Depends(require_role("admin"))])
 async def gateway_test_connection(name: str, request: Request) -> dict[str, Any]:
-    """Explicitly test connectivity to a registered gateway."""
+    """Explicitly test connectivity to a registered gateway.
+
+    Args:
+        name: Gateway name.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Connection test result.
+
+    Raises:
+        HTTPException: If the gateway is not found (404).
+    """
     _validate_name_param(name)
     try:
         result = await asyncio.to_thread(_get_gateway_service().test_connection, name)
@@ -262,7 +345,18 @@ async def gateway_test_connection(name: str, request: Request) -> dict[str, Any]
 
 @router.post("/{name}/select", dependencies=[Depends(require_role("admin"))])
 async def gateway_select(name: str, request: Request) -> dict[str, Any]:
-    """Set a gateway as active and reconnect."""
+    """Set a gateway as active and reconnect.
+
+    Args:
+        name: Gateway name.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Selection result with connection status.
+
+    Raises:
+        HTTPException: If the gateway is not found (404).
+    """
     _validate_name_param(name)
     logger.info("Gateway selected (gateway=%s, actor=%s)", name, get_actor(request))
     try:
@@ -278,7 +372,14 @@ async def gateway_select(name: str, request: Request) -> dict[str, Any]:
 
 @router.get("/diagnostics", dependencies=[Depends(require_role("operator"))])
 async def gateway_diagnostics() -> dict[str, Any]:
-    """Check Docker availability, daemon status, and permissions (local mode)."""
+    """Check Docker availability, daemon status, and permissions (local mode).
+
+    Returns:
+        dict[str, Any]: Diagnostic results.
+
+    Raises:
+        HTTPException: If not running in local mode.
+    """
     mgr = _get_local_manager()
     if mgr is None:
         raise HTTPException(404, "Diagnostics only available in local mode")
@@ -287,7 +388,17 @@ async def gateway_diagnostics() -> dict[str, Any]:
 
 @router.post("/start", dependencies=[Depends(require_role("admin"))])
 async def gateway_start_active(request: Request) -> dict[str, Any]:
-    """Start the active gateway (local mode)."""
+    """Start the active gateway (local mode).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Start result.
+
+    Raises:
+        HTTPException: If not running in local mode.
+    """
     mgr = _get_local_manager()
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
@@ -299,7 +410,17 @@ async def gateway_start_active(request: Request) -> dict[str, Any]:
 
 @router.post("/stop", dependencies=[Depends(require_role("admin"))])
 async def gateway_stop_active(request: Request) -> dict[str, Any]:
-    """Stop the active gateway (local mode)."""
+    """Stop the active gateway (local mode).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Stop result.
+
+    Raises:
+        HTTPException: If not running in local mode.
+    """
     mgr = _get_local_manager()
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
@@ -311,7 +432,17 @@ async def gateway_stop_active(request: Request) -> dict[str, Any]:
 
 @router.post("/restart", dependencies=[Depends(require_role("admin"))])
 async def gateway_restart_active(request: Request) -> dict[str, Any]:
-    """Restart the active gateway (local mode)."""
+    """Restart the active gateway (local mode).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Restart result.
+
+    Raises:
+        HTTPException: If not running in local mode.
+    """
     mgr = _get_local_manager()
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
@@ -323,7 +454,18 @@ async def gateway_restart_active(request: Request) -> dict[str, Any]:
 
 @router.post("/{name}/start", dependencies=[Depends(require_role("admin"))])
 async def gateway_start_named(name: str, request: Request) -> dict[str, Any]:
-    """Start a specific gateway by name (local mode)."""
+    """Start a specific gateway by name (local mode).
+
+    Args:
+        name: Gateway name.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Start result.
+
+    Raises:
+        HTTPException: If not running in local mode.
+    """
     _validate_name_param(name)
     mgr = _get_local_manager()
     if mgr is None:
@@ -336,7 +478,18 @@ async def gateway_start_named(name: str, request: Request) -> dict[str, Any]:
 
 @router.post("/{name}/stop", dependencies=[Depends(require_role("admin"))])
 async def gateway_stop_named(name: str, request: Request) -> dict[str, Any]:
-    """Stop a specific gateway by name (local mode)."""
+    """Stop a specific gateway by name (local mode).
+
+    Args:
+        name: Gateway name.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Stop result.
+
+    Raises:
+        HTTPException: If not running in local mode.
+    """
     _validate_name_param(name)
     mgr = _get_local_manager()
     if mgr is None:
@@ -349,7 +502,18 @@ async def gateway_stop_named(name: str, request: Request) -> dict[str, Any]:
 
 @router.post("/{name}/restart", dependencies=[Depends(require_role("admin"))])
 async def gateway_restart_named(name: str, request: Request) -> dict[str, Any]:
-    """Restart a specific gateway by name (local mode)."""
+    """Restart a specific gateway by name (local mode).
+
+    Args:
+        name: Gateway name.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Restart result.
+
+    Raises:
+        HTTPException: If not running in local mode.
+    """
     _validate_name_param(name)
     mgr = _get_local_manager()
     if mgr is None:
@@ -362,7 +526,19 @@ async def gateway_restart_named(name: str, request: Request) -> dict[str, Any]:
 
 @router.post("/{name}/destroy", dependencies=[Depends(require_role("admin"))])
 async def gateway_destroy(name: str, request: Request, force: bool = False) -> dict[str, Any]:
-    """Destroy a gateway and remove its configuration (local mode)."""
+    """Destroy a gateway and remove its configuration (local mode).
+
+    Args:
+        name: Gateway name.
+        request: Incoming HTTP request.
+        force: Whether to force-destroy even if running.
+
+    Returns:
+        dict[str, Any]: Destruction result.
+
+    Raises:
+        HTTPException: If not running in local mode.
+    """
     _validate_name_param(name)
     mgr = _get_local_manager()
     if mgr is None:
@@ -380,7 +556,19 @@ async def gateway_destroy(name: str, request: Request, force: bool = False) -> d
 
 @router.post("/create", status_code=202, dependencies=[Depends(require_role("admin"))])
 async def gateway_create(body: CreateGatewayRequest, request: Request) -> dict[str, Any]:
-    """Create a new local gateway. Returns 202 with operation ID (local mode)."""
+    """Create a new local gateway. Returns 202 with operation ID (local mode).
+
+    Args:
+        body: Gateway creation payload.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Operation tracking object with id and status.
+
+    Raises:
+        HTTPException: If not in local mode, name is invalid, or creation is
+            already in progress.
+    """
     mgr = _get_local_manager()
     if mgr is None:
         raise HTTPException(404, "Local gateway creation only available in local mode")
@@ -397,6 +585,7 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> dict[s
     _audit_ip = request.client.host if request.client else None
 
     async def _run() -> None:
+        """Execute gateway creation in the background."""
         logger.info("Starting gateway creation: '%s' (op=%s, actor=%s)", body.name, op.id, actor)
         try:
             result = await asyncio.to_thread(

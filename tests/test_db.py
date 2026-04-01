@@ -70,6 +70,7 @@ def test_gateways_table_columns():
     engine = init_db("sqlite:///:memory:")
     columns = {c["name"] for c in inspect(engine).get_columns("gateways")}
     expected = {
+        "id",
         "name",
         "endpoint",
         "scheme",
@@ -97,7 +98,8 @@ def test_audit_log_table_columns():
         "action",
         "resource_type",
         "resource_id",
-        "gateway",
+        "gateway_name",
+        "gateway_id",
         "detail",
         "client_ip",
     }

@@ -208,7 +208,7 @@ class TestCleanup:
         from shoreguard.models import AuditEntry
 
         session = audit_svc._session_factory()
-        old_ts = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=100)).isoformat()
+        old_ts = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=100)
         session.add(
             AuditEntry(
                 timestamp=old_ts,

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Gateway Roles — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item"><a href="/users">Users</a></li>
+    <li class="breadcrumb-item active">Gateway Roles</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8" x-data='gatewayRolesPage({{ entity_type|tojson }}, {{ entity_id|tojson }})' x-init="load()">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">
+                <i class="bi bi-shield-lock me-2"></i>Gateway Roles: <span x-text="entityLabel"></span>
+            </h5>
+            <a href="/users" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to Users
+            </a>
+        </div>
+
+        <!-- Loading -->
+        <div x-show="loading" class="text-center text-muted py-5">
+            <div class="spinner-border spinner-border-sm me-2"></div>Loading gateway roles...
+        </div>
+
+        <!-- Error -->
+        <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+        <!-- Content -->
+        <template x-if="!loading && !error">
+            <div>
+                <!-- Existing overrides -->
+                <template x-if="roles.length > 0">
+                    <div class="table-responsive mb-3">
+                        <table class="table table-dark table-striped table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Gateway</th>
+                                    <th>Role</th>
+                                    <th class="text-end" style="width:60px"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="r in roles" :key="r.gateway_name">
+                                    <tr>
+                                        <td><strong x-text="r.gateway_name"></strong></td>
+                                        <td><span class="badge" :class="roleBadge(r.role)" x-text="r.role"></span></td>
+                                        <td class="text-end">
+                                            <button class="btn btn-sm text-muted" @click="removeRole(r.gateway_name)" title="Remove override">
+                                                <i class="bi bi-trash3"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </template>
+
+                <template x-if="roles.length === 0">
+                    <p class="text-muted mb-3">No gateway-specific role overrides. The global role applies everywhere.</p>
+                </template>
+
+                <!-- Add override form -->
+                <template x-if="availableGateways.length > 0">
+                    <div class="card bg-dark border-secondary">
+                        <div class="card-body py-2">
+                            <div class="row g-2 align-items-end">
+                                <div class="col">
+                                    <label class="form-label small text-muted mb-1">Gateway</label>
+                                    <select class="form-select form-select-sm bg-dark text-light border-secondary" x-model="newGw">
+                                        <template x-for="gw in availableGateways" :key="gw">
+                                            <option :value="gw" x-text="gw"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                                <div class="col">
+                                    <label class="form-label small text-muted mb-1">Role</label>
+                                    <select class="form-select form-select-sm bg-dark text-light border-secondary" x-model="newRole">
+                                        <option value="admin">admin</option>
+                                        <option value="operator">operator</option>
+                                        <option value="viewer" selected>viewer</option>
+                                    </select>
+                                </div>
+                                <div class="col-auto">
+                                    <button class="btn btn-sm btn-outline-success" @click="addRole()">
+                                        <i class="bi bi-plus-lg me-1"></i>Add
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </template>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/users.js"></script>
+{% endblock %}

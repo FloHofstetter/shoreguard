@@ -23,8 +23,15 @@ async def sandbox_events(
     gw: str,
     sandbox_name: str,
     _auth: None = Depends(require_auth_ws),
-):
-    """Stream live sandbox events over WebSocket."""
+) -> None:
+    """Stream live sandbox events over WebSocket.
+
+    Args:
+        websocket: The WebSocket connection.
+        gw: The gateway name from the URL path.
+        sandbox_name: The sandbox to stream events for.
+        _auth: Authentication dependency (unused sentinel).
+    """
     try:
         await websocket.accept()
     except RuntimeError:
@@ -63,7 +70,10 @@ async def sandbox_events(
         cancel_event = threading.Event()
 
         async def _producer():
-            def _iter_watch():
+            """Run the blocking gRPC watch in a thread and enqueue events."""
+
+            def _iter_watch() -> None:
+                """Iterate the gRPC watch stream, forwarding events to the queue."""
                 try:
                     for event in client.sandboxes.watch(
                         sandbox_id,

@@ -1,0 +1,90 @@
+{% extends "pages/sandbox_base.html" %}
+{% block title %}Policy Revisions — {{ sandbox_name }} — Shoreguard{% endblock %}
+
+{% block breadcrumb_tail %}
+<li class="breadcrumb-item"><a href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/policy">Policy</a></li>
+<li class="breadcrumb-item active">Revisions</li>
+{% endblock %}
+
+{% block content %}
+<div x-data='policyRevisionsPage({{ sandbox_name|tojson }})' x-init="load()">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Policy Revisions</h5>
+        <div class="btn-group btn-group-sm">
+            <button x-show="!showDiff && selectedA != null && selectedB != null && selectedA !== selectedB"
+                    class="btn btn-outline-info" @click="compareDiff()">
+                <i class="bi bi-arrow-left-right me-1"></i>Compare
+            </button>
+            <button x-show="showDiff" class="btn btn-outline-secondary" @click="showDiff = false">
+                <i class="bi bi-arrow-left me-1"></i>Back to List
+            </button>
+            <a href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/policy" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Back to Policy
+            </a>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading revisions...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <!-- Empty state -->
+    <div x-show="!loading && !error && revisions.length === 0" x-cloak class="text-center text-muted py-5">
+        <i class="bi bi-clock-history fs-1 d-block mb-3"></i>
+        <p>No policy revisions recorded.</p>
+    </div>
+
+    <!-- Revisions list -->
+    <div x-show="!loading && !error && revisions.length > 0 && !showDiff" x-cloak>
+        <p class="text-muted small mb-2">Select two versions to compare:</p>
+        <div class="table-responsive">
+            <table class="table table-dark table-striped table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th style="width:40px">A</th>
+                        <th style="width:40px">B</th>
+                        <th>Version</th>
+                        <th>Status</th>
+                        <th>Hash</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="rev in revisions" :key="rev.version">
+                        <tr>
+                            <td>
+                                <input type="radio" name="diff-a" class="form-check-input"
+                                       :value="rev.version" x-model.number="selectedA">
+                            </td>
+                            <td>
+                                <input type="radio" name="diff-b" class="form-check-input"
+                                       :value="rev.version" x-model.number="selectedB">
+                            </td>
+                            <td><strong x-text="'v' + rev.version"></strong></td>
+                            <td><span class="badge text-bg-secondary" x-text="rev.status || '\u2014'"></span></td>
+                            <td class="text-muted small font-monospace" x-text="rev.policy_hash ? rev.policy_hash.substring(0, 8) : '\u2014'"></td>
+                            <td class="text-muted small" x-text="rev.created_at_ms ? new Date(rev.created_at_ms).toLocaleString() : '\u2014'"></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Diff view -->
+    <div x-show="!loading && !error && showDiff" x-cloak>
+        <div x-show="diffLoading" class="text-center text-muted py-5">
+            <div class="spinner-border spinner-border-sm me-2"></div>Loading policy diff...
+        </div>
+        <div x-show="!diffLoading" x-html="diffHtml"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block sandbox_js %}
+<script src="/static/js/policy.js"></script>
+{% endblock %}

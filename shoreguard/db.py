@@ -21,12 +21,23 @@ _engine: Engine | None = None
 
 
 def _alembic_dir() -> str:
-    """Return the path to the alembic directory shipped inside the package."""
+    """Return the path to the alembic directory shipped inside the package.
+
+    Returns:
+        str: Absolute path to the embedded alembic directory.
+    """
     return str(Path(__file__).parent / "alembic")
 
 
 def _alembic_config(url: str) -> AlembicConfig:
-    """Build an Alembic config pointing at our embedded migrations."""
+    """Build an Alembic config pointing at our embedded migrations.
+
+    Args:
+        url: SQLAlchemy database URL.
+
+    Returns:
+        AlembicConfig: Configured Alembic config instance.
+    """
     cfg = AlembicConfig()
     cfg.set_main_option("script_location", _alembic_dir())
     cfg.set_main_option("sqlalchemy.url", url)
@@ -37,6 +48,15 @@ def init_db(url: str | None = None) -> Engine:
     """Create the engine, run migrations, and configure the session factory.
 
     Called once during application startup (FastAPI lifespan).
+
+    Args:
+        url: SQLAlchemy database URL. Falls back to ``default_database_url()``.
+
+    Returns:
+        Engine: The initialised SQLAlchemy engine.
+
+    Raises:
+        RuntimeError: If database migration fails.
     """
     global _engine  # noqa: PLW0603
 
@@ -101,7 +121,14 @@ def init_db(url: str | None = None) -> Engine:
 
 
 def get_engine() -> Engine:
-    """Return the current engine."""
+    """Return the current engine.
+
+    Returns:
+        Engine: The active SQLAlchemy engine.
+
+    Raises:
+        RuntimeError: If ``init_db()`` has not been called yet.
+    """
     if _engine is None:
         raise RuntimeError("Database not initialised — call init_db() first")
     return _engine

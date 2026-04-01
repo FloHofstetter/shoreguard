@@ -16,7 +16,15 @@ POLICY_STATUS_NAMES = {
 
 
 def _policy_to_dict(policy: sandbox_pb2.SandboxPolicy) -> dict[str, Any]:
-    """Convert a SandboxPolicy protobuf to a plain dict."""
+    """Convert a SandboxPolicy protobuf to a plain dict.
+
+    Args:
+        policy: SandboxPolicy protobuf message.
+
+    Returns:
+        dict[str, Any]: Policy data with version, filesystem, process,
+            landlock, and network_policies.
+    """
     result: dict[str, Any] = {"version": policy.version}
 
     if policy.HasField("filesystem"):
@@ -42,7 +50,15 @@ def _policy_to_dict(policy: sandbox_pb2.SandboxPolicy) -> dict[str, Any]:
 
 
 def _network_rule_to_dict(rule: sandbox_pb2.NetworkPolicyRule) -> dict[str, Any]:
-    """Convert a NetworkPolicyRule protobuf to dict."""
+    """Convert a NetworkPolicyRule protobuf to dict.
+
+    Args:
+        rule: NetworkPolicyRule protobuf message.
+
+    Returns:
+        dict[str, Any]: Network rule data with name, endpoints,
+            and binaries.
+    """
     result: dict[str, Any] = {"name": rule.name, "endpoints": [], "binaries": []}
     for ep in rule.endpoints:
         ep_dict: dict[str, Any] = {"host": ep.host, "port": ep.port}
@@ -76,15 +92,26 @@ def _network_rule_to_dict(rule: sandbox_pb2.NetworkPolicyRule) -> dict[str, Any]
 
 
 class PolicyManager:
-    """Policy read/write operations against OpenShell gateway."""
+    """Policy read/write operations against OpenShell gateway.
 
-    def __init__(self, stub: openshell_pb2_grpc.OpenShellStub, *, timeout: float = 30.0) -> None:
-        """Initialize with an OpenShell gRPC stub."""
+    Args:
+        stub: OpenShell gRPC stub.
+        timeout: gRPC call timeout in seconds.
+    """
+
+    def __init__(self, stub: openshell_pb2_grpc.OpenShellStub, *, timeout: float = 30.0) -> None:  # noqa: D107
         self._stub = stub
         self._timeout = timeout
 
     def get(self, sandbox_name: str) -> dict[str, Any]:
-        """Get the current active policy for a sandbox."""
+        """Get the current active policy for a sandbox.
+
+        Args:
+            sandbox_name: Sandbox name.
+
+        Returns:
+            dict[str, Any]: Active policy status with revision details.
+        """
         resp = self._stub.GetSandboxPolicyStatus(
             openshell_pb2.GetSandboxPolicyStatusRequest(name=sandbox_name),
             timeout=self._timeout,
@@ -104,7 +131,15 @@ class PolicyManager:
         return result
 
     def get_version(self, sandbox_name: str, version: int) -> dict[str, Any]:
-        """Get a specific policy revision by version number."""
+        """Get a specific policy revision by version number.
+
+        Args:
+            sandbox_name: Sandbox name.
+            version: Policy version number to retrieve.
+
+        Returns:
+            dict[str, Any]: Policy status with revision details.
+        """
         resp = self._stub.GetSandboxPolicyStatus(
             openshell_pb2.GetSandboxPolicyStatusRequest(name=sandbox_name, version=version),
             timeout=self._timeout,
@@ -126,7 +161,16 @@ class PolicyManager:
     def list_revisions(
         self, sandbox_name: str, *, limit: int = 20, offset: int = 0
     ) -> list[dict[str, Any]]:
-        """List policy revision history for a sandbox."""
+        """List policy revision history for a sandbox.
+
+        Args:
+            sandbox_name: Sandbox name.
+            limit: Maximum number of revisions to return.
+            offset: Pagination offset.
+
+        Returns:
+            list[dict[str, Any]]: List of policy revision summary dicts.
+        """
         resp = self._stub.ListSandboxPolicies(
             openshell_pb2.ListSandboxPoliciesRequest(name=sandbox_name, limit=limit, offset=offset),
             timeout=self._timeout,
@@ -146,7 +190,16 @@ class PolicyManager:
     def update(
         self, sandbox_name: str, policy: sandbox_pb2.SandboxPolicy, *, global_scope: bool = False
     ) -> dict[str, Any]:
-        """Push a new policy version to a sandbox (or globally)."""
+        """Push a new policy version to a sandbox (or globally).
+
+        Args:
+            sandbox_name: Sandbox name.
+            policy: SandboxPolicy protobuf message.
+            global_scope: If True, apply policy globally.
+
+        Returns:
+            dict[str, Any]: Version and policy hash of the new revision.
+        """
         resp = self._stub.UpdateConfig(
             openshell_pb2.UpdateConfigRequest(
                 name=sandbox_name,

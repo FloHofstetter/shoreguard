@@ -6,7 +6,16 @@ from ._proto import sandbox_pb2
 
 
 def _dict_to_policy(data: dict) -> sandbox_pb2.SandboxPolicy:
-    """Convert a policy dict to protobuf SandboxPolicy."""
+    """Convert a policy dict to protobuf SandboxPolicy.
+
+    Args:
+        data: Policy definition with optional keys ``version``,
+            ``filesystem``/``filesystem_policy``, ``process``,
+            ``landlock``, and ``network_policies``.
+
+    Returns:
+        sandbox_pb2.SandboxPolicy: Populated protobuf message.
+    """
     policy = sandbox_pb2.SandboxPolicy()
     if "version" in data:
         policy.version = data["version"]
@@ -39,7 +48,15 @@ def _dict_to_policy(data: dict) -> sandbox_pb2.SandboxPolicy:
 
 
 def _dict_to_network_rule(data: dict) -> sandbox_pb2.NetworkPolicyRule:
-    """Convert a network rule dict to protobuf."""
+    """Convert a network rule dict to protobuf.
+
+    Args:
+        data: Network rule definition with ``name``, ``endpoints``,
+            and ``binaries`` keys.
+
+    Returns:
+        sandbox_pb2.NetworkPolicyRule: Populated protobuf message.
+    """
     rule = sandbox_pb2.NetworkPolicyRule(name=data.get("name", ""))
     for ep_data in data.get("endpoints", []):
         ep = sandbox_pb2.NetworkEndpoint(

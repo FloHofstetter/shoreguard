@@ -19,6 +19,13 @@ def is_private_ip(host: str) -> bool:
 
     Used both at registration time (API validation) and at connection time
     (DNS-rebinding protection).
+
+    Args:
+        host: IP address literal or hostname to check.
+
+    Returns:
+        bool: ``True`` if the address is private, loopback, link-local,
+            or reserved.
     """
     try:
         addr = ipaddress.ip_address(host)
@@ -41,7 +48,11 @@ def is_private_ip(host: str) -> bool:
 
 
 def xdg_config_home() -> Path:
-    """Return the XDG config home directory."""
+    """Return the XDG config home directory.
+
+    Returns:
+        Path: Path from ``$XDG_CONFIG_HOME`` or ``~/.config`` as fallback.
+    """
     configured = os.environ.get("XDG_CONFIG_HOME")
     if configured:
         return Path(configured)
@@ -49,17 +60,29 @@ def xdg_config_home() -> Path:
 
 
 def openshell_config_dir() -> Path:
-    """Return the openshell config directory."""
+    """Return the openshell config directory.
+
+    Returns:
+        Path: ``<xdg_config_home>/openshell``.
+    """
     return xdg_config_home() / "openshell"
 
 
 def shoreguard_config_dir() -> Path:
-    """Return the shoreguard config directory."""
+    """Return the shoreguard config directory.
+
+    Returns:
+        Path: ``<xdg_config_home>/shoreguard``.
+    """
     return xdg_config_home() / "shoreguard"
 
 
 def default_database_url() -> str:
-    """Return the database URL, from env or SQLite default."""
+    """Return the database URL, from env or SQLite default.
+
+    Returns:
+        str: Value of ``$SHOREGUARD_DATABASE_URL`` or a SQLite file URL.
+    """
     env_url = os.environ.get("SHOREGUARD_DATABASE_URL")
     if env_url:
         return env_url

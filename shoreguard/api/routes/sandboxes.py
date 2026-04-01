@@ -29,11 +29,29 @@ _background_tasks: set[asyncio.Task] = set()
 
 
 def _get_sandbox_service(client: ShoreGuardClient = Depends(get_client)) -> SandboxService:
+    """Build a SandboxService from the injected client.
+
+    Args:
+        client: gRPC client for the active gateway.
+
+    Returns:
+        SandboxService: Service instance bound to the client.
+    """
     return SandboxService(client)
 
 
 class CreateSandboxRequest(BaseModel):
-    """Body for creating a new sandbox."""
+    """Body for creating a new sandbox.
+
+    Attributes:
+        name: Sandbox name (optional, defaults to "unnamed").
+        image: Container image to use.
+        providers: List of provider names to attach.
+        gpu: Whether to enable GPU access.
+        environment: Environment variables to set.
+        policy: Optional policy to apply.
+        presets: Policy presets to apply.
+    """
 
     name: str = ""
     image: str = ""
@@ -45,7 +63,14 @@ class CreateSandboxRequest(BaseModel):
 
 
 class ExecRequest(BaseModel):
-    """Body for executing a command in a sandbox."""
+    """Body for executing a command in a sandbox.
+
+    Attributes:
+        command: Command string or list of arguments to execute.
+        workdir: Working directory for the command.
+        env: Environment variables for the command.
+        timeout_seconds: Execution timeout in seconds (0 = no timeout).
+    """
 
     command: str | list[str]
     workdir: str = ""
@@ -54,7 +79,11 @@ class ExecRequest(BaseModel):
 
 
 class RevokeSshRequest(BaseModel):
-    """Body for revoking an SSH session."""
+    """Body for revoking an SSH session.
+
+    Attributes:
+        token: SSH session token to revoke.
+    """
 
     token: str
 
@@ -65,7 +94,16 @@ async def list_sandboxes(
     offset: int = Query(0, ge=0),
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> list[dict[str, Any]]:
-    """List all sandboxes with pagination."""
+    """List all sandboxes with pagination.
+
+    Args:
+        limit: Maximum number of results to return.
+        offset: Number of results to skip.
+        svc: Injected sandbox service.
+
+    Returns:
+        list[dict[str, Any]]: Sandbox records.
+    """
     return await asyncio.to_thread(svc.list, limit=limit, offset=offset)
 
 
@@ -76,7 +114,20 @@ async def create_sandbox(
     svc: SandboxService = Depends(_get_sandbox_service),
     client: ShoreGuardClient = Depends(get_client),
 ) -> dict[str, Any]:
-    """Create a new sandbox. Returns 202 with an operation ID for polling."""
+    """Create a new sandbox. Returns 202 with an operation ID for polling.
+
+    Args:
+        body: Sandbox creation payload.
+        request: Incoming HTTP request.
+        svc: Injected sandbox service.
+        client: gRPC client for the active gateway.
+
+    Returns:
+        dict[str, Any]: Operation tracking object with id and status.
+
+    Raises:
+        HTTPException: If sandbox name is invalid or creation is already in progress.
+    """
     if body.name and not _VALID_NAME_RE.match(body.name):
         raise HTTPException(400, "Invalid sandbox name: must match [a-zA-Z0-9][a-zA-Z0-9._-]*")
     sandbox_name = body.name or "unnamed"
@@ -86,6 +137,7 @@ async def create_sandbox(
         raise HTTPException(409, f"Sandbox '{sandbox_name}' creation already in progress")
 
     async def _run() -> None:
+        """Execute sandbox creation in the background."""
         logger.info("Starting sandbox creation: '%s' (op=%s, actor=%s)", sandbox_name, op.id, actor)
         try:
             result = await asyncio.to_thread(
@@ -166,7 +218,15 @@ async def get_sandbox(
     name: str,
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> dict[str, Any]:
-    """Get a sandbox by name."""
+    """Get a sandbox by name.
+
+    Args:
+        name: Sandbox name.
+        svc: Injected sandbox service.
+
+    Returns:
+        dict[str, Any]: Sandbox record.
+    """
     return await asyncio.to_thread(svc.get, name)
 
 
@@ -176,7 +236,16 @@ async def delete_sandbox(
     request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> dict[str, bool]:
-    """Delete a sandbox by name."""
+    """Delete a sandbox by name.
+
+    Args:
+        name: Sandbox name.
+        request: Incoming HTTP request.
+        svc: Injected sandbox service.
+
+    Returns:
+        dict[str, bool]: Deletion status.
+    """
     deleted = await asyncio.to_thread(svc.delete, name)
     if deleted:
         logger.info("Sandbox deleted (sandbox=%s, actor=%s)", name, get_actor(request))
@@ -194,6 +263,15 @@ async def exec_in_sandbox(
     """Execute a command inside a running sandbox.
 
     Accepts command as a string (parsed with shlex) or a list of args.
+
+    Args:
+        name: Sandbox name.
+        body: Execution request payload.
+        request: Incoming HTTP request.
+        svc: Injected sandbox service.
+
+    Returns:
+        dict[str, Any]: Execution result with stdout, stderr, and exit code.
     """
     result = await asyncio.to_thread(
         svc.exec,
@@ -214,7 +292,16 @@ async def create_ssh_session(
     request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> dict[str, Any]:
-    """Create a temporary SSH session for shell access to a sandbox."""
+    """Create a temporary SSH session for shell access to a sandbox.
+
+    Args:
+        name: Sandbox name.
+        request: Incoming HTTP request.
+        svc: Injected sandbox service.
+
+    Returns:
+        dict[str, Any]: SSH session details including token and connection info.
+    """
     result = await asyncio.to_thread(svc.create_ssh_session, name)
     logger.info("SSH session created (sandbox=%s, actor=%s)", name, get_actor(request))
     await audit_log(request, "sandbox.ssh.create", "sandbox", name, gateway=_current_gateway.get())
@@ -228,7 +315,17 @@ async def revoke_ssh_session(
     request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> dict[str, bool]:
-    """Revoke an active SSH session."""
+    """Revoke an active SSH session.
+
+    Args:
+        name: Sandbox name.
+        body: Revocation request with session token.
+        request: Incoming HTTP request.
+        svc: Injected sandbox service.
+
+    Returns:
+        dict[str, bool]: Revocation status.
+    """
     revoked = await asyncio.to_thread(svc.revoke_ssh_session, body.token)
     logger.info("SSH session revoked (sandbox=%s, actor=%s)", name, get_actor(request))
     await audit_log(request, "sandbox.ssh.revoke", "sandbox", name, gateway=_current_gateway.get())
@@ -244,7 +341,19 @@ async def get_sandbox_logs(
     sources: str = "",
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> list[dict[str, Any]]:
-    """Fetch recent log entries from a sandbox."""
+    """Fetch recent log entries from a sandbox.
+
+    Args:
+        name: Sandbox name.
+        lines: Maximum number of log lines to return.
+        since_ms: Only return logs newer than this Unix timestamp in ms.
+        min_level: Minimum log level filter.
+        sources: Comma-separated list of log sources to include.
+        svc: Injected sandbox service.
+
+    Returns:
+        list[dict[str, Any]]: Log entry records.
+    """
     source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else None
     return await asyncio.to_thread(
         svc.get_logs,

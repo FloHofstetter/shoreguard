@@ -1,15 +1,23 @@
 """HTML page routes and auth API endpoints for the Shoreguard frontend."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
+from starlette.responses import HTMLResponse
+from starlette.templating import _TemplateResponse as TemplateResponse
+
+if TYPE_CHECKING:
+    from shoreguard.services._openshell_meta import OpenShellMeta
 
 from shoreguard.config import VALID_GATEWAY_NAME_RE
 from shoreguard.services.audit import audit_log
@@ -43,23 +51,51 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+$")
 
 
 def _valid_email(email: str) -> bool:
-    """Basic email format check."""
+    """Basic email format check.
+
+    Args:
+        email: Email address to validate.
+
+    Returns:
+        bool: True if the email matches a basic pattern.
+    """
     return bool(_EMAIL_RE.match(email.strip()))
 
 
 def _client_ip(request: Request) -> str:
-    """Extract client IP from request."""
+    """Extract client IP from request.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        str: Client IP address or ``"unknown"``.
+    """
     return request.client.host if request.client else "unknown"
 
 
 def _get_actor(request: Request) -> str:
-    """Extract acting user identity from request state."""
+    """Extract acting user identity from request state.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        str: User identifier or ``"unknown"``.
+    """
     user_id = getattr(request.state, "user_id", None)
     return str(user_id) if user_id else "unknown"
 
 
 def _resolve_frontend_dir() -> Path:
-    """Resolve the frontend directory for both installed and dev-checkout modes."""
+    """Resolve the frontend directory for both installed and dev-checkout modes.
+
+    Returns:
+        Path: Resolved path to the frontend assets directory.
+
+    Raises:
+        FileNotFoundError: If neither the installed nor dev-checkout frontend directory exists.
+    """
     pkg_dir = Path(__file__).resolve().parent.parent / "_frontend"
     if pkg_dir.is_dir():
         return pkg_dir
@@ -82,15 +118,28 @@ router = APIRouter()
 
 
 class LoginRequest(BaseModel):
-    """Request body for the login endpoint."""
+    """Request body for the login endpoint.
+
+    Attributes:
+        email: User email address.
+        password: User password.
+    """
 
     email: str
     password: str
 
 
 @router.post("/api/auth/login")
-async def login(request: Request, body: LoginRequest):
-    """Validate credentials and set a session cookie."""
+async def login(request: Request, body: LoginRequest) -> JSONResponse:
+    """Validate credentials and set a session cookie.
+
+    Args:
+        request: Incoming HTTP request.
+        body: Login credentials.
+
+    Returns:
+        JSONResponse: Session cookie on success, or error details.
+    """
     if not is_setup_complete():
         return JSONResponse(
             status_code=400,
@@ -133,8 +182,15 @@ async def login(request: Request, body: LoginRequest):
 
 
 @router.post("/api/auth/logout")
-async def logout(request: Request):
-    """Clear the session cookie."""
+async def logout(request: Request) -> JSONResponse:
+    """Clear the session cookie.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        JSONResponse: Confirmation response with cookie deleted.
+    """
     cookie = request.cookies.get(COOKIE_NAME)
     user_info = "unknown"
     if cookie:
@@ -154,8 +210,15 @@ async def logout(request: Request):
 
 
 @router.get("/api/auth/check")
-async def auth_check(request: Request):
-    """Return auth status, role, and whether setup is needed."""
+async def auth_check(request: Request) -> dict[str, Any]:
+    """Return auth status, role, and whether setup is needed.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Authentication state including role and setup status.
+    """
     needs_setup = not is_setup_complete()
     if needs_setup:
         return {
@@ -198,15 +261,28 @@ async def auth_check(request: Request):
 
 
 class SetupRequest(BaseModel):
-    """Request body for the initial admin setup."""
+    """Request body for the initial admin setup.
+
+    Attributes:
+        email: Admin email address.
+        password: Admin password.
+    """
 
     email: str
     password: str
 
 
 @router.post("/api/auth/setup")
-async def setup(request: Request, body: SetupRequest):
-    """Create the first admin user. Only works when no users exist."""
+async def setup(request: Request, body: SetupRequest) -> JSONResponse:
+    """Create the first admin user. Only works when no users exist.
+
+    Args:
+        request: Incoming HTTP request.
+        body: Admin credentials for initial setup.
+
+    Returns:
+        JSONResponse: Session cookie on success, or error details.
+    """
     if is_setup_complete():
         return JSONResponse(status_code=400, content={"detail": "Setup already complete"})
     if not body.email.strip() or not body.password:
@@ -260,21 +336,43 @@ async def setup(request: Request, body: SetupRequest):
 
 
 class CreateUserRequest(BaseModel):
-    """Request body for inviting a user."""
+    """Request body for inviting a user.
+
+    Attributes:
+        email: Email address of the user to invite.
+        role: Role to assign (default ``"viewer"``).
+    """
 
     email: str
     role: str = "viewer"
 
 
 @router.get("/api/auth/users", dependencies=[Depends(require_role("admin"))])
-async def get_users(request: Request):
-    """List all users (admin only)."""
+async def get_users(request: Request) -> list[dict[str, Any]]:
+    """List all users (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        list[dict[str, Any]]: All registered users.
+    """
     return list_users()
 
 
 @router.post("/api/auth/users", status_code=201, dependencies=[Depends(require_role("admin"))])
-async def create_user_endpoint(request: Request, body: CreateUserRequest):
-    """Invite a new user (admin only). Returns an invite token."""
+async def create_user_endpoint(
+    request: Request, body: CreateUserRequest
+) -> dict[str, Any] | JSONResponse:
+    """Invite a new user (admin only). Returns an invite token.
+
+    Args:
+        request: Incoming HTTP request.
+        body: User email and role.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Created user info including invite token.
+    """
     if body.role not in ROLES:
         return JSONResponse(
             status_code=400,
@@ -307,8 +405,16 @@ async def create_user_endpoint(request: Request, body: CreateUserRequest):
 
 
 @router.delete("/api/auth/users/{user_id}", dependencies=[Depends(require_role("admin"))])
-async def delete_user_endpoint(request: Request, user_id: int):
-    """Delete a user (admin only)."""
+async def delete_user_endpoint(request: Request, user_id: int) -> dict[str, Any] | JSONResponse:
+    """Delete a user (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+        user_id: Database ID of the user to delete.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Confirmation or error response.
+    """
     # Prevent self-deletion
     cookie = request.cookies.get(COOKIE_NAME)
     if cookie:
@@ -336,7 +442,11 @@ async def delete_user_endpoint(request: Request, user_id: int):
 
 
 class SetGatewayRoleRequest(BaseModel):
-    """Request body for setting a per-gateway role override."""
+    """Request body for setting a per-gateway role override.
+
+    Attributes:
+        role: Role to assign for the gateway scope.
+    """
 
     role: str
 
@@ -344,8 +454,15 @@ class SetGatewayRoleRequest(BaseModel):
 @router.get(
     "/api/auth/users/{user_id}/gateway-roles", dependencies=[Depends(require_role("admin"))]
 )
-async def get_user_gateway_roles(user_id: int):
-    """List all gateway-scoped role overrides for a user."""
+async def get_user_gateway_roles(user_id: int) -> list[dict[str, Any]]:
+    """List all gateway-scoped role overrides for a user.
+
+    Args:
+        user_id: Database ID of the user.
+
+    Returns:
+        list[dict[str, Any]]: Gateway role overrides for the user.
+    """
     return await asyncio.to_thread(list_gateway_roles_for_user, user_id)
 
 
@@ -354,8 +471,18 @@ async def get_user_gateway_roles(user_id: int):
 )
 async def set_user_gateway_role(
     request: Request, user_id: int, gw: str, body: SetGatewayRoleRequest
-):
-    """Set or update a per-gateway role for a user."""
+) -> dict[str, Any] | JSONResponse:
+    """Set or update a per-gateway role for a user.
+
+    Args:
+        request: Incoming HTTP request.
+        user_id: Database ID of the user.
+        gw: Gateway name.
+        body: Role to assign.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Updated gateway role mapping.
+    """
     if not VALID_GATEWAY_NAME_RE.match(gw):
         return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
     if body.role not in ROLES:
@@ -367,7 +494,7 @@ async def set_user_gateway_role(
         result = await asyncio.to_thread(
             set_gateway_role, user_id=user_id, gateway_name=gw, role=body.role
         )
-    except IntegrityError:
+    except (IntegrityError, ValueError):
         return JSONResponse(status_code=404, content={"detail": "User or gateway not found"})
     await audit_log(
         request,
@@ -382,8 +509,19 @@ async def set_user_gateway_role(
 @router.delete(
     "/api/auth/users/{user_id}/gateway-roles/{gw}", dependencies=[Depends(require_role("admin"))]
 )
-async def delete_user_gateway_role(request: Request, user_id: int, gw: str):
-    """Remove a per-gateway role override for a user (falls back to global role)."""
+async def delete_user_gateway_role(
+    request: Request, user_id: int, gw: str
+) -> dict[str, Any] | JSONResponse:
+    """Remove a per-gateway role override for a user (falls back to global role).
+
+    Args:
+        request: Incoming HTTP request.
+        user_id: Database ID of the user.
+        gw: Gateway name.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Confirmation or error response.
+    """
     if not VALID_GATEWAY_NAME_RE.match(gw):
         return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
     if await asyncio.to_thread(remove_gateway_role, user_id=user_id, gateway_name=gw):
@@ -402,8 +540,15 @@ async def delete_user_gateway_role(request: Request, user_id: int, gw: str):
     "/api/auth/service-principals/{sp_id}/gateway-roles",
     dependencies=[Depends(require_role("admin"))],
 )
-async def get_sp_gateway_roles(sp_id: int):
-    """List all gateway-scoped role overrides for a service principal."""
+async def get_sp_gateway_roles(sp_id: int) -> list[dict[str, Any]]:
+    """List all gateway-scoped role overrides for a service principal.
+
+    Args:
+        sp_id: Database ID of the service principal.
+
+    Returns:
+        list[dict[str, Any]]: Gateway role overrides for the service principal.
+    """
     return await asyncio.to_thread(list_gateway_roles_for_sp, sp_id)
 
 
@@ -413,8 +558,18 @@ async def get_sp_gateway_roles(sp_id: int):
 )
 async def set_sp_gateway_role_endpoint(
     request: Request, sp_id: int, gw: str, body: SetGatewayRoleRequest
-):
-    """Set or update a per-gateway role for a service principal."""
+) -> dict[str, Any] | JSONResponse:
+    """Set or update a per-gateway role for a service principal.
+
+    Args:
+        request: Incoming HTTP request.
+        sp_id: Database ID of the service principal.
+        gw: Gateway name.
+        body: Role to assign.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Updated gateway role mapping.
+    """
     if not VALID_GATEWAY_NAME_RE.match(gw):
         return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
     if body.role not in ROLES:
@@ -426,7 +581,7 @@ async def set_sp_gateway_role_endpoint(
         result = await asyncio.to_thread(
             set_gateway_role, sp_id=sp_id, gateway_name=gw, role=body.role
         )
-    except IntegrityError:
+    except (IntegrityError, ValueError):
         return JSONResponse(
             status_code=404, content={"detail": "Service principal or gateway not found"}
         )
@@ -444,8 +599,19 @@ async def set_sp_gateway_role_endpoint(
     "/api/auth/service-principals/{sp_id}/gateway-roles/{gw}",
     dependencies=[Depends(require_role("admin"))],
 )
-async def delete_sp_gateway_role(request: Request, sp_id: int, gw: str):
-    """Remove a per-gateway role override for a service principal."""
+async def delete_sp_gateway_role(
+    request: Request, sp_id: int, gw: str
+) -> dict[str, Any] | JSONResponse:
+    """Remove a per-gateway role override for a service principal.
+
+    Args:
+        request: Incoming HTTP request.
+        sp_id: Database ID of the service principal.
+        gw: Gateway name.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Confirmation or error response.
+    """
     if not VALID_GATEWAY_NAME_RE.match(gw):
         return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
     if await asyncio.to_thread(remove_gateway_role, sp_id=sp_id, gateway_name=gw):
@@ -464,15 +630,28 @@ async def delete_sp_gateway_role(request: Request, sp_id: int, gw: str):
 
 
 class AcceptInviteRequest(BaseModel):
-    """Request body for accepting an invite."""
+    """Request body for accepting an invite.
+
+    Attributes:
+        token: Invite token from the invitation link.
+        password: Chosen password for the new account.
+    """
 
     token: str
     password: str
 
 
 @router.post("/api/auth/accept-invite")
-async def accept_invite_endpoint(request: Request, body: AcceptInviteRequest):
-    """Accept an invite and set password. Returns session cookie."""
+async def accept_invite_endpoint(request: Request, body: AcceptInviteRequest) -> JSONResponse:
+    """Accept an invite and set password. Returns session cookie.
+
+    Args:
+        request: Incoming HTTP request.
+        body: Invite token and chosen password.
+
+    Returns:
+        JSONResponse: Session cookie on success, or error details.
+    """
     if not body.password or len(body.password) < 8:
         return JSONResponse(
             status_code=400, content={"detail": "Password must be at least 8 characters"}
@@ -513,15 +692,28 @@ async def accept_invite_endpoint(request: Request, body: AcceptInviteRequest):
 
 
 class RegisterRequest(BaseModel):
-    """Request body for self-registration."""
+    """Request body for self-registration.
+
+    Attributes:
+        email: Email address for the new account.
+        password: Chosen password.
+    """
 
     email: str
     password: str
 
 
 @router.post("/api/auth/register")
-async def register_endpoint(request: Request, body: RegisterRequest):
-    """Self-register a new viewer account. Requires SHOREGUARD_ALLOW_REGISTRATION."""
+async def register_endpoint(request: Request, body: RegisterRequest) -> JSONResponse:
+    """Self-register a new viewer account. Requires SHOREGUARD_ALLOW_REGISTRATION.
+
+    Args:
+        request: Incoming HTTP request.
+        body: Registration email and password.
+
+    Returns:
+        JSONResponse: Session cookie on success, or error details.
+    """
     if not is_registration_enabled():
         return JSONResponse(status_code=403, content={"detail": "Registration is disabled"})
     if not is_setup_complete():
@@ -581,23 +773,45 @@ async def register_endpoint(request: Request, body: RegisterRequest):
 
 
 class CreateSPRequest(BaseModel):
-    """Request body for creating a service principal."""
+    """Request body for creating a service principal.
+
+    Attributes:
+        name: Display name for the service principal.
+        role: Role to assign (default ``"viewer"``).
+    """
 
     name: str
     role: str = "viewer"
 
 
 @router.get("/api/auth/service-principals", dependencies=[Depends(require_role("admin"))])
-async def get_sps(request: Request):
-    """List all service principals (admin only)."""
+async def get_sps(request: Request) -> list[dict[str, Any]]:
+    """List all service principals (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        list[dict[str, Any]]: All registered service principals.
+    """
     return list_service_principals()
 
 
 @router.post(
     "/api/auth/service-principals", status_code=201, dependencies=[Depends(require_role("admin"))]
 )
-async def create_sp_endpoint(request: Request, body: CreateSPRequest):
-    """Create a new service principal (admin only)."""
+async def create_sp_endpoint(
+    request: Request, body: CreateSPRequest
+) -> dict[str, Any] | JSONResponse:
+    """Create a new service principal (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+        body: Service principal name and role.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Created service principal info including API key.
+    """
     if body.role not in ROLES:
         return JSONResponse(
             status_code=400,
@@ -641,8 +855,16 @@ async def create_sp_endpoint(request: Request, body: CreateSPRequest):
 @router.delete(
     "/api/auth/service-principals/{sp_id}", dependencies=[Depends(require_role("admin"))]
 )
-async def delete_sp_endpoint(request: Request, sp_id: int):
-    """Delete a service principal (admin only)."""
+async def delete_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | JSONResponse:
+    """Delete a service principal (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+        sp_id: Database ID of the service principal to delete.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Confirmation or error response.
+    """
     if delete_service_principal(sp_id):
         logger.info("Service principal deleted (sp_id=%s, actor=%s)", sp_id, _get_actor(request))
         await audit_log(request, "sp.delete", "service_principal", str(sp_id))
@@ -653,24 +875,45 @@ async def delete_sp_endpoint(request: Request, sp_id: int):
 # ─── Page helpers ────────────────────────────────────────────────────────────
 
 
-def _openshell_meta():
-    """Lazy import to avoid circular deps at module level."""
+def _openshell_meta() -> OpenShellMeta:
+    """Lazy import to avoid circular deps at module level.
+
+    Returns:
+        OpenShellMeta: Cached metadata about provider types and community sandboxes.
+    """
     from shoreguard.services._openshell_meta import get_openshell_meta
 
     return get_openshell_meta()
 
 
-def _gw_ctx(gw: str, **extra: object) -> dict:
-    """Common template context for gateway-scoped pages."""
+def _gw_ctx(gw: str, **extra: object) -> dict[str, Any]:
+    """Common template context for gateway-scoped pages.
+
+    Args:
+        gw: Gateway name.
+        **extra: Additional context variables.
+
+    Returns:
+        dict[str, Any]: Template context dict with gateway info.
+    """
     return {"active_page": "sandboxes", "gateway_name": gw, **extra}
 
 
 def _render_error(
     request: Request, status_code: int, title: str, message: str, icon: str = "exclamation-triangle"
-):
-    """Render a styled error page."""
-    from starlette.responses import HTMLResponse
+) -> HTMLResponse:
+    """Render a styled error page.
 
+    Args:
+        request: Incoming HTTP request.
+        status_code: HTTP status code for the response.
+        title: Error title displayed to the user.
+        message: Error description displayed to the user.
+        icon: Bootstrap icon name for the error page.
+
+    Returns:
+        HTMLResponse: Rendered error page with the given status code.
+    """
     resp = templates.TemplateResponse(
         request,
         "pages/error.html",
@@ -679,8 +922,15 @@ def _render_error(
     return HTMLResponse(content=resp.body, status_code=status_code, headers=dict(resp.headers))
 
 
-def _require_page_auth(request: Request):
-    """Redirect to /login or /setup based on auth state."""
+def _require_page_auth(request: Request) -> RedirectResponse | None:
+    """Redirect to /login or /setup based on auth state.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        RedirectResponse | None: Redirect if unauthenticated, or None if authorized.
+    """
     from shoreguard.api.auth import _session_factory
 
     # If a DB is configured but no users exist yet → setup wizard
@@ -702,14 +952,28 @@ def _require_page_auth(request: Request):
 
 
 @router.get("/login")
-async def login_page(request: Request):
-    """Serve the login page."""
+async def login_page(request: Request) -> TemplateResponse:
+    """Serve the login page.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse: Rendered login page.
+    """
     return templates.TemplateResponse(request, "pages/login.html", {})
 
 
 @router.get("/register")
-async def register_page(request: Request):
-    """Serve the self-registration page."""
+async def register_page(request: Request) -> TemplateResponse | HTMLResponse:
+    """Serve the self-registration page.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | HTMLResponse: Rendered registration page, or error if disabled.
+    """
     if not is_registration_enabled():
         return _render_error(
             request,
@@ -723,22 +987,43 @@ async def register_page(request: Request):
 
 
 @router.get("/invite")
-async def invite_page(request: Request):
-    """Serve the invite acceptance page."""
+async def invite_page(request: Request) -> TemplateResponse:
+    """Serve the invite acceptance page.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse: Rendered invite acceptance page.
+    """
     return templates.TemplateResponse(request, "pages/invite.html", {})
 
 
 @router.get("/setup")
-async def setup_page(request: Request):
-    """Serve the setup wizard (only when no users exist)."""
+async def setup_page(request: Request) -> TemplateResponse | RedirectResponse:
+    """Serve the setup wizard (only when no users exist).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse: Rendered setup page, or redirect if already set up.
+    """
     if is_setup_complete():
         return RedirectResponse(url="/", status_code=302)
     return templates.TemplateResponse(request, "pages/setup.html", {})
 
 
 @router.get("/")
-async def dashboard_redirect(request: Request):
-    """Redirect root to gateways list."""
+async def dashboard_redirect(request: Request) -> RedirectResponse:
+    """Redirect root to gateways list.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        RedirectResponse: Redirect to /gateways or login page.
+    """
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
@@ -746,8 +1031,15 @@ async def dashboard_redirect(request: Request):
 
 
 @router.get("/gateways")
-async def gateways_page(request: Request):
-    """Gateway list page."""
+async def gateways_page(request: Request) -> TemplateResponse | RedirectResponse:
+    """Gateway list page.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse: Rendered gateways list page.
+    """
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
@@ -759,8 +1051,18 @@ async def gateways_page(request: Request):
 
 
 @router.get("/gateways/{name:path}")
-async def gateway_detail_or_sub(request: Request, name: str):
-    """Gateway detail page or gateway-scoped sub-pages."""
+async def gateway_detail_or_sub(
+    request: Request, name: str
+) -> TemplateResponse | RedirectResponse | HTMLResponse:
+    """Gateway detail page or gateway-scoped sub-pages.
+
+    Args:
+        request: Incoming HTTP request.
+        name: Gateway name, optionally followed by a sub-path.
+
+    Returns:
+        TemplateResponse | RedirectResponse | HTMLResponse: Rendered gateway page or 404 error page.
+    """
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
@@ -878,8 +1180,15 @@ async def gateway_detail_or_sub(request: Request, name: str):
 
 
 @router.get("/policies")
-async def policies_page(request: Request):
-    """Policy presets list page (global, not gateway-scoped)."""
+async def policies_page(request: Request) -> TemplateResponse | RedirectResponse:
+    """Policy presets list page (global, not gateway-scoped).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse: Rendered policies list page.
+    """
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
@@ -891,8 +1200,16 @@ async def policies_page(request: Request):
 
 
 @router.get("/policies/{name}")
-async def preset_detail_page(request: Request, name: str):
-    """Preset detail page (global)."""
+async def preset_detail_page(request: Request, name: str) -> TemplateResponse | RedirectResponse:
+    """Preset detail page (global).
+
+    Args:
+        request: Incoming HTTP request.
+        name: Preset name.
+
+    Returns:
+        TemplateResponse | RedirectResponse: Rendered preset detail page.
+    """
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
@@ -904,8 +1221,16 @@ async def preset_detail_page(request: Request, name: str):
 
 
 @router.get("/audit")
-async def audit_page(request: Request):
-    """Audit log page (admin only)."""
+async def audit_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
+    """Audit log page (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse | HTMLResponse: Rendered audit log
+            page or access denied error.
+    """
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
@@ -925,8 +1250,16 @@ async def audit_page(request: Request):
 
 
 @router.get("/users")
-async def users_page(request: Request):
-    """User and service principal management page (admin only)."""
+async def users_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
+    """User and service principal management page (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse | HTMLResponse: Rendered users
+            management page or access denied error.
+    """
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
@@ -946,8 +1279,16 @@ async def users_page(request: Request):
 
 
 @router.get("/users/new")
-async def user_new_page(request: Request):
-    """Invite user form page (admin only)."""
+async def user_new_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
+    """Invite user form page (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse | HTMLResponse: Rendered invite
+            user form or access denied error.
+    """
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
@@ -963,8 +1304,16 @@ async def user_new_page(request: Request):
 
 
 @router.get("/users/new-service-principal")
-async def sp_new_page(request: Request):
-    """Create service principal form page (admin only)."""
+async def sp_new_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
+    """Create service principal form page (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse | HTMLResponse: Rendered service
+            principal form or access denied error.
+    """
     redirect = _require_page_auth(request)
     if redirect:
         return redirect

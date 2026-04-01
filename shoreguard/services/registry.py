@@ -16,10 +16,13 @@ logger = logging.getLogger(__name__)
 
 
 class GatewayRegistry:
-    """CRUD and health tracking for registered gateways."""
+    """CRUD and health tracking for registered gateways.
 
-    def __init__(self, session_factory: sessionmaker[Session]) -> None:
-        """Create a registry backed by the given session factory."""
+    Args:
+        session_factory: SQLAlchemy session factory for database access.
+    """
+
+    def __init__(self, session_factory: sessionmaker[Session]) -> None:  # noqa: D107
         self._session_factory = session_factory
 
     def register(
@@ -34,7 +37,24 @@ class GatewayRegistry:
         client_key: bytes | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Register a new gateway. Raises ValueError if name already exists."""
+        """Register a new gateway.
+
+        Args:
+            name: Unique gateway name.
+            endpoint: Gateway endpoint address.
+            scheme: Connection scheme (e.g. "https").
+            auth_mode: Authentication mode (e.g. "mtls").
+            ca_cert: CA certificate bytes for TLS.
+            client_cert: Client certificate bytes for mTLS.
+            client_key: Client private key bytes for mTLS.
+            metadata: Optional metadata dict.
+
+        Returns:
+            dict[str, Any]: The registered gateway record.
+
+        Raises:
+            ValueError: If a gateway with the given name already exists.
+        """
         with self._session_factory() as session:
             gw = Gateway(
                 name=name,
@@ -45,7 +65,7 @@ class GatewayRegistry:
                 client_cert=client_cert,
                 client_key=client_key,
                 metadata_json=json.dumps(metadata) if metadata else None,
-                registered_at=datetime.now(UTC).isoformat(),
+                registered_at=datetime.now(UTC),
                 last_status="unknown",
             )
             session.add(gw)
@@ -59,9 +79,19 @@ class GatewayRegistry:
             return self._to_dict(gw)
 
     def unregister(self, name: str) -> bool:
-        """Remove a gateway. Returns True if it existed."""
+        """Remove a gateway.
+
+        Args:
+            name: Gateway name to unregister.
+
+        Returns:
+            bool: True if the gateway existed and was removed.
+
+        Raises:
+            SQLAlchemyError: If the commit fails.
+        """
         with self._session_factory() as session:
-            gw = session.get(Gateway, name)
+            gw = session.query(Gateway).filter(Gateway.name == name).first()
             if gw is None:
                 logger.debug("Unregister called for unknown gateway '%s'", name)
                 return False
@@ -76,10 +106,20 @@ class GatewayRegistry:
             return True
 
     def get(self, name: str) -> dict[str, Any] | None:
-        """Return a single gateway or None."""
+        """Return a single gateway or None.
+
+        Args:
+            name: Gateway name.
+
+        Returns:
+            dict[str, Any] | None: Gateway record, or None if not found.
+
+        Raises:
+            SQLAlchemyError: If the query fails.
+        """
         try:
             with self._session_factory() as session:
-                gw = session.get(Gateway, name)
+                gw = session.query(Gateway).filter(Gateway.name == name).first()
                 if gw is None:
                     return None
                 return self._to_dict(gw)
@@ -88,7 +128,14 @@ class GatewayRegistry:
             raise
 
     def list_all(self) -> list[dict[str, Any]]:
-        """Return all registered gateways."""
+        """Return all registered gateways.
+
+        Returns:
+            list[dict[str, Any]]: All gateway records ordered by name.
+
+        Raises:
+            SQLAlchemyError: If the query fails.
+        """
         try:
             with self._session_factory() as session:
                 gateways = session.query(Gateway).order_by(Gateway.name).all()
@@ -97,10 +144,19 @@ class GatewayRegistry:
             logger.error("Failed to list gateways", exc_info=True)
             raise
 
-    def update_health(self, name: str, status: str, last_seen: str) -> None:
-        """Update health status and last-seen timestamp."""
+    def update_health(self, name: str, status: str, last_seen: datetime) -> None:
+        """Update health status and last-seen timestamp.
+
+        Args:
+            name: Gateway name.
+            status: New health status string.
+            last_seen: Timestamp of the health check.
+
+        Raises:
+            SQLAlchemyError: If the commit fails.
+        """
         with self._session_factory() as session:
-            gw = session.get(Gateway, name)
+            gw = session.query(Gateway).filter(Gateway.name == name).first()
             if gw is None:
                 logger.debug("update_health called for unknown gateway '%s'", name)
                 return
@@ -117,9 +173,17 @@ class GatewayRegistry:
                 logger.info("Gateway '%s' health: %s → %s", name, old_status, status)
 
     def update_metadata(self, name: str, metadata: dict[str, Any]) -> None:
-        """Replace the metadata JSON blob."""
+        """Replace the metadata JSON blob.
+
+        Args:
+            name: Gateway name.
+            metadata: New metadata dict to store.
+
+        Raises:
+            SQLAlchemyError: If the commit fails.
+        """
         with self._session_factory() as session:
-            gw = session.get(Gateway, name)
+            gw = session.query(Gateway).filter(Gateway.name == name).first()
             if gw is None:
                 logger.debug("update_metadata called for unknown gateway '%s'", name)
                 return
@@ -132,10 +196,21 @@ class GatewayRegistry:
                 raise
 
     def get_credentials(self, name: str) -> dict[str, str | bytes | None] | None:
-        """Return raw cert bytes for a gateway (for connection logic only)."""
+        """Return raw cert bytes for a gateway (for connection logic only).
+
+        Args:
+            name: Gateway name.
+
+        Returns:
+            dict[str, str | bytes | None] | None: Credential dict, or None if
+                not found.
+
+        Raises:
+            SQLAlchemyError: If the query fails.
+        """
         try:
             with self._session_factory() as session:
-                gw = session.get(Gateway, name)
+                gw = session.query(Gateway).filter(Gateway.name == name).first()
                 if gw is None:
                     return None
                 return {
@@ -150,6 +225,14 @@ class GatewayRegistry:
 
     @staticmethod
     def _to_dict(gw: Gateway) -> dict[str, Any]:
+        """Convert a Gateway ORM object to a plain dict.
+
+        Args:
+            gw: The gateway ORM instance.
+
+        Returns:
+            dict[str, Any]: JSON-serializable representation.
+        """
         try:
             metadata = json.loads(gw.metadata_json) if gw.metadata_json else {}
         except json.JSONDecodeError:
@@ -164,7 +247,7 @@ class GatewayRegistry:
             "has_client_cert": gw.client_cert is not None,
             "has_client_key": gw.client_key is not None,
             "metadata": metadata,
-            "registered_at": gw.registered_at,
-            "last_seen": gw.last_seen,
+            "registered_at": gw.registered_at.isoformat() if gw.registered_at else None,
+            "last_seen": gw.last_seen.isoformat() if gw.last_seen else None,
             "last_status": gw.last_status,
         }

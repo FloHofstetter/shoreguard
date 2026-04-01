@@ -21,23 +21,47 @@ class SandboxService:
 
     Provides higher-level workflows like create-with-presets
     that were previously implemented in browser JS.
+
+    Args:
+        client: OpenShell gRPC client instance.
     """
 
-    def __init__(self, client: ShoreGuardClient) -> None:
-        """Initialize with an OpenShell client."""
+    def __init__(self, client: ShoreGuardClient) -> None:  # noqa: D107
         self._client = client
         self._policy = PolicyService(client)
 
     def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
-        """List all sandboxes."""
+        """List all sandboxes.
+
+        Args:
+            limit: Maximum number of sandboxes to return.
+            offset: Number of sandboxes to skip.
+
+        Returns:
+            list[dict[str, Any]]: Sandbox records.
+        """
         return self._client.sandboxes.list(limit=limit, offset=offset)
 
     def get(self, name: str) -> dict[str, Any]:
-        """Get a sandbox by name."""
+        """Get a sandbox by name.
+
+        Args:
+            name: Sandbox name.
+
+        Returns:
+            dict[str, Any]: Sandbox record.
+        """
         return self._client.sandboxes.get(name)
 
     def delete(self, name: str) -> bool:
-        """Delete a sandbox by name."""
+        """Delete a sandbox by name.
+
+        Args:
+            name: Sandbox name.
+
+        Returns:
+            bool: True if the sandbox was deleted.
+        """
         return self._client.sandboxes.delete(name)
 
     def exec(
@@ -52,6 +76,19 @@ class SandboxService:
         """Execute a command inside a sandbox.
 
         Accepts command as a raw string (parsed with shlex) or list.
+
+        Args:
+            name: Sandbox name.
+            command: Command as a string or list of arguments.
+            workdir: Working directory inside the sandbox.
+            env: Environment variables to set.
+            timeout_seconds: Execution timeout (0 for no timeout).
+
+        Returns:
+            dict[str, Any]: Execution result with stdout, stderr, exit code.
+
+        Raises:
+            ValidationError: If the command string has invalid syntax.
         """
         sandbox = self._client.sandboxes.get(name)
         if isinstance(command, str):
@@ -76,7 +113,18 @@ class SandboxService:
         sources: list[str] | None = None,
         min_level: str = "",
     ) -> list[dict[str, Any]]:
-        """Fetch recent logs from a sandbox."""
+        """Fetch recent logs from a sandbox.
+
+        Args:
+            name: Sandbox name.
+            lines: Maximum number of log lines to return.
+            since_ms: Only return logs after this epoch millisecond timestamp.
+            sources: Filter by log source names.
+            min_level: Minimum log level filter.
+
+        Returns:
+            list[dict[str, Any]]: Log entries.
+        """
         sandbox = self._client.sandboxes.get(name)
         return self._client.sandboxes.get_logs(
             sandbox["id"],
@@ -87,12 +135,26 @@ class SandboxService:
         )
 
     def create_ssh_session(self, name: str) -> dict[str, Any]:
-        """Create an SSH session for a sandbox, resolving name to ID."""
+        """Create an SSH session for a sandbox, resolving name to ID.
+
+        Args:
+            name: Sandbox name.
+
+        Returns:
+            dict[str, Any]: SSH session details including token.
+        """
         sandbox = self._client.sandboxes.get(name)
         return self._client.sandboxes.create_ssh_session(sandbox["id"])
 
     def revoke_ssh_session(self, token: str) -> bool:
-        """Revoke an active SSH session by token."""
+        """Revoke an active SSH session by token.
+
+        Args:
+            token: Session token to revoke.
+
+        Returns:
+            bool: True if the session was revoked.
+        """
         return self._client.sandboxes.revoke_ssh_session(token)
 
     def create(
@@ -113,6 +175,17 @@ class SandboxService:
         2. Wait for ready state
         3. Wait for initial policy
         4. Apply presets sequentially
+
+        Args:
+            name: Sandbox name (empty for auto-generated).
+            image: Container image to use.
+            gpu: Whether to enable GPU support.
+            providers: Provider names to attach.
+            environment: Environment variables to set.
+            presets: Policy presets to apply after creation.
+
+        Returns:
+            dict[str, Any]: Created sandbox record with preset status.
         """
         result = self._client.sandboxes.create(
             name=name,

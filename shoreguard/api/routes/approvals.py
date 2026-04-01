@@ -21,23 +21,43 @@ router = APIRouter()
 
 
 def _get_approval_service(client: ShoreGuardClient = Depends(get_client)) -> ApprovalService:
+    """Build an ApprovalService from the injected client.
+
+    Args:
+        client: gRPC client for the active gateway.
+
+    Returns:
+        ApprovalService: Service instance bound to the client.
+    """
     return ApprovalService(client)
 
 
 class RejectRequest(BaseModel):
-    """Body for rejecting a draft policy chunk."""
+    """Body for rejecting a draft policy chunk.
+
+    Attributes:
+        reason: Optional rejection reason.
+    """
 
     reason: str = ""
 
 
 class ApproveAllRequest(BaseModel):
-    """Body for bulk-approving all pending draft chunks."""
+    """Body for bulk-approving all pending draft chunks.
+
+    Attributes:
+        include_security_flagged: Whether to also approve security-flagged chunks.
+    """
 
     include_security_flagged: bool = False
 
 
 class EditChunkRequest(BaseModel):
-    """Body for editing a draft policy chunk's proposed rule."""
+    """Body for editing a draft policy chunk's proposed rule.
+
+    Attributes:
+        proposed_rule: New rule definition to replace the existing one.
+    """
 
     proposed_rule: dict
 
@@ -48,7 +68,16 @@ async def get_approvals(
     status_filter: str = "",
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, Any]:
-    """Get draft policy recommendations for a sandbox."""
+    """Get draft policy recommendations for a sandbox.
+
+    Args:
+        name: Sandbox name.
+        status_filter: Optional filter by approval status.
+        svc: Injected approval service.
+
+    Returns:
+        dict[str, Any]: Draft policy with approval metadata.
+    """
     return await asyncio.to_thread(svc.get_draft, name, status_filter=status_filter)
 
 
@@ -57,7 +86,15 @@ async def get_pending_approvals(
     name: str,
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> list[dict[str, Any]]:
-    """Get only pending (unapproved) draft chunks."""
+    """Get only pending (unapproved) draft chunks.
+
+    Args:
+        name: Sandbox name.
+        svc: Injected approval service.
+
+    Returns:
+        list[dict[str, Any]]: Pending draft chunks.
+    """
     return await asyncio.to_thread(svc.get_pending, name)
 
 
@@ -70,7 +107,17 @@ async def approve_chunk(
     chunk_id: str,
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, Any]:
-    """Approve a single draft policy chunk."""
+    """Approve a single draft policy chunk.
+
+    Args:
+        request: Incoming HTTP request.
+        name: Sandbox name.
+        chunk_id: Chunk identifier.
+        svc: Injected approval service.
+
+    Returns:
+        dict[str, Any]: Updated chunk status.
+    """
     actor = get_actor(request)
     logger.info("Chunk approved (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
     result = await asyncio.to_thread(svc.approve, name, chunk_id)
@@ -94,8 +141,19 @@ async def reject_chunk(
     chunk_id: str,
     body: RejectRequest | None = None,
     svc: ApprovalService = Depends(_get_approval_service),
-) -> dict:
-    """Reject a single draft policy chunk."""
+) -> dict[str, str]:
+    """Reject a single draft policy chunk.
+
+    Args:
+        request: Incoming HTTP request.
+        name: Sandbox name.
+        chunk_id: Chunk identifier.
+        body: Optional rejection payload with reason.
+        svc: Injected approval service.
+
+    Returns:
+        dict[str, str]: Rejection confirmation status.
+    """
     reason = body.reason if body else ""
     actor = get_actor(request)
     logger.info("Chunk rejected (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
@@ -118,7 +176,17 @@ async def approve_all(
     body: ApproveAllRequest | None = None,
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, Any]:
-    """Approve all pending draft chunks for a sandbox."""
+    """Approve all pending draft chunks for a sandbox.
+
+    Args:
+        request: Incoming HTTP request.
+        name: Sandbox name.
+        body: Optional payload controlling security-flagged inclusion.
+        svc: Injected approval service.
+
+    Returns:
+        dict[str, Any]: Bulk approval result with counts.
+    """
     actor = get_actor(request)
     logger.info("All chunks approved (sandbox=%s, actor=%s)", name, actor)
     include_flagged = body.include_security_flagged if body else False
@@ -143,8 +211,19 @@ async def edit_chunk(
     chunk_id: str,
     body: EditChunkRequest,
     svc: ApprovalService = Depends(_get_approval_service),
-) -> dict:
-    """Edit a pending draft chunk's proposed rule."""
+) -> dict[str, str]:
+    """Edit a pending draft chunk's proposed rule.
+
+    Args:
+        request: Incoming HTTP request.
+        name: Sandbox name.
+        chunk_id: Chunk identifier.
+        body: Payload with the new proposed rule.
+        svc: Injected approval service.
+
+    Returns:
+        dict[str, str]: Edit confirmation status.
+    """
     actor = get_actor(request)
     logger.info("Chunk edited (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
     await asyncio.to_thread(svc.edit, name, chunk_id, body.proposed_rule)
@@ -166,7 +245,17 @@ async def undo_chunk(
     chunk_id: str,
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, Any]:
-    """Reverse an approval decision."""
+    """Reverse an approval decision.
+
+    Args:
+        request: Incoming HTTP request.
+        name: Sandbox name.
+        chunk_id: Chunk identifier.
+        svc: Injected approval service.
+
+    Returns:
+        dict[str, Any]: Updated chunk status after undo.
+    """
     actor = get_actor(request)
     logger.info("Chunk undone (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
     result = await asyncio.to_thread(svc.undo, name, chunk_id)
@@ -187,7 +276,16 @@ async def clear_approvals(
     name: str,
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> dict[str, int]:
-    """Clear all pending draft chunks for a sandbox."""
+    """Clear all pending draft chunks for a sandbox.
+
+    Args:
+        request: Incoming HTTP request.
+        name: Sandbox name.
+        svc: Injected approval service.
+
+    Returns:
+        dict[str, int]: Number of cleared chunks.
+    """
     actor = get_actor(request)
     logger.info("Chunks cleared (sandbox=%s, actor=%s)", name, actor)
     result = await asyncio.to_thread(svc.clear, name)
@@ -200,5 +298,13 @@ async def get_approval_history(
     name: str,
     svc: ApprovalService = Depends(_get_approval_service),
 ) -> list[dict[str, Any]]:
-    """Get decision history for a sandbox's draft policy."""
+    """Get decision history for a sandbox's draft policy.
+
+    Args:
+        name: Sandbox name.
+        svc: Injected approval service.
+
+    Returns:
+        list[dict[str, Any]]: Approval decision history records.
+    """
     return await asyncio.to_thread(svc.get_history, name)

@@ -1,5 +1,7 @@
 """Tests for the GatewayRegistry service."""
 
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -113,13 +115,13 @@ class TestListAll:
 class TestUpdateHealth:
     def test_update_health(self, registry):
         registry.register("gw1", "10.0.0.1:8443")
-        registry.update_health("gw1", "healthy", "2026-03-28T10:00:00")
+        registry.update_health("gw1", "healthy", datetime(2026, 3, 28, 10, 0, 0, tzinfo=UTC))
         gw = registry.get("gw1")
         assert gw["last_status"] == "healthy"
-        assert gw["last_seen"] == "2026-03-28T10:00:00"
+        assert gw["last_seen"] in ("2026-03-28T10:00:00+00:00", "2026-03-28T10:00:00")
 
     def test_update_health_nonexistent_is_noop(self, registry):
-        registry.update_health("nope", "healthy", "2026-03-28T10:00:00")
+        registry.update_health("nope", "healthy", datetime(2026, 3, 28, 10, 0, 0, tzinfo=UTC))
 
 
 class TestUpdateMetadata:
@@ -141,7 +143,7 @@ class TestToDict:
         registry.register("gw1", "10.0.0.1:8443", metadata={"valid": True})
         # Corrupt the metadata_json directly
         with registry._session_factory() as session:
-            gw = session.get(Gateway, "gw1")
+            gw = session.query(Gateway).filter(Gateway.name == "gw1").first()
             gw.metadata_json = "not-valid-json{{"
             session.commit()
         result = registry.get("gw1")
@@ -179,7 +181,11 @@ class TestDatabaseErrors:
             side_effect=SQLAlchemyError("disk full"),
         ):
             with pytest.raises(SQLAlchemyError):
-                registry.update_health("gw1", "healthy", "2026-03-28T10:00:00")
+                registry.update_health(
+                    "gw1",
+                    "healthy",
+                    datetime(2026, 3, 28, 10, 0, 0, tzinfo=UTC),
+                )
 
     def test_update_metadata_db_error_raises(self, registry):
         """update_metadata re-raises SQLAlchemyError on commit failure."""

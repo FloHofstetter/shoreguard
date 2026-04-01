@@ -9,7 +9,14 @@ from ._proto import openshell_pb2, openshell_pb2_grpc
 
 
 def _chunk_to_dict(chunk: openshell_pb2.PolicyChunk) -> dict[str, Any]:
-    """Convert a PolicyChunk protobuf to a plain dict."""
+    """Convert a PolicyChunk protobuf to a plain dict.
+
+    Args:
+        chunk: PolicyChunk protobuf message.
+
+    Returns:
+        dict[str, Any]: Chunk data with status, rule, and metadata.
+    """
     result: dict[str, Any] = {
         "id": chunk.id,
         "status": chunk.status,
@@ -63,15 +70,27 @@ def _chunk_to_dict(chunk: openshell_pb2.PolicyChunk) -> dict[str, Any]:
 
 
 class ApprovalManager:
-    """Draft policy approval flow: review, approve, reject blocked requests."""
+    """Draft policy approval flow: review, approve, reject blocked requests.
 
-    def __init__(self, stub: openshell_pb2_grpc.OpenShellStub, *, timeout: float = 30.0) -> None:
-        """Initialize with an OpenShell gRPC stub."""
+    Args:
+        stub: OpenShell gRPC stub.
+        timeout: gRPC call timeout in seconds.
+    """
+
+    def __init__(self, stub: openshell_pb2_grpc.OpenShellStub, *, timeout: float = 30.0) -> None:  # noqa: D107
         self._stub = stub
         self._timeout = timeout
 
     def get_draft(self, sandbox_name: str, *, status_filter: str = "") -> dict[str, Any]:
-        """Get draft policy recommendations for a sandbox."""
+        """Get draft policy recommendations for a sandbox.
+
+        Args:
+            sandbox_name: Sandbox name.
+            status_filter: Optional status to filter chunks by.
+
+        Returns:
+            dict[str, Any]: Draft policy with chunks, summary, and version.
+        """
         resp = self._stub.GetDraftPolicy(
             openshell_pb2.GetDraftPolicyRequest(name=sandbox_name, status_filter=status_filter),
             timeout=self._timeout,
@@ -84,12 +103,27 @@ class ApprovalManager:
         }
 
     def get_pending(self, sandbox_name: str) -> list[dict[str, Any]]:
-        """Get only pending (unapproved) draft chunks."""
+        """Get only pending (unapproved) draft chunks.
+
+        Args:
+            sandbox_name: Sandbox name.
+
+        Returns:
+            list[dict[str, Any]]: List of pending chunk dicts.
+        """
         draft = self.get_draft(sandbox_name, status_filter="pending")
         return draft["chunks"]
 
     def approve(self, sandbox_name: str, chunk_id: str) -> dict[str, Any]:
-        """Approve a single draft policy chunk (merges into active policy)."""
+        """Approve a single draft policy chunk (merges into active policy).
+
+        Args:
+            sandbox_name: Sandbox name.
+            chunk_id: Chunk identifier to approve.
+
+        Returns:
+            dict[str, Any]: New policy version and hash.
+        """
         resp = self._stub.ApproveDraftChunk(
             openshell_pb2.ApproveDraftChunkRequest(name=sandbox_name, chunk_id=chunk_id),
             timeout=self._timeout,
@@ -97,7 +131,13 @@ class ApprovalManager:
         return {"policy_version": resp.policy_version, "policy_hash": resp.policy_hash}
 
     def reject(self, sandbox_name: str, chunk_id: str, *, reason: str = "") -> None:
-        """Reject a single draft policy chunk."""
+        """Reject a single draft policy chunk.
+
+        Args:
+            sandbox_name: Sandbox name.
+            chunk_id: Chunk identifier to reject.
+            reason: Optional rejection reason.
+        """
         self._stub.RejectDraftChunk(
             openshell_pb2.RejectDraftChunkRequest(
                 name=sandbox_name, chunk_id=chunk_id, reason=reason
@@ -108,7 +148,16 @@ class ApprovalManager:
     def approve_all(
         self, sandbox_name: str, *, include_security_flagged: bool = False
     ) -> dict[str, Any]:
-        """Approve all pending draft chunks."""
+        """Approve all pending draft chunks.
+
+        Args:
+            sandbox_name: Sandbox name.
+            include_security_flagged: Whether to also approve
+                security-flagged chunks.
+
+        Returns:
+            dict[str, Any]: Policy version, hash, and approval counts.
+        """
         resp = self._stub.ApproveAllDraftChunks(
             openshell_pb2.ApproveAllDraftChunksRequest(
                 name=sandbox_name, include_security_flagged=include_security_flagged
@@ -123,7 +172,13 @@ class ApprovalManager:
         }
 
     def edit(self, sandbox_name: str, chunk_id: str, proposed_rule: dict) -> None:
-        """Edit a pending draft chunk in-place."""
+        """Edit a pending draft chunk in-place.
+
+        Args:
+            sandbox_name: Sandbox name.
+            chunk_id: Chunk identifier to edit.
+            proposed_rule: Network rule dict to replace the existing rule.
+        """
         rule = _dict_to_network_rule(proposed_rule)
         self._stub.EditDraftChunk(
             openshell_pb2.EditDraftChunkRequest(
@@ -133,7 +188,15 @@ class ApprovalManager:
         )
 
     def undo(self, sandbox_name: str, chunk_id: str) -> dict[str, Any]:
-        """Reverse an approval (remove merged rule from active policy)."""
+        """Reverse an approval (remove merged rule from active policy).
+
+        Args:
+            sandbox_name: Sandbox name.
+            chunk_id: Chunk identifier to undo.
+
+        Returns:
+            dict[str, Any]: Updated policy version and hash.
+        """
         resp = self._stub.UndoDraftChunk(
             openshell_pb2.UndoDraftChunkRequest(name=sandbox_name, chunk_id=chunk_id),
             timeout=self._timeout,
@@ -141,7 +204,14 @@ class ApprovalManager:
         return {"policy_version": resp.policy_version, "policy_hash": resp.policy_hash}
 
     def clear(self, sandbox_name: str) -> dict[str, int]:
-        """Clear all pending draft chunks for a sandbox."""
+        """Clear all pending draft chunks for a sandbox.
+
+        Args:
+            sandbox_name: Sandbox name.
+
+        Returns:
+            dict[str, int]: Number of chunks cleared.
+        """
         resp = self._stub.ClearDraftChunks(
             openshell_pb2.ClearDraftChunksRequest(name=sandbox_name),
             timeout=self._timeout,
@@ -149,7 +219,14 @@ class ApprovalManager:
         return {"chunks_cleared": resp.chunks_cleared}
 
     def get_history(self, sandbox_name: str) -> list[dict[str, Any]]:
-        """Get decision history for a sandbox's draft policy."""
+        """Get decision history for a sandbox's draft policy.
+
+        Args:
+            sandbox_name: Sandbox name.
+
+        Returns:
+            list[dict[str, Any]]: List of history entry dicts.
+        """
         resp = self._stub.GetDraftHistory(
             openshell_pb2.GetDraftHistoryRequest(name=sandbox_name),
             timeout=self._timeout,

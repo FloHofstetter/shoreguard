@@ -1,0 +1,53 @@
+{% extends "pages/sandbox_base.html" %}
+{% block title %}Edit Chunk — {{ sandbox_name }} — Shoreguard{% endblock %}
+
+{% block breadcrumb_tail %}
+<li class="breadcrumb-item"><a href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/approvals">Approvals</a></li>
+<li class="breadcrumb-item active">Edit Chunk</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8" x-data='approvalEditPage({{ sandbox_name|tojson }}, {{ chunk_id|tojson }})' x-init="load()">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0"><i class="bi bi-pencil me-2"></i>Edit Proposed Rule</h5>
+            <a href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/approvals" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to Approvals
+            </a>
+        </div>
+
+        <!-- Loading -->
+        <div x-show="loading" class="text-center text-muted py-5">
+            <div class="spinner-border spinner-border-sm me-2"></div>Loading chunk...
+        </div>
+
+        <!-- Error -->
+        <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+        <!-- Edit form -->
+        <template x-if="!loading && !error && chunkJson !== null">
+            <div class="card sg-card-themed">
+                <div class="card-body">
+                    <p class="text-muted small mb-2">Edit the proposed rule JSON. Changes are saved as a new proposal.</p>
+                    <textarea class="form-control font-monospace" rows="14" spellcheck="false"
+                              x-model="chunkJson"></textarea>
+
+                    <!-- Status output -->
+                    <div class="mt-2" x-show="output" x-html="output"></div>
+
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn btn-success" @click="save()" :disabled="saving">
+                            <i class="bi bi-check me-1"></i>Save
+                        </button>
+                        <a href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/approvals" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+</div>
+{% endblock %}
+
+{% block sandbox_js %}
+<script src="/static/js/approvals.js"></script>
+{% endblock %}

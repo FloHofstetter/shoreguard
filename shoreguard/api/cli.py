@@ -28,7 +28,14 @@ cli = typer.Typer(
 
 
 def _version_callback(value: bool) -> None:
-    """Print version and exit when --version is passed."""
+    """Print version and exit when --version is passed.
+
+    Args:
+        value: True when ``--version`` flag is present.
+
+    Raises:
+        typer.Exit: After printing the version string.
+    """
     if value:
         from shoreguard import __version__
 
@@ -109,7 +116,18 @@ def main(
         ),
     ] = None,
 ) -> None:
-    """Start the Shoreguard server."""
+    """Start the Shoreguard server.
+
+    Args:
+        host: Network interface to listen on.
+        port: HTTP port for the dashboard and REST API.
+        log_level: Verbosity for Shoreguard and Uvicorn.
+        reload: Auto-reload on code changes.
+        local: Enable local mode with Docker lifecycle management.
+        no_auth: Disable authentication entirely.
+        database_url: SQLAlchemy database URL override.
+        version: Print version and exit (handled by callback).
+    """
     import os
 
     import uvicorn
@@ -181,9 +199,14 @@ def _import_filesystem_gateways(
 ) -> tuple[int, int]:
     """Import gateways from openshell filesystem config into the DB registry.
 
-    Returns (imported, skipped) counts.  Gateways already in the DB are
-    silently skipped.  *log_fn* receives human-readable status lines; when
-    ``None``, messages go to the module logger instead.
+    Gateways already in the DB are silently skipped.
+
+    Args:
+        registry: Gateway registry to import into.
+        log_fn: Callback for status lines; falls back to module logger.
+
+    Returns:
+        tuple[int, int]: ``(imported, skipped)`` counts.
     """
     import json as json_mod
     import os
@@ -334,8 +357,12 @@ def _import_filesystem_gateways(
     return imported, skipped
 
 
-def _cli_init_db(database_url: str | None):
-    """Init DB + auth for CLI commands. Returns engine (caller must .dispose())."""
+def _cli_init_db(database_url: str | None):  # type: ignore[no-untyped-def]
+    """Init DB + auth for CLI commands.
+
+    Args:
+        database_url: Optional database URL override.
+    """  # noqa: DOC201
     import os
 
     from sqlalchemy.orm import sessionmaker as sa_sessionmaker
@@ -370,7 +397,17 @@ def create_user_cmd(
         ),
     ] = None,
 ) -> None:
-    """Create a user account (for initial setup or headless deployments)."""
+    """Create a user account (for initial setup or headless deployments).
+
+    Args:
+        email: Email address for the new user.
+        role: Role: admin, operator, or viewer.
+        password: Password (prompted if omitted).
+        database_url: Optional database URL override.
+
+    Raises:
+        typer.Exit: On validation or database errors.
+    """
     from shoreguard.api.auth import ROLES, create_user
 
     logging.basicConfig(level=logging.INFO)
@@ -409,7 +446,11 @@ _DB_URL_OPT = typer.Option(
 def list_users_cmd(
     database_url: Annotated[str | None, _DB_URL_OPT] = None,
 ) -> None:
-    """List all user accounts."""
+    """List all user accounts.
+
+    Args:
+        database_url: Optional database URL override.
+    """
     from shoreguard.api.auth import list_users
 
     logging.basicConfig(level=logging.WARNING)
@@ -433,7 +474,15 @@ def delete_user_cmd(
     email: Annotated[str, typer.Argument(help="Email of the user to delete")],
     database_url: Annotated[str | None, _DB_URL_OPT] = None,
 ) -> None:
-    """Delete a user account by email."""
+    """Delete a user account by email.
+
+    Args:
+        email: Email of the user to delete.
+        database_url: Optional database URL override.
+
+    Raises:
+        typer.Exit: If user not found or is last admin.
+    """
     from shoreguard.api.auth import delete_user, list_users
 
     logging.basicConfig(level=logging.WARNING)
@@ -463,7 +512,16 @@ def create_sp_cmd(
     ] = "viewer",
     database_url: Annotated[str | None, _DB_URL_OPT] = None,
 ) -> None:
-    """Create a service principal and print its API key."""
+    """Create a service principal and print its API key.
+
+    Args:
+        name: Name for the service principal.
+        role: Role: admin, operator, or viewer.
+        database_url: Optional database URL override.
+
+    Raises:
+        typer.Exit: On validation or database errors.
+    """
     from shoreguard.api.auth import ROLES, create_service_principal
 
     logging.basicConfig(level=logging.WARNING)
@@ -490,7 +548,11 @@ def create_sp_cmd(
 def list_sps_cmd(
     database_url: Annotated[str | None, _DB_URL_OPT] = None,
 ) -> None:
-    """List all service principals."""
+    """List all service principals.
+
+    Args:
+        database_url: Optional database URL override.
+    """
     from shoreguard.api.auth import list_service_principals
 
     logging.basicConfig(level=logging.WARNING)
@@ -509,7 +571,11 @@ def list_sps_cmd(
 
 @cli.command("import-gateways")
 def import_gateways() -> None:
-    """Import gateways from openshell filesystem config into the database."""
+    """Import gateways from openshell filesystem config into the database.
+
+    Raises:
+        typer.Exit: If database initialisation fails.
+    """
     from sqlalchemy.orm import sessionmaker as sa_sessionmaker
 
     from shoreguard.db import init_db

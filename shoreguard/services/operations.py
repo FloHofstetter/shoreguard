@@ -14,7 +14,18 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Operation:
-    """A tracked long-running operation."""
+    """A tracked long-running operation.
+
+    Attributes:
+        id: Unique operation identifier.
+        status: Current status ("running", "succeeded", or "failed").
+        resource_type: Type of resource ("gateway" or "sandbox").
+        resource_key: Name of the resource (for duplicate detection).
+        created_at: Monotonic timestamp when the operation was created.
+        completed_at: Monotonic timestamp when the operation completed.
+        result: Result payload on success.
+        error: Error message on failure.
+    """
 
     id: str
     status: str  # "running" | "succeeded" | "failed"
@@ -30,6 +41,11 @@ class OperationStore:
     """Thread-safe in-memory store for async operations.
 
     Operations are stored with a TTL and automatically cleaned up.
+
+    Args:
+        ttl: Time-to-live in seconds for completed operations.
+        running_ttl: Time-to-live in seconds for running operations before
+            they are expired as timed out.
     """
 
     def __init__(self, ttl: float = 3600.0, running_ttl: float = 600.0) -> None:  # noqa: D107
@@ -39,7 +55,15 @@ class OperationStore:
         self._running_ttl = running_ttl
 
     def create(self, resource_type: str, resource_key: str) -> Operation:
-        """Create a new running operation."""
+        """Create a new running operation.
+
+        Args:
+            resource_type: Type of resource being operated on.
+            resource_key: Name of the resource.
+
+        Returns:
+            Operation: The newly created operation.
+        """
         op = Operation(
             id=str(uuid.uuid4()),
             status="running",
@@ -53,7 +77,13 @@ class OperationStore:
     def create_if_not_running(self, resource_type: str, resource_key: str) -> Operation | None:
         """Atomically check for a running operation and create one if none exists.
 
-        Returns the new Operation, or None if one is already running.
+        Args:
+            resource_type: Type of resource being operated on.
+            resource_key: Name of the resource.
+
+        Returns:
+            Operation | None: The new operation, or None if one is already
+                running.
         """
         op = Operation(
             id=str(uuid.uuid4()),
@@ -73,7 +103,12 @@ class OperationStore:
         return op
 
     def complete(self, op_id: str, result: dict[str, Any]) -> None:
-        """Mark an operation as succeeded with its result."""
+        """Mark an operation as succeeded with its result.
+
+        Args:
+            op_id: The operation ID to complete.
+            result: Result payload to store.
+        """
         with self._lock:
             op = self._ops.get(op_id)
             if op:
@@ -88,7 +123,12 @@ class OperationStore:
                 )
 
     def fail(self, op_id: str, error: str) -> None:
-        """Mark an operation as failed with an error message."""
+        """Mark an operation as failed with an error message.
+
+        Args:
+            op_id: The operation ID to mark as failed.
+            error: Error message describing the failure.
+        """
         with self._lock:
             op = self._ops.get(op_id)
             if op:
@@ -104,12 +144,27 @@ class OperationStore:
                 )
 
     def get(self, op_id: str) -> Operation | None:
-        """Get an operation by ID, or None if not found/expired."""
+        """Get an operation by ID, or None if not found/expired.
+
+        Args:
+            op_id: The operation ID to look up.
+
+        Returns:
+            Operation | None: The operation, or None if not found.
+        """
         with self._lock:
             return self._ops.get(op_id)
 
     def is_running(self, resource_type: str, resource_key: str) -> bool:
-        """Check if there is already a running operation for the given resource."""
+        """Check if there is already a running operation for the given resource.
+
+        Args:
+            resource_type: Type of resource to check.
+            resource_key: Name of the resource to check.
+
+        Returns:
+            bool: True if a running operation exists for this resource.
+        """
         with self._lock:
             return any(
                 op.status == "running"
@@ -119,7 +174,11 @@ class OperationStore:
             )
 
     def cleanup(self) -> int:
-        """Remove completed operations older than TTL and expire stuck running operations."""
+        """Remove completed operations older than TTL and expire stuck running operations.
+
+        Returns:
+            int: Number of expired operations removed.
+        """
         now = time.monotonic()
         removed = 0
         with self._lock:
@@ -150,7 +209,14 @@ class OperationStore:
         return removed
 
     def to_dict(self, op: Operation) -> dict[str, Any]:
-        """Convert an operation to a JSON-serializable dict."""
+        """Convert an operation to a JSON-serializable dict.
+
+        Args:
+            op: The operation to convert.
+
+        Returns:
+            dict[str, Any]: JSON-serializable representation.
+        """
         with self._lock:
             d = asdict(op)
         # Remove internal fields

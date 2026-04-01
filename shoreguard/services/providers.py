@@ -9,18 +9,36 @@ from shoreguard.services._openshell_meta import get_openshell_meta
 
 
 class ProviderService:
-    """Provider management shared by Web UI and TUI."""
+    """Provider management shared by Web UI and TUI.
 
-    def __init__(self, client: ShoreGuardClient) -> None:
-        """Initialize with an OpenShell client."""
+    Args:
+        client: OpenShell gRPC client instance.
+    """
+
+    def __init__(self, client: ShoreGuardClient) -> None:  # noqa: D107
         self._client = client
 
     def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
-        """List all providers."""
+        """List all providers.
+
+        Args:
+            limit: Maximum number of providers to return.
+            offset: Number of providers to skip.
+
+        Returns:
+            list[dict[str, Any]]: Provider records.
+        """
         return self._client.providers.list(limit=limit, offset=offset)
 
     def get(self, name: str) -> dict[str, Any]:
-        """Get a provider by name."""
+        """Get a provider by name.
+
+        Args:
+            name: Provider name.
+
+        Returns:
+            dict[str, Any]: Provider record.
+        """
         return self._client.providers.get(name)
 
     def create(
@@ -36,6 +54,16 @@ class ProviderService:
 
         Looks up the correct environment variable name from openshell.yaml.
         Falls back to API_KEY for unknown types.
+
+        Args:
+            name: Provider name.
+            provider_type: Provider type identifier.
+            api_key: Primary API key value.
+            extra_credentials: Additional credential key-value pairs.
+            config: Optional provider configuration.
+
+        Returns:
+            dict[str, Any]: The created provider record.
         """
         meta = get_openshell_meta()
         type_info = meta.get_provider_type(provider_type)
@@ -60,7 +88,17 @@ class ProviderService:
         credentials: dict[str, str] | None = None,
         config: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """Update an existing provider."""
+        """Update an existing provider.
+
+        Args:
+            name: Provider name.
+            provider_type: New provider type (empty string to keep current).
+            credentials: New credential key-value pairs.
+            config: New provider configuration.
+
+        Returns:
+            dict[str, Any]: The updated provider record.
+        """
         return self._client.providers.update(
             name=name,
             provider_type=provider_type,
@@ -69,23 +107,42 @@ class ProviderService:
         )
 
     def delete(self, name: str) -> bool:
-        """Delete a provider."""
+        """Delete a provider.
+
+        Args:
+            name: Provider name.
+
+        Returns:
+            bool: True if the provider was deleted.
+        """
         return self._client.providers.delete(name)
 
     @staticmethod
     def list_known_types() -> list[dict[str, str]]:
-        """Return metadata about known provider types from openshell.yaml."""
+        """Return metadata about known provider types from openshell.yaml.
+
+        Returns:
+            list[dict[str, str]]: Provider type metadata records.
+        """
         meta = get_openshell_meta()
         return [{"type": k, **v} for k, v in meta.provider_types.items()]
 
     @staticmethod
     def list_inference_providers() -> list[dict[str, str]]:
-        """Return known inference provider options from openshell.yaml."""
+        """Return known inference provider options from openshell.yaml.
+
+        Returns:
+            list[dict[str, str]]: Inference provider option records.
+        """
         meta = get_openshell_meta()
         return meta.inference_providers
 
     @staticmethod
     def list_community_sandboxes() -> list[dict[str, Any]]:
-        """Return community sandbox templates from openshell.yaml."""
+        """Return community sandbox templates from openshell.yaml.
+
+        Returns:
+            list[dict[str, Any]]: Community sandbox template records.
+        """
         meta = get_openshell_meta()
         return meta.community_sandboxes

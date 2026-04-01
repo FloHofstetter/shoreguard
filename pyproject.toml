@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "shoreguard"
-version = "0.5.0"
+version = "0.7.0"
 description = "Open source control plane for NVIDIA OpenShell"
 license = "Apache-2.0"
 readme = "README.md"
@@ -48,6 +48,7 @@ dev = [
     "pyright>=1.1",
     "hatchling>=1.29.0",
     "mutmut>=3.5",
+    "pydoclint>=0.8",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -107,3 +108,23 @@ tests_dir = ["tests"]
 do_not_mutate = ["shoreguard/client/_proto/*"]
 also_copy = ["frontend"]
 runner = "python -m pytest -x --ignore=tests/integration"
+
+[tool.pydoclint]
+style = "google"
+skip-checking-short-docstrings = false
+skip-checking-raises = false
+check-arg-order = true
+check-return-types = true
+check-yield-types = true
+check-class-attributes = true
+check-style-mismatch = true
+arg-type-hints-in-docstring = false
+arg-type-hints-in-signature = true
+require-return-section-when-returning-nothing = false
+require-yield-section-when-yielding-nothing = false
+should-document-private-class-attributes = false
+should-document-star-arguments = true
+should-declare-assert-error-if-assert-statement-exists = true
+treat-property-methods-as-class-attributes = true
+allow-init-docstring = false
+exclude = '\.venv/|_proto/|tests/'
