@@ -5,6 +5,55 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — 2026-04-03
+
+### Fixed
+
+- **RBAC response_model crash** — added `response_model=None` to 17 route
+  decorators (16 in `pages.py`, 1 in `main.py`) returning `TemplateResponse`,
+  `HTMLResponse`, or `RedirectResponse`. Prevents FastAPI Pydantic serialization
+  errors on non-JSON responses.
+- **IntegrityError/ValueError split** — gateway-role SET endpoints now return
+  409 on constraint conflicts and 404 on missing user/SP/gateway, instead of a
+  blanket 404 for both.
+
+### Added
+
+- **Migration verification tests** — 5 tests (`tests/test_migrations.py`)
+  covering SQLite and PostgreSQL: fresh-DB, head revision, schema-matches-models,
+  downgrade, and PostgreSQL fresh-DB.
+- **RBAC regression & validation tests** — 10 new tests (`tests/test_rbac.py`)
+  for DELETE gateway-role 404s, invalid gateway name 400s, and invalid role 400s
+  (user and SP symmetry).
+- **Migration check script** — `scripts/verify_migrations.sh` runs all Alembic
+  migrations against a fresh database and verifies the final revision.
+- **Migration CI workflow** — `.github/workflows/test-migrations.yml` runs
+  migration tests on SQLite and PostgreSQL for PRs touching migrations or models.
+- **PR template** — `.github/PULL_REQUEST_TEMPLATE.md` with migration checklist.
+- **Migration runbook** — `docs/admin/migration-runbook.md` with backup,
+  upgrade, and rollback procedures.
+- **Warning logs on error paths** — all gateway-role endpoints now log
+  `logger.warning()` for invalid names, invalid roles, not-found, and conflict
+  responses.
+- **Backoff for background tasks** — `_cleanup_operations()` and
+  `_health_monitor()` double their interval (up to a cap) after 10 consecutive
+  failures and reset on success.
+- `postgres` pytest marker in `pyproject.toml`.
+
+### Security
+
+- **Shell injection fix** — `verify_migrations.sh` passes database URL via
+  `os.environ` instead of bash interpolation in a Python heredoc.
+
+### Changed
+
+- **Migrations squashed** — all 7 incremental migrations replaced by a single
+  `001_initial_schema.py` that creates the final schema directly. Existing
+  databases must be reset (`rm ~/.config/shoreguard/shoreguard.db`).
+- Migration CI caches `uv` dependencies via `enable-cache: true`.
+
+---
+
 ## [0.7.1] — 2026-04-01
 
 ### Added

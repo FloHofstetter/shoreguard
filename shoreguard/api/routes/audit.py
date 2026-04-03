@@ -55,7 +55,7 @@ async def list_audit_entries(
     )
 
 
-@router.get("/export")
+@router.get("/export", response_model=None)
 async def export_audit(
     fmt: str = Query("json", alias="format", pattern="^(json|csv)$"),
     actor: str | None = None,

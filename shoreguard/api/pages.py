@@ -360,7 +360,12 @@ async def get_users(request: Request) -> list[dict[str, Any]]:
     return list_users()
 
 
-@router.post("/api/auth/users", status_code=201, dependencies=[Depends(require_role("admin"))])
+@router.post(
+    "/api/auth/users",
+    status_code=201,
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
+)
 async def create_user_endpoint(
     request: Request, body: CreateUserRequest
 ) -> dict[str, Any] | JSONResponse:
@@ -404,7 +409,9 @@ async def create_user_endpoint(
     return info
 
 
-@router.delete("/api/auth/users/{user_id}", dependencies=[Depends(require_role("admin"))])
+@router.delete(
+    "/api/auth/users/{user_id}", dependencies=[Depends(require_role("admin"))], response_model=None
+)
 async def delete_user_endpoint(request: Request, user_id: int) -> dict[str, Any] | JSONResponse:
     """Delete a user (admin only).
 
@@ -467,7 +474,9 @@ async def get_user_gateway_roles(user_id: int) -> list[dict[str, Any]]:
 
 
 @router.put(
-    "/api/auth/users/{user_id}/gateway-roles/{gw}", dependencies=[Depends(require_role("admin"))]
+    "/api/auth/users/{user_id}/gateway-roles/{gw}",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
 )
 async def set_user_gateway_role(
     request: Request, user_id: int, gw: str, body: SetGatewayRoleRequest
@@ -484,8 +493,12 @@ async def set_user_gateway_role(
         dict[str, Any] | JSONResponse: Updated gateway role mapping.
     """
     if not VALID_GATEWAY_NAME_RE.match(gw):
+        logger.warning(
+            "Invalid gateway name rejected (gateway=%s, actor=%s)", gw, _get_actor(request)
+        )
         return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
     if body.role not in ROLES:
+        logger.warning("Invalid role rejected (role=%s, actor=%s)", body.role, _get_actor(request))
         return JSONResponse(
             status_code=400,
             content={"detail": f"Invalid role: {body.role!r} (must be one of {ROLES})"},
@@ -494,8 +507,30 @@ async def set_user_gateway_role(
         result = await asyncio.to_thread(
             set_gateway_role, user_id=user_id, gateway_name=gw, role=body.role
         )
-    except (IntegrityError, ValueError):
+    except ValueError:
+        logger.warning(
+            "User or gateway not found (user_id=%s, gateway=%s, actor=%s)",
+            user_id,
+            gw,
+            _get_actor(request),
+        )
         return JSONResponse(status_code=404, content={"detail": "User or gateway not found"})
+    except IntegrityError:
+        logger.warning(
+            "Gateway role conflict (user_id=%s, gateway=%s, role=%s, actor=%s)",
+            user_id,
+            gw,
+            body.role,
+            _get_actor(request),
+        )
+        return JSONResponse(status_code=409, content={"detail": "Gateway role conflict"})
+    logger.info(
+        "User gateway role set (user_id=%s, gateway=%s, role=%s, actor=%s)",
+        user_id,
+        gw,
+        body.role,
+        _get_actor(request),
+    )
     await audit_log(
         request,
         "user.gateway_role.set",
@@ -507,7 +542,9 @@ async def set_user_gateway_role(
 
 
 @router.delete(
-    "/api/auth/users/{user_id}/gateway-roles/{gw}", dependencies=[Depends(require_role("admin"))]
+    "/api/auth/users/{user_id}/gateway-roles/{gw}",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
 )
 async def delete_user_gateway_role(
     request: Request, user_id: int, gw: str
@@ -523,8 +560,17 @@ async def delete_user_gateway_role(
         dict[str, Any] | JSONResponse: Confirmation or error response.
     """
     if not VALID_GATEWAY_NAME_RE.match(gw):
+        logger.warning(
+            "Invalid gateway name rejected (gateway=%s, actor=%s)", gw, _get_actor(request)
+        )
         return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
     if await asyncio.to_thread(remove_gateway_role, user_id=user_id, gateway_name=gw):
+        logger.info(
+            "User gateway role removed (user_id=%s, gateway=%s, actor=%s)",
+            user_id,
+            gw,
+            _get_actor(request),
+        )
         await audit_log(
             request,
             "user.gateway_role.remove",
@@ -533,6 +579,12 @@ async def delete_user_gateway_role(
             detail={"gateway": gw},
         )
         return {"ok": True}
+    logger.warning(
+        "Gateway role not found for deletion (user_id=%s, gateway=%s, actor=%s)",
+        user_id,
+        gw,
+        _get_actor(request),
+    )
     return JSONResponse(status_code=404, content={"detail": "Gateway role not found"})
 
 
@@ -555,6 +607,7 @@ async def get_sp_gateway_roles(sp_id: int) -> list[dict[str, Any]]:
 @router.put(
     "/api/auth/service-principals/{sp_id}/gateway-roles/{gw}",
     dependencies=[Depends(require_role("admin"))],
+    response_model=None,
 )
 async def set_sp_gateway_role_endpoint(
     request: Request, sp_id: int, gw: str, body: SetGatewayRoleRequest
@@ -571,8 +624,12 @@ async def set_sp_gateway_role_endpoint(
         dict[str, Any] | JSONResponse: Updated gateway role mapping.
     """
     if not VALID_GATEWAY_NAME_RE.match(gw):
+        logger.warning(
+            "Invalid gateway name rejected (gateway=%s, actor=%s)", gw, _get_actor(request)
+        )
         return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
     if body.role not in ROLES:
+        logger.warning("Invalid role rejected (role=%s, actor=%s)", body.role, _get_actor(request))
         return JSONResponse(
             status_code=400,
             content={"detail": f"Invalid role: {body.role!r} (must be one of {ROLES})"},
@@ -581,10 +638,32 @@ async def set_sp_gateway_role_endpoint(
         result = await asyncio.to_thread(
             set_gateway_role, sp_id=sp_id, gateway_name=gw, role=body.role
         )
-    except (IntegrityError, ValueError):
+    except ValueError:
+        logger.warning(
+            "Service principal or gateway not found (sp_id=%s, gateway=%s, actor=%s)",
+            sp_id,
+            gw,
+            _get_actor(request),
+        )
         return JSONResponse(
             status_code=404, content={"detail": "Service principal or gateway not found"}
         )
+    except IntegrityError:
+        logger.warning(
+            "Gateway role conflict (sp_id=%s, gateway=%s, role=%s, actor=%s)",
+            sp_id,
+            gw,
+            body.role,
+            _get_actor(request),
+        )
+        return JSONResponse(status_code=409, content={"detail": "Gateway role conflict"})
+    logger.info(
+        "SP gateway role set (sp_id=%s, gateway=%s, role=%s, actor=%s)",
+        sp_id,
+        gw,
+        body.role,
+        _get_actor(request),
+    )
     await audit_log(
         request,
         "sp.gateway_role.set",
@@ -598,6 +677,7 @@ async def set_sp_gateway_role_endpoint(
 @router.delete(
     "/api/auth/service-principals/{sp_id}/gateway-roles/{gw}",
     dependencies=[Depends(require_role("admin"))],
+    response_model=None,
 )
 async def delete_sp_gateway_role(
     request: Request, sp_id: int, gw: str
@@ -613,8 +693,17 @@ async def delete_sp_gateway_role(
         dict[str, Any] | JSONResponse: Confirmation or error response.
     """
     if not VALID_GATEWAY_NAME_RE.match(gw):
+        logger.warning(
+            "Invalid gateway name rejected (gateway=%s, actor=%s)", gw, _get_actor(request)
+        )
         return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
     if await asyncio.to_thread(remove_gateway_role, sp_id=sp_id, gateway_name=gw):
+        logger.info(
+            "SP gateway role removed (sp_id=%s, gateway=%s, actor=%s)",
+            sp_id,
+            gw,
+            _get_actor(request),
+        )
         await audit_log(
             request,
             "sp.gateway_role.remove",
@@ -623,6 +712,12 @@ async def delete_sp_gateway_role(
             detail={"gateway": gw},
         )
         return {"ok": True}
+    logger.warning(
+        "Gateway role not found for deletion (sp_id=%s, gateway=%s, actor=%s)",
+        sp_id,
+        gw,
+        _get_actor(request),
+    )
     return JSONResponse(status_code=404, content={"detail": "Gateway role not found"})
 
 
@@ -798,7 +893,10 @@ async def get_sps(request: Request) -> list[dict[str, Any]]:
 
 
 @router.post(
-    "/api/auth/service-principals", status_code=201, dependencies=[Depends(require_role("admin"))]
+    "/api/auth/service-principals",
+    status_code=201,
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
 )
 async def create_sp_endpoint(
     request: Request, body: CreateSPRequest
@@ -853,7 +951,9 @@ async def create_sp_endpoint(
 
 
 @router.delete(
-    "/api/auth/service-principals/{sp_id}", dependencies=[Depends(require_role("admin"))]
+    "/api/auth/service-principals/{sp_id}",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
 )
 async def delete_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | JSONResponse:
     """Delete a service principal (admin only).
@@ -951,7 +1051,7 @@ def _require_page_auth(request: Request) -> RedirectResponse | None:
 # ─── Global pages ────────────────────────────────────────────────────────────
 
 
-@router.get("/login")
+@router.get("/login", response_model=None)
 async def login_page(request: Request) -> TemplateResponse:
     """Serve the login page.
 
@@ -964,7 +1064,7 @@ async def login_page(request: Request) -> TemplateResponse:
     return templates.TemplateResponse(request, "pages/login.html", {})
 
 
-@router.get("/register")
+@router.get("/register", response_model=None)
 async def register_page(request: Request) -> TemplateResponse | HTMLResponse:
     """Serve the self-registration page.
 
@@ -986,7 +1086,7 @@ async def register_page(request: Request) -> TemplateResponse | HTMLResponse:
     return templates.TemplateResponse(request, "pages/register.html", {})
 
 
-@router.get("/invite")
+@router.get("/invite", response_model=None)
 async def invite_page(request: Request) -> TemplateResponse:
     """Serve the invite acceptance page.
 
@@ -999,7 +1099,7 @@ async def invite_page(request: Request) -> TemplateResponse:
     return templates.TemplateResponse(request, "pages/invite.html", {})
 
 
-@router.get("/setup")
+@router.get("/setup", response_model=None)
 async def setup_page(request: Request) -> TemplateResponse | RedirectResponse:
     """Serve the setup wizard (only when no users exist).
 
@@ -1014,7 +1114,7 @@ async def setup_page(request: Request) -> TemplateResponse | RedirectResponse:
     return templates.TemplateResponse(request, "pages/setup.html", {})
 
 
-@router.get("/")
+@router.get("/", response_model=None)
 async def dashboard_redirect(request: Request) -> RedirectResponse:
     """Redirect root to gateways list.
 
@@ -1030,7 +1130,7 @@ async def dashboard_redirect(request: Request) -> RedirectResponse:
     return RedirectResponse(url="/gateways", status_code=302)
 
 
-@router.get("/gateways")
+@router.get("/gateways", response_model=None)
 async def gateways_page(request: Request) -> TemplateResponse | RedirectResponse:
     """Gateway list page.
 
@@ -1050,7 +1150,7 @@ async def gateways_page(request: Request) -> TemplateResponse | RedirectResponse
     )
 
 
-@router.get("/gateways/{name:path}")
+@router.get("/gateways/{name:path}", response_model=None)
 async def gateway_detail_or_sub(
     request: Request, name: str
 ) -> TemplateResponse | RedirectResponse | HTMLResponse:
@@ -1179,7 +1279,7 @@ async def gateway_detail_or_sub(
     )
 
 
-@router.get("/policies")
+@router.get("/policies", response_model=None)
 async def policies_page(request: Request) -> TemplateResponse | RedirectResponse:
     """Policy presets list page (global, not gateway-scoped).
 
@@ -1199,7 +1299,7 @@ async def policies_page(request: Request) -> TemplateResponse | RedirectResponse
     )
 
 
-@router.get("/policies/{name}")
+@router.get("/policies/{name}", response_model=None)
 async def preset_detail_page(request: Request, name: str) -> TemplateResponse | RedirectResponse:
     """Preset detail page (global).
 
@@ -1220,7 +1320,7 @@ async def preset_detail_page(request: Request, name: str) -> TemplateResponse | 
     )
 
 
-@router.get("/audit")
+@router.get("/audit", response_model=None)
 async def audit_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
     """Audit log page (admin only).
 
@@ -1249,7 +1349,7 @@ async def audit_page(request: Request) -> TemplateResponse | RedirectResponse | 
     )
 
 
-@router.get("/users")
+@router.get("/users", response_model=None)
 async def users_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
     """User and service principal management page (admin only).
 
@@ -1278,7 +1378,7 @@ async def users_page(request: Request) -> TemplateResponse | RedirectResponse | 
     )
 
 
-@router.get("/users/new")
+@router.get("/users/new", response_model=None)
 async def user_new_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
     """Invite user form page (admin only).
 
@@ -1303,7 +1403,7 @@ async def user_new_page(request: Request) -> TemplateResponse | RedirectResponse
     return templates.TemplateResponse(request, "pages/user_new.html", {"active_page": "users"})
 
 
-@router.get("/users/new-service-principal")
+@router.get("/users/new-service-principal", response_model=None)
 async def sp_new_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
     """Create service principal form page (admin only).
 

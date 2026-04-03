@@ -605,3 +605,202 @@ async def test_cannot_delete_last_admin(db, mock_client):
             assert resp.status_code == 400
     finally:
         app.dependency_overrides.clear()
+
+
+# ─── Regression: response_model=None error paths (Fix #5) ────────────────
+
+
+async def test_duplicate_user_returns_409(admin_client):
+    """Creating a duplicate user returns 409, not 500 (requires response_model=None)."""
+    resp = await admin_client.post(
+        "/api/auth/users",
+        json={"email": "admin@test.com", "role": "viewer"},
+    )
+    assert resp.status_code == 409
+    assert "already exists" in resp.json()["detail"]
+
+
+async def test_delete_nonexistent_user_returns_404(admin_client):
+    """Deleting a user that does not exist returns 404, not 500."""
+    resp = await admin_client.delete("/api/auth/users/99999")
+    assert resp.status_code == 404
+    assert "not found" in resp.json()["detail"].lower()
+
+
+async def test_set_gateway_role_nonexistent_gateway_returns_404(admin_client):
+    """Setting a gateway role for a nonexistent gateway returns 404, not 500."""
+    # First create a user to target
+    resp = await admin_client.post(
+        "/api/auth/users",
+        json={"email": "target@test.com", "role": "viewer"},
+    )
+    assert resp.status_code == 201
+    user_id = resp.json()["id"]
+
+    resp = await admin_client.put(
+        f"/api/auth/users/{user_id}/gateway-roles/nonexistent-gw",
+        json={"role": "operator"},
+    )
+    assert resp.status_code == 404
+    assert "not found" in resp.json()["detail"].lower()
+
+
+# ─── SP endpoint symmetry tests ───────────────────────────────────────────
+
+
+async def test_duplicate_sp_returns_409(admin_client):
+    """Creating a service principal with a duplicate name returns 409."""
+    resp = await admin_client.post(
+        "/api/auth/service-principals",
+        json={"name": "dup-sp", "role": "viewer"},
+    )
+    assert resp.status_code == 201
+
+    resp = await admin_client.post(
+        "/api/auth/service-principals",
+        json={"name": "dup-sp", "role": "viewer"},
+    )
+    assert resp.status_code == 409
+    assert "already exists" in resp.json()["detail"]
+
+
+async def test_delete_nonexistent_sp_returns_404(admin_client):
+    """Deleting an SP that does not exist returns 404."""
+    resp = await admin_client.delete("/api/auth/service-principals/99999")
+    assert resp.status_code == 404
+    assert "not found" in resp.json()["detail"].lower()
+
+
+async def test_set_sp_gateway_role_nonexistent_gateway_returns_404(admin_client):
+    """Setting a gateway role on an SP for a nonexistent gateway returns 404."""
+    resp = await admin_client.post(
+        "/api/auth/service-principals",
+        json={"name": "sp-gw-test", "role": "viewer"},
+    )
+    assert resp.status_code == 201
+    sp_id = resp.json()["id"]
+
+    resp = await admin_client.put(
+        f"/api/auth/service-principals/{sp_id}/gateway-roles/nonexistent-gw",
+        json={"role": "operator"},
+    )
+    assert resp.status_code == 404
+    assert "not found" in resp.json()["detail"].lower()
+
+
+# ─── DELETE gateway-role endpoints ─────────────────────────────────────────
+
+
+async def test_delete_user_gateway_role_not_found(admin_client):
+    """Deleting a gateway role that doesn't exist returns 404."""
+    resp = await admin_client.post(
+        "/api/auth/users",
+        json={"email": "del-role@test.com", "role": "viewer"},
+    )
+    assert resp.status_code == 201
+    user_id = resp.json()["id"]
+
+    resp = await admin_client.delete(f"/api/auth/users/{user_id}/gateway-roles/nonexistent-gw")
+    assert resp.status_code == 404
+    assert "not found" in resp.json()["detail"].lower()
+
+
+async def test_delete_sp_gateway_role_not_found(admin_client):
+    """Deleting an SP gateway role that doesn't exist returns 404."""
+    resp = await admin_client.post(
+        "/api/auth/service-principals",
+        json={"name": "sp-del-role", "role": "viewer"},
+    )
+    assert resp.status_code == 201
+    sp_id = resp.json()["id"]
+
+    resp = await admin_client.delete(
+        f"/api/auth/service-principals/{sp_id}/gateway-roles/nonexistent-gw"
+    )
+    assert resp.status_code == 404
+    assert "not found" in resp.json()["detail"].lower()
+
+
+# ─── Validation: invalid gateway name / invalid role ──────────────────────
+
+
+async def test_set_user_gateway_role_invalid_name_returns_400(admin_client):
+    """Setting a gateway role with an invalid gateway name returns 400."""
+    resp = await admin_client.post(
+        "/api/auth/users",
+        json={"email": "val-name@test.com", "role": "viewer"},
+    )
+    assert resp.status_code == 201
+    user_id = resp.json()["id"]
+
+    resp = await admin_client.put(
+        f"/api/auth/users/{user_id}/gateway-roles/INVALID NAME!!!",
+        json={"role": "operator"},
+    )
+    assert resp.status_code == 400
+    assert "invalid gateway name" in resp.json()["detail"].lower()
+
+
+async def test_set_user_gateway_role_invalid_role_returns_400(admin_client):
+    """Setting a gateway role with an invalid role returns 400."""
+    resp = await admin_client.post(
+        "/api/auth/users",
+        json={"email": "val-role@test.com", "role": "viewer"},
+    )
+    assert resp.status_code == 201
+    user_id = resp.json()["id"]
+
+    resp = await admin_client.put(
+        f"/api/auth/users/{user_id}/gateway-roles/some-gw",
+        json={"role": "superadmin"},
+    )
+    assert resp.status_code == 400
+    assert "invalid role" in resp.json()["detail"].lower()
+
+
+async def test_set_sp_gateway_role_invalid_name_returns_400(admin_client):
+    """Setting an SP gateway role with an invalid gateway name returns 400."""
+    resp = await admin_client.post(
+        "/api/auth/service-principals",
+        json={"name": "sp-val-name", "role": "viewer"},
+    )
+    assert resp.status_code == 201
+    sp_id = resp.json()["id"]
+
+    resp = await admin_client.put(
+        f"/api/auth/service-principals/{sp_id}/gateway-roles/INVALID NAME!!!",
+        json={"role": "operator"},
+    )
+    assert resp.status_code == 400
+    assert "invalid gateway name" in resp.json()["detail"].lower()
+
+
+async def test_set_sp_gateway_role_invalid_role_returns_400(admin_client):
+    """Setting an SP gateway role with an invalid role returns 400."""
+    resp = await admin_client.post(
+        "/api/auth/service-principals",
+        json={"name": "sp-val-role", "role": "viewer"},
+    )
+    assert resp.status_code == 201
+    sp_id = resp.json()["id"]
+
+    resp = await admin_client.put(
+        f"/api/auth/service-principals/{sp_id}/gateway-roles/some-gw",
+        json={"role": "superadmin"},
+    )
+    assert resp.status_code == 400
+    assert "invalid role" in resp.json()["detail"].lower()
+
+
+async def test_delete_user_gateway_role_invalid_name_returns_400(admin_client):
+    """Deleting a user gateway role with an invalid gateway name returns 400."""
+    resp = await admin_client.delete("/api/auth/users/1/gateway-roles/INVALID NAME!!!")
+    assert resp.status_code == 400
+    assert "invalid gateway name" in resp.json()["detail"].lower()
+
+
+async def test_delete_sp_gateway_role_invalid_name_returns_400(admin_client):
+    """Deleting an SP gateway role with an invalid gateway name returns 400."""
+    resp = await admin_client.delete("/api/auth/service-principals/1/gateway-roles/INVALID NAME!!!")
+    assert resp.status_code == 400
+    assert "invalid gateway name" in resp.json()["detail"].lower()

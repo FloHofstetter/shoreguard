@@ -49,6 +49,7 @@ dev = [
     "hatchling>=1.29.0",
     "mutmut>=3.5",
     "pydoclint>=0.8",
+    "psycopg[binary]>=3.1",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -94,6 +95,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "integration: requires a live OpenShell gateway (deselect with -m 'not integration')",
+    "postgres: requires a live PostgreSQL database (deselect with -m 'not postgres')",
 ]
 
 [tool.coverage.run]

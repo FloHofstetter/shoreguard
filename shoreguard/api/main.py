@@ -97,35 +97,61 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         """Periodically purge expired operations and audit entries."""
         from shoreguard.services.operations import operation_store
 
+        base_interval = 600
+        max_interval = 900
+        backoff_threshold = 10
         consecutive_failures = 0
+        interval = base_interval
         while True:
-            await asyncio.sleep(600)
+            await asyncio.sleep(interval)
             try:
                 await asyncio.to_thread(operation_store.cleanup)
                 if audit_mod.audit_service:
                     await asyncio.to_thread(audit_mod.audit_service.cleanup)
                 consecutive_failures = 0
+                interval = base_interval
             except Exception:
                 consecutive_failures += 1
                 logger.exception(
                     "Operation cleanup failed (consecutive failures: %d)",
                     consecutive_failures,
                 )
+                if consecutive_failures >= backoff_threshold:
+                    interval = min(interval * 2, max_interval)
+                    logger.error(
+                        "Operation cleanup has failed %d consecutive times, "
+                        "backing off to %ds interval",
+                        consecutive_failures,
+                        interval,
+                    )
 
     async def _health_monitor() -> None:
         """Periodically check health of all registered gateways."""
+        base_interval = 30
+        max_interval = 300
+        backoff_threshold = 10
         consecutive_failures = 0
+        interval = base_interval
         while True:
-            await asyncio.sleep(30)
+            await asyncio.sleep(interval)
             try:
                 await asyncio.to_thread(gw_mod.gateway_service.check_all_health)  # type: ignore[union-attr]
                 consecutive_failures = 0
+                interval = base_interval
             except Exception:
                 consecutive_failures += 1
                 logger.exception(
                     "Health monitor error (consecutive failures: %d)",
                     consecutive_failures,
                 )
+                if consecutive_failures >= backoff_threshold:
+                    interval = min(interval * 2, max_interval)
+                    logger.error(
+                        "Health monitor has failed %d consecutive times, "
+                        "backing off to %ds interval",
+                        consecutive_failures,
+                        interval,
+                    )
 
     cleanup_task = asyncio.create_task(_cleanup_operations())
     health_task = asyncio.create_task(_health_monitor())
@@ -144,7 +170,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.6.0",
+    version="0.8.0",
     lifespan=lifespan,
 )
 
@@ -166,7 +192,7 @@ gw_api.include_router(approvals.router, prefix="/sandboxes", tags=["approvals"])
 gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
 
 
-@gw_api.get("/health")
+@gw_api.get("/health", response_model=None)
 async def gw_health(
     gw: str, client: ShoreGuardClient = Depends(get_client)
 ) -> dict[str, Any] | JSONResponse:
