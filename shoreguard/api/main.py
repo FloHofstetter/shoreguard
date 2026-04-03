@@ -144,7 +144,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.6.0",
+    version="0.8.0",
     lifespan=lifespan,
 )
 
@@ -166,7 +166,7 @@ gw_api.include_router(approvals.router, prefix="/sandboxes", tags=["approvals"])
 gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
 
 
-@gw_api.get("/health")
+@gw_api.get("/health", response_model=None)
 async def gw_health(
     gw: str, client: ShoreGuardClient = Depends(get_client)
 ) -> dict[str, Any] | JSONResponse:

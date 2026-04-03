@@ -5,6 +5,41 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — 2026-04-03
+
+### Fixed
+
+- **RBAC response_model crash** — added `response_model=None` to 17 route
+  decorators (16 in `pages.py`, 1 in `main.py`) returning `TemplateResponse`,
+  `HTMLResponse`, or `RedirectResponse`. Prevents FastAPI Pydantic serialization
+  errors on non-JSON responses.
+
+### Added
+
+- **Migration verification tests** — 7 new tests (`tests/test_migrations.py`)
+  covering SQLite and PostgreSQL: fresh-DB, head revision, schema-matches-models,
+  incremental upgrade, downgrade-irreversible, downgrade-reversible.
+- **Migration check script** — `scripts/verify_migrations.sh` runs all Alembic
+  migrations against a fresh database and verifies the final revision.
+- **Migration CI workflow** — `.github/workflows/test-migrations.yml` runs
+  migration tests on SQLite and PostgreSQL for PRs touching migrations or models.
+- **PR template** — `.github/PULL_REQUEST_TEMPLATE.md` with migration checklist.
+- **Migration runbook** — `docs/admin/migration-runbook.md` with backup,
+  upgrade, rollback, and irreversible migration 007 procedures.
+- `postgres` pytest marker in `pyproject.toml`.
+
+### Security
+
+- **Shell injection fix** — `verify_migrations.sh` passes database URL via
+  `os.environ` instead of bash interpolation in a Python heredoc.
+
+### Changed
+
+- Migration CI uses `-m postgres` (marker filter) instead of `-k postgres`
+  (substring match).
+
+---
+
 ## [0.7.1] — 2026-04-01
 
 ### Added
