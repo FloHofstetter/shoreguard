@@ -71,16 +71,23 @@ def _network_rule_to_dict(rule: sandbox_pb2.NetworkPolicyRule) -> dict[str, Any]
         if ep.access:
             ep_dict["access"] = ep.access
         if ep.rules:
-            ep_dict["rules"] = [
-                {
-                    "allow": {
-                        "method": r.allow.method,
-                        "path": r.allow.path,
-                        "command": r.allow.command,
-                    }
+            rules_list = []
+            for r in ep.rules:
+                allow_dict: dict[str, Any] = {
+                    "method": r.allow.method,
+                    "path": r.allow.path,
+                    "command": r.allow.command,
                 }
-                for r in ep.rules
-            ]
+                if r.allow.query:
+                    allow_dict["query"] = {
+                        key: {
+                            **({"glob": m.glob} if m.glob else {}),
+                            **({"any": list(m.any)} if m.any else {}),
+                        }
+                        for key, m in r.allow.query.items()
+                    }
+                rules_list.append({"allow": allow_dict})
+            ep_dict["rules"] = rules_list
         if ep.allowed_ips:
             ep_dict["allowed_ips"] = list(ep.allowed_ips)
         if ep.ports:

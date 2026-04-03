@@ -5,6 +5,20 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] — 2026-04-03
+
+### Added
+
+- **Inference timeout** — `timeout_secs` field on `PUT /api/gateways/{gw}/inference`
+  allows configuring per-route request timeouts (0 = default 60s). Displayed in the
+  gateway detail inference card.
+- **L7 query parameter matchers** — network policy rules can now match on URL query
+  parameters using `glob` (single pattern) or `any` (list of patterns) matchers.
+
+### Changed
+
+- **Protobuf stubs regenerated** from OpenShell v0.0.22 (was ~v0.0.16).
+
 ## [0.11.0] — 2026-04-03
 
 ### Added

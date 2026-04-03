@@ -20,7 +20,7 @@ _sym_db = _symbol_database.Default()
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\rsandbox.proto\x12\x14openshell.sandbox.v1"\xff\x02\n\rSandboxPolicy\x12\x0f\n\x07version\x18\x01 \x01(\r\x12:\n\nfilesystem\x18\x02 \x01(\x0b\x32&.openshell.sandbox.v1.FilesystemPolicy\x12\x36\n\x08landlock\x18\x03 \x01(\x0b\x32$.openshell.sandbox.v1.LandlockPolicy\x12\x34\n\x07process\x18\x04 \x01(\x0b\x32#.openshell.sandbox.v1.ProcessPolicy\x12R\n\x10network_policies\x18\x05 \x03(\x0b\x32\x38.openshell.sandbox.v1.SandboxPolicy.NetworkPoliciesEntry\x1a_\n\x14NetworkPoliciesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x36\n\x05value\x18\x02 \x01(\x0b\x32\'.openshell.sandbox.v1.NetworkPolicyRule:\x02\x38\x01"R\n\x10\x46ilesystemPolicy\x12\x17\n\x0finclude_workdir\x18\x01 \x01(\x08\x12\x11\n\tread_only\x18\x02 \x03(\t\x12\x12\n\nread_write\x18\x03 \x03(\t"\'\n\x0eLandlockPolicy\x12\x15\n\rcompatibility\x18\x01 \x01(\t":\n\rProcessPolicy\x12\x13\n\x0brun_as_user\x18\x01 \x01(\t\x12\x14\n\x0crun_as_group\x18\x02 \x01(\t"\x92\x01\n\x11NetworkPolicyRule\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x38\n\tendpoints\x18\x02 \x03(\x0b\x32%.openshell.sandbox.v1.NetworkEndpoint\x12\x35\n\x08\x62inaries\x18\x03 \x03(\x0b\x32#.openshell.sandbox.v1.NetworkBinary"\xc2\x01\n\x0fNetworkEndpoint\x12\x0c\n\x04host\x18\x01 \x01(\t\x12\x0c\n\x04port\x18\x02 \x01(\r\x12\x10\n\x08protocol\x18\x03 \x01(\t\x12\x0b\n\x03tls\x18\x04 \x01(\t\x12\x13\n\x0b\x65nforcement\x18\x05 \x01(\t\x12\x0e\n\x06\x61\x63\x63\x65ss\x18\x06 \x01(\t\x12+\n\x05rules\x18\x07 \x03(\x0b\x32\x1c.openshell.sandbox.v1.L7Rule\x12\x13\n\x0b\x61llowed_ips\x18\x08 \x03(\t\x12\r\n\x05ports\x18\t \x03(\r"6\n\x06L7Rule\x12,\n\x05\x61llow\x18\x01 \x01(\x0b\x32\x1d.openshell.sandbox.v1.L7Allow"8\n\x07L7Allow\x12\x0e\n\x06method\x18\x01 \x01(\t\x12\x0c\n\x04path\x18\x02 \x01(\t\x12\x0f\n\x07\x63ommand\x18\x03 \x01(\t"2\n\rNetworkBinary\x12\x0c\n\x04path\x18\x01 \x01(\t\x12\x13\n\x07harness\x18\x02 \x01(\x08\x42\x02\x18\x01"-\n\x17GetSandboxConfigRequest\x12\x12\n\nsandbox_id\x18\x01 \x01(\t"\x19\n\x17GetGatewayConfigRequest"\xda\x01\n\x18GetGatewayConfigResponse\x12N\n\x08settings\x18\x01 \x03(\x0b\x32<.openshell.sandbox.v1.GetGatewayConfigResponse.SettingsEntry\x12\x19\n\x11settings_revision\x18\x02 \x01(\x04\x1aS\n\rSettingsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x31\n\x05value\x18\x02 \x01(\x0b\x32".openshell.sandbox.v1.SettingValue:\x02\x38\x01"q\n\x0cSettingValue\x12\x16\n\x0cstring_value\x18\x01 \x01(\tH\x00\x12\x14\n\nbool_value\x18\x02 \x01(\x08H\x00\x12\x13\n\tint_value\x18\x03 \x01(\x03H\x00\x12\x15\n\x0b\x62ytes_value\x18\x04 \x01(\x0cH\x00\x42\x07\n\x05value"x\n\x10\x45\x66\x66\x65\x63tiveSetting\x12\x31\n\x05value\x18\x01 \x01(\x0b\x32".openshell.sandbox.v1.SettingValue\x12\x31\n\x05scope\x18\x02 \x01(\x0e\x32".openshell.sandbox.v1.SettingScope"\x91\x03\n\x18GetSandboxConfigResponse\x12\x33\n\x06policy\x18\x01 \x01(\x0b\x32#.openshell.sandbox.v1.SandboxPolicy\x12\x0f\n\x07version\x18\x02 \x01(\r\x12\x13\n\x0bpolicy_hash\x18\x03 \x01(\t\x12N\n\x08settings\x18\x04 \x03(\x0b\x32<.openshell.sandbox.v1.GetSandboxConfigResponse.SettingsEntry\x12\x17\n\x0f\x63onfig_revision\x18\x05 \x01(\x04\x12\x39\n\rpolicy_source\x18\x06 \x01(\x0e\x32".openshell.sandbox.v1.PolicySource\x12\x1d\n\x15global_policy_version\x18\x07 \x01(\r\x1aW\n\rSettingsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x35\n\x05value\x18\x02 \x01(\x0b\x32&.openshell.sandbox.v1.EffectiveSetting:\x02\x38\x01*b\n\x0cSettingScope\x12\x1d\n\x19SETTING_SCOPE_UNSPECIFIED\x10\x00\x12\x19\n\x15SETTING_SCOPE_SANDBOX\x10\x01\x12\x18\n\x14SETTING_SCOPE_GLOBAL\x10\x02*b\n\x0cPolicySource\x12\x1d\n\x19POLICY_SOURCE_UNSPECIFIED\x10\x00\x12\x19\n\x15POLICY_SOURCE_SANDBOX\x10\x01\x12\x18\n\x14POLICY_SOURCE_GLOBAL\x10\x02\x62\x06proto3'
+    b'\n\rsandbox.proto\x12\x14openshell.sandbox.v1"\xff\x02\n\rSandboxPolicy\x12\x0f\n\x07version\x18\x01 \x01(\r\x12:\n\nfilesystem\x18\x02 \x01(\x0b\x32&.openshell.sandbox.v1.FilesystemPolicy\x12\x36\n\x08landlock\x18\x03 \x01(\x0b\x32$.openshell.sandbox.v1.LandlockPolicy\x12\x34\n\x07process\x18\x04 \x01(\x0b\x32#.openshell.sandbox.v1.ProcessPolicy\x12R\n\x10network_policies\x18\x05 \x03(\x0b\x32\x38.openshell.sandbox.v1.SandboxPolicy.NetworkPoliciesEntry\x1a_\n\x14NetworkPoliciesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x36\n\x05value\x18\x02 \x01(\x0b\x32\'.openshell.sandbox.v1.NetworkPolicyRule:\x02\x38\x01"R\n\x10\x46ilesystemPolicy\x12\x17\n\x0finclude_workdir\x18\x01 \x01(\x08\x12\x11\n\tread_only\x18\x02 \x03(\t\x12\x12\n\nread_write\x18\x03 \x03(\t"\'\n\x0eLandlockPolicy\x12\x15\n\rcompatibility\x18\x01 \x01(\t":\n\rProcessPolicy\x12\x13\n\x0brun_as_user\x18\x01 \x01(\t\x12\x14\n\x0crun_as_group\x18\x02 \x01(\t"\x92\x01\n\x11NetworkPolicyRule\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x38\n\tendpoints\x18\x02 \x03(\x0b\x32%.openshell.sandbox.v1.NetworkEndpoint\x12\x35\n\x08\x62inaries\x18\x03 \x03(\x0b\x32#.openshell.sandbox.v1.NetworkBinary"\xc2\x01\n\x0fNetworkEndpoint\x12\x0c\n\x04host\x18\x01 \x01(\t\x12\x0c\n\x04port\x18\x02 \x01(\r\x12\x10\n\x08protocol\x18\x03 \x01(\t\x12\x0b\n\x03tls\x18\x04 \x01(\t\x12\x13\n\x0b\x65nforcement\x18\x05 \x01(\t\x12\x0e\n\x06\x61\x63\x63\x65ss\x18\x06 \x01(\t\x12+\n\x05rules\x18\x07 \x03(\x0b\x32\x1c.openshell.sandbox.v1.L7Rule\x12\x13\n\x0b\x61llowed_ips\x18\x08 \x03(\t\x12\r\n\x05ports\x18\t \x03(\r"6\n\x06L7Rule\x12,\n\x05\x61llow\x18\x01 \x01(\x0b\x32\x1d.openshell.sandbox.v1.L7Allow"\xc5\x01\n\x07L7Allow\x12\x0e\n\x06method\x18\x01 \x01(\t\x12\x0c\n\x04path\x18\x02 \x01(\t\x12\x0f\n\x07\x63ommand\x18\x03 \x01(\t\x12\x37\n\x05query\x18\x04 \x03(\x0b\x32(.openshell.sandbox.v1.L7Allow.QueryEntry\x1aR\n\nQueryEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x33\n\x05value\x18\x02 \x01(\x0b\x32$.openshell.sandbox.v1.L7QueryMatcher:\x02\x38\x01"+\n\x0eL7QueryMatcher\x12\x0c\n\x04glob\x18\x01 \x01(\t\x12\x0b\n\x03\x61ny\x18\x02 \x03(\t"2\n\rNetworkBinary\x12\x0c\n\x04path\x18\x01 \x01(\t\x12\x13\n\x07harness\x18\x02 \x01(\x08\x42\x02\x18\x01"-\n\x17GetSandboxConfigRequest\x12\x12\n\nsandbox_id\x18\x01 \x01(\t"\x19\n\x17GetGatewayConfigRequest"\xda\x01\n\x18GetGatewayConfigResponse\x12N\n\x08settings\x18\x01 \x03(\x0b\x32<.openshell.sandbox.v1.GetGatewayConfigResponse.SettingsEntry\x12\x19\n\x11settings_revision\x18\x02 \x01(\x04\x1aS\n\rSettingsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x31\n\x05value\x18\x02 \x01(\x0b\x32".openshell.sandbox.v1.SettingValue:\x02\x38\x01"q\n\x0cSettingValue\x12\x16\n\x0cstring_value\x18\x01 \x01(\tH\x00\x12\x14\n\nbool_value\x18\x02 \x01(\x08H\x00\x12\x13\n\tint_value\x18\x03 \x01(\x03H\x00\x12\x15\n\x0b\x62ytes_value\x18\x04 \x01(\x0cH\x00\x42\x07\n\x05value"x\n\x10\x45\x66\x66\x65\x63tiveSetting\x12\x31\n\x05value\x18\x01 \x01(\x0b\x32".openshell.sandbox.v1.SettingValue\x12\x31\n\x05scope\x18\x02 \x01(\x0e\x32".openshell.sandbox.v1.SettingScope"\x91\x03\n\x18GetSandboxConfigResponse\x12\x33\n\x06policy\x18\x01 \x01(\x0b\x32#.openshell.sandbox.v1.SandboxPolicy\x12\x0f\n\x07version\x18\x02 \x01(\r\x12\x13\n\x0bpolicy_hash\x18\x03 \x01(\t\x12N\n\x08settings\x18\x04 \x03(\x0b\x32<.openshell.sandbox.v1.GetSandboxConfigResponse.SettingsEntry\x12\x17\n\x0f\x63onfig_revision\x18\x05 \x01(\x04\x12\x39\n\rpolicy_source\x18\x06 \x01(\x0e\x32".openshell.sandbox.v1.PolicySource\x12\x1d\n\x15global_policy_version\x18\x07 \x01(\r\x1aW\n\rSettingsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x35\n\x05value\x18\x02 \x01(\x0b\x32&.openshell.sandbox.v1.EffectiveSetting:\x02\x38\x01*b\n\x0cSettingScope\x12\x1d\n\x19SETTING_SCOPE_UNSPECIFIED\x10\x00\x12\x19\n\x15SETTING_SCOPE_SANDBOX\x10\x01\x12\x18\n\x14SETTING_SCOPE_GLOBAL\x10\x02*b\n\x0cPolicySource\x12\x1d\n\x19POLICY_SOURCE_UNSPECIFIED\x10\x00\x12\x19\n\x15POLICY_SOURCE_SANDBOX\x10\x01\x12\x18\n\x14POLICY_SOURCE_GLOBAL\x10\x02\x62\x06proto3'
 )
 
 _globals = globals()
@@ -30,16 +30,18 @@ if not _descriptor._USE_C_DESCRIPTORS:
     DESCRIPTOR._loaded_options = None
     _globals["_SANDBOXPOLICY_NETWORKPOLICIESENTRY"]._loaded_options = None
     _globals["_SANDBOXPOLICY_NETWORKPOLICIESENTRY"]._serialized_options = b"8\001"
+    _globals["_L7ALLOW_QUERYENTRY"]._loaded_options = None
+    _globals["_L7ALLOW_QUERYENTRY"]._serialized_options = b"8\001"
     _globals["_NETWORKBINARY"].fields_by_name["harness"]._loaded_options = None
     _globals["_NETWORKBINARY"].fields_by_name["harness"]._serialized_options = b"\030\001"
     _globals["_GETGATEWAYCONFIGRESPONSE_SETTINGSENTRY"]._loaded_options = None
     _globals["_GETGATEWAYCONFIGRESPONSE_SETTINGSENTRY"]._serialized_options = b"8\001"
     _globals["_GETSANDBOXCONFIGRESPONSE_SETTINGSENTRY"]._loaded_options = None
     _globals["_GETSANDBOXCONFIGRESPONSE_SETTINGSENTRY"]._serialized_options = b"8\001"
-    _globals["_SETTINGSCOPE"]._serialized_start = 2058
-    _globals["_SETTINGSCOPE"]._serialized_end = 2156
-    _globals["_POLICYSOURCE"]._serialized_start = 2158
-    _globals["_POLICYSOURCE"]._serialized_end = 2256
+    _globals["_SETTINGSCOPE"]._serialized_start = 2245
+    _globals["_SETTINGSCOPE"]._serialized_end = 2343
+    _globals["_POLICYSOURCE"]._serialized_start = 2345
+    _globals["_POLICYSOURCE"]._serialized_end = 2443
     _globals["_SANDBOXPOLICY"]._serialized_start = 40
     _globals["_SANDBOXPOLICY"]._serialized_end = 423
     _globals["_SANDBOXPOLICY_NETWORKPOLICIESENTRY"]._serialized_start = 328
@@ -56,24 +58,28 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals["_NETWORKENDPOINT"]._serialized_end = 954
     _globals["_L7RULE"]._serialized_start = 956
     _globals["_L7RULE"]._serialized_end = 1010
-    _globals["_L7ALLOW"]._serialized_start = 1012
-    _globals["_L7ALLOW"]._serialized_end = 1068
-    _globals["_NETWORKBINARY"]._serialized_start = 1070
-    _globals["_NETWORKBINARY"]._serialized_end = 1120
-    _globals["_GETSANDBOXCONFIGREQUEST"]._serialized_start = 1122
-    _globals["_GETSANDBOXCONFIGREQUEST"]._serialized_end = 1167
-    _globals["_GETGATEWAYCONFIGREQUEST"]._serialized_start = 1169
-    _globals["_GETGATEWAYCONFIGREQUEST"]._serialized_end = 1194
-    _globals["_GETGATEWAYCONFIGRESPONSE"]._serialized_start = 1197
-    _globals["_GETGATEWAYCONFIGRESPONSE"]._serialized_end = 1415
-    _globals["_GETGATEWAYCONFIGRESPONSE_SETTINGSENTRY"]._serialized_start = 1332
-    _globals["_GETGATEWAYCONFIGRESPONSE_SETTINGSENTRY"]._serialized_end = 1415
-    _globals["_SETTINGVALUE"]._serialized_start = 1417
-    _globals["_SETTINGVALUE"]._serialized_end = 1530
-    _globals["_EFFECTIVESETTING"]._serialized_start = 1532
-    _globals["_EFFECTIVESETTING"]._serialized_end = 1652
-    _globals["_GETSANDBOXCONFIGRESPONSE"]._serialized_start = 1655
-    _globals["_GETSANDBOXCONFIGRESPONSE"]._serialized_end = 2056
-    _globals["_GETSANDBOXCONFIGRESPONSE_SETTINGSENTRY"]._serialized_start = 1969
-    _globals["_GETSANDBOXCONFIGRESPONSE_SETTINGSENTRY"]._serialized_end = 2056
+    _globals["_L7ALLOW"]._serialized_start = 1013
+    _globals["_L7ALLOW"]._serialized_end = 1210
+    _globals["_L7ALLOW_QUERYENTRY"]._serialized_start = 1128
+    _globals["_L7ALLOW_QUERYENTRY"]._serialized_end = 1210
+    _globals["_L7QUERYMATCHER"]._serialized_start = 1212
+    _globals["_L7QUERYMATCHER"]._serialized_end = 1255
+    _globals["_NETWORKBINARY"]._serialized_start = 1257
+    _globals["_NETWORKBINARY"]._serialized_end = 1307
+    _globals["_GETSANDBOXCONFIGREQUEST"]._serialized_start = 1309
+    _globals["_GETSANDBOXCONFIGREQUEST"]._serialized_end = 1354
+    _globals["_GETGATEWAYCONFIGREQUEST"]._serialized_start = 1356
+    _globals["_GETGATEWAYCONFIGREQUEST"]._serialized_end = 1381
+    _globals["_GETGATEWAYCONFIGRESPONSE"]._serialized_start = 1384
+    _globals["_GETGATEWAYCONFIGRESPONSE"]._serialized_end = 1602
+    _globals["_GETGATEWAYCONFIGRESPONSE_SETTINGSENTRY"]._serialized_start = 1519
+    _globals["_GETGATEWAYCONFIGRESPONSE_SETTINGSENTRY"]._serialized_end = 1602
+    _globals["_SETTINGVALUE"]._serialized_start = 1604
+    _globals["_SETTINGVALUE"]._serialized_end = 1717
+    _globals["_EFFECTIVESETTING"]._serialized_start = 1719
+    _globals["_EFFECTIVESETTING"]._serialized_end = 1839
+    _globals["_GETSANDBOXCONFIGRESPONSE"]._serialized_start = 1842
+    _globals["_GETSANDBOXCONFIGRESPONSE"]._serialized_end = 2243
+    _globals["_GETSANDBOXCONFIGRESPONSE_SETTINGSENTRY"]._serialized_start = 2156
+    _globals["_GETSANDBOXCONFIGRESPONSE_SETTINGSENTRY"]._serialized_end = 2243
 # @@protoc_insertion_point(module_scope)

@@ -337,3 +337,51 @@ def test_dict_to_network_rule_full():
     assert ep.rules[0].allow.method == "GET"
     assert ep.rules[0].allow.path == "/api"
     assert rule.binaries[0].path == "/usr/bin/curl"
+
+
+def test_dict_to_network_rule_l7_query_matchers():
+    """L7Allow with query parameter matchers converts correctly."""
+    rule = _dict_to_network_rule(
+        {
+            "endpoints": [
+                {
+                    "host": "api.example.com",
+                    "port": 443,
+                    "rules": [
+                        {
+                            "allow": {
+                                "method": "GET",
+                                "path": "/v1/models",
+                                "query": {
+                                    "token": {"glob": "sk-*"},
+                                    "format": {"any": ["json", "xml"]},
+                                },
+                            }
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+    allow = rule.endpoints[0].rules[0].allow
+    assert allow.method == "GET"
+    assert "token" in allow.query
+    assert allow.query["token"].glob == "sk-*"
+    assert "format" in allow.query
+    assert list(allow.query["format"].any) == ["json", "xml"]
+
+
+def test_dict_to_network_rule_l7_no_query():
+    """L7Allow without query field produces empty query map."""
+    rule = _dict_to_network_rule(
+        {
+            "endpoints": [
+                {
+                    "host": "example.com",
+                    "rules": [{"allow": {"method": "GET", "path": "/"}}],
+                }
+            ],
+        }
+    )
+    allow = rule.endpoints[0].rules[0].allow
+    assert len(allow.query) == 0

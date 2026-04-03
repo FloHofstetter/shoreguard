@@ -50,6 +50,7 @@ class _FakeInferenceStub:
             model_id="claude-sonnet-4-20250514",
             version=2,
             route_name="default",
+            timeout_secs=30,
         )
 
     def SetClusterInference(self, req, timeout=None):
@@ -59,6 +60,7 @@ class _FakeInferenceStub:
             model_id=req.model_id,
             version=3,
             route_name="default",
+            timeout_secs=req.timeout_secs if hasattr(req, "timeout_secs") else 0,
         )
         resp.validation_performed = True
         resp.validated_endpoints = [
@@ -208,6 +210,7 @@ def test_get_cluster_inference(client):
     assert result["model_id"] == "claude-sonnet-4-20250514"
     assert result["version"] == 2
     assert result["route_name"] == "default"
+    assert result["timeout_secs"] == 30
 
 
 def test_get_gateway_config(client):
@@ -223,10 +226,11 @@ def test_get_gateway_config(client):
 def test_set_cluster_inference(client):
     """set_cluster_inference() returns result with validation fields."""
     result = client.set_cluster_inference(
-        provider_name="anthropic", model_id="claude-sonnet-4-20250514", verify=True
+        provider_name="anthropic", model_id="claude-sonnet-4-20250514", verify=True, timeout_secs=45
     )
     assert result["provider_name"] == "anthropic"
     assert result["version"] == 3
+    assert result["timeout_secs"] == 45
     assert result["validation_performed"] is True
     assert len(result["validated_endpoints"]) == 1
     assert result["validated_endpoints"][0]["host"] == "api.anthropic.com"
@@ -244,6 +248,7 @@ def test_set_cluster_inference_without_validation(client):
                 model_id="gpt-4o",
                 version=1,
                 route_name="",
+                timeout_secs=0,
             )
 
     client._inference_stub = _NoValidationStub()

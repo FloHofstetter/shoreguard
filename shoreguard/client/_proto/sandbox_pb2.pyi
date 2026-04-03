@@ -155,18 +155,43 @@ class L7Rule(_message.Message):
     def __init__(self, allow: _Optional[_Union[L7Allow, _Mapping]] = ...) -> None: ...
 
 class L7Allow(_message.Message):
-    __slots__ = ("method", "path", "command")
+    __slots__ = ("method", "path", "command", "query")
+    class QueryEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: L7QueryMatcher
+        def __init__(
+            self,
+            key: _Optional[str] = ...,
+            value: _Optional[_Union[L7QueryMatcher, _Mapping]] = ...,
+        ) -> None: ...
+
     METHOD_FIELD_NUMBER: _ClassVar[int]
     PATH_FIELD_NUMBER: _ClassVar[int]
     COMMAND_FIELD_NUMBER: _ClassVar[int]
+    QUERY_FIELD_NUMBER: _ClassVar[int]
     method: str
     path: str
     command: str
+    query: _containers.MessageMap[str, L7QueryMatcher]
     def __init__(
         self,
         method: _Optional[str] = ...,
         path: _Optional[str] = ...,
         command: _Optional[str] = ...,
+        query: _Optional[_Mapping[str, L7QueryMatcher]] = ...,
+    ) -> None: ...
+
+class L7QueryMatcher(_message.Message):
+    __slots__ = ("glob", "any")
+    GLOB_FIELD_NUMBER: _ClassVar[int]
+    ANY_FIELD_NUMBER: _ClassVar[int]
+    glob: str
+    any: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(
+        self, glob: _Optional[str] = ..., any: _Optional[_Iterable[str]] = ...
     ) -> None: ...
 
 class NetworkBinary(_message.Message):

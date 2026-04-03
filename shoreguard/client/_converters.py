@@ -47,6 +47,25 @@ def _dict_to_policy(data: dict) -> sandbox_pb2.SandboxPolicy:
     return policy
 
 
+def _dict_to_l7_query(query_data: dict) -> dict[str, sandbox_pb2.L7QueryMatcher]:
+    """Convert a query matcher dict to protobuf L7QueryMatcher map.
+
+    Args:
+        query_data: Mapping of parameter names to matcher definitions
+            with ``glob`` (str) and/or ``any`` (list[str]) keys.
+
+    Returns:
+        dict[str, sandbox_pb2.L7QueryMatcher]: Protobuf matcher map.
+    """
+    result: dict[str, sandbox_pb2.L7QueryMatcher] = {}
+    for key, matcher in query_data.items():
+        result[key] = sandbox_pb2.L7QueryMatcher(
+            glob=matcher.get("glob", ""),
+            **{"any": matcher.get("any", [])},
+        )
+    return result
+
+
 def _dict_to_network_rule(data: dict) -> sandbox_pb2.NetworkPolicyRule:
     """Convert a network rule dict to protobuf.
 
@@ -71,15 +90,15 @@ def _dict_to_network_rule(data: dict) -> sandbox_pb2.NetworkPolicyRule:
         )
         for rule_data in ep_data.get("rules", []):
             allow = rule_data.get("allow", {})
-            ep.rules.append(
-                sandbox_pb2.L7Rule(
-                    allow=sandbox_pb2.L7Allow(
-                        method=allow.get("method", ""),
-                        path=allow.get("path", ""),
-                        command=allow.get("command", ""),
-                    )
-                )
+            l7_allow = sandbox_pb2.L7Allow(
+                method=allow.get("method", ""),
+                path=allow.get("path", ""),
+                command=allow.get("command", ""),
             )
+            if "query" in allow:
+                for k, v in _dict_to_l7_query(allow["query"]).items():
+                    l7_allow.query[k].CopyFrom(v)
+            ep.rules.append(sandbox_pb2.L7Rule(allow=l7_allow))
         rule.endpoints.append(ep)
     for bin_data in data.get("binaries", []):
         rule.binaries.append(sandbox_pb2.NetworkBinary(path=bin_data.get("path", "")))

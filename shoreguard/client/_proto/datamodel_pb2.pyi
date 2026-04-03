@@ -105,7 +105,6 @@ class SandboxTemplate(_message.Message):
         "annotations",
         "environment",
         "resources",
-        "pod_template",
         "volume_claim_templates",
     )
     class LabelsEntry(_message.Message):
@@ -139,7 +138,6 @@ class SandboxTemplate(_message.Message):
     ANNOTATIONS_FIELD_NUMBER: _ClassVar[int]
     ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
     RESOURCES_FIELD_NUMBER: _ClassVar[int]
-    POD_TEMPLATE_FIELD_NUMBER: _ClassVar[int]
     VOLUME_CLAIM_TEMPLATES_FIELD_NUMBER: _ClassVar[int]
     image: str
     runtime_class_name: str
@@ -148,7 +146,6 @@ class SandboxTemplate(_message.Message):
     annotations: _containers.ScalarMap[str, str]
     environment: _containers.ScalarMap[str, str]
     resources: _struct_pb2.Struct
-    pod_template: _struct_pb2.Struct
     volume_claim_templates: _struct_pb2.Struct
     def __init__(
         self,
@@ -159,7 +156,6 @@ class SandboxTemplate(_message.Message):
         annotations: _Optional[_Mapping[str, str]] = ...,
         environment: _Optional[_Mapping[str, str]] = ...,
         resources: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...,
-        pod_template: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...,
         volume_claim_templates: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...,
     ) -> None: ...
 

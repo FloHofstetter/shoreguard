@@ -274,6 +274,7 @@ function inferenceConfig() {
     return {
         provider: '',
         modelId: '',
+        timeoutSecs: 0,
         providers: _knownProviders,
         placeholder: 'model-id',
         loading: false,
@@ -297,6 +298,7 @@ function inferenceConfig() {
                 const config = await apiFetch(`${API}/inference`);
                 this.provider = config.provider_name || '';
                 this.modelId = config.model_id || '';
+                this.timeoutSecs = config.timeout_secs || 0;
                 const cp = this.currentProvider;
                 if (cp) this.placeholder = cp.placeholder;
             } catch {
@@ -325,7 +327,7 @@ function inferenceConfig() {
                 await apiFetch(`${API}/inference`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ provider_name: this.provider, model_id: this.modelId, verify: false }),
+                    body: JSON.stringify({ provider_name: this.provider, model_id: this.modelId, verify: false, timeout_secs: this.timeoutSecs }),
                 });
                 this.saveOutput = '<div class="text-success small"><i class="bi bi-check-circle me-1"></i>Provider configured.</div>';
                 showToast('Inference provider saved.', 'success');

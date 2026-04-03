@@ -171,7 +171,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.11.0",
+    version="0.12.0",
     lifespan=lifespan,
 )
 
@@ -185,13 +185,21 @@ health_router = APIRouter(tags=["health"])
 
 @health_router.get("/healthz")
 async def healthz() -> dict[str, str]:
-    """Liveness probe — returns 200 if the process is running."""
+    """Liveness probe — returns 200 if the process is running.
+
+    Returns:
+        dict[str, str]: Status object with ``{"status": "ok"}``.
+    """
     return {"status": "ok"}
 
 
 @health_router.get("/readyz")
 async def readyz() -> JSONResponse:
-    """Readiness probe — checks database and service initialisation."""
+    """Readiness probe — checks database and service initialisation.
+
+    Returns:
+        JSONResponse: 200 with check details when ready, 503 otherwise.
+    """
     import shoreguard.services.gateway as gw_mod
     from shoreguard.db import get_engine
 
@@ -265,11 +273,13 @@ class SetInferenceRequest(BaseModel):
         provider_name: Name of the inference provider.
         model_id: Identifier of the model to use.
         verify: Whether to verify the configuration before applying.
+        timeout_secs: Per-route request timeout in seconds (0 = default 60s).
     """
 
     provider_name: str
     model_id: str
     verify: bool = True
+    timeout_secs: int = 0
 
 
 @gw_api.get("/inference")
@@ -317,6 +327,7 @@ async def set_inference(
         provider_name=body.provider_name,
         model_id=body.model_id,
         verify=body.verify,
+        timeout_secs=body.timeout_secs,
     )
     from shoreguard.services.audit import audit_log
 

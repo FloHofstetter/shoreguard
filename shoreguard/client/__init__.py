@@ -193,6 +193,7 @@ class ShoreGuardClient:
             "model_id": resp.model_id,
             "version": resp.version,
             "route_name": resp.route_name,
+            "timeout_secs": resp.timeout_secs,
         }
 
     def get_gateway_config(self) -> dict:
@@ -224,6 +225,7 @@ class ShoreGuardClient:
         model_id: str,
         verify: bool = True,
         route_name: str = "",
+        timeout_secs: int = 0,
     ) -> dict:
         """Set cluster inference configuration.
 
@@ -232,6 +234,7 @@ class ShoreGuardClient:
             model_id: Model identifier to use.
             verify: Whether to validate endpoints before saving.
             route_name: Optional route name to configure.
+            timeout_secs: Per-route request timeout in seconds (0 = default 60s).
 
         Returns:
             dict: Updated inference configuration with validation results.
@@ -242,6 +245,7 @@ class ShoreGuardClient:
                 model_id=model_id,
                 verify=verify,
                 route_name=route_name,
+                timeout_secs=timeout_secs,
             ),
             timeout=self._timeout,
         )
@@ -250,6 +254,7 @@ class ShoreGuardClient:
             "model_id": resp.model_id,
             "version": resp.version,
             "route_name": resp.route_name,
+            "timeout_secs": resp.timeout_secs,
         }
         if hasattr(resp, "validation_performed"):
             result["validation_performed"] = resp.validation_performed

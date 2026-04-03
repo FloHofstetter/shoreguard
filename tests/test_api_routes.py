@@ -88,6 +88,7 @@ async def test_get_inference(api_client, mock_client):
         "model_id": "claude-3",
         "version": 1,
         "route_name": "default",
+        "timeout_secs": 30,
     }
     resp = await api_client.get(f"/api/gateways/{GW}/inference")
     assert resp.status_code == 200
@@ -103,11 +104,12 @@ async def test_set_inference_validation(api_client, mock_client):
         "model_id": "claude-3",
         "version": 1,
         "route_name": "",
+        "timeout_secs": 90,
     }
 
     resp = await api_client.put(
         f"/api/gateways/{GW}/inference",
-        json={"provider_name": "anthropic", "model_id": "claude-3"},
+        json={"provider_name": "anthropic", "model_id": "claude-3", "timeout_secs": 90},
     )
 
     assert resp.status_code == 200

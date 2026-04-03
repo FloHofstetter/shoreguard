@@ -158,7 +158,7 @@
                 <!-- Config form -->
                 <div x-show="!loading && gw?.connected" x-cloak>
                     <form @submit.prevent="save()" class="row g-3 align-items-end">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label small text-muted">Provider</label>
                             <select class="form-select form-select-sm" x-model="provider" @change="onProviderChange()">
                                 <option value="">— Select —</option>
@@ -167,10 +167,15 @@
                                 </template>
                             </select>
                         </div>
-                        <div class="col-md-5">
+                        <div class="col-md-4">
                             <label class="form-label small text-muted">Model ID</label>
                             <input type="text" class="form-control form-control-sm" x-model="modelId"
                                    :placeholder="placeholder">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted">Timeout (s)</label>
+                            <input type="number" class="form-control form-control-sm"
+                                   x-model.number="timeoutSecs" placeholder="0" min="0">
                         </div>
                         <div class="col-md-3 d-flex gap-2">
                             <button type="submit" class="btn btn-primary btn-sm" :disabled="saving">
