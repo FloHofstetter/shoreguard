@@ -16,6 +16,7 @@ document.addEventListener('alpine:init', () => {
         authenticated: false,
         needsSetup: false,
         registrationEnabled: false,
+        localMode: false,
 
         async init() {
             try {
@@ -32,6 +33,7 @@ document.addEventListener('alpine:init', () => {
                     this.role = d.role || 'viewer';
                     this.email = d.email || null;
                     this.registrationEnabled = d.registration_enabled || false;
+                    this.localMode = d.local_mode || false;
                 }
                 // Hide elements with data-sg-min-role
                 document.querySelectorAll('[data-sg-min-role]').forEach(el => {

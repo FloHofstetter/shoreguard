@@ -247,6 +247,8 @@ async def auth_check(request: Request) -> dict[str, Any]:
                         email = user.email
                 finally:
                     session.close()
+    import shoreguard.services.local_gateway as local_mod
+
     return {
         "authenticated": role is not None,
         "auth_enabled": True,
@@ -254,6 +256,7 @@ async def auth_check(request: Request) -> dict[str, Any]:
         "email": email,
         "needs_setup": False,
         "registration_enabled": is_registration_enabled(),
+        "local_mode": local_mod.local_gateway_manager is not None,
     }
 
 

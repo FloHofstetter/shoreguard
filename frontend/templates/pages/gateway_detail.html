@@ -35,6 +35,18 @@
                 <span x-show="gw?.version" class="text-muted" x-text="'v' + (gw?.version || '')"></span>
             </div>
             <div class="d-flex gap-2">
+                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && !$store.health.connected" x-cloak
+                        class="btn btn-outline-success btn-sm" @click="startGateway()">
+                    <i class="bi bi-play-fill me-1"></i>Start
+                </button>
+                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && $store.health.connected" x-cloak
+                        class="btn btn-outline-danger btn-sm" @click="stopGateway()">
+                    <i class="bi bi-stop-fill me-1"></i>Stop
+                </button>
+                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && $store.health.connected" x-cloak
+                        class="btn btn-outline-warning btn-sm" @click="restartGateway()">
+                    <i class="bi bi-arrow-repeat me-1"></i>Restart
+                </button>
                 <button x-show="$store.auth.hasRole('admin')" x-cloak
                         class="btn btn-outline-primary btn-sm" @click="testConnection()">
                     <i class="bi bi-plug me-1"></i>Test Connection

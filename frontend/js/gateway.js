@@ -174,6 +174,69 @@ function gatewayDetail(name) {
             }
         },
 
+        async startGateway() {
+            this.actionOutput = '<div class="spinner-border spinner-border-sm me-2"></div>Starting gateway...';
+            this.actionClass = '';
+            try {
+                const result = await apiFetch(`${API_GLOBAL}/gateway/${name}/start`, { method: 'POST' });
+                if (result.success) {
+                    this.actionOutput = `Gateway started. ${escapeHtml(result.output || '')}`;
+                    this.actionClass = 'log-info';
+                    showToast('Gateway started.', 'success');
+                    Alpine.store('health').check();
+                    setTimeout(() => this.load(), SG.config.actionRefreshDelay);
+                } else {
+                    this.actionOutput = `Start failed: ${escapeHtml(result.error || 'Unknown error')}`;
+                    this.actionClass = 'log-error';
+                }
+            } catch (e) {
+                this.actionOutput = `Error: ${escapeHtml(e.message)}`;
+                this.actionClass = 'log-error';
+            }
+        },
+
+        async stopGateway() {
+            this.actionOutput = '<div class="spinner-border spinner-border-sm me-2"></div>Stopping gateway...';
+            this.actionClass = '';
+            try {
+                const result = await apiFetch(`${API_GLOBAL}/gateway/${name}/stop`, { method: 'POST' });
+                if (result.success) {
+                    this.actionOutput = 'Gateway stopped.';
+                    this.actionClass = 'log-info';
+                    showToast('Gateway stopped.', 'success');
+                    Alpine.store('health').check();
+                    setTimeout(() => this.load(), SG.config.actionRefreshDelay);
+                } else {
+                    this.actionOutput = `Stop failed: ${escapeHtml(result.error || 'Unknown error')}`;
+                    this.actionClass = 'log-error';
+                }
+            } catch (e) {
+                this.actionOutput = `Error: ${escapeHtml(e.message)}`;
+                this.actionClass = 'log-error';
+            }
+        },
+
+        async restartGateway() {
+            this.actionOutput = '<div class="spinner-border spinner-border-sm me-2"></div>Restarting gateway...';
+            this.actionClass = '';
+            try {
+                const result = await apiFetch(`${API_GLOBAL}/gateway/${name}/restart`, { method: 'POST' });
+                if (result.success) {
+                    this.actionOutput = `Gateway restarted. ${escapeHtml(result.output || '')}`;
+                    this.actionClass = 'log-info';
+                    showToast('Gateway restarted.', 'success');
+                    Alpine.store('health').check();
+                    setTimeout(() => this.load(), SG.config.actionRefreshDelay);
+                } else {
+                    this.actionOutput = `Restart failed: ${escapeHtml(result.error || 'Unknown error')}`;
+                    this.actionClass = 'log-error';
+                }
+            } catch (e) {
+                this.actionOutput = `Error: ${escapeHtml(e.message)}`;
+                this.actionClass = 'log-error';
+            }
+        },
+
         async unregister() {
             const confirmed = await showConfirm(
                 `Unregister gateway "${name}"? This removes it from Shoreguard but does not affect the running gateway.`,
