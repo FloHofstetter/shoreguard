@@ -77,7 +77,9 @@ def register_error_handlers(app: FastAPI) -> None:
             JSONResponse: Error response with status code and detail.
         """
         status = _DOMAIN_STATUS_MAP.get(type(exc), 500)
-        if status >= 500:
+        if isinstance(exc, GatewayNotConnectedError):
+            logger.debug("Gateway not connected: %s", exc)
+        elif status >= 500:
             logger.error("Unhandled domain error: %s (status=%d)", exc, status, exc_info=True)
         else:
             logger.warning("Domain error: %s (status=%d)", exc, status)
