@@ -344,7 +344,7 @@ async function showPolicyRevisions(sandboxName) {
         body.innerHTML = `
             <p class="text-muted small mb-2">Select two versions to compare:</p>
             <div class="table-responsive">
-                <table class="table table-dark table-striped table-sm align-middle">
+                <table class="table table-striped table-sm align-middle">
                     <thead>
                         <tr>
                             <th style="width:40px">A</th>

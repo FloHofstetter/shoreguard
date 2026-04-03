@@ -56,7 +56,7 @@ async function loadProvidersPage() {
 
         container.innerHTML = `
             <div class="table-responsive">
-                <table class="table table-dark table-striped table-hover table-sm align-middle">
+                <table class="table table-striped table-hover table-sm align-middle">
                     <thead>
                         <tr>
                             <th>Name</th>

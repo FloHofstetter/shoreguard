@@ -5,6 +5,26 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] — 2026-04-03
+
+### Added
+
+- **Sidebar navigation** — collapsible sidebar with grouped navigation
+  (Gateways, Policies, gateway-scoped Sandboxes/Providers, admin-only
+  Audit/Users). Replaces the icon buttons in the topbar. Responsive:
+  collapses to hamburger menu on mobile (<768px).
+- **Light/dark theme toggle** — switchable via sidebar button, persisted
+  in `localStorage`. All custom CSS variables scoped to
+  `[data-bs-theme]`; Bootstrap 5.3 handles the rest automatically.
+
+### Fixed
+
+- **Audit page breadcrumbs** — audit.html now has breadcrumbs and uses
+  the standard layout instead of `container-fluid`.
+- **Dashboard breadcrumbs** — dashboard.html now has breadcrumbs.
+- **Theme-aware tables** — removed hardcoded `table-dark` class from all
+  templates and JS files; tables now adapt to the active theme.
+
 ## [0.8.0] — 2026-04-03
 
 ### Fixed

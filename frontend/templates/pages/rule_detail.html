@@ -44,7 +44,7 @@
             </h6>
             <template x-if="(rule.endpoints || []).length > 0">
                 <div class="table-responsive mb-4">
-                    <table class="table table-dark table-striped table-sm align-middle mb-0">
+                    <table class="table table-striped table-sm align-middle mb-0">
                         <thead>
                             <tr>
                                 <th>Host</th>
@@ -91,7 +91,7 @@
             </h6>
             <template x-if="(rule.binaries || []).length > 0">
                 <div class="table-responsive">
-                    <table class="table table-dark table-striped table-sm align-middle mb-0">
+                    <table class="table table-striped table-sm align-middle mb-0">
                         <thead><tr><th>Path</th></tr></thead>
                         <tbody>
                             <template x-for="b in rule.binaries" :key="b.path">

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
+<script>document.documentElement.setAttribute('data-bs-theme', localStorage.getItem('sg-theme') || 'dark');</script>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,6 +16,9 @@
 </head>
 <body>
     <nav class="topbar" x-data>
+        <button class="sidebar-toggle" @click="$store.sidebar.toggle()" aria-label="Toggle navigation">
+            <i class="bi bi-list"></i>
+        </button>
         <a class="topbar-brand" href="/">
             <i class="bi bi-shield-check me-1"></i>Shoreguard
         </a>
@@ -30,14 +34,6 @@
             <span x-show="$store.health.connected" x-text="($store.health.gwName ? $store.health.gwName + ' ' : '') + ($store.health.version || 'Connected')"></span>
             <span x-show="!$store.health.connected && $store.health.status !== 'unknown'" x-text="$store.health.status === 'degraded' ? 'Degraded' : 'Disconnected'"></span>
         </span>
-        <a href="/audit" class="btn btn-sm btn-outline-secondary ms-2"
-           x-cloak x-show="$store.auth.hasRole('admin')" title="Audit Log">
-            <i class="bi bi-journal-text"></i>
-        </a>
-        <a href="/users" class="btn btn-sm btn-outline-secondary ms-2"
-           x-cloak x-show="$store.auth.hasRole('admin')" title="Users">
-            <i class="bi bi-people"></i>
-        </a>
         <span class="text-muted small ms-2"
               x-cloak x-show="$store.auth.email" x-text="$store.auth.email"></span>
         <span class="badge bg-secondary ms-2"
@@ -49,6 +45,10 @@
             <i class="bi bi-box-arrow-right"></i>
         </button>
     </nav>
+
+    {% include "components/sidebar.html" %}
+    <div class="sidebar-backdrop" x-data x-show="$store.sidebar?.open" x-cloak
+         @click="$store.sidebar.open = false"></div>
 
     {% block subnav %}{% endblock %}
 

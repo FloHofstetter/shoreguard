@@ -131,6 +131,27 @@ document.addEventListener('alpine:init', () => {
         },
     });
 
+    // ─── Sidebar Store ──────────────────────────────────────────────────────
+    Alpine.store('sidebar', {
+        open: false,
+        toggle() { this.open = !this.open; },
+    });
+
+    // ─── Theme Store ───────────────────────────────────────────────────────
+    Alpine.store('theme', {
+        mode: localStorage.getItem('sg-theme') || 'dark',
+
+        init() {
+            document.documentElement.setAttribute('data-bs-theme', this.mode);
+        },
+
+        toggle() {
+            this.mode = this.mode === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-bs-theme', this.mode);
+            localStorage.setItem('sg-theme', this.mode);
+        },
+    });
+
 }); // end alpine:init
 
 

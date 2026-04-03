@@ -96,7 +96,7 @@ function formatTimeAgo(isoString) {
 function renderKeyValueTable(rows) {
     if (!rows || rows.length === 0) return '';
     return `
-        <table class="table table-dark table-sm table-borderless mb-0">
+        <table class="table table-sm table-borderless mb-0">
             <tbody>
                 ${rows.map(([label, value]) => `
                     <tr>

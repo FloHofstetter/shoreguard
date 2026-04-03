@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — Shoreguard{% endblock %}
 
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item active">Dashboard</li>
+</ol>
+{% endblock %}
+
 {% block content %}
 <div x-data="dashboardPage()" x-init="init()">
     <!-- Loading -->

@@ -259,7 +259,7 @@ async function showApprovalHistory(sandboxName) {
 
         body.innerHTML = `
             <div class="table-responsive">
-                <table class="table table-dark table-striped table-sm align-middle">
+                <table class="table table-striped table-sm align-middle">
                     <thead>
                         <tr>
                             <th>Rule</th>

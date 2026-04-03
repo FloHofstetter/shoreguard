@@ -11,13 +11,13 @@
     background-color: rgba(118, 185, 0, 0.1) !important;
 }
 
-/* Tighter striping for dark theme */
-.table-dark.table-striped > tbody > tr:nth-of-type(odd) > * {
-    --bs-table-bg-type: rgba(255, 255, 255, 0.02);
+/* Theme-aware striping & hover */
+.table.table-striped > tbody > tr:nth-of-type(odd) > * {
+    --bs-table-bg-type: var(--sg-table-stripe);
 }
 
-.table-dark.table-hover > tbody > tr:hover > * {
-    --bs-table-bg-state: rgba(118, 185, 0, 0.06);
+.table.table-hover > tbody > tr:hover > * {
+    --bs-table-bg-state: var(--sg-table-hover);
 }
 
 /* Expand chevron rotation */
@@ -68,8 +68,8 @@ tr:hover .delete-btn {
 }
 
 /* Table header contrast */
-.table-dark > thead > tr > th {
-    background-color: rgba(255, 255, 255, 0.04);
+.table > thead > tr > th {
+    background-color: var(--sg-table-head-bg);
     border-bottom: 1px solid var(--sg-border);
     font-size: 0.8rem;
     text-transform: uppercase;
