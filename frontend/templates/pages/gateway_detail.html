@@ -93,31 +93,46 @@
         </div>
 
         <!-- Details -->
-        <h6 class="text-muted mb-3">Details</h6>
-        <dl class="row mb-4">
-            <dt class="col-sm-3 text-muted fw-normal">Endpoint</dt>
-            <dd class="col-sm-9 font-monospace small" x-text="gw?.endpoint || '\u2014'"></dd>
-            <dt class="col-sm-3 text-muted fw-normal">Scheme</dt>
-            <dd class="col-sm-9" x-text="gw?.scheme || '\u2014'"></dd>
-            <template x-if="gw?.auth_mode">
-                <dt class="col-sm-3 text-muted fw-normal">Auth</dt>
-            </template>
-            <template x-if="gw?.auth_mode">
-                <dd class="col-sm-9" x-text="gw.auth_mode"></dd>
-            </template>
-            <template x-if="gw?.registered_at">
-                <dt class="col-sm-3 text-muted fw-normal">Registered</dt>
-            </template>
-            <template x-if="gw?.registered_at">
-                <dd class="col-sm-9 small text-muted" x-text="gw.registered_at"></dd>
-            </template>
-            <template x-if="gw?.last_seen">
-                <dt class="col-sm-3 text-muted fw-normal">Last Seen</dt>
-            </template>
-            <template x-if="gw?.last_seen">
-                <dd class="col-sm-9 small text-muted" x-text="formatTimeAgo(gw.last_seen)"></dd>
-            </template>
-        </dl>
+        <div class="card sg-card-themed mb-4">
+            <div class="card-body p-0">
+                <table class="table table-sm table-borderless mb-0 align-middle">
+                    <tbody>
+                        <tr>
+                            <td class="text-muted ps-3" style="width:160px"><i class="bi bi-globe me-2"></i>Endpoint</td>
+                            <td><span class="endpoint-badge px-2 py-1" x-text="gw?.endpoint || '\u2014'"></span></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted ps-3"><i class="bi bi-lock me-2"></i>Scheme</td>
+                            <td x-text="gw?.scheme || '\u2014'"></td>
+                        </tr>
+                        <template x-if="gw?.auth_mode">
+                            <tr>
+                                <td class="text-muted ps-3"><i class="bi bi-shield-check me-2"></i>Auth</td>
+                                <td x-text="gw.auth_mode"></td>
+                            </tr>
+                        </template>
+                        <template x-if="gw?.registered_at">
+                            <tr>
+                                <td class="text-muted ps-3"><i class="bi bi-calendar-plus me-2"></i>Registered</td>
+                                <td>
+                                    <span x-text="new Date(gw.registered_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })"></span>
+                                    <span class="text-muted small ms-1" x-text="'(' + formatTimeAgo(gw.registered_at) + ')'"></span>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="gw?.last_seen">
+                            <tr>
+                                <td class="text-muted ps-3"><i class="bi bi-clock-history me-2"></i>Last Seen</td>
+                                <td>
+                                    <span x-text="formatTimeAgo(gw.last_seen)"></span>
+                                    <span class="text-muted small ms-1" x-text="'(' + new Date(gw.last_seen).toLocaleString() + ')'"></span>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
         <!-- Unregister -->
         <div x-show="$store.auth.hasRole('admin')" x-cloak class="border-top pt-3" style="border-color:var(--sg-border)!important">
