@@ -5,6 +5,32 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] — 2026-04-03
+
+### Added
+
+- **Docker containerisation** — multi-stage `Dockerfile` and
+  `docker-compose.yml` (ShoreGuard + PostgreSQL) for production deployments.
+- **Health probes** — unauthenticated `GET /healthz` (liveness) and
+  `GET /readyz` (readiness — checks database and gateway service).
+- **`protobuf` runtime dependency** — added to `pyproject.toml` (was
+  previously only available transitively via `grpcio-tools` in dev).
+- `.dockerignore` for minimal build context.
+
+### Fixed
+
+- **PostgreSQL migration** — `users.is_active` column used
+  `server_default=sa.text("1")` which fails on PostgreSQL. Changed to
+  `sa.true()` for cross-database compatibility.
+- **Gateway health endpoint** — `GET /api/gateways/{gw}/health` called
+  `get_client()` directly instead of via dependency injection, causing
+  `GatewayNotConnectedError` to return 200 instead of 503.
+
+### Changed
+
+- FastAPI `version` field now matches the package version (was stale at
+  `0.8.0`).
+
 ## [0.10.0] — 2026-04-03
 
 ### Removed

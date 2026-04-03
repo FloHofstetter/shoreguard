@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: shoreguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: shoreguard
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shoreguard"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  shoreguard:
+    build: .
+    ports:
+      - "8888:8888"
+    environment:
+      SHOREGUARD_DATABASE_URL: "postgresql+psycopg://shoreguard:${POSTGRES_PASSWORD}@db:5432/shoreguard"
+      SHOREGUARD_SECRET_KEY: ${SHOREGUARD_SECRET_KEY:?set SHOREGUARD_SECRET_KEY}
+      SHOREGUARD_ADMIN_PASSWORD: ${SHOREGUARD_ADMIN_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

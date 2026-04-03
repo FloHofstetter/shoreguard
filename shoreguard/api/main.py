@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import GatewayNotConnectedError
@@ -170,11 +171,54 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.8.0",
+    version="0.11.0",
     lifespan=lifespan,
 )
 
 register_error_handlers(app)
+
+
+# ─── Health probes (unauthenticated) ────────────────────────────────────────
+
+health_router = APIRouter(tags=["health"])
+
+
+@health_router.get("/healthz")
+async def healthz() -> dict[str, str]:
+    """Liveness probe — returns 200 if the process is running."""
+    return {"status": "ok"}
+
+
+@health_router.get("/readyz")
+async def readyz() -> JSONResponse:
+    """Readiness probe — checks database and service initialisation."""
+    import shoreguard.services.gateway as gw_mod
+    from shoreguard.db import get_engine
+
+    checks: dict[str, str] = {}
+    healthy = True
+
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as exc:
+        checks["database"] = str(exc)
+        healthy = False
+
+    if gw_mod.gateway_service is not None:
+        checks["gateway_service"] = "ok"
+    else:
+        checks["gateway_service"] = "not initialised"
+        healthy = False
+
+    status_code = 200 if healthy else 503
+    payload = {"status": "ready" if healthy else "not ready", "checks": checks}
+    return JSONResponse(content=payload, status_code=status_code)
+
+
+app.include_router(health_router)
 
 
 # ─── Gateway-scoped API routes ──────────────────────────────────────────────
@@ -193,17 +237,19 @@ gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
 
 
 @gw_api.get("/health", response_model=None)
-async def gw_health(gw: str) -> dict[str, Any] | JSONResponse:
+async def gw_health(
+    gw: str, client: ShoreGuardClient = Depends(get_client)
+) -> dict[str, Any] | JSONResponse:
     """Return gateway health status.
 
     Args:
         gw: The gateway name.
+        client: The ShoreGuardClient for this gateway.
 
     Returns:
         dict[str, Any] | JSONResponse: Health info or 503 if disconnected.
     """
     try:
-        client = get_client()
         return await asyncio.to_thread(client.health)
     except GatewayNotConnectedError:
         return JSONResponse(

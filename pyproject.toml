@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "shoreguard"
-version = "0.10.0"
+version = "0.11.0"
 description = "Open source control plane for NVIDIA OpenShell"
 license = "Apache-2.0"
 readme = "README.md"
@@ -28,6 +28,7 @@ dependencies = [
     "fastapi>=0.135",
     "uvicorn>=0.42",
     "grpcio>=1.78",
+    "protobuf>=5.29",
     "pyyaml>=6.0",
     "jinja2>=3.1",
     "websockets>=16.0",

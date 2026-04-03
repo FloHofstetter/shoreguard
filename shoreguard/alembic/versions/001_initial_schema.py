@@ -42,7 +42,7 @@ def upgrade() -> None:
         sa.Column("email", sa.String(254), unique=True, nullable=False),
         sa.Column("hashed_password", sa.String(128), nullable=True),
         sa.Column("role", sa.String(20), nullable=False, server_default="viewer"),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("invite_token_hash", sa.String(64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
