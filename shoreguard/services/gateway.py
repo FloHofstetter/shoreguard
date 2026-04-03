@@ -11,8 +11,8 @@ from typing import Any
 import grpc
 
 from shoreguard.client import ShoreGuardClient
-from shoreguard.config import is_private_ip, openshell_config_dir
-from shoreguard.exceptions import GatewayNotConnectedError, NotFoundError, ShoreGuardError
+from shoreguard.config import is_private_ip
+from shoreguard.exceptions import GatewayNotConnectedError, NotFoundError
 from shoreguard.services.registry import GatewayRegistry
 
 logger = logging.getLogger(__name__)
@@ -88,24 +88,19 @@ class GatewayService:
 
     # ── Connection management ─────────────────────────────────────────────
 
-    def get_client(self, name: str | None = None) -> ShoreGuardClient:
+    def get_client(self, name: str) -> ShoreGuardClient:
         """Return a client for the given gateway, attempting reconnect with backoff.
 
-        If *name* is None, falls back to the active gateway from config.
-
         Args:
-            name: Gateway name, or None for the active gateway.
+            name: Gateway name.
 
         Returns:
             ShoreGuardClient: Connected gRPC client.
 
         Raises:
-            GatewayNotConnectedError: If no gateway is specified or
-                connection fails.
+            GatewayNotConnectedError: If connection fails.
         """
-        gw_name = name or self.get_active_name()
-        if not gw_name:
-            raise GatewayNotConnectedError("No gateway specified or configured.")
+        gw_name = name
 
         # Phase 1: read state under the lock
         with _clients_lock:
@@ -152,16 +147,14 @@ class GatewayService:
             entry.backoff = 0.0
         return new_client
 
-    def set_client(self, client: ShoreGuardClient | None, name: str | None = None) -> None:
+    def set_client(self, client: ShoreGuardClient | None, name: str) -> None:
         """Set or clear a client for the given gateway.
 
         Args:
             client: Client to cache, or None to clear.
-            name: Gateway name, or None for the active gateway.
+            name: Gateway name.
         """
-        gw_name = name or self.get_active_name()
-        if not gw_name:
-            return
+        gw_name = name
         with _clients_lock:
             if client is None:
                 _clients.pop(gw_name, None)
@@ -175,13 +168,13 @@ class GatewayService:
                 entry.backoff = 0.0
                 logger.debug("Set client for gateway '%s'", gw_name)
 
-    def reset_backoff(self, name: str | None = None) -> None:
+    def reset_backoff(self, name: str) -> None:
         """Reset connection backoff for a gateway.
 
         Args:
-            name: Gateway name, or None for the active gateway.
+            name: Gateway name.
         """
-        gw_name = name or self.get_active_name()
+        gw_name = name
         with _clients_lock:
             if gw_name and gw_name in _clients:
                 _clients[gw_name].backoff = 0.0
@@ -290,21 +283,6 @@ class GatewayService:
                 logger.debug("Failed to close client for '%s'", name)
             return None
 
-    # ── Gateway discovery ─────────────────────────────────────────────────
-
-    def get_active_name(self) -> str | None:
-        """Read the active gateway name from config.
-
-        Returns:
-            str | None: Active gateway name, or None if not set.
-        """
-        active_file = openshell_config_dir() / "active_gateway"
-        try:
-            name = active_file.read_text().strip()
-            return name or None
-        except (FileNotFoundError, OSError):
-            return None
-
     # ── Registration ─────────────────────────────────────────────────────
 
     def register(
@@ -356,12 +334,6 @@ class GatewayService:
 
         record["connected"] = connected
         record["status"] = "connected" if connected else "unreachable"
-
-        if self.get_active_name() is None:
-            self.write_active_gateway(name)
-            record["active"] = True
-        else:
-            record["active"] = name == self.get_active_name()
 
         return record
 
@@ -420,11 +392,8 @@ class GatewayService:
             list[dict[str, Any]]: Gateway records with connection status.
         """
         gateways = self._registry.list_all()
-        active_name = self.get_active_name()
 
         for gw in gateways:
-            gw["active"] = gw["name"] == active_name
-
             with _clients_lock:
                 cached = _clients.get(gw["name"])
                 connected = cached is not None and cached.client is not None
@@ -434,30 +403,25 @@ class GatewayService:
 
         return gateways
 
-    def get_info(self, name: str | None = None) -> dict[str, Any]:
-        """Get detailed info for a gateway (active if name is None).
+    def get_info(self, name: str) -> dict[str, Any]:
+        """Get detailed info for a gateway.
 
         Args:
-            name: Gateway name, or None for the active gateway.
+            name: Gateway name.
 
         Returns:
             dict[str, Any]: Detailed gateway information.
         """
-        gw_name = name or self.get_active_name()
-        if not gw_name:
-            return {"configured": False, "error": "No active gateway configured"}
-
-        record = self._registry.get(gw_name)
+        record = self._registry.get(name)
         if record is None:
-            return {"configured": False, "error": f"Gateway '{gw_name}' not registered"}
+            return {"configured": False, "error": f"Gateway '{name}' not registered"}
 
         record["configured"] = True
-        record["active"] = gw_name == self.get_active_name()
 
         connected = False
         version = None
         with _clients_lock:
-            cached = _clients.get(gw_name)
+            cached = _clients.get(name)
             cached_client = cached.client if cached else None
         if cached_client is not None:
             try:
@@ -465,7 +429,7 @@ class GatewayService:
                 connected = True
                 version = health.get("version")
             except grpc.RpcError:
-                self.set_client(None, name=gw_name)
+                self.set_client(None, name=name)
 
         record["connected"] = connected
         if version:
@@ -473,36 +437,16 @@ class GatewayService:
         record["status"] = _derive_status(connected, record.get("last_status"))
         return record
 
-    def health(self) -> dict[str, Any]:
-        """Combined health + gateway info in one call.
+    def get_config(self, name: str) -> dict[str, Any]:
+        """Fetch the gateway configuration via gRPC.
 
-        Returns:
-            dict[str, Any]: Health and connection status.
-        """
-        active_name = self.get_active_name()
-        result: dict[str, Any] = {
-            "connected": False,
-            "gateway_name": active_name,
-        }
-
-        try:
-            client = self.get_client()
-            health = client.health()
-            result["connected"] = True
-            result["version"] = health.get("version")
-            result["health_status"] = health.get("status")
-        except (grpc.RpcError, GatewayNotConnectedError):
-            logger.debug("Health check failed for gateway '%s'", active_name)
-
-        return result
-
-    def get_config(self) -> dict[str, Any]:
-        """Fetch the global gateway configuration via gRPC.
+        Args:
+            name: Gateway name.
 
         Returns:
             dict[str, Any]: Gateway configuration.
         """
-        client = self.get_client()
+        client = self.get_client(name=name)
         return client.get_gateway_config()
 
     # ── Health monitor ────────────────────────────────────────────────────
@@ -529,34 +473,6 @@ class GatewayService:
             except Exception:
                 logger.warning("Failed to update health for '%s'", name, exc_info=True)
 
-    # ── Select ────────────────────────────────────────────────────────────
-
-    def select(self, name: str) -> dict[str, Any]:
-        """Set a gateway as active and attempt connection.
-
-        Args:
-            name: Gateway name to select.
-
-        Returns:
-            dict[str, Any]: Selection result with connection status.
-
-        Raises:
-            NotFoundError: If the gateway is not registered.
-        """
-        record = self._registry.get(name)
-        if record is None:
-            raise NotFoundError(f"Gateway '{name}' not registered")
-
-        self.write_active_gateway(name)
-
-        try:
-            self.get_client(name=name)
-            connected = True
-        except (grpc.RpcError, OSError, ConnectionError, TimeoutError, GatewayNotConnectedError):
-            connected = False
-        logger.info("Selected gateway '%s' (connected=%s)", name, connected)
-        return {"success": True, "connected": connected}
-
     def get_cached_client(self, name: str) -> ShoreGuardClient | None:
         """Return the cached client for a gateway, or None if not connected.
 
@@ -571,28 +487,6 @@ class GatewayService:
             if entry is not None and entry.client is not None:
                 return entry.client
         return None
-
-    # ── Internal helpers ──────────────────────────────────────────────────
-
-    def write_active_gateway(self, name: str) -> None:
-        """Switch the active gateway file (for OpenShell CLI compat).
-
-        Args:
-            name: Gateway name to set as active.
-
-        Raises:
-            ShoreGuardError: If the active gateway file cannot be written.
-        """
-        active_file = openshell_config_dir() / "active_gateway"
-        try:
-            active_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            active_file.write_text(name)
-            os.chmod(active_file, 0o600)
-        except OSError as e:
-            logger.error("Failed to write active gateway file '%s'", active_file, exc_info=True)
-            raise ShoreGuardError(f"Failed to write active gateway file: {e}") from e
-        logger.info("Set active gateway to '%s'", name)
-        self.reset_backoff(name)
 
 
 # Module-level reference — set during app lifespan (see shoreguard.api.main).

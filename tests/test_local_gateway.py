@@ -43,7 +43,6 @@ def gw_svc(registry):
 def config_dir(tmp_path, monkeypatch):
     d = tmp_path / "openshell"
     d.mkdir()
-    monkeypatch.setattr("shoreguard.services.gateway.openshell_config_dir", lambda: d)
     monkeypatch.setattr("shoreguard.services.local_gateway.openshell_config_dir", lambda: d)
     return d
 
@@ -114,55 +113,31 @@ def test_diagnostics_docker_permission_denied(mock_run, mock_which, mgr):
 # ─── Start / Stop / Restart ──────────────────────────────────────────────────
 
 
-def test_start_no_active_gateway(mgr, config_dir):
-    """Start without any active gateway returns error."""
-    result = mgr.start()
-    assert result["success"] is False
-    assert "No active gateway" in result["error"]
-
-
-def test_stop_no_active_gateway(mgr, config_dir):
-    """Stop without any active gateway returns error."""
-    result = mgr.stop()
-    assert result["success"] is False
-    assert "No active gateway" in result["error"]
-
-
-def test_restart_no_active_gateway(mgr, config_dir):
-    """Restart without any active gateway returns error."""
-    result = mgr.restart()
-    assert result["success"] is False
-    assert "No active gateway" in result["error"]
-
-
 @patch("shoreguard.services.local_gateway.LocalGatewayManager._check_docker_daemon")
 @patch("shoreguard.services.local_gateway.LocalGatewayManager._get_container_status")
-def test_start_already_running(mock_status, mock_docker, mgr, config_dir):
+def test_start_already_running(mock_status, mock_docker, mgr):
     """Start when container is already running."""
     mock_docker.return_value = True
     mock_status.return_value = "running"
-    (config_dir / "active_gateway").write_text(GW)
-    result = mgr.start()
+    result = mgr.start(GW)
     assert result["success"] is True
     assert "already running" in result["output"]
 
 
 @patch("shoreguard.services.local_gateway.LocalGatewayManager._get_container_status")
-def test_stop_already_stopped(mock_status, mgr, config_dir):
+def test_stop_already_stopped(mock_status, mgr):
     """Stop when container is not running."""
     mock_status.return_value = "exited"
-    (config_dir / "active_gateway").write_text(GW)
-    result = mgr.stop()
+    result = mgr.stop(GW)
     assert result["success"] is True
     assert "already stopped" in result["output"]
 
 
 @patch("shoreguard.services.local_gateway.LocalGatewayManager._check_docker_daemon")
-def test_start_docker_not_running(mock_docker, mgr, config_dir):
+def test_start_docker_not_running(mock_docker, mgr):
     """Start when docker daemon is not running."""
     mock_docker.return_value = False
-    (config_dir / "active_gateway").write_text(GW)
-    result = mgr.start()
+    result = mgr.start(GW)
     assert result["success"] is False
     assert "Docker daemon" in result["error"]
 
@@ -170,15 +145,14 @@ def test_start_docker_not_running(mock_docker, mgr, config_dir):
 @patch("shoreguard.services.local_gateway.LocalGatewayManager._check_docker_daemon")
 @patch("shoreguard.services.local_gateway.LocalGatewayManager._get_container_status")
 @patch("shoreguard.services.local_gateway.LocalGatewayManager._docker_start_container")
-def test_start_exited_container(mock_start, mock_status, mock_docker, mgr, config_dir):
+def test_start_exited_container(mock_start, mock_status, mock_docker, mgr):
     """Start a previously stopped container."""
     mock_docker.return_value = True
     mock_status.return_value = "exited"
     mock_start.return_value = {"success": True, "output": "Started"}
-    (config_dir / "active_gateway").write_text(GW)
 
     with patch.object(mgr._gw, "get_client", side_effect=GatewayNotConnectedError):
-        result = mgr.start()
+        result = mgr.start(GW)
     assert result["success"] is True
 
 

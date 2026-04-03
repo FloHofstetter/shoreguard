@@ -127,18 +127,8 @@ def gateway_endpoint():
         yield endpoint
         return
 
-    # 2. Named gateway from env or active gateway from config
+    # 2. Named gateway from env
     gw_name = os.environ.get("OPENSHELL_GATEWAY")
-    if not gw_name:
-        # Try reading active gateway from config
-        try:
-            from shoreguard.config import openshell_config_dir
-
-            active_file = openshell_config_dir() / "active_gateway"
-            if active_file.exists():
-                gw_name = active_file.read_text().strip() or None
-        except Exception:
-            pass
     if gw_name:
         try:
             client = ShoreGuardClient.from_active_cluster(cluster=gw_name)
@@ -250,5 +240,5 @@ def gateway_service(sg_client: ShoreGuardClient):
     session_factory = sa_sessionmaker(bind=engine)
     registry = GatewayRegistry(session_factory)
     svc = GatewayService(registry)
-    svc.set_client(sg_client)
+    svc.set_client(sg_client, name="integration-test")
     return svc

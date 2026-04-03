@@ -46,15 +46,6 @@ def svc(registry):
     return GatewayService(registry)
 
 
-@pytest.fixture
-def config_dir(tmp_path, monkeypatch):
-    """Temp openshell config directory with patched config function."""
-    d = tmp_path / "openshell"
-    d.mkdir()
-    monkeypatch.setattr("shoreguard.services.gateway.openshell_config_dir", lambda: d)
-    return d
-
-
 # ─── _derive_status ─────────────────────────────────────────────────────────
 
 
@@ -103,12 +94,6 @@ def test_get_client_reconnects_on_health_fail(svc):
 
     assert result is new_client
     old_client.close.assert_called_once()
-
-
-def test_get_client_no_name_no_active(svc, config_dir):
-    """get_client with no name and no active gateway raises."""
-    with pytest.raises(GatewayNotConnectedError, match="No gateway specified"):
-        svc.get_client(name=None)
 
 
 def test_get_client_reconnect_close_fails(svc):
@@ -163,12 +148,6 @@ def test_set_client_none_pops(svc):
     assert GW in gw_module._clients
     svc.set_client(None, name=GW)
     assert GW not in gw_module._clients
-
-
-def test_set_client_no_name_no_active_is_noop(svc, config_dir):
-    """set_client with no name and no active gateway does nothing."""
-    svc.set_client(MagicMock())
-    assert len(gw_module._clients) == 0
 
 
 def test_set_client_creates_entry(svc):
@@ -264,30 +243,10 @@ def test_try_connect_registry_health_fail(svc, registry):
     mock_client.close.assert_called_once()
 
 
-# ─── Gateway discovery ───────────────────────────────────────────────────────
-
-
-def test_get_active_name_missing(svc, config_dir):
-    """Returns None when active_gateway file does not exist."""
-    assert svc.get_active_name() is None
-
-
-def test_get_active_name_present(svc, config_dir):
-    """Returns gateway name read from active_gateway file."""
-    (config_dir / "active_gateway").write_text("my-gw\n")
-    assert svc.get_active_name() == "my-gw"
-
-
-def test_get_active_name_empty_file(svc, config_dir):
-    """Empty active_gateway file returns None."""
-    (config_dir / "active_gateway").write_text("  \n")
-    assert svc.get_active_name() is None
-
-
 # ─── Registration ────────────────────────────────────────────────────────────
 
 
-def test_register_creates_gateway(svc, config_dir):
+def test_register_creates_gateway(svc):
     """Register adds gateway to registry and returns record."""
     result = svc.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     assert result["name"] == GW
@@ -296,21 +255,14 @@ def test_register_creates_gateway(svc, config_dir):
     assert "status" in result
 
 
-def test_register_sets_first_as_active(svc, config_dir):
-    """First registered gateway becomes active."""
-    result = svc.register(GW, "10.0.0.1:8443", auth_mode="insecure")
-    assert result.get("active") is True
-    assert svc.get_active_name() == GW
-
-
-def test_register_duplicate_raises(svc, config_dir):
+def test_register_duplicate_raises(svc):
     """Registering same name twice raises ValueError."""
     svc.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     with pytest.raises(ValueError, match="already registered"):
         svc.register(GW, "10.0.0.2:8443", auth_mode="insecure")
 
 
-def test_register_with_certs(svc, config_dir):
+def test_register_with_certs(svc):
     """Register stores certificates."""
     svc.register(
         GW,
@@ -330,7 +282,7 @@ def test_register_with_certs(svc, config_dir):
     assert creds["client_key"] == b"key-data"
 
 
-def test_unregister_removes_gateway(svc, config_dir):
+def test_unregister_removes_gateway(svc):
     """Unregister removes gateway from registry."""
     svc.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     assert svc.unregister(GW) is True
@@ -342,7 +294,7 @@ def test_unregister_nonexistent(svc):
     assert svc.unregister("nope") is False
 
 
-def test_unregister_clears_client(svc, config_dir):
+def test_unregister_clears_client(svc):
     """Unregister closes any cached client."""
     svc.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     mock_client = MagicMock()
@@ -392,7 +344,7 @@ def test_list_all_empty(svc):
     assert svc.list_all() == []
 
 
-def test_list_all_with_gateways(svc, config_dir, registry):
+def test_list_all_with_gateways(svc, registry):
     """list_all returns all registered gateways with enriched status."""
     registry.register("alpha", "10.0.0.1:8443", auth_mode="insecure")
     registry.register("beta", "10.0.0.2:8443", auth_mode="insecure")
@@ -403,10 +355,9 @@ def test_list_all_with_gateways(svc, config_dir, registry):
     for gw in result:
         assert "connected" in gw
         assert "status" in gw
-        assert "active" in gw
 
 
-def test_list_all_connected_gateway(svc, config_dir, registry):
+def test_list_all_connected_gateway(svc, registry):
     """list_all reports connected status for gateways with cached client."""
     registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     mock_client = MagicMock()
@@ -418,18 +369,12 @@ def test_list_all_connected_gateway(svc, config_dir, registry):
     assert result[0]["status"] == "connected"
 
 
-def test_list_all_no_cached_client(svc, config_dir, registry):
+def test_list_all_no_cached_client(svc, registry):
     """list_all reports disconnected when no client is cached."""
     registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
 
     result = svc.list_all()
     assert result[0]["connected"] is False
-
-
-def test_get_info_no_active(svc, config_dir):
-    """get_info with no active gateway returns error."""
-    result = svc.get_info()
-    assert result["configured"] is False
 
 
 def test_get_info_with_name(svc, registry):
@@ -448,7 +393,7 @@ def test_get_info_not_registered(svc):
     assert "not registered" in result["error"]
 
 
-def test_get_info_connected(svc, config_dir, registry):
+def test_get_info_connected(svc, registry):
     """get_info shows connected state when client is cached."""
     registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     mock_client = MagicMock()
@@ -460,78 +405,19 @@ def test_get_info_connected(svc, config_dir, registry):
     assert result["version"] == "2.0"
 
 
-# ─── Health & Config ─────────────────────────────────────────────────────────
+# ─── Config ──────────────────────────────────────────────────────────────────
 
 
-def test_health_connected(svc, config_dir):
-    """health() returns connected info when client works."""
-    (config_dir / "active_gateway").write_text(GW)
-    mock_client = MagicMock()
-    mock_client.health.return_value = {"status": "healthy", "version": "1.0"}
-    svc.set_client(mock_client, name=GW)
-
-    result = svc.health()
-    assert result["connected"] is True
-    assert result["version"] == "1.0"
-
-
-def test_health_disconnected(svc, config_dir):
-    """health() returns disconnected when no client available."""
-    (config_dir / "active_gateway").write_text(GW)
-    result = svc.health()
-    assert result["connected"] is False
-
-
-def test_get_config_delegates_to_client(svc, config_dir):
+def test_get_config_delegates_to_client(svc):
     """get_config calls client.get_gateway_config()."""
-    (config_dir / "active_gateway").write_text(GW)
     mock_client = MagicMock()
     mock_client.health.return_value = {"status": "healthy"}
     mock_client.get_gateway_config.return_value = {"settings": {}}
     svc.set_client(mock_client, name=GW)
 
-    result = svc.get_config()
+    result = svc.get_config(GW)
     mock_client.get_gateway_config.assert_called_once()
     assert result == {"settings": {}}
-
-
-# ─── Select ──────────────────────────────────────────────────────────────────
-
-
-def test_select_not_registered(svc):
-    """select() for unregistered gateway raises NotFoundError."""
-    from shoreguard.exceptions import NotFoundError
-
-    with pytest.raises(NotFoundError, match="not registered"):
-        svc.select("nope")
-
-
-def test_select_sets_active(svc, config_dir, registry):
-    """select() writes active_gateway file."""
-    registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
-    svc.select(GW)
-    assert svc.get_active_name() == GW
-
-
-def test_select_connected(svc, config_dir, registry):
-    """select() returns connected=True when client is available."""
-    registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
-    mock_client = MagicMock()
-    mock_client.health.return_value = {"status": "healthy"}
-    svc.set_client(mock_client, name=GW)
-
-    result = svc.select(GW)
-    assert result["success"] is True
-    assert result["connected"] is True
-
-
-def test_select_not_connected(svc, config_dir, registry):
-    """select() returns connected=False when connection fails."""
-    registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
-    with patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("fail")):
-        result = svc.select(GW)
-    assert result["success"] is True
-    assert result["connected"] is False
 
 
 # ─── Health monitor ──────────────────────────────────────────────────────────
@@ -545,7 +431,7 @@ def test_check_all_health_updates_registry(svc, registry):
     mock_client = MagicMock()
     mock_client.health.return_value = {"status": "healthy"}
 
-    def fake_get_client(name=None):
+    def fake_get_client(name):
         if name == "gw1":
             return mock_client
         raise GatewayNotConnectedError("fail")
@@ -558,31 +444,6 @@ def test_check_all_health_updates_registry(svc, registry):
     assert gw1["last_status"] == "healthy"
     assert gw1["last_seen"] is not None
     assert gw2["last_status"] == "unreachable"
-
-
-# ─── write_active_gateway ──────────────────────────────────────────────────
-
-
-def testwrite_active_gateway(svc, config_dir):
-    """write_active_gateway creates the file and resets backoff."""
-    svc.write_active_gateway(GW)
-    assert (config_dir / "active_gateway").read_text() == GW
-
-
-def testwrite_active_gateway_creates_dirs(svc, tmp_path, monkeypatch):
-    """write_active_gateway creates parent dirs if needed."""
-    nested = tmp_path / "deep" / "nested"
-    monkeypatch.setattr("shoreguard.services.gateway.openshell_config_dir", lambda: nested)
-    svc.write_active_gateway(GW)
-    assert (nested / "active_gateway").read_text() == GW
-
-
-def test_write_active_gateway_file_permissions(svc, config_dir):
-    """write_active_gateway creates the file with 0o600."""
-    svc.write_active_gateway(GW)
-    active_file = config_dir / "active_gateway"
-    mode = oct(active_file.stat().st_mode & 0o777)
-    assert mode == "0o600"
 
 
 # ─── DNS rebinding protection ─────────────────────────────────────��──────────
@@ -676,7 +537,7 @@ def test_check_all_health_db_error_does_not_stop_loop(svc, registry):
     assert call_count == 2
 
 
-def test_get_info_disconnects_stale_client(svc, config_dir, registry):
+def test_get_info_disconnects_stale_client(svc, registry):
     """get_info clears client when health check fails."""
     registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     mock_client = MagicMock()
@@ -686,24 +547,3 @@ def test_get_info_disconnects_stale_client(svc, config_dir, registry):
     result = svc.get_info(GW)
     assert result["connected"] is False
     assert svc.get_cached_client(GW) is None
-
-
-def test_write_active_gateway_permission_error(svc, tmp_path, monkeypatch):
-    """write_active_gateway raises ShoreGuardError on permission error."""
-    from shoreguard.exceptions import ShoreGuardError
-
-    readonly = tmp_path / "readonly"
-    readonly.mkdir(mode=0o444)
-    monkeypatch.setattr("shoreguard.services.gateway.openshell_config_dir", lambda: readonly)
-    with pytest.raises(ShoreGuardError, match="Failed to write"):
-        svc.write_active_gateway(GW)
-
-
-def test_select_passes_name_to_get_client(svc, config_dir, registry):
-    """select() explicitly passes name= to get_client, not relying on file round-trip."""
-    registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
-
-    with patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("fail")) as mock_gc:
-        svc.select(GW)
-
-    mock_gc.assert_called_once_with(name=GW)

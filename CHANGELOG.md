@@ -5,6 +5,45 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] — 2026-04-03
+
+### Removed
+
+- **"Active gateway" concept** — the server-side `active_gateway` file
+  (`~/.config/openshell/active_gateway`) is no longer read or written by the
+  web service. Every gateway operation now requires an explicit gateway name
+  from the URL. Removed endpoints: `POST /{name}/select`, `GET /info`,
+  `POST /start`, `POST /stop`, `POST /restart` (non-named variants). The
+  named variants (`/{name}/start` etc.) remain unchanged.
+- **`active` field** removed from all gateway API responses (`list`, `info`,
+  `register`).
+- Service methods removed: `get_active_name()`, `write_active_gateway()`,
+  `select()`, `health()`.
+- Auto-select of first registered gateway removed from `register()`.
+
+### Changed
+
+- **Stateless gateway routing** — the `name` parameter is now required on
+  `get_client()`, `set_client()`, `reset_backoff()`, `get_info()`, and
+  `get_config()`. No method falls back to the active gateway file anymore.
+- **`GET /info` → `GET /{name}/info`** — gateway info endpoint is now
+  name-scoped.
+- **`GET /config` → `GET /{name}/config`** — gateway config endpoint is now
+  name-scoped.
+- **`LocalGatewayManager`** — `start()`, `stop()`, `restart()` now require
+  a gateway name. Connection and client management simplified: always
+  operates on the explicitly named gateway.
+- **Frontend inference config** — now shows when gateway is connected
+  (`gw.connected`) instead of when it was the "active" gateway
+  (`gw.active`). Gateway list highlights connected gateways.
+- **Health store** — uses `GW` directly for gateway name instead of
+  fetching from `/api/gateway/info`.
+- Version bumped to `0.10.0`.
+- 756 tests (down from 774 — 18 tests for removed active-gateway
+  functionality deleted).
+
+---
+
 ## [0.9.0] — 2026-04-03
 
 ### Added

@@ -143,7 +143,7 @@ function gatewayDetail(name) {
                 if (!this.gw) return;
 
                 // Cache providers for inference config
-                if (_knownProviders.length === 0 && this.gw.active) {
+                if (_knownProviders.length === 0 && this.gw.connected) {
                     try { _knownProviders = await apiFetch(`${API}/providers/inference-providers`); } catch {}
                 }
             } catch (e) {

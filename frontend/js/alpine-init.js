@@ -100,10 +100,7 @@ document.addEventListener('alpine:init', () => {
                 const resp = await fetch(`${API}/health`);
                 if (resp.ok) {
                     const data = await resp.json();
-                    try {
-                        const info = await fetch('/api/gateway/info').then(r => r.json());
-                        this.gwName = info.name || '';
-                    } catch { /* ignore */ }
+                    this.gwName = GW;
                     this.version = data.version || '';
 
                     if (!this.connected) {

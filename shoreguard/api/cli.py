@@ -19,8 +19,8 @@ cli = typer.Typer(
         "Web control plane for NVIDIA OpenShell.\n\n"
         "Launch the Shoreguard dashboard to manage sandboxes, security policies, "
         "and approval flows through your browser.\n\n"
-        "Connects to your active OpenShell gateway automatically "
-        "via ~/.config/openshell/active_gateway."
+        "Connects to registered OpenShell gateways. "
+        "Each gateway is addressed by name in the URL."
     ),
     no_args_is_help=False,
     add_completion=False,

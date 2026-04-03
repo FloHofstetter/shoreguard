@@ -38,16 +38,18 @@ async def test_gateway_list(gw_client, mock_gw_svc):
 
 async def test_gateway_info(gw_client, mock_gw_svc):
     mock_gw_svc.get_info.return_value = {"name": "gw1", "connected": True}
-    resp = await gw_client.get("/api/gateway/info")
+    resp = await gw_client.get("/api/gateway/gw1/info")
     assert resp.status_code == 200
     assert resp.json()["connected"] is True
+    mock_gw_svc.get_info.assert_called_once_with("gw1")
 
 
 async def test_gateway_config(gw_client, mock_gw_svc):
     mock_gw_svc.get_config.return_value = {"settings": {"log_level": "info"}}
-    resp = await gw_client.get("/api/gateway/config")
+    resp = await gw_client.get("/api/gateway/gw1/config")
     assert resp.status_code == 200
     assert resp.json()["settings"]["log_level"] == "info"
+    mock_gw_svc.get_config.assert_called_once_with("gw1")
 
 
 # ─── Registration ────────────────────────────────────────────────────────────
@@ -205,25 +207,12 @@ async def test_gateway_test_connection(gw_client, mock_gw_svc):
     mock_gw_svc.test_connection.assert_called_once_with("my-gw")
 
 
-# ─── Select ──────────────────────────────────────────────────────────────────
-
-
-async def test_gateway_select(gw_client, mock_gw_svc):
-    mock_gw_svc.select.return_value = {"success": True, "connected": True}
-    resp = await gw_client.post("/api/gateway/my-gw/select")
-    assert resp.status_code == 200
-    mock_gw_svc.select.assert_called_once_with("my-gw")
-
-
 # ─── Local mode routes (without SHOREGUARD_LOCAL_MODE) ───────────────────────
 
 
 async def test_local_routes_return_404_without_local_mode(gw_client):
     """Local lifecycle routes return 404 when not in local mode."""
     for path in [
-        "/api/gateway/start",
-        "/api/gateway/stop",
-        "/api/gateway/restart",
         "/api/gateway/diagnostics",
         "/api/gateway/my-gw/start",
         "/api/gateway/my-gw/stop",
@@ -247,11 +236,6 @@ async def test_invalid_name_on_delete(gw_client, mock_gw_svc):
     resp = await gw_client.delete("/api/gateway/--bad")
     assert resp.status_code == 400
     assert "Invalid gateway name" in resp.json()["detail"]
-
-
-async def test_invalid_name_on_select(gw_client, mock_gw_svc):
-    resp = await gw_client.post("/api/gateway/--bad/select")
-    assert resp.status_code == 400
 
 
 async def test_invalid_name_on_test_connection(gw_client, mock_gw_svc):
@@ -321,28 +305,6 @@ async def test_gateway_diagnostics_local_mode(gw_client, mock_local_mgr):
     mock_local_mgr.diagnostics.assert_called_once()
 
 
-async def test_gateway_start_active_local_mode(gw_client, mock_local_mgr):
-    mock_local_mgr.start.return_value = {"success": True, "output": "Started"}
-    resp = await gw_client.post("/api/gateway/start")
-    assert resp.status_code == 200
-    assert resp.json()["success"] is True
-    mock_local_mgr.start.assert_called_once()
-
-
-async def test_gateway_stop_active_local_mode(gw_client, mock_local_mgr):
-    mock_local_mgr.stop.return_value = {"success": True, "output": "Stopped"}
-    resp = await gw_client.post("/api/gateway/stop")
-    assert resp.status_code == 200
-    mock_local_mgr.stop.assert_called_once()
-
-
-async def test_gateway_restart_active_local_mode(gw_client, mock_local_mgr):
-    mock_local_mgr.restart.return_value = {"success": True, "output": "Restarted"}
-    resp = await gw_client.post("/api/gateway/restart")
-    assert resp.status_code == 200
-    mock_local_mgr.restart.assert_called_once()
-
-
 async def test_gateway_start_named_local_mode(gw_client, mock_local_mgr):
     mock_local_mgr.start.return_value = {"success": True, "output": "Started my-gw"}
     resp = await gw_client.post("/api/gateway/my-gw/start")
@@ -383,13 +345,6 @@ async def test_gateway_destroy_invalid_name_local_mode(gw_client, mock_local_mgr
     assert resp.status_code == 400
 
 
-async def test_gateway_start_error_local_mode(gw_client, mock_local_mgr):
-    mock_local_mgr.start.return_value = {"success": False, "error": "Docker not running"}
-    resp = await gw_client.post("/api/gateway/start")
-    assert resp.status_code == 200
-    assert resp.json()["success"] is False
-
-
 async def test_gateway_create_local_mode(gw_client, mock_local_mgr):
     mock_local_mgr.create.return_value = {"success": True, "name": "new-gw"}
     resp = await gw_client.post("/api/gateway/create", json={"name": "new-gw"})
@@ -398,16 +353,6 @@ async def test_gateway_create_local_mode(gw_client, mock_local_mgr):
 
 
 # ─── NotFoundError → 404 mapping ──────────────────────────────────────────────
-
-
-async def test_gateway_select_not_found(gw_client, mock_gw_svc):
-    """select returns 404 when gateway is not registered."""
-    from shoreguard.exceptions import NotFoundError
-
-    mock_gw_svc.select.side_effect = NotFoundError("Gateway 'nope' not registered")
-    resp = await gw_client.post("/api/gateway/nope/select")
-    assert resp.status_code == 404
-    assert "not registered" in resp.json()["detail"]
 
 
 async def test_gateway_test_connection_not_found(gw_client, mock_gw_svc):

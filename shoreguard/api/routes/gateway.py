@@ -176,24 +176,32 @@ async def gateway_list() -> list[dict[str, Any]]:
     return await asyncio.to_thread(_get_gateway_service().list_all)
 
 
-@router.get("/info")
-async def gateway_info() -> dict[str, Any]:
-    """Return active gateway configuration and connection status.
+@router.get("/{name}/info")
+async def gateway_info(name: str) -> dict[str, Any]:
+    """Return gateway configuration and connection status.
+
+    Args:
+        name: Gateway name.
 
     Returns:
-        dict[str, Any]: Active gateway info.
+        dict[str, Any]: Gateway info.
     """
-    return await asyncio.to_thread(_get_gateway_service().get_info)
+    _validate_name_param(name)
+    return await asyncio.to_thread(_get_gateway_service().get_info, name)
 
 
-@router.get("/config")
-async def gateway_config() -> dict[str, Any]:
-    """Get the global gateway configuration (settings and revision).
+@router.get("/{name}/config")
+async def gateway_config(name: str) -> dict[str, Any]:
+    """Get gateway configuration (settings and revision).
+
+    Args:
+        name: Gateway name.
 
     Returns:
         dict[str, Any]: Gateway configuration.
     """
-    return await asyncio.to_thread(_get_gateway_service().get_config)
+    _validate_name_param(name)
+    return await asyncio.to_thread(_get_gateway_service().get_config, name)
 
 
 # ─── Registration (v0.3) ──────────────────────────────────────────────────
@@ -343,30 +351,6 @@ async def gateway_test_connection(name: str, request: Request) -> dict[str, Any]
 # ─── Actions on any gateway ───────────────────────────────────────────────
 
 
-@router.post("/{name}/select", dependencies=[Depends(require_role("admin"))])
-async def gateway_select(name: str, request: Request) -> dict[str, Any]:
-    """Set a gateway as active and reconnect.
-
-    Args:
-        name: Gateway name.
-        request: Incoming HTTP request.
-
-    Returns:
-        dict[str, Any]: Selection result with connection status.
-
-    Raises:
-        HTTPException: If the gateway is not found (404).
-    """
-    _validate_name_param(name)
-    logger.info("Gateway selected (gateway=%s, actor=%s)", name, get_actor(request))
-    try:
-        result = await asyncio.to_thread(_get_gateway_service().select, name)
-    except NotFoundError as e:
-        raise HTTPException(404, str(e)) from e
-    await audit_log(request, "gateway.select", "gateway", name)
-    return result
-
-
 # ─── Local mode routes (SHOREGUARD_LOCAL_MODE=1) ─────────────────────────
 
 
@@ -384,72 +368,6 @@ async def gateway_diagnostics() -> dict[str, Any]:
     if mgr is None:
         raise HTTPException(404, "Diagnostics only available in local mode")
     return await asyncio.to_thread(mgr.diagnostics)
-
-
-@router.post("/start", dependencies=[Depends(require_role("admin"))])
-async def gateway_start_active(request: Request) -> dict[str, Any]:
-    """Start the active gateway (local mode).
-
-    Args:
-        request: Incoming HTTP request.
-
-    Returns:
-        dict[str, Any]: Start result.
-
-    Raises:
-        HTTPException: If not running in local mode.
-    """
-    mgr = _get_local_manager()
-    if mgr is None:
-        raise HTTPException(404, "Local lifecycle only available in local mode")
-    logger.info("Gateway start requested (gateway=active, actor=%s)", get_actor(request))
-    result = await asyncio.to_thread(mgr.start)
-    await audit_log(request, "gateway.start", "gateway", "active")
-    return result
-
-
-@router.post("/stop", dependencies=[Depends(require_role("admin"))])
-async def gateway_stop_active(request: Request) -> dict[str, Any]:
-    """Stop the active gateway (local mode).
-
-    Args:
-        request: Incoming HTTP request.
-
-    Returns:
-        dict[str, Any]: Stop result.
-
-    Raises:
-        HTTPException: If not running in local mode.
-    """
-    mgr = _get_local_manager()
-    if mgr is None:
-        raise HTTPException(404, "Local lifecycle only available in local mode")
-    logger.info("Gateway stop requested (gateway=active, actor=%s)", get_actor(request))
-    result = await asyncio.to_thread(mgr.stop)
-    await audit_log(request, "gateway.stop", "gateway", "active")
-    return result
-
-
-@router.post("/restart", dependencies=[Depends(require_role("admin"))])
-async def gateway_restart_active(request: Request) -> dict[str, Any]:
-    """Restart the active gateway (local mode).
-
-    Args:
-        request: Incoming HTTP request.
-
-    Returns:
-        dict[str, Any]: Restart result.
-
-    Raises:
-        HTTPException: If not running in local mode.
-    """
-    mgr = _get_local_manager()
-    if mgr is None:
-        raise HTTPException(404, "Local lifecycle only available in local mode")
-    logger.info("Gateway restart requested (gateway=active, actor=%s)", get_actor(request))
-    result = await asyncio.to_thread(mgr.restart)
-    await audit_log(request, "gateway.restart", "gateway", "active")
-    return result
 
 
 @router.post("/{name}/start", dependencies=[Depends(require_role("admin"))])

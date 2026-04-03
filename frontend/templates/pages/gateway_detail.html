@@ -98,12 +98,10 @@
                 <table class="table table-sm table-borderless mb-0 align-middle">
                     <tbody>
                         <tr>
-                            <td class="text-muted ps-3" style="width:160px"><i class="bi bi-globe me-2"></i>Endpoint</td>
-                            <td><span class="endpoint-badge px-2 py-1" x-text="gw?.endpoint || '\u2014'"></span></td>
-                        </tr>
-                        <tr>
-                            <td class="text-muted ps-3"><i class="bi bi-lock me-2"></i>Scheme</td>
-                            <td x-text="gw?.scheme || '\u2014'"></td>
+                            <td class="text-muted ps-3" style="width:160px"><i class="bi bi-globe me-2"></i>URL</td>
+                            <td>
+                                <span class="endpoint-badge px-2 py-1" x-text="(gw?.scheme || 'https') + '://' + (gw?.endpoint || '\u2014')"></span>
+                            </td>
                         </tr>
                         <template x-if="gw?.auth_mode">
                             <tr>
@@ -115,8 +113,8 @@
                             <tr>
                                 <td class="text-muted ps-3"><i class="bi bi-calendar-plus me-2"></i>Registered</td>
                                 <td>
-                                    <span x-text="new Date(gw.registered_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })"></span>
-                                    <span class="text-muted small ms-1" x-text="'(' + formatTimeAgo(gw.registered_at) + ')'"></span>
+                                    <span x-text="formatTimeAgo(gw.registered_at)"></span>
+                                    <span class="text-muted small ms-1" x-text="'(' + new Date(gw.registered_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) + ')'"></span>
                                 </td>
                             </tr>
                         </template>
@@ -125,7 +123,7 @@
                                 <td class="text-muted ps-3"><i class="bi bi-clock-history me-2"></i>Last Seen</td>
                                 <td>
                                     <span x-text="formatTimeAgo(gw.last_seen)"></span>
-                                    <span class="text-muted small ms-1" x-text="'(' + new Date(gw.last_seen).toLocaleString() + ')'"></span>
+                                    <span class="text-muted small ms-1" x-text="'(' + new Date(gw.last_seen).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) + ')'"></span>
                                 </td>
                             </tr>
                         </template>
@@ -142,8 +140,8 @@
         </div>
 
         <!-- Inference Provider (only for active gateway) -->
-        <div x-show="gw?.active" x-cloak class="card mb-4 mt-4 sg-card-themed"
-             x-data="inferenceConfig()" x-effect="if (gw?.active && gw?.connected && !loaded) load()">
+        <div x-show="gw?.connected" x-cloak class="card mb-4 mt-4 sg-card-themed"
+             x-data="inferenceConfig()" x-effect="if (gw?.connected && !loaded) load()">
             <div class="card-body">
                 <h6 class="text-muted mb-3"><i class="bi bi-cpu me-2"></i>Inference Provider</h6>
 

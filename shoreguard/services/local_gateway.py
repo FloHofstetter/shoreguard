@@ -113,18 +113,16 @@ class LocalGatewayManager:
 
     # ── Lifecycle actions ─────────────────────────────────────────────────
 
-    def start(self, name: str | None = None) -> dict[str, Any]:
-        """Start a gateway by name (or active if None).
+    def start(self, name: str) -> dict[str, Any]:
+        """Start a gateway by name.
 
         Args:
-            name: Gateway name, or None for the active gateway.
+            name: Gateway name.
 
         Returns:
             dict[str, Any]: Result with success status and output or error.
         """
-        gw_name = name or self._gw.get_active_name()
-        if not gw_name:
-            return {"success": False, "error": "No active gateway configured"}
+        gw_name = name
         logger.info("Starting gateway '%s'", gw_name)
 
         if not self._check_docker_daemon():
@@ -138,12 +136,10 @@ class LocalGatewayManager:
         status = self._get_container_status(gw_name)
 
         if status == "running":
-            active_name = self._gw.get_active_name()
-            if name is None or name == active_name:
-                try:
-                    self._gw.get_client()
-                except GatewayNotConnectedError:
-                    logger.debug("Gateway '%s' running but not yet connectable", gw_name)
+            try:
+                self._gw.get_client(name=gw_name)
+            except GatewayNotConnectedError:
+                logger.debug("Gateway '%s' running but not yet connectable", gw_name)
             return {"success": True, "output": "Gateway is already running"}
 
         if status in ("exited", "created", "dead"):
@@ -169,24 +165,22 @@ class LocalGatewayManager:
             result = self._docker_start_container(gw_name)
             if result["success"]:
                 self._gw.reset_backoff(name=gw_name)
-                active_name = self._gw.get_active_name()
-                if name is None or name == active_name:
-                    for attempt in range(10):
-                        time.sleep(2)
-                        try:
-                            self._gw.get_client()
-                            break
-                        except GatewayNotConnectedError:
-                            logger.debug(
-                                "Waiting for gateway '%s' to become connectable (attempt %d/10)",
-                                gw_name,
-                                attempt + 1,
-                            )
-                    else:
-                        logger.warning(
-                            "Gateway '%s' started but not connectable after 10 attempts",
+                for attempt in range(10):
+                    time.sleep(2)
+                    try:
+                        self._gw.get_client(name=gw_name)
+                        break
+                    except GatewayNotConnectedError:
+                        logger.debug(
+                            "Waiting for gateway '%s' to become connectable (attempt %d/10)",
                             gw_name,
+                            attempt + 1,
                         )
+                else:
+                    logger.warning(
+                        "Gateway '%s' started but not connectable after 10 attempts",
+                        gw_name,
+                    )
             return result
 
         if not shutil.which("openshell"):
@@ -197,27 +191,23 @@ class LocalGatewayManager:
         result = self._run_openshell(args, timeout=600)
 
         if result["success"]:
-            active_name = self._gw.get_active_name()
-            if name is None or name == active_name:
-                try:
-                    self._gw.get_client()
-                except GatewayNotConnectedError:
-                    logger.debug("Gateway '%s' started but not yet connectable", gw_name)
+            try:
+                self._gw.get_client(name=gw_name)
+            except GatewayNotConnectedError:
+                logger.debug("Gateway '%s' started but not yet connectable", gw_name)
 
         return result
 
-    def stop(self, name: str | None = None) -> dict[str, Any]:
-        """Stop a gateway by name (or active if None).
+    def stop(self, name: str) -> dict[str, Any]:
+        """Stop a gateway by name.
 
         Args:
-            name: Gateway name, or None for the active gateway.
+            name: Gateway name.
 
         Returns:
             dict[str, Any]: Result with success status and output or error.
         """
-        gw_name = name or self._gw.get_active_name()
-        if not gw_name:
-            return {"success": False, "error": "No active gateway configured"}
+        gw_name = name
         logger.info("Stopping gateway '%s'", gw_name)
 
         status = self._get_container_status(gw_name)
@@ -227,25 +217,20 @@ class LocalGatewayManager:
         result = self._docker_stop_container(gw_name)
 
         if result["success"]:
-            active_name = self._gw.get_active_name()
-            if name is None or name == active_name:
-                self._gw.set_client(None)
+            self._gw.set_client(None, name=gw_name)
 
         return result
 
-    def restart(self, name: str | None = None) -> dict[str, Any]:
+    def restart(self, name: str) -> dict[str, Any]:
         """Restart a gateway (stop + start).
 
         Args:
-            name: Gateway name, or None for the active gateway.
+            name: Gateway name.
 
         Returns:
             dict[str, Any]: Result from the start step.
         """
-        gw_name = name or self._gw.get_active_name()
-        if not gw_name:
-            return {"success": False, "error": "No active gateway configured"}
-        logger.info("Restarting gateway '%s'", gw_name)
+        logger.info("Restarting gateway '%s'", name)
         self.stop(name=name)
         return self.start(name=name)
 
@@ -303,9 +288,8 @@ class LocalGatewayManager:
         result = self._run_openshell(args, timeout=600)
 
         if result["success"]:
-            self._gw.write_active_gateway(name)
             try:
-                self._gw.get_client()
+                self._gw.get_client(name=name)
             except GatewayNotConnectedError:
                 logger.debug("Gateway '%s' created but not yet connectable", name)
             info = self._gw.get_info(name)
@@ -385,9 +369,7 @@ class LocalGatewayManager:
                                 e,
                             )
 
-        active_name = self._gw.get_active_name()
-        if name == active_name:
-            self._gw.set_client(None)
+        self._gw.set_client(None, name=name)
 
         return self._run_openshell(
             ["gateway", "destroy", "--name", name],
@@ -642,9 +624,7 @@ class LocalGatewayManager:
         if cached is not None:
             return cached
         try:
-            active = self._gw.get_active_name()
-            if name == active:
-                return self._gw.get_client(name=name)
+            return self._gw.get_client(name=name)
         except (GatewayNotConnectedError, grpc.RpcError, OSError):
             logger.debug(
                 "Could not connect to gateway '%s' for resource listing",

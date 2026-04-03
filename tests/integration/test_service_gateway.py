@@ -7,15 +7,6 @@ import pytest
 pytestmark = pytest.mark.integration
 
 
-def test_gateway_health(gateway_service):
-    """health() returns connected=True with a live gateway."""
-    result = gateway_service.health()
-
-    assert result["connected"] is True
-    assert "version" in result
-    assert "health_status" in result
-
-
 def test_gateway_list_all(gateway_service):
     """list_all() returns a list with registered gateways."""
     result = gateway_service.list_all()
@@ -46,7 +37,7 @@ def test_local_gateway_diagnostics(gateway_service):
 
 def test_gateway_get_config(gateway_service):
     """get_config() returns settings from the live gateway."""
-    result = gateway_service.get_config()
+    result = gateway_service.get_config("integration-test")
 
     assert "settings" in result
     assert isinstance(result["settings"], dict)

@@ -56,7 +56,7 @@
             <tbody>
                 <template x-for="gw in gateways" :key="gw.name">
                     <tr @click="navigateTo('/gateways/' + gw.name)" style="cursor:pointer"
-                        :class="gw.active ? 'table-active' : ''">
+                        :class="gw.connected ? 'table-active' : ''">
                         <td><strong x-text="gw.name"></strong></td>
                         <td class="font-monospace small" x-text="gw.endpoint || '\u2014'"></td>
                         <td class="small" x-text="gw.auth_mode || '\u2014'"></td>
