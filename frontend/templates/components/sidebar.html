@@ -17,11 +17,15 @@
     <div class="sidebar-section" x-show="GW" x-cloak>
         <div class="sidebar-label" x-text="GW || 'Gateway'"></div>
         <a class="sidebar-link {{ 'active' if active_page in ('sandboxes', 'sandbox_detail', 'wizard') }}"
-           :href="'/gateways/' + GW + '/sandboxes'">
+           :class="{ 'disabled': !$store.health.connected }"
+           :href="$store.health.connected ? '/gateways/' + GW + '/sandboxes' : null"
+           @click="!$store.health.connected && $event.preventDefault()">
             <i class="bi bi-box"></i> Sandboxes
         </a>
         <a class="sidebar-link {{ 'active' if active_page == 'providers' }}"
-           :href="'/gateways/' + GW + '/providers'">
+           :class="{ 'disabled': !$store.health.connected }"
+           :href="$store.health.connected ? '/gateways/' + GW + '/providers' : null"
+           @click="!$store.health.connected && $event.preventDefault()">
             <i class="bi bi-cloud"></i> Providers
         </a>
     </div>

@@ -200,6 +200,12 @@ body {
     border-left-color: var(--sg-accent);
 }
 
+.sidebar-link.disabled {
+    color: var(--sg-text-dim);
+    pointer-events: none;
+    opacity: 0.5;
+}
+
 .sidebar-link i {
     font-size: 1rem;
     width: 1.25rem;
