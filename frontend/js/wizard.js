@@ -299,7 +299,7 @@ async function launchSandbox() {
                         <i class="bi bi-grid me-1"></i>Sandboxes
                     </button>
                 </div>
-            </div>`;
+            </div>`);
         logEl.scrollTop = logEl.scrollHeight;
     }
 }
