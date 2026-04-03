@@ -5,7 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/shoreguard?color=%2376b900&style=flat-square)](https://pypi.org/project/shoreguard/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/FloHofstetter/shoreguard/blob/main/LICENSE)
 [![Python](https://img.shields.io/pypi/pyversions/shoreguard?style=flat-square)](https://pypi.org/project/shoreguard/)
-[![Tests](https://img.shields.io/badge/tests-710%20passed-brightgreen?style=flat-square)](https://github.com/FloHofstetter/shoreguard)
+[![Tests](https://img.shields.io/badge/tests-759%20passed-brightgreen?style=flat-square)](https://github.com/FloHofstetter/shoreguard)
 
 ![Sandbox Overview](screenshots/sandbox-overview.png)
 

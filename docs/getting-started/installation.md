@@ -49,7 +49,7 @@ SQLite works well for single-node deployments. If you need a shared database
 with the `SHOREGUARD_DATABASE_URL` environment variable:
 
 ```bash
-export SHOREGUARD_DATABASE_URL="postgresql+asyncpg://user:pass@db-host:5432/shoreguard"
+export SHOREGUARD_DATABASE_URL="postgresql+psycopg://user:pass@db-host:5432/shoreguard"
 shoreguard
 ```
 

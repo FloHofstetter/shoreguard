@@ -13,7 +13,7 @@ need and manage them all from the ShoreGuard dashboard.
 
 ### Via the Web UI
 
-Open the **Gateways** page and click **Add Gateway**. Fill in the gateway name,
+Open the **Gateways** page and click **+ Register**. Fill in the gateway name,
 endpoint URL, authentication mode, and — if using mTLS — upload the
 certificates.
 
@@ -56,8 +56,22 @@ You can trigger an explicit connection test at any time:
 
 The test performs a full gRPC health check and reports the result immediately.
 
-## Selecting the active gateway
+## Gateway detail
 
-The dashboard operates against one gateway at a time. Use the gateway selector
-in the top navigation bar to switch between registered gateways. Sandboxes,
-policies, and logs update automatically when you change the selection.
+Each gateway has a dedicated detail page at `/gateways/{name}` showing status,
+connection info, and management controls.
+
+![Gateway Detail](../screenshots/gateway-detail.png)
+
+### Start, Stop, and Restart
+
+When running in [local mode](../admin/local-mode.md), the gateway detail page
+shows **Stop**, **Restart**, and **Test Connection** buttons to manage the
+Docker-based gateway lifecycle directly from the browser.
+
+### Inference provider
+
+The **Inference Provider** card lets you configure which LLM provider and model
+the gateway uses for agent inference. You can also set a per-route **timeout**
+in seconds (0 uses the default of 60s) — useful for large models with long
+response times.

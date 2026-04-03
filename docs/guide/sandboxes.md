@@ -33,6 +33,28 @@ Content-Type: application/json
 }
 ```
 
+## Providers
+
+Providers supply credentials for external services that sandboxes need —
+inference APIs (Anthropic, OpenAI), code hosting (GitHub), and more. Manage
+them from the **Providers** page under each gateway.
+
+![Providers](../screenshots/providers.png)
+
+Each provider has a type, credentials (stored securely on the gateway and
+redacted in API responses), and optional configuration like custom endpoints.
+
+```http
+POST /api/gateways/{gw}/providers
+Content-Type: application/json
+
+{
+  "name": "anthropic",
+  "type": "anthropic",
+  "api_key": "sk-ant-..."
+}
+```
+
 ## Sandbox lifecycle
 
 A sandbox moves through these states:

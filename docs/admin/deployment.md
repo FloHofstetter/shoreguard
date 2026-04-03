@@ -15,6 +15,27 @@ This is convenient for development but should not be used in production.
 > Always use `--no-reload` in production to avoid unnecessary restarts and
 > file-watching overhead.
 
+## Docker
+
+ShoreGuard ships with a `Dockerfile` and `docker-compose.yml` for production
+deployments with PostgreSQL:
+
+```bash
+POSTGRES_PASSWORD=changeme SHOREGUARD_SECRET_KEY=changeme docker compose up -d
+```
+
+This starts two containers: ShoreGuard (port 8888) and PostgreSQL 17. Set
+`SHOREGUARD_ADMIN_PASSWORD` to bootstrap the first admin account without the
+setup wizard.
+
+Health probes for container orchestration:
+
+- `GET /healthz` — liveness (process running)
+- `GET /readyz` — readiness (database reachable, services initialised)
+
+See the [Configuration](../reference/configuration.md) page for all
+environment variables.
+
 ## Production flags
 
 ```bash
@@ -36,7 +57,7 @@ on first run. No setup required — this works well for single-node deployments.
 For multi-instance or high-availability setups, point ShoreGuard at PostgreSQL:
 
 ```bash
-export SHOREGUARD_DATABASE_URL="postgresql+asyncpg://user:pass@db-host:5432/shoreguard"
+export SHOREGUARD_DATABASE_URL="postgresql+psycopg://user:pass@db-host:5432/shoreguard"
 shoreguard --no-reload
 ```
 

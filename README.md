@@ -66,11 +66,13 @@ Open [http://localhost:8888](http://localhost:8888) and complete the setup wizar
 
 ## Features
 
-- **[Gateway management](https://flohofstetter.github.io/shoreguard/guide/gateways/)** — register and monitor multiple remote OpenShell gateways
+- **[Gateway management](https://flohofstetter.github.io/shoreguard/guide/gateways/)** — register and monitor multiple remote OpenShell gateways with health probing
 - **[Sandbox wizard](https://flohofstetter.github.io/shoreguard/guide/sandboxes/)** — step-by-step creation with agent types, images, and presets
 - **[Visual policy editor](https://flohofstetter.github.io/shoreguard/guide/policies/)** — network rules, filesystem paths, process settings — no YAML
 - **[Approval flow](https://flohofstetter.github.io/shoreguard/guide/approvals/)** — review agent-requested endpoint access in real-time
-- **[RBAC](https://flohofstetter.github.io/shoreguard/admin/rbac/)** — Admin, Operator, Viewer roles with invite flow
+- **[RBAC](https://flohofstetter.github.io/shoreguard/admin/rbac/)** — Admin, Operator, Viewer roles with gateway-scoped overrides
+- **[Docker deployment](https://flohofstetter.github.io/shoreguard/admin/deployment/)** — Dockerfile + docker-compose with PostgreSQL and health probes
+- **[Audit log](https://flohofstetter.github.io/shoreguard/guide/monitoring/)** — persistent, filterable, exportable audit trail
 - **[Terraform provider](https://flohofstetter.github.io/shoreguard/reference/terraform/)** — declarative infrastructure-as-code
 
 ## Documentation
@@ -89,22 +91,21 @@ Full documentation is available at **[flohofstetter.github.io/shoreguard](https:
 **Completed:**
 
 - [x] Multi-gateway management with health monitoring
-- [x] RBAC — Admin, Operator, Viewer roles
+- [x] RBAC — Admin, Operator, Viewer roles with gateway-scoped overrides
 - [x] Sandbox wizard with community images and presets
-- [x] Visual policy editor with revision history
+- [x] Visual policy editor with revision history and diff viewer
 - [x] Approval flow with real-time notifications
 - [x] Terraform provider ([separate repo](https://github.com/FloHofstetter/terraform-provider-shoreguard))
-- [x] Alpine.js reactive frontend
+- [x] Alpine.js reactive frontend with dark/light theme
 - [x] Persistent audit log with export
+- [x] Docker image + docker-compose with PostgreSQL
+- [x] Health probes (`/healthz`, `/readyz`)
+- [x] Stateless gateway routing (URL-based, no server-side selection)
+- [x] Inference timeout configuration (OpenShell v0.0.22)
+- [x] L7 query parameter matchers for network policies
 
-**In Progress:**
+**Planned:**
 
-- [ ] Policy diff viewer
-- [ ] Gateway-scoped RBAC for team isolation
-
-**Vision:**
-
-- [ ] Docker image and demo mode
 - [ ] DigitalOcean Marketplace integration
 - [ ] Paperclip adapter for agent orchestration
 - [ ] Multi-region gateway federation

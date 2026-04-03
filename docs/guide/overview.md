@@ -11,7 +11,7 @@ area so you can get the most out of your deployment.
 ### [Gateways](gateways.md)
 
 Register and monitor multiple OpenShell gateways from a single dashboard.
-Health probing, connection testing, and multi-gateway selection are all
+Health probing, connection testing, and gateway lifecycle management are all
 built in.
 
 ### [Sandboxes](sandboxes.md)

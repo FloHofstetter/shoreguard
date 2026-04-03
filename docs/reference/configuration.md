@@ -43,7 +43,7 @@ For multi-replica or production deployments, pass a PostgreSQL connection
 string:
 
 ```bash
-export SHOREGUARD_DATABASE_URL="postgresql+asyncpg://user:pass@db-host:5432/shoreguard"
+export SHOREGUARD_DATABASE_URL="postgresql+psycopg://user:pass@db-host:5432/shoreguard"
 shoreguard
 ```
 
