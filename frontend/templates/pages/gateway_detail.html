@@ -35,17 +35,17 @@
                 <span x-show="gw?.version" class="text-muted" x-text="'v' + (gw?.version || '')"></span>
             </div>
             <div class="d-flex gap-2">
-                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && !$store.health.connected" x-cloak
+                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && gw?.status !== 'connected'" x-cloak
                         class="btn btn-outline-success btn-sm" :disabled="acting" @click="startGateway()">
                     <template x-if="acting"><span class="spinner-border spinner-border-sm me-1"></span></template>
                     <i x-show="!acting" class="bi bi-play-fill me-1"></i>Start
                 </button>
-                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && $store.health.connected" x-cloak
+                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && gw?.status === 'connected'" x-cloak
                         class="btn btn-outline-danger btn-sm" :disabled="acting" @click="stopGateway()">
                     <template x-if="acting"><span class="spinner-border spinner-border-sm me-1"></span></template>
                     <i x-show="!acting" class="bi bi-stop-fill me-1"></i>Stop
                 </button>
-                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && $store.health.connected" x-cloak
+                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && gw?.status === 'connected'" x-cloak
                         class="btn btn-outline-warning btn-sm" :disabled="acting" @click="restartGateway()">
                     <template x-if="acting"><span class="spinner-border spinner-border-sm me-1"></span></template>
                     <i x-show="!acting" class="bi bi-arrow-repeat me-1"></i>Restart
@@ -70,23 +70,23 @@
         <!-- Quick links -->
         <div class="row g-3 mb-4">
             <div class="col">
-                <a :href="$store.health.connected ? gwUrl('/sandboxes') : null"
+                <a :href="gw?.status === 'connected' ? gwUrl('/sandboxes') : null"
                    class="btn btn-outline-secondary w-100 py-3"
-                   :class="{ 'disabled': !$store.health.connected }">
+                   :class="{ 'disabled': gw?.status !== 'connected' }">
                     <i class="bi bi-grid me-2"></i>Sandboxes
                 </a>
             </div>
             <div class="col">
-                <a :href="$store.health.connected ? gwUrl('/providers') : null"
+                <a :href="gw?.status === 'connected' ? gwUrl('/providers') : null"
                    class="btn btn-outline-secondary w-100 py-3"
-                   :class="{ 'disabled': !$store.health.connected }">
+                   :class="{ 'disabled': gw?.status !== 'connected' }">
                     <i class="bi bi-key me-2"></i>Providers
                 </a>
             </div>
             <div class="col">
-                <a :href="$store.health.connected ? gwUrl('/wizard') : null"
+                <a :href="gw?.status === 'connected' ? gwUrl('/wizard') : null"
                    class="btn btn-outline-success w-100 py-3"
-                   :class="{ 'disabled': !$store.health.connected }">
+                   :class="{ 'disabled': gw?.status !== 'connected' }">
                     <i class="bi bi-plus-circle me-2"></i>New Sandbox
                 </a>
             </div>
