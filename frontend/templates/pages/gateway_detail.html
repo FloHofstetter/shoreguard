@@ -55,17 +55,23 @@
         <!-- Quick links -->
         <div class="row g-3 mb-4">
             <div class="col">
-                <a :href="gwUrl('/sandboxes')" class="btn btn-outline-secondary w-100 py-3">
+                <a :href="$store.health.connected ? gwUrl('/sandboxes') : null"
+                   class="btn btn-outline-secondary w-100 py-3"
+                   :class="{ 'disabled': !$store.health.connected }">
                     <i class="bi bi-grid me-2"></i>Sandboxes
                 </a>
             </div>
             <div class="col">
-                <a :href="gwUrl('/providers')" class="btn btn-outline-secondary w-100 py-3">
+                <a :href="$store.health.connected ? gwUrl('/providers') : null"
+                   class="btn btn-outline-secondary w-100 py-3"
+                   :class="{ 'disabled': !$store.health.connected }">
                     <i class="bi bi-key me-2"></i>Providers
                 </a>
             </div>
             <div class="col">
-                <a :href="gwUrl('/wizard')" class="btn btn-outline-success w-100 py-3">
+                <a :href="$store.health.connected ? gwUrl('/wizard') : null"
+                   class="btn btn-outline-success w-100 py-3"
+                   :class="{ 'disabled': !$store.health.connected }">
                     <i class="bi bi-plus-circle me-2"></i>New Sandbox
                 </a>
             </div>
