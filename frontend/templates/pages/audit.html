@@ -97,18 +97,6 @@
         </table>
     </div>
 
-    <!-- Pagination -->
-    <div x-show="entries.length > 0" class="d-flex justify-content-between align-items-center mt-2">
-        <span class="text-muted small" x-text="entries.length + ' entries shown'"></span>
-        <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-outline-secondary" :disabled="offset === 0" @click="offset -= limit; load()">
-                <i class="bi bi-chevron-left"></i> Prev
-            </button>
-            <button class="btn btn-sm btn-outline-secondary" :disabled="entries.length < limit" @click="offset += limit; load()">
-                Next <i class="bi bi-chevron-right"></i>
-            </button>
-        </div>
-    </div>
 </div>
 
 <script>
@@ -117,8 +105,6 @@ function auditPage() {
         entries: [],
         loading: true,
         error: null,
-        limit: 100,
-        offset: 0,
         filters: { actor: '', action: '', resource_type: '' },
 
         get hasFilters() {
@@ -130,8 +116,6 @@ function auditPage() {
             this.error = null;
             try {
                 const params = new URLSearchParams();
-                params.set('limit', this.limit);
-                params.set('offset', this.offset);
                 if (this.filters.actor) params.set('actor', this.filters.actor);
                 if (this.filters.action) params.set('action', this.filters.action);
                 if (this.filters.resource_type) params.set('resource_type', this.filters.resource_type);
@@ -145,7 +129,6 @@ function auditPage() {
 
         clearFilters() {
             this.filters = { actor: '', action: '', resource_type: '' };
-            this.offset = 0;
             this.load();
         },
 
