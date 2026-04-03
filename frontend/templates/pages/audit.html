@@ -116,6 +116,7 @@ function auditPage() {
             this.error = null;
             try {
                 const params = new URLSearchParams();
+                params.set('limit', '1000');
                 if (this.filters.actor) params.set('actor', this.filters.actor);
                 if (this.filters.action) params.set('action', this.filters.action);
                 if (this.filters.resource_type) params.set('resource_type', this.filters.resource_type);
