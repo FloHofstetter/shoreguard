@@ -36,16 +36,19 @@
             </div>
             <div class="d-flex gap-2">
                 <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && !$store.health.connected" x-cloak
-                        class="btn btn-outline-success btn-sm" @click="startGateway()">
-                    <i class="bi bi-play-fill me-1"></i>Start
+                        class="btn btn-outline-success btn-sm" :disabled="acting" @click="startGateway()">
+                    <template x-if="acting"><span class="spinner-border spinner-border-sm me-1"></span></template>
+                    <i x-show="!acting" class="bi bi-play-fill me-1"></i>Start
                 </button>
                 <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && $store.health.connected" x-cloak
-                        class="btn btn-outline-danger btn-sm" @click="stopGateway()">
-                    <i class="bi bi-stop-fill me-1"></i>Stop
+                        class="btn btn-outline-danger btn-sm" :disabled="acting" @click="stopGateway()">
+                    <template x-if="acting"><span class="spinner-border spinner-border-sm me-1"></span></template>
+                    <i x-show="!acting" class="bi bi-stop-fill me-1"></i>Stop
                 </button>
                 <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && $store.health.connected" x-cloak
-                        class="btn btn-outline-warning btn-sm" @click="restartGateway()">
-                    <i class="bi bi-arrow-repeat me-1"></i>Restart
+                        class="btn btn-outline-warning btn-sm" :disabled="acting" @click="restartGateway()">
+                    <template x-if="acting"><span class="spinner-border spinner-border-sm me-1"></span></template>
+                    <i x-show="!acting" class="bi bi-arrow-repeat me-1"></i>Restart
                 </button>
                 <button x-show="$store.auth.hasRole('admin')" x-cloak
                         class="btn btn-outline-primary btn-sm" @click="testConnection()">

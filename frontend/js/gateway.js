@@ -128,6 +128,7 @@ function gatewayDetail(name) {
         error: null,
         actionOutput: '',
         actionClass: '',
+        acting: false,
 
         statusIcon(s) { return _gwStatusIcons[s || 'offline'] || 'circle'; },
         statusLabel(s) { return _gwStatusLabels[s || 'offline'] || (s || 'offline'); },
@@ -136,7 +137,6 @@ function gatewayDetail(name) {
         async load() {
             this.loading = true;
             this.error = null;
-            this.actionOutput = '';
             try {
                 const gateways = await apiFetch(`${API_GLOBAL}/gateway/list`);
                 this.gw = gateways.find(g => g.name === name) || null;
@@ -175,6 +175,7 @@ function gatewayDetail(name) {
         },
 
         async startGateway() {
+            this.acting = true;
             this.actionOutput = '<div class="spinner-border spinner-border-sm me-2"></div>Starting gateway...';
             this.actionClass = '';
             try {
@@ -192,10 +193,13 @@ function gatewayDetail(name) {
             } catch (e) {
                 this.actionOutput = `Error: ${escapeHtml(e.message)}`;
                 this.actionClass = 'log-error';
+            } finally {
+                this.acting = false;
             }
         },
 
         async stopGateway() {
+            this.acting = true;
             this.actionOutput = '<div class="spinner-border spinner-border-sm me-2"></div>Stopping gateway...';
             this.actionClass = '';
             try {
@@ -213,10 +217,13 @@ function gatewayDetail(name) {
             } catch (e) {
                 this.actionOutput = `Error: ${escapeHtml(e.message)}`;
                 this.actionClass = 'log-error';
+            } finally {
+                this.acting = false;
             }
         },
 
         async restartGateway() {
+            this.acting = true;
             this.actionOutput = '<div class="spinner-border spinner-border-sm me-2"></div>Restarting gateway...';
             this.actionClass = '';
             try {
@@ -234,6 +241,8 @@ function gatewayDetail(name) {
             } catch (e) {
                 this.actionOutput = `Error: ${escapeHtml(e.message)}`;
                 this.actionClass = 'log-error';
+            } finally {
+                this.acting = false;
             }
         },
 
