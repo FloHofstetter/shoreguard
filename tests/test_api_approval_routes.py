@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from shoreguard.exceptions import NotFoundError
+
 GW = "test"
 SB = "sb1"
 BASE = f"/api/gateways/{GW}/sandboxes/{SB}/approvals"
@@ -26,6 +28,48 @@ async def test_get_pending_approvals(api_client, mock_client):
 
     assert resp.status_code == 200
     assert len(resp.json()) == 1
+
+
+async def test_approve_nonexistent_chunk(api_client, mock_client):
+    """POST /approvals/{chunk_id}/approve returns 404 for unknown chunk."""
+    mock_client.approvals.approve.side_effect = NotFoundError("Chunk not found")
+
+    resp = await api_client.post(f"{BASE}/nonexistent-chunk/approve")
+
+    assert resp.status_code == 404
+
+
+async def test_reject_nonexistent_chunk(api_client, mock_client):
+    """POST /approvals/{chunk_id}/reject returns 404 for unknown chunk."""
+    mock_client.approvals.reject.side_effect = NotFoundError("Chunk not found")
+
+    resp = await api_client.post(
+        f"{BASE}/nonexistent-chunk/reject",
+        json={"reason": "test"},
+    )
+
+    assert resp.status_code == 404
+
+
+async def test_edit_nonexistent_chunk(api_client, mock_client):
+    """POST /approvals/{chunk_id}/edit returns 404 for unknown chunk."""
+    mock_client.approvals.edit.side_effect = NotFoundError("Chunk not found")
+
+    resp = await api_client.post(
+        f"{BASE}/nonexistent-chunk/edit",
+        json={"proposed_rule": {"key": "r1", "rule": {}}},
+    )
+
+    assert resp.status_code == 404
+
+
+async def test_undo_nonexistent_chunk(api_client, mock_client):
+    """POST /approvals/{chunk_id}/undo returns 404 for unknown chunk."""
+    mock_client.approvals.undo.side_effect = NotFoundError("Chunk not found")
+
+    resp = await api_client.post(f"{BASE}/nonexistent-chunk/undo")
+
+    assert resp.status_code == 404
 
 
 async def test_approve_chunk(api_client, mock_client):

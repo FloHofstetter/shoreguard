@@ -349,3 +349,204 @@ class TestDeliveryRetry:
         call_kwargs = mock_client.post.call_args
         headers = call_kwargs.kwargs.get("headers", call_kwargs[1].get("headers", {}))
         assert "X-Shoreguard-Signature" not in headers
+
+
+# ─── Delivery record & cleanup tests ────────────────────────────────────────
+
+
+class TestDeliveryRecords:
+    """Tests for delivery record creation, listing, and cleanup."""
+
+    def test_cleanup_old_deliveries(self, webhook_svc):
+        """cleanup_old_deliveries removes records older than max_age_days."""
+        import datetime
+
+        wh = webhook_svc.create(
+            url="https://example.com/hook",
+            event_types=["*"],
+            created_by="admin@test.com",
+        )
+        # Create a delivery and manually backdate it
+        delivery_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        with webhook_svc._session_factory() as session:
+            from shoreguard.models import WebhookDelivery
+
+            row = session.get(WebhookDelivery, delivery_id)
+            row.created_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=30)
+            session.commit()
+
+        purged = webhook_svc.cleanup_old_deliveries(max_age_days=7)
+        assert purged == 1
+
+        # Second call should find nothing to purge
+        assert webhook_svc.cleanup_old_deliveries(max_age_days=7) == 0
+
+    def test_cleanup_keeps_recent_deliveries(self, webhook_svc):
+        """cleanup_old_deliveries keeps records newer than max_age_days."""
+        wh = webhook_svc.create(
+            url="https://example.com/hook",
+            event_types=["*"],
+            created_by="admin@test.com",
+        )
+        webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        purged = webhook_svc.cleanup_old_deliveries(max_age_days=7)
+        assert purged == 0
+
+    def test_list_deliveries(self, webhook_svc):
+        """list_deliveries returns delivery records for a webhook."""
+        wh = webhook_svc.create(
+            url="https://example.com/hook",
+            event_types=["*"],
+            created_by="admin@test.com",
+        )
+        webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        webhook_svc._create_delivery(wh["id"], "sandbox.deleted", '{"b":2}')
+
+        deliveries = webhook_svc.list_deliveries(wh["id"])
+        assert len(deliveries) == 2
+        assert all(d["webhook_id"] == wh["id"] for d in deliveries)
+        assert all(d["status"] == "pending" for d in deliveries)
+
+    def test_list_deliveries_empty(self, webhook_svc):
+        """list_deliveries returns empty list for webhook with no deliveries."""
+        wh = webhook_svc.create(
+            url="https://example.com/hook",
+            event_types=["*"],
+            created_by="admin@test.com",
+        )
+        assert webhook_svc.list_deliveries(wh["id"]) == []
+
+    def test_update_delivery_success(self, webhook_svc):
+        """_update_delivery sets status, response_code, and delivered_at."""
+        wh = webhook_svc.create(
+            url="https://example.com/hook",
+            event_types=["*"],
+            created_by="admin@test.com",
+        )
+        delivery_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        webhook_svc._update_delivery(delivery_id, status="success", response_code=200, attempt=1)
+
+        deliveries = webhook_svc.list_deliveries(wh["id"])
+        assert len(deliveries) == 1
+        assert deliveries[0]["status"] == "success"
+        assert deliveries[0]["response_code"] == 200
+        assert deliveries[0]["delivered_at"] is not None
+
+    def test_update_delivery_failed(self, webhook_svc):
+        """_update_delivery records failure with error message."""
+        wh = webhook_svc.create(
+            url="https://example.com/hook",
+            event_types=["*"],
+            created_by="admin@test.com",
+        )
+        delivery_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        webhook_svc._update_delivery(
+            delivery_id, status="failed", error_message="HTTP 502", attempt=4
+        )
+
+        deliveries = webhook_svc.list_deliveries(wh["id"])
+        assert deliveries[0]["status"] == "failed"
+        assert deliveries[0]["error_message"] == "HTTP 502"
+        assert deliveries[0]["attempt"] == 4
+        assert deliveries[0]["delivered_at"] is None
+
+
+# ─── Email delivery tests ────────────────────────────────────────────────────
+
+
+class TestEmailDelivery:
+    """Tests for _deliver_email path."""
+
+    async def test_email_delivery_success(self, webhook_svc):
+        """Email delivery calls aiosmtplib.send with correct parameters."""
+        import json
+
+        wh = webhook_svc.create(
+            url="admin@example.com",
+            event_types=["*"],
+            created_by="admin@test.com",
+            channel_type="email",
+            extra_config=json.dumps(
+                {
+                    "smtp_host": "smtp.example.com",
+                    "smtp_port": 587,
+                    "to_addrs": ["admin@example.com"],
+                }
+            ),
+        )
+        delivery_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        target = _make_target(
+            webhook_id=wh["id"],
+            url="admin@example.com",
+            channel_type="email",
+            extra_config=wh.get("extra_config") and json.dumps(wh["extra_config"]),
+        )
+
+        mock_smtp_mod = MagicMock()
+        mock_smtp_mod.send = AsyncMock()
+        with patch.dict("sys.modules", {"aiosmtplib": mock_smtp_mod}):
+            await webhook_svc._deliver_email(target, "Subject line\nBody text", delivery_id)
+            mock_smtp_mod.send.assert_called_once()
+
+        deliveries = webhook_svc.list_deliveries(wh["id"])
+        assert any(d["status"] == "success" for d in deliveries)
+
+    async def test_email_delivery_failure(self, webhook_svc):
+        """Email delivery failure records error in delivery."""
+        import json
+
+        wh = webhook_svc.create(
+            url="admin@example.com",
+            event_types=["*"],
+            created_by="admin@test.com",
+            channel_type="email",
+            extra_config=json.dumps(
+                {"smtp_host": "smtp.example.com", "to_addrs": ["admin@example.com"]}
+            ),
+        )
+        delivery_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        target = _make_target(
+            webhook_id=wh["id"],
+            url="admin@example.com",
+            channel_type="email",
+            extra_config=wh.get("extra_config") and json.dumps(wh["extra_config"]),
+        )
+
+        mock_smtp_mod = MagicMock()
+        mock_smtp_mod.send = AsyncMock(side_effect=OSError("Connection refused"))
+        with patch.dict("sys.modules", {"aiosmtplib": mock_smtp_mod}):
+            await webhook_svc._deliver_email(target, "Subject\nBody", delivery_id)
+
+        deliveries = webhook_svc.list_deliveries(wh["id"])
+        assert any(d["status"] == "failed" for d in deliveries)
+
+
+# ─── Convenience function tests ─────────────────────────────────────────────
+
+
+class TestFireWebhookConvenience:
+    """Tests for the module-level fire_webhook function."""
+
+    async def test_fire_webhook_noop_when_no_service(self):
+        """fire_webhook does nothing when webhook_service is None."""
+        import shoreguard.services.webhooks as mod
+
+        original = mod.webhook_service
+        mod.webhook_service = None
+        try:
+            await mod.fire_webhook("sandbox.created", {"sandbox": "test"})
+        finally:
+            mod.webhook_service = original
+
+    async def test_fire_webhook_delegates_to_service(self, webhook_svc):
+        """fire_webhook delegates to the module-level service."""
+        import shoreguard.services.webhooks as mod
+
+        original = mod.webhook_service
+        mod.webhook_service = webhook_svc
+        try:
+            with patch.object(webhook_svc, "fire", new_callable=AsyncMock) as mock_fire:
+                await mod.fire_webhook("sandbox.created", {"sandbox": "test"})
+                mock_fire.assert_called_once_with("sandbox.created", {"sandbox": "test"})
+        finally:
+            mod.webhook_service = original

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from shoreguard.exceptions import GatewayNotConnectedError
+from shoreguard.exceptions import GatewayNotConnectedError, NotFoundError
 
 GW = "test"  # gateway name used in all gateway-scoped URLs
 
@@ -135,6 +135,24 @@ async def test_delete_sandbox(api_client, mock_client):
 
     assert resp.status_code == 200
     assert resp.json()["deleted"] is True
+
+
+async def test_get_nonexistent_sandbox(api_client, mock_client):
+    """GET /api/gateways/{gw}/sandboxes/{name} returns 404 for unknown sandbox."""
+    mock_client.sandboxes.get.side_effect = NotFoundError("Sandbox not found")
+
+    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/nonexistent")
+
+    assert resp.status_code == 404
+
+
+async def test_delete_nonexistent_sandbox(api_client, mock_client):
+    """DELETE /api/gateways/{gw}/sandboxes/{name} returns 404 for unknown sandbox."""
+    mock_client.sandboxes.delete.side_effect = NotFoundError("Sandbox not found")
+
+    resp = await api_client.delete(f"/api/gateways/{GW}/sandboxes/nonexistent")
+
+    assert resp.status_code == 404
 
 
 async def test_list_presets(api_client):

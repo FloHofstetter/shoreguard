@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from shoreguard.exceptions import NotFoundError, SandboxError
+
 GW = "test"
 BASE = f"/api/gateways/{GW}/providers"
 
@@ -83,3 +85,42 @@ async def test_list_community_sandboxes(api_client):
 
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
+
+
+async def test_get_nonexistent_provider(api_client, mock_client):
+    """GET /providers/{name} returns 404 for unknown provider."""
+    mock_client.providers.get.side_effect = NotFoundError("Provider not found")
+
+    resp = await api_client.get(f"{BASE}/nonexistent-prov")
+
+    assert resp.status_code == 404
+
+
+async def test_delete_nonexistent_provider(api_client, mock_client):
+    """DELETE /providers/{name} returns 404 for unknown provider."""
+    mock_client.providers.delete.side_effect = NotFoundError("Provider not found")
+
+    resp = await api_client.delete(f"{BASE}/nonexistent-prov")
+
+    assert resp.status_code == 404
+
+
+async def test_update_nonexistent_provider(api_client, mock_client):
+    """PUT /providers/{name} returns 404 for unknown provider."""
+    mock_client.providers.update.side_effect = NotFoundError("Provider not found")
+
+    resp = await api_client.put(f"{BASE}/nonexistent-prov", json={"type": "openai"})
+
+    assert resp.status_code == 404
+
+
+async def test_create_duplicate_provider(api_client, mock_client):
+    """POST /providers returns 409 when provider already exists."""
+    mock_client.providers.create.side_effect = SandboxError("already exists")
+
+    resp = await api_client.post(
+        BASE,
+        json={"name": "dup-prov", "type": "anthropic", "api_key": "sk-xxx"},
+    )
+
+    assert resp.status_code == 409

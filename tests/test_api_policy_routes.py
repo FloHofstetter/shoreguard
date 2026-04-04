@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from shoreguard.exceptions import NotFoundError
+
 GW = "test"
 SB = "sb1"
 BASE = f"/api/gateways/{GW}/sandboxes/{SB}/policy"
@@ -129,3 +131,31 @@ async def test_get_valid_preset(api_client):
     assert data["name"] == "pypi"
     assert "description" in data
     assert "network_policies" in data["policy"]
+
+
+async def test_update_policy_nonexistent_sandbox(api_client, mock_client):
+    """PUT /policy returns 404 when sandbox doesn't exist."""
+    mock_client.policies.update.side_effect = NotFoundError("Sandbox not found")
+
+    resp = await api_client.put(BASE, json={"network_policies": {}})
+
+    assert resp.status_code == 404
+
+
+async def test_add_network_rule_nonexistent_sandbox(api_client, mock_client):
+    """POST /policy/network-rules returns 404 when sandbox doesn't exist."""
+    mock_client.policies.get.side_effect = NotFoundError("Sandbox not found")
+
+    resp = await api_client.post(
+        f"{BASE}/network-rules",
+        json={"key": "pypi", "rule": {"endpoints": []}},
+    )
+
+    assert resp.status_code == 404
+
+
+async def test_apply_nonexistent_preset(api_client, mock_client):
+    """POST /policy/presets/{name} returns 404 for unknown preset."""
+    resp = await api_client.post(f"{BASE}/presets/nonexistent-preset-xyz")
+
+    assert resp.status_code == 404

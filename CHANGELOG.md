@@ -5,6 +5,48 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.17.0] — 2026-04-05
+
+### Fixed
+
+- **Exception handling** — narrowed overly broad `except Exception` blocks in
+  health check logging, webhook delivery, reconnection loop, and operation
+  lifecycle. All handlers now log with full traceback and re-raise or return
+  safe error responses.
+- **SP expiry timezone** — `expires_at` comparison in `_lookup_sp_identity`
+  now correctly handles naive datetimes by normalising to UTC before comparison.
+- **Bootstrap admin** — `bootstrap_admin_user()` no longer raises on duplicate
+  email when called during startup with an existing database.
+
+### Changed
+
+- **Logging consistency** — webhook delivery success/failure, gateway
+  reconnection attempts, and operation lifecycle transitions now log at
+  appropriate levels (INFO for business events, WARNING for recoverable
+  errors, DEBUG for technical details).
+- **Docstrings** — all public functions and classes pass `pydoclint` with
+  strict Google-style checking (raises, return types, class attributes).
+- **Type hints** — `require_role` return type corrected. Zero `pyright`
+  errors on standard mode.
+- **CI** — Python 3.14 target for CI matrix, ruff, and pyright.
+  Bumped `docker/setup-buildx-action` to v4, `docker/build-push-action`
+  to v7, `astral-sh/setup-uv` to v7.
+
+### Added (tests only)
+
+- **Webhook route tests** — 24 integration tests covering CRUD, validation,
+  role enforcement (admin/viewer/unauthenticated), and service-not-initialised.
+- **Error-case tests** — 13 tests across approvals (4), policies (3),
+  providers (4), and sandboxes (2) for 404/409 error paths.
+- **Template tests** — 9 tests for `sandbox_templates.py` (list, get, path
+  traversal protection) and template route handlers.
+- **Webhook delivery tests** — 13 tests for delivery records, cleanup,
+  email channel dispatch, and the `fire_webhook` convenience function.
+- **Auth endpoint tests** — 31 tests for `pages.py` covering setup wizard,
+  login validation, user CRUD, gateway role management, self-registration,
+  and service principal management error paths.
+- **Total**: 915 tests (+86 from 0.16.2), coverage 82% → 84%.
+
 ## [0.16.0] — 2026-04-04
 
 ### Added
