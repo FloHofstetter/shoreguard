@@ -58,14 +58,7 @@
                 <template x-for="gw in gateways" :key="gw.name">
                     <tr @click="navigateTo('/gateways/' + gw.name)" style="cursor:pointer"
                         :class="gw.connected ? 'table-active' : ''">
-                        <td>
-                            <strong x-text="gw.name"></strong>
-                            <div x-show="Object.keys(gw.labels || {}).length > 0" class="mt-1">
-                                <template x-for="[k,v] in Object.entries(gw.labels || {})" :key="k">
-                                    <span class="badge text-bg-light border me-1 small" x-text="k + '=' + v"></span>
-                                </template>
-                            </div>
-                        </td>
+                        <td><strong x-text="gw.name"></strong></td>
                         <td class="d-none d-lg-table-cell small text-muted text-truncate" style="max-width:200px"
                             x-text="gw.description || '\u2014'"></td>
                         <td class="font-monospace small" x-text="gw.endpoint || '\u2014'"></td>
