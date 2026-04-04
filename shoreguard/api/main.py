@@ -260,19 +260,19 @@ gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
 
 
 @gw_api.get("/health", response_model=None)
-async def gw_health(
-    gw: str, client: ShoreGuardClient = Depends(get_client)
-) -> dict[str, Any] | JSONResponse:
+async def gw_health(gw: str) -> dict[str, Any] | JSONResponse:
     """Return gateway health status.
 
     Args:
         gw: The gateway name.
-        client: The ShoreGuardClient for this gateway.
 
     Returns:
         dict[str, Any] | JSONResponse: Health info or 503 if disconnected.
     """
+    from .deps import _get_gateway_service
+
     try:
+        client = _get_gateway_service().get_client(name=gw)
         return await asyncio.to_thread(client.health)
     except GatewayNotConnectedError:
         return JSONResponse(
