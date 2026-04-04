@@ -159,13 +159,12 @@ function gatewayDetail(name) {
         actionOutput: '',
         actionClass: '',
         acting: false,
-        editing: false,
-        editSaving: false,
-        editOutput: '',
-        editForm: { description: '' },
-        editLabels: [],
-        newEditKey: '',
-        newEditVal: '',
+        metaForm: { description: '' },
+        metaLabels: [],
+        newMetaKey: '',
+        newMetaVal: '',
+        metaSaving: false,
+        metaOutput: '',
 
         statusIcon(s) { return _gwStatusIcons[s || 'offline'] || 'circle'; },
         statusLabel(s) { return _gwStatusLabels[s || 'offline'] || (s || 'offline'); },
@@ -178,6 +177,10 @@ function gatewayDetail(name) {
                 const gateways = await apiFetch(`${API_GLOBAL}/gateway/list`);
                 this.gw = gateways.find(g => g.name === name) || null;
                 if (!this.gw) return;
+
+                // Populate metadata form from gateway data
+                this.metaForm.description = this.gw.description || '';
+                this.metaLabels = Object.entries(this.gw.labels || {}).map(([k, v]) => ({ key: k, val: v }));
 
                 // Cache providers for inference config
                 if (_knownProviders.length === 0 && this.gw.connected) {
@@ -283,45 +286,31 @@ function gatewayDetail(name) {
             }
         },
 
-        startEdit() {
-            this.editing = true;
-            this.editOutput = '';
-            this.editForm.description = this.gw?.description || '';
-            this.editLabels = Object.entries(this.gw?.labels || {}).map(([k, v]) => ({ key: k, val: v }));
-            this.newEditKey = '';
-            this.newEditVal = '';
-        },
-
-        cancelEdit() {
-            this.editing = false;
-            this.editOutput = '';
-        },
-
-        addEditLabel() {
-            const key = this.newEditKey.trim();
-            const val = this.newEditVal.trim();
+        addMetaLabel() {
+            const key = this.newMetaKey.trim();
+            const val = this.newMetaVal.trim();
             if (!key) return;
-            if (this.editLabels.some(r => r.key === key)) return;
-            if (this.editLabels.length >= 20) return;
-            this.editLabels.push({ key, val });
-            this.newEditKey = '';
-            this.newEditVal = '';
+            if (this.metaLabels.some(r => r.key === key)) return;
+            if (this.metaLabels.length >= 20) return;
+            this.metaLabels.push({ key, val });
+            this.newMetaKey = '';
+            this.newMetaVal = '';
         },
 
-        removeEditLabel(key) {
-            this.editLabels = this.editLabels.filter(r => r.key !== key);
+        removeMetaLabel(key) {
+            this.metaLabels = this.metaLabels.filter(r => r.key !== key);
         },
 
-        async saveEdit() {
-            this.editSaving = true;
-            this.editOutput = '';
+        async saveMeta() {
+            this.metaSaving = true;
+            this.metaOutput = '';
             const body = {};
-            const desc = this.editForm.description.trim();
+            const desc = this.metaForm.description.trim();
             body.description = desc || null;
 
-            if (this.editLabels.length > 0) {
+            if (this.metaLabels.length > 0) {
                 const labels = {};
-                for (const r of this.editLabels) labels[r.key] = r.val;
+                for (const r of this.metaLabels) labels[r.key] = r.val;
                 body.labels = labels;
             } else {
                 body.labels = null;
@@ -333,13 +322,13 @@ function gatewayDetail(name) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
                 });
-                this.editing = false;
-                showToast('Gateway metadata updated.', 'success');
+                this.metaOutput = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Saved</span>';
+                setTimeout(() => { this.metaOutput = ''; }, 2000);
                 this.load();
             } catch (e) {
-                this.editOutput = `<div class="text-danger small">${escapeHtml(e.message)}</div>`;
+                this.metaOutput = `<span class="text-danger">${escapeHtml(e.message)}</span>`;
             } finally {
-                this.editSaving = false;
+                this.metaSaving = false;
             }
         },
 
