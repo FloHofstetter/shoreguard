@@ -1,0 +1,16 @@
+template:
+  name: data-science
+  description: "GPU-enabled data science with Python, HuggingFace, and Ollama"
+  category: ml
+
+sandbox:
+  image: ghcr.io/nvidia/openshell-community/sandboxes/ollama:latest
+  gpu: true
+  providers:
+    - nvidia
+  environment:
+    CUDA_VISIBLE_DEVICES: all
+  presets:
+    - pypi
+    - huggingface
+    - docker

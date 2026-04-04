@@ -42,6 +42,8 @@ EXPECTED_TABLES = {
     "audit_log",
     "user_gateway_roles",
     "sp_gateway_roles",
+    "webhooks",
+    "webhook_deliveries",
     "alembic_version",
 }
 
@@ -86,6 +88,31 @@ EXPECTED_SP_GATEWAY_ROLE_COLUMNS = {
     "role",
 }
 
+EXPECTED_SP_COLUMNS = {
+    "id",
+    "name",
+    "key_hash",
+    "key_prefix",
+    "role",
+    "created_by",
+    "created_at",
+    "last_used",
+    "expires_at",
+}
+
+EXPECTED_WEBHOOK_DELIVERY_COLUMNS = {
+    "id",
+    "webhook_id",
+    "event_type",
+    "payload_json",
+    "status",
+    "response_code",
+    "error_message",
+    "attempt",
+    "created_at",
+    "delivered_at",
+}
+
 
 def test_migrations_sqlite_fresh_db():
     """All migrations apply cleanly on a fresh SQLite file database."""
@@ -124,6 +151,8 @@ def test_migrations_sqlite_schema_matches_models():
             ("users", EXPECTED_USER_COLUMNS),
             ("user_gateway_roles", EXPECTED_USER_GATEWAY_ROLE_COLUMNS),
             ("sp_gateway_roles", EXPECTED_SP_GATEWAY_ROLE_COLUMNS),
+            ("service_principals", EXPECTED_SP_COLUMNS),
+            ("webhook_deliveries", EXPECTED_WEBHOOK_DELIVERY_COLUMNS),
         ]:
             columns = {c["name"] for c in insp.get_columns(table_name)}
             assert columns == expected_cols, (

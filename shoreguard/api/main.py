@@ -29,7 +29,17 @@ from .metrics import metrics_middleware, shoreguard_info
 from .metrics import router as metrics_router
 from .pages import FRONTEND_DIR
 from .pages import router as pages_router
-from .routes import approvals, audit, gateway, operations, policies, providers, sandboxes, webhooks
+from .routes import (
+    approvals,
+    audit,
+    gateway,
+    operations,
+    policies,
+    providers,
+    sandboxes,
+    templates,
+    webhooks,
+)
 from .websocket import router as ws_router
 
 logger = logging.getLogger(__name__)
@@ -122,6 +132,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 await asyncio.to_thread(operation_store.cleanup)
                 if audit_mod.audit_service:
                     await asyncio.to_thread(audit_mod.audit_service.cleanup)
+                if webhook_mod.webhook_service:
+                    await asyncio.to_thread(webhook_mod.webhook_service.cleanup_old_deliveries)
                 consecutive_failures = 0
                 interval = base_interval
             except Exception:
@@ -184,7 +196,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.15.0",
+    version="0.16.0",
     lifespan=lifespan,
 )
 
@@ -345,6 +357,7 @@ async def set_inference(
         timeout_secs=body.timeout_secs,
     )
     from shoreguard.services.audit import audit_log
+    from shoreguard.services.webhooks import fire_webhook
 
     await audit_log(
         request,
@@ -353,6 +366,15 @@ async def set_inference(
         gw,
         gateway=gw,
         detail={"provider": body.provider_name, "model": body.model_id},
+    )
+    await fire_webhook(
+        "inference.updated",
+        {
+            "gateway": gw,
+            "provider": body.provider_name,
+            "model": body.model_id,
+            "actor": actor,
+        },
     )
     return result
 
@@ -398,6 +420,13 @@ app.include_router(
     prefix="/api/webhooks",
     tags=["webhooks"],
     dependencies=[Depends(require_auth), Depends(require_role("admin"))],
+)
+
+app.include_router(
+    templates.router,
+    prefix="/api/sandbox-templates",
+    tags=["templates"],
+    dependencies=[Depends(require_auth)],
 )
 
 

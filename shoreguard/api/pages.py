@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 import re
 from pathlib import Path
@@ -41,6 +42,7 @@ from .auth import (
     list_users,
     remove_gateway_role,
     require_role,
+    rotate_service_principal,
     set_gateway_role,
     verify_session_token,
 )
@@ -876,10 +878,12 @@ class CreateSPRequest(BaseModel):
     Attributes:
         name: Display name for the service principal.
         role: Role to assign (default ``"viewer"``).
+        expires_at: Optional expiry timestamp (ISO-8601).
     """
 
     name: str
     role: str = "viewer"
+    expires_at: datetime.datetime | None = None
 
 
 @router.get("/api/auth/service-principals", dependencies=[Depends(require_role("admin"))])
@@ -921,7 +925,9 @@ async def create_sp_endpoint(
     if not body.name.strip():
         return JSONResponse(status_code=400, content={"detail": "Name is required"})
     try:
-        plaintext, info = create_service_principal(body.name.strip(), body.role)
+        plaintext, info = create_service_principal(
+            body.name.strip(), body.role, expires_at=body.expires_at
+        )
     except IntegrityError:
         logger.warning(
             "Duplicate service principal creation attempt (name=%s, actor=%s)",
@@ -973,6 +979,32 @@ async def delete_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | J
         await audit_log(request, "sp.delete", "service_principal", str(sp_id))
         return {"ok": True}
     return JSONResponse(status_code=404, content={"detail": "Service principal not found"})
+
+
+@router.post(
+    "/api/auth/service-principals/{sp_id}/rotate",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
+)
+async def rotate_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | JSONResponse:
+    """Rotate the API key for a service principal (admin only).
+
+    Generates a new key and immediately invalidates the old one.
+
+    Args:
+        request: Incoming HTTP request.
+        sp_id: Database ID of the service principal.
+
+    Returns:
+        dict[str, Any] | JSONResponse: New key info or error response.
+    """
+    result = rotate_service_principal(sp_id)
+    if result is None:
+        return JSONResponse(status_code=404, content={"detail": "Service principal not found"})
+    plaintext, info = result
+    logger.info("Service principal key rotated (sp_id=%s, actor=%s)", sp_id, _get_actor(request))
+    await audit_log(request, "sp.rotate", "service_principal", str(sp_id))
+    return {"key": plaintext, **info}
 
 
 # ─── Page helpers ────────────────────────────────────────────────────────────

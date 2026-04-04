@@ -17,7 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker as SessionMaker
 
-from shoreguard.models import Webhook
+from shoreguard.models import Webhook, WebhookDelivery
 from shoreguard.services.formatters import FORMATTERS
 
 logger = logging.getLogger(__name__)
@@ -26,18 +26,22 @@ logger = logging.getLogger(__name__)
 webhook_service: WebhookService | None = None
 
 DELIVERY_TIMEOUT = 10.0
+RETRY_DELAYS = [5, 30, 120]  # seconds between retries
+DELIVERY_MAX_AGE_DAYS = 7
 
 
 class _Target(NamedTuple):
     """Resolved delivery target for a webhook.
 
     Attributes:
+        webhook_id: Database ID of the webhook.
         url: Target URL for delivery.
         secret: HMAC signing secret.
         channel_type: Channel type (generic, slack, discord, email).
         extra_config: Optional JSON config for channel-specific settings.
     """
 
+    webhook_id: int
     url: str
     secret: str
     channel_type: str
@@ -210,6 +214,7 @@ class WebhookService:
                     if event_type in types or "*" in types:
                         result.append(
                             _Target(
+                                webhook_id=wh.id,
                                 url=wh.url,
                                 secret=wh.secret,
                                 channel_type=wh.channel_type,
@@ -222,7 +227,7 @@ class WebhookService:
             return []
 
     async def fire(self, event_type: str, payload: dict[str, Any]) -> None:
-        """Deliver event to all matching webhooks (fire-and-forget).
+        """Deliver event to all matching webhooks with delivery tracking.
 
         Args:
             event_type: Type of event (e.g. "approval.approved").
@@ -233,59 +238,172 @@ class WebhookService:
             return
 
         timestamp = datetime.datetime.now(datetime.UTC).isoformat()
+        payload_json = json.dumps(payload, default=str)
 
         for target in targets:
+            delivery_id = await asyncio.to_thread(
+                self._create_delivery, target.webhook_id, event_type, payload_json
+            )
             formatter = FORMATTERS.get(target.channel_type, FORMATTERS["generic"])
             body = formatter(event_type, payload, timestamp)
-            asyncio.create_task(self._deliver(target, body))
+            asyncio.create_task(self._deliver(target, body, delivery_id))
 
-    @staticmethod
-    async def _deliver(target: _Target, body: str) -> None:
-        """Deliver a payload to a webhook target.
+    def _create_delivery(self, webhook_id: int, event_type: str, payload_json: str) -> int:
+        """Create a pending delivery record.
+
+        Args:
+            webhook_id: Target webhook ID.
+            event_type: Event type string.
+            payload_json: JSON-encoded payload.
+
+        Returns:
+            int: Delivery row ID.
+        """
+        with self._session_factory() as session:
+            delivery = WebhookDelivery(
+                webhook_id=webhook_id,
+                event_type=event_type,
+                payload_json=payload_json,
+                status="pending",
+                attempt=1,
+                created_at=datetime.datetime.now(datetime.UTC),
+            )
+            session.add(delivery)
+            session.commit()
+            session.refresh(delivery)
+            return delivery.id
+
+    def _update_delivery(
+        self,
+        delivery_id: int,
+        *,
+        status: str,
+        response_code: int | None = None,
+        error_message: str | None = None,
+        attempt: int = 1,
+    ) -> None:
+        """Update a delivery record with result.
+
+        Args:
+            delivery_id: Delivery row ID.
+            status: New status (success or failed).
+            response_code: HTTP response code, if any.
+            error_message: Error details, if any.
+            attempt: Current attempt number.
+        """
+        try:
+            with self._session_factory() as session:
+                row = session.get(WebhookDelivery, delivery_id)
+                if row:
+                    row.status = status
+                    row.response_code = response_code
+                    row.error_message = error_message
+                    row.attempt = attempt
+                    if status == "success":
+                        row.delivered_at = datetime.datetime.now(datetime.UTC)
+                    session.commit()
+        except SQLAlchemyError:
+            logger.exception("Failed to update delivery %d", delivery_id)
+
+    async def _deliver(self, target: _Target, body: str, delivery_id: int) -> None:
+        """Deliver a payload to a webhook target with retry.
 
         Args:
             target: Delivery target with URL, secret, and channel type.
             body: Formatted request body string.
+            delivery_id: Delivery record ID for status updates.
         """
         if target.channel_type == "email":
-            await WebhookService._deliver_email(target, body)
+            await self._deliver_email(target, body, delivery_id)
             return
-        await WebhookService._deliver_http(target, body)
+        await self._deliver_http_with_retry(target, body, delivery_id)
 
-    @staticmethod
-    async def _deliver_http(target: _Target, body: str) -> None:
-        """POST a payload to an HTTP webhook URL.
+    async def _deliver_http_with_retry(self, target: _Target, body: str, delivery_id: int) -> None:
+        """POST a payload with retry on 5xx and network errors.
 
         Args:
             target: Delivery target.
             body: JSON-encoded request body.
+            delivery_id: Delivery record ID.
         """
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if target.channel_type == "generic":
             signature = hmac.new(target.secret.encode(), body.encode(), hashlib.sha256).hexdigest()
             headers["X-Shoreguard-Signature"] = f"sha256={signature}"
 
-        try:
-            async with httpx.AsyncClient(timeout=DELIVERY_TIMEOUT) as client:
-                resp = await client.post(target.url, content=body, headers=headers)
-                if resp.status_code >= 400:
-                    logger.warning(
-                        "Webhook delivery to %s returned %d", target.url, resp.status_code
-                    )
-                    WebhookService._inc_delivery_counter("failed")
-                else:
-                    WebhookService._inc_delivery_counter("success")
-        except Exception:
-            logger.warning("Webhook delivery to %s failed", target.url, exc_info=True)
-            WebhookService._inc_delivery_counter("failed")
+        max_attempts = len(RETRY_DELAYS) + 1
+        error_msg: str | None = None
 
-    @staticmethod
-    async def _deliver_email(target: _Target, body: str) -> None:
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=DELIVERY_TIMEOUT) as client:
+                    resp = await client.post(target.url, content=body, headers=headers)
+                    if resp.status_code < 400:
+                        await asyncio.to_thread(
+                            self._update_delivery,
+                            delivery_id,
+                            status="success",
+                            response_code=resp.status_code,
+                            attempt=attempt,
+                        )
+                        self._inc_delivery_counter("success")
+                        return
+                    if resp.status_code < 500:
+                        # Client error — don't retry
+                        await asyncio.to_thread(
+                            self._update_delivery,
+                            delivery_id,
+                            status="failed",
+                            response_code=resp.status_code,
+                            error_message=f"HTTP {resp.status_code}",
+                            attempt=attempt,
+                        )
+                        self._inc_delivery_counter("failed")
+                        logger.warning(
+                            "Webhook delivery to %s returned %d (no retry)",
+                            target.url,
+                            resp.status_code,
+                        )
+                        return
+                    # 5xx — retry
+                    error_msg = f"HTTP {resp.status_code}"
+            except (httpx.TimeoutException, httpx.ConnectError, OSError) as e:
+                error_msg = str(e)
+
+            if attempt < max_attempts:
+                delay = RETRY_DELAYS[attempt - 1]
+                logger.info(
+                    "Webhook delivery to %s failed (attempt %d/%d), retrying in %ds",
+                    target.url,
+                    attempt,
+                    max_attempts,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+
+        # All attempts exhausted
+        await asyncio.to_thread(
+            self._update_delivery,
+            delivery_id,
+            status="failed",
+            error_message=error_msg,
+            attempt=max_attempts,
+        )
+        self._inc_delivery_counter("failed")
+        logger.warning(
+            "Webhook delivery to %s failed after %d attempts: %s",
+            target.url,
+            max_attempts,
+            error_msg,
+        )
+
+    async def _deliver_email(self, target: _Target, body: str, delivery_id: int) -> None:
         """Send a notification email via SMTP.
 
         Args:
             target: Delivery target with SMTP config in extra_config.
             body: Plain-text email body.
+            delivery_id: Delivery record ID.
         """
         try:
             from email.message import EmailMessage
@@ -317,10 +435,89 @@ class WebhookService:
                 kwargs["use_tls"] = True
 
             await aiosmtplib.send(msg, **kwargs)
-            WebhookService._inc_delivery_counter("success")
-        except Exception:
+            await asyncio.to_thread(
+                self._update_delivery,
+                delivery_id,
+                status="success",
+                attempt=1,
+            )
+            self._inc_delivery_counter("success")
+        except Exception as e:
             logger.warning("Email delivery failed", exc_info=True)
-            WebhookService._inc_delivery_counter("failed")
+            await asyncio.to_thread(
+                self._update_delivery,
+                delivery_id,
+                status="failed",
+                error_message=str(e),
+                attempt=1,
+            )
+            self._inc_delivery_counter("failed")
+
+    # ─── Delivery log queries ────────────────────────────────────────────────
+
+    def list_deliveries(self, webhook_id: int, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Return recent deliveries for a webhook.
+
+        Args:
+            webhook_id: Webhook ID to query.
+            limit: Maximum number of records to return.
+
+        Returns:
+            list[dict[str, Any]]: Delivery records, newest first.
+        """
+        try:
+            with self._session_factory() as session:
+                rows = (
+                    session.query(WebhookDelivery)
+                    .filter(WebhookDelivery.webhook_id == webhook_id)
+                    .order_by(WebhookDelivery.created_at.desc())
+                    .limit(limit)
+                    .all()
+                )
+                return [
+                    {
+                        "id": r.id,
+                        "webhook_id": r.webhook_id,
+                        "event_type": r.event_type,
+                        "status": r.status,
+                        "response_code": r.response_code,
+                        "error_message": r.error_message,
+                        "attempt": r.attempt,
+                        "created_at": r.created_at.isoformat() if r.created_at else None,
+                        "delivered_at": r.delivered_at.isoformat() if r.delivered_at else None,
+                    }
+                    for r in rows
+                ]
+        except SQLAlchemyError:
+            logger.exception("Failed to list deliveries for webhook %d", webhook_id)
+            return []
+
+    def cleanup_old_deliveries(self, max_age_days: int = DELIVERY_MAX_AGE_DAYS) -> int:
+        """Purge delivery records older than max_age_days.
+
+        Args:
+            max_age_days: Maximum age of records to keep.
+
+        Returns:
+            int: Number of records deleted.
+        """
+        cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=max_age_days)
+        try:
+            with self._session_factory() as session:
+                count = (
+                    session.query(WebhookDelivery)
+                    .filter(WebhookDelivery.created_at < cutoff)
+                    .delete()
+                )
+                session.commit()
+                if count:
+                    logger.info("Purged %d old webhook deliveries", count)
+                return count
+        except SQLAlchemyError:
+            logger.exception("Failed to cleanup old webhook deliveries")
+            return 0
+
+    # ─── Helpers ─────────────────────────────────────────────────────────────
 
     @staticmethod
     def _inc_delivery_counter(status: str) -> None:

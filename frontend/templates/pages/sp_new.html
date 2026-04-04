@@ -29,6 +29,11 @@
                             <option value="admin">Admin — full access</option>
                         </select>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Expires</label>
+                        <input type="date" class="form-control" x-model="expiresDate">
+                        <div class="form-text">Leave empty for a non-expiring key.</div>
+                    </div>
 
                     <!-- Error -->
                     <div x-show="error" x-cloak class="text-danger small mb-3">

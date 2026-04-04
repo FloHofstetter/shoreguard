@@ -77,11 +77,79 @@ function usersPage() {
             }
         },
 
+        async rotateSP(sp) {
+            const confirmed = await showConfirm(
+                `Rotate API key for "${sp.name}"? The current key will stop working immediately.`,
+                { icon: 'arrow-repeat', iconColor: 'text-warning', btnClass: 'btn-warning', btnLabel: 'Rotate' }
+            );
+            if (!confirmed) return;
+            try {
+                const data = await apiFetch(`/api/auth/service-principals/${sp.id}/rotate`, { method: 'POST' });
+                showKeyModal(data.key, sp.name);
+                this.load();
+            } catch (e) {
+                showToast(`Rotate failed: ${e.message}`, 'danger');
+            }
+        },
+
+        expiryBadge(sp) {
+            if (!sp.expires_at) return '';
+            const exp = new Date(sp.expires_at);
+            const now = new Date();
+            const daysLeft = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+            if (daysLeft <= 0) return '<span class="badge text-bg-danger">Expired</span>';
+            if (daysLeft <= 30) return `<span class="badge text-bg-warning">${daysLeft}d left</span>`;
+            return `<span class="badge text-bg-success">${daysLeft}d left</span>`;
+        },
+
         async showSPGatewayRoles(sp) {
             await openGatewayRolesModal('sp', sp.id, sp.name);
             this.load();
         },
     };
+}
+
+function showKeyModal(key, name) {
+    const existing = document.getElementById('showKeyModal');
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="showKeyModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content sg-modal-themed">
+                    <div class="modal-header border-bottom">
+                        <h5 class="modal-title"><i class="bi bi-key me-2"></i>API Key — ${escapeHtml(name)}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-warning mb-3">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            This key is shown only once. Copy it now.
+                        </div>
+                        <div class="input-group">
+                            <input type="text" class="form-control font-monospace" value="${escapeHtml(key)}" readonly id="keyValue">
+                            <button class="btn btn-outline-secondary" id="copyKeyBtn" title="Copy">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `);
+
+    const modalEl = document.getElementById('showKeyModal');
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    document.getElementById('copyKeyBtn').addEventListener('click', () => {
+        navigator.clipboard.writeText(key).then(() => showToast('Key copied to clipboard', 'success'));
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove());
 }
 
 
@@ -273,6 +341,7 @@ function spNewForm() {
     return {
         name: '',
         role: 'viewer',
+        expiresDate: '',
         error: '',
         loading: false,
         spKey: '',
@@ -285,10 +354,14 @@ function spNewForm() {
             this.error = '';
             this.loading = true;
             try {
+                const payload = { name: this.name.trim(), role: this.role };
+                if (this.expiresDate) {
+                    payload.expires_at = new Date(this.expiresDate + 'T23:59:59Z').toISOString();
+                }
                 const data = await apiFetch('/api/auth/service-principals', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: this.name.trim(), role: this.role }),
+                    body: JSON.stringify(payload),
                 });
                 this.spKey = data.key;
                 showToast(`Service principal "${this.name.trim()}" created.`, 'success');

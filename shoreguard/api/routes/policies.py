@@ -16,6 +16,7 @@ from shoreguard.presets import get_preset as _get_preset
 from shoreguard.presets import list_presets as _list_presets
 from shoreguard.services.audit import audit_log
 from shoreguard.services.policy import PolicyService
+from shoreguard.services.webhooks import fire_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,12 @@ async def update_policy(
         name,
         get_actor(request),
     )
-    await audit_log(request, "policy.update", "policy", name, gateway=_current_gateway.get())
+    gw = _current_gateway.get()
+    await audit_log(request, "policy.update", "policy", name, gateway=gw)
+    await fire_webhook(
+        "policy.updated",
+        {"sandbox": name, "gateway": gw, "actor": get_actor(request)},
+    )
     return result
 
 

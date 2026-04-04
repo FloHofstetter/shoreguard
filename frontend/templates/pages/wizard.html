@@ -35,8 +35,12 @@
             </div>
         </div>
 
-        <!-- Step 1: Agent Type (rendered from openshell.yaml) -->
+        <!-- Step 1: Agent Type (templates + community sandboxes) -->
         <div id="wizard-step-1" class="wizard-content">
+            <!-- Sandbox Templates (loaded from API) -->
+            <div id="wizard-templates" class="row g-3 mb-4"></div>
+
+            <!-- Community Sandboxes (rendered from openshell.yaml) -->
             <div class="row g-3">
                 {% for sandbox in community_sandboxes %}
                 <div class="col-md-6">
@@ -122,7 +126,12 @@
                         <div id="wizard-log" class="log-output small"></div>
                     </div>
                     <div class="d-flex justify-content-between">
-                        <button class="btn btn-outline-secondary" onclick="wizardPrev()" id="wizard-back-btn">Back</button>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-outline-secondary" onclick="wizardPrev()" id="wizard-back-btn">Back</button>
+                            <button class="btn btn-outline-secondary" onclick="wizardCustomize()" id="wizard-customize-btn">
+                                <i class="bi bi-pencil me-1"></i>Customize
+                            </button>
+                        </div>
                         <button class="btn btn-success" onclick="launchSandbox()" id="wizard-launch-btn">
                             <i class="bi bi-rocket me-1"></i>Launch Sandbox
                         </button>

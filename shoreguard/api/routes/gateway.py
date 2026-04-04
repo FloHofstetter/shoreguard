@@ -20,6 +20,7 @@ from shoreguard.config import ENDPOINT_RE, VALID_GATEWAY_NAME_RE, is_private_ip
 from shoreguard.exceptions import NotFoundError, friendly_grpc_error
 from shoreguard.services.audit import audit_log
 from shoreguard.services.operations import operation_store
+from shoreguard.services.webhooks import fire_webhook
 
 if TYPE_CHECKING:
     from shoreguard.services.local_gateway import LocalGatewayManager
@@ -365,6 +366,14 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
             "labels": body.labels,
         },
     )
+    await fire_webhook(
+        "gateway.registered",
+        {
+            "gateway": body.name,
+            "endpoint": body.endpoint,
+            "actor": get_actor(request),
+        },
+    )
     return result
 
 
@@ -404,6 +413,10 @@ async def gateway_unregister(name: str, request: Request) -> dict[str, Any]:
         raise HTTPException(404, f"Gateway '{name}' not found")
     logger.info("Gateway unregistered (gateway=%s, actor=%s)", name, get_actor(request))
     await audit_log(request, "gateway.unregister", "gateway", name)
+    await fire_webhook(
+        "gateway.unregistered",
+        {"gateway": name, "actor": get_actor(request)},
+    )
     return {"success": True, "name": name}
 
 

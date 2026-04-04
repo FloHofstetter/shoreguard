@@ -200,7 +200,9 @@ class TestFire:
             created_by="admin@test.com",
             channel_type="slack",
         )
-        with patch.object(WebhookService, "_deliver_http", new_callable=AsyncMock) as mock_http:
+        with patch.object(
+            WebhookService, "_deliver_http_with_retry", new_callable=AsyncMock
+        ) as mock_http:
             with patch.object(WebhookService, "_deliver", wraps=WebhookService._deliver):
                 await webhook_svc.fire("sandbox.created", {"sandbox": "test"})
                 import asyncio

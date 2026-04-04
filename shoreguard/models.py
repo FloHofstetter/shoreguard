@@ -93,10 +93,12 @@ class ServicePrincipal(Base):
         id: Auto-incremented primary key.
         name: Unique human-readable name (max 100 chars).
         key_hash: SHA-256 hash of the API key.
+        key_prefix: First 12 characters of the key for identification.
         role: Global role (``admin``, ``operator``, ``viewer``).
         created_by: FK to the user who created this principal, or ``None``.
         created_at: Timestamp when the principal was created.
         last_used: Timestamp of the most recent API call, or ``None``.
+        expires_at: Optional expiry timestamp; ``None`` means never expires.
     """
 
     __tablename__ = "service_principals"
@@ -104,12 +106,14 @@ class ServicePrincipal(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    key_prefix: Mapped[str | None] = mapped_column(String(12))
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="viewer")
     created_by: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL")
     )
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_used: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class UserGatewayRole(Base):
@@ -226,3 +230,37 @@ class Webhook(Base):
     extra_config: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str] = mapped_column(String(254), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WebhookDelivery(Base):
+    """A delivery attempt for a webhook event.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        webhook_id: FK to the webhook that was triggered.
+        event_type: The event type that triggered the delivery.
+        payload_json: JSON-encoded event payload.
+        status: Delivery status (``pending``, ``success``, ``failed``).
+        response_code: HTTP response code from the target, if any.
+        error_message: Error details on failure, if any.
+        attempt: Current attempt number (1-based).
+        created_at: Timestamp when the delivery was created.
+        delivered_at: Timestamp when delivery succeeded, if any.
+    """
+
+    __tablename__ = "webhook_deliveries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    webhook_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("webhooks.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", server_default="pending"
+    )
+    response_code: Mapped[int | None] = mapped_column(Integer)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    delivered_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))

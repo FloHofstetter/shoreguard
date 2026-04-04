@@ -337,6 +337,9 @@ def _lookup_sp_identity(key: str) -> dict | None:
             )
             if row is None:
                 return None
+            if row.expires_at is not None and row.expires_at <= datetime.datetime.now(datetime.UTC):
+                logger.info("Service principal '%s' has expired", row.name)
+                return None
             row.last_used = datetime.datetime.now(datetime.UTC)
             session.commit()
             return {"id": row.id, "name": row.name, "role": row.role}
@@ -862,7 +865,10 @@ def delete_user(user_id: int) -> bool:
 
 
 def create_service_principal(
-    name: str, role: str, created_by: int | None = None
+    name: str,
+    role: str,
+    created_by: int | None = None,
+    expires_at: datetime.datetime | None = None,
 ) -> tuple[str, dict]:
     """Create a new service principal.
 
@@ -870,6 +876,7 @@ def create_service_principal(
         name: Human-readable name for the principal.
         role: One of ``admin``, ``operator``, ``viewer``.
         created_by: Database ID of the creating user, or ``None``.
+        expires_at: Optional expiry timestamp; ``None`` means never expires.
 
     Returns:
         tuple[str, dict]: ``(plaintext_key, info_dict)``.
@@ -886,14 +893,21 @@ def create_service_principal(
         raise RuntimeError("Database not available")
     from shoreguard.models import ServicePrincipal
 
-    plaintext = secrets.token_urlsafe(32)
+    plaintext = "sg_" + secrets.token_urlsafe(32)
     key_hash = _hash_key(plaintext)
+    key_prefix = plaintext[:12]
     now = datetime.datetime.now(datetime.UTC)
 
     with _session_factory() as session:
         try:
             sp = ServicePrincipal(
-                name=name, key_hash=key_hash, role=role, created_by=created_by, created_at=now
+                name=name,
+                key_hash=key_hash,
+                key_prefix=key_prefix,
+                role=role,
+                created_by=created_by,
+                created_at=now,
+                expires_at=expires_at,
             )
             session.add(sp)
             session.commit()
@@ -908,7 +922,9 @@ def create_service_principal(
                 "id": sp.id,
                 "name": name,
                 "role": role,
+                "key_prefix": key_prefix,
                 "created_at": now.isoformat(),
+                "expires_at": expires_at.isoformat() if expires_at else None,
             }
         except IntegrityError:
             session.rollback()
@@ -937,9 +953,11 @@ def list_service_principals() -> list[dict]:
                     "id": r.id,
                     "name": r.name,
                     "role": r.role,
+                    "key_prefix": r.key_prefix,
                     "created_by": r.created_by,
                     "created_at": r.created_at.isoformat() if r.created_at else None,
                     "last_used": r.last_used.isoformat() if r.last_used else None,
+                    "expires_at": r.expires_at.isoformat() if r.expires_at else None,
                 }
                 for r in rows
             ]
@@ -978,6 +996,51 @@ def delete_service_principal(sp_id: int) -> bool:
         except Exception:
             session.rollback()
             logger.exception("Failed to delete service principal (sp_id=%d)", sp_id)
+            raise
+
+
+def rotate_service_principal(sp_id: int) -> tuple[str, dict] | None:
+    """Rotate the API key for a service principal.
+
+    Generates a new key and immediately invalidates the old one.
+
+    Args:
+        sp_id: Database ID of the service principal.
+
+    Returns:
+        tuple[str, dict] | None: ``(new_plaintext_key, info_dict)`` or ``None``
+            if the principal was not found.
+
+    Raises:
+        RuntimeError: If the database is not available.
+    """
+    if _session_factory is None:
+        raise RuntimeError("Database not available")
+    from shoreguard.models import ServicePrincipal
+
+    new_plaintext = "sg_" + secrets.token_urlsafe(32)
+    new_hash = _hash_key(new_plaintext)
+    new_prefix = new_plaintext[:12]
+
+    with _session_factory() as session:
+        try:
+            row = session.query(ServicePrincipal).filter(ServicePrincipal.id == sp_id).first()
+            if row is None:
+                return None
+            row.key_hash = new_hash
+            row.key_prefix = new_prefix
+            session.commit()
+            logger.info("Service principal key rotated (sp_id=%d, name=%s)", sp_id, row.name)
+            return new_plaintext, {
+                "id": row.id,
+                "name": row.name,
+                "role": row.role,
+                "key_prefix": new_prefix,
+                "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+            }
+        except Exception:
+            session.rollback()
+            logger.exception("Failed to rotate service principal key (sp_id=%d)", sp_id)
             raise
 
 

@@ -184,7 +184,14 @@ async def create_sandbox(
                 )
             await fire_webhook(
                 "sandbox.created",
-                {"sandbox": sandbox_name, "actor": _audit_actor, "gateway": _audit_gw},
+                {
+                    "sandbox": sandbox_name,
+                    "actor": _audit_actor,
+                    "gateway": _audit_gw,
+                    "image": body.image or "",
+                    "gpu": body.gpu,
+                    "providers": body.providers or [],
+                },
             )
         except asyncio.CancelledError:
             logger.warning("Sandbox creation cancelled for '%s'", sandbox_name)

@@ -7,13 +7,15 @@ let wizardState = { step: 1, agent: null, presets: new Set() };
 
 // Community sandbox data loaded from API (openshell.yaml)
 let _communitySandboxes = [];
+let _sandboxTemplates = [];
 
 function initWizard() {
-    wizardState = { step: 1, agent: null, presets: new Set(), defaultProvider: '' };
+    wizardState = { step: 1, agent: null, presets: new Set(), defaultProvider: '', fromTemplate: false };
     const envVars = document.getElementById('wizard-env-vars');
     if (envVars) envVars.innerHTML = '';
     updateWizardUI();
     _loadCommunitySandboxes();
+    _loadSandboxTemplates();
 }
 
 async function _loadCommunitySandboxes() {
@@ -21,6 +23,68 @@ async function _loadCommunitySandboxes() {
     try {
         _communitySandboxes = await apiFetch(`${API}/providers/community-sandboxes`);
     } catch {}
+}
+
+async function _loadSandboxTemplates() {
+    try {
+        _sandboxTemplates = await apiFetch('/api/sandbox-templates');
+        _renderTemplateCards();
+    } catch {}
+}
+
+function _renderTemplateCards() {
+    const container = document.getElementById('wizard-templates');
+    if (!container || _sandboxTemplates.length === 0) return;
+    const categoryIcons = { ml: 'gpu-card', dev: 'code-slash', security: 'shield-lock' };
+    container.innerHTML = _sandboxTemplates.map(t => {
+        const icon = categoryIcons[t.category] || 'file-earmark-code';
+        return `
+            <div class="col">
+                <div class="card sg-card-themed h-100 agent-card" style="cursor:pointer"
+                     onclick="selectTemplate('${escapeHtml(t.name)}')">
+                    <div class="card-body text-center py-3">
+                        <i class="bi bi-${icon} fs-3 d-block mb-2" style="color:var(--sg-accent)"></i>
+                        <div class="fw-semibold">${escapeHtml(t.name)}</div>
+                        <div class="text-muted small mt-1">${escapeHtml(t.description)}</div>
+                        <span class="badge text-bg-secondary mt-2">${escapeHtml(t.category || 'general')}</span>
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+async function selectTemplate(name) {
+    try {
+        const tpl = await apiFetch(`/api/sandbox-templates/${name}`);
+        const sb = tpl.sandbox || {};
+
+        // Populate wizard fields
+        document.getElementById('wizard-image').value = sb.image || '';
+        document.getElementById('wizard-gpu').checked = !!sb.gpu;
+
+        // Populate env vars
+        const envContainer = document.getElementById('wizard-env-vars');
+        envContainer.innerHTML = '';
+        if (sb.environment) {
+            for (const [k, v] of Object.entries(sb.environment)) {
+                addWizardEnvVar(k, v);
+            }
+        }
+
+        // Populate presets
+        wizardState.presets = new Set(sb.presets || []);
+        wizardState.agent = name;
+        wizardState.defaultProvider = '';
+        wizardState.fromTemplate = true;
+        wizardState.templateProviders = sb.providers || [];
+
+        // Jump to summary (step 4)
+        wizardState.step = 4;
+        updateWizardUI();
+        updateWizardSummary();
+    } catch (e) {
+        showToast(`Failed to load template: ${e.message}`, 'danger');
+    }
 }
 
 function selectAgent(type, event) {
@@ -174,11 +238,19 @@ function toggleWizardPreset(name, rowEl) {
     }
 }
 
+function wizardCustomize() {
+    wizardState.step = 2;
+    updateWizardUI();
+    loadWizardProviders();
+}
+
 function updateWizardSummary() {
     const name = document.getElementById('wizard-name').value || '(auto-generated)';
     const image = document.getElementById('wizard-image').value || '(default)';
     const gpu = document.getElementById('wizard-gpu').checked;
-    const providers = getSelectedProviders();
+    const providers = wizardState.fromTemplate && wizardState.templateProviders?.length > 0
+        ? wizardState.templateProviders
+        : getSelectedProviders();
     const envVars = collectEnvVars();
     const envEntries = Object.entries(envVars);
     const presets = [...wizardState.presets];
@@ -211,7 +283,9 @@ async function launchSandbox() {
     const name = document.getElementById('wizard-name').value;
     const image = document.getElementById('wizard-image').value;
     const gpu = document.getElementById('wizard-gpu').checked;
-    const providers = getSelectedProviders();
+    const providers = wizardState.fromTemplate && wizardState.templateProviders?.length > 0
+        ? wizardState.templateProviders
+        : getSelectedProviders();
     const environment = collectEnvVars();
     const presets = [...wizardState.presets];
 

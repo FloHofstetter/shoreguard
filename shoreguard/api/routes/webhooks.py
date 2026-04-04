@@ -7,7 +7,7 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 import shoreguard.services.webhooks as webhook_mod
@@ -221,3 +221,26 @@ async def test_webhook(webhook_id: int) -> dict[str, str]:
         {"webhook_id": wh["id"], "message": "Test event from Shoreguard"},
     )
     return {"status": "Test event sent"}
+
+
+@router.get("/{webhook_id}/deliveries")
+async def list_deliveries(
+    webhook_id: int, limit: int = Query(50, ge=1, le=500)
+) -> list[dict[str, Any]]:
+    """List recent delivery attempts for a webhook.
+
+    Args:
+        webhook_id: Primary key of the webhook.
+        limit: Maximum number of records to return.
+
+    Returns:
+        list[dict[str, Any]]: Delivery records, newest first.
+
+    Raises:
+        HTTPException: If webhook is not found.
+    """
+    svc = _get_svc()
+    wh = await asyncio.to_thread(svc.get, webhook_id)
+    if wh is None:
+        raise HTTPException(404, "Webhook not found")
+    return await asyncio.to_thread(svc.list_deliveries, webhook_id, limit=limit)

@@ -97,20 +97,34 @@
                         <thead>
                             <tr>
                                 <th>Name</th>
+                                <th class="d-none d-lg-table-cell">Key</th>
                                 <th>Role</th>
-                                <th class="d-none d-md-table-cell">Created</th>
+                                <th class="d-none d-md-table-cell">Expires</th>
                                 <th class="d-none d-md-table-cell">Last Used</th>
-                                <th class="text-end" style="width:60px">Actions</th>
+                                <th class="text-end" style="width:100px">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <template x-for="sp in sps" :key="sp.id">
                                 <tr>
                                     <td><strong x-text="sp.name"></strong></td>
+                                    <td class="d-none d-lg-table-cell">
+                                        <code class="small" x-text="sp.key_prefix ? sp.key_prefix + '...' : '(legacy)'"></code>
+                                    </td>
                                     <td><span class="badge" :class="roleBadge(sp.role)" x-text="sp.role"></span></td>
-                                    <td class="d-none d-md-table-cell small text-muted" x-text="formatDate(sp.created_at)"></td>
+                                    <td class="d-none d-md-table-cell small">
+                                        <template x-if="sp.expires_at">
+                                            <span x-html="expiryBadge(sp)"></span>
+                                        </template>
+                                        <template x-if="!sp.expires_at">
+                                            <span class="text-muted">Never</span>
+                                        </template>
+                                    </td>
                                     <td class="d-none d-md-table-cell small text-muted" x-text="sp.last_used ? formatTimeAgo(sp.last_used) : 'Never'"></td>
                                     <td class="text-end">
+                                        <button class="btn btn-sm text-muted" @click="rotateSP(sp)" title="Rotate Key">
+                                            <i class="bi bi-arrow-repeat"></i>
+                                        </button>
                                         <button class="btn btn-sm text-muted" @click="showSPGatewayRoles(sp)" title="Gateway Roles">
                                             <i class="bi bi-shield-lock"></i>
                                         </button>

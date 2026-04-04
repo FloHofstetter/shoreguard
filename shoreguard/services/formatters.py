@@ -11,6 +11,10 @@ _EVENT_LABELS: dict[str, str] = {
     "approval.rejected": "Approval Rejected",
     "sandbox.created": "Sandbox Created",
     "sandbox.deleted": "Sandbox Deleted",
+    "gateway.registered": "Gateway Registered",
+    "gateway.unregistered": "Gateway Unregistered",
+    "inference.updated": "Inference Updated",
+    "policy.updated": "Policy Updated",
     "webhook.test": "Test Event",
 }
 
@@ -20,6 +24,10 @@ _SLACK_COLORS: dict[str, str] = {
     "approval.rejected": "danger",
     "sandbox.created": "#2196F3",
     "sandbox.deleted": "#9E9E9E",
+    "gateway.registered": "good",
+    "gateway.unregistered": "warning",
+    "inference.updated": "#2196F3",
+    "policy.updated": "#2196F3",
     "webhook.test": "#6C757D",
 }
 
@@ -29,6 +37,10 @@ _DISCORD_COLORS: dict[str, int] = {
     "approval.rejected": 0xE74C3C,
     "sandbox.created": 0x2196F3,
     "sandbox.deleted": 0x9E9E9E,
+    "gateway.registered": 0x2ECC71,
+    "gateway.unregistered": 0xFFA500,
+    "inference.updated": 0x2196F3,
+    "policy.updated": 0x2196F3,
     "webhook.test": 0x6C757D,
 }
 
@@ -55,7 +67,17 @@ def _payload_fields(payload: dict[str, Any]) -> list[tuple[str, str]]:
         list[tuple[str, str]]: List of (label, value) pairs.
     """
     fields = []
-    for key in ("sandbox", "gateway", "actor", "reason", "message"):
+    for key in (
+        "sandbox",
+        "gateway",
+        "actor",
+        "reason",
+        "message",
+        "provider",
+        "model",
+        "image",
+        "endpoint",
+    ):
         if key in payload:
             fields.append((key.title(), str(payload[key])))
     return fields

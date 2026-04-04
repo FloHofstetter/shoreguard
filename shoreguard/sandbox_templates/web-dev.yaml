@@ -1,0 +1,14 @@
+template:
+  name: web-dev
+  description: "Web development with npm, Docker, and Slack integration"
+  category: dev
+
+sandbox:
+  image: ""
+  gpu: false
+  providers: []
+  environment: {}
+  presets:
+    - npm
+    - docker
+    - slack

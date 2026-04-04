@@ -5,6 +5,53 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.16.0] — 2026-04-04
+
+### Added
+
+- **Webhook delivery log** — new `webhook_deliveries` table tracks every
+  delivery attempt with status, response code, error message, and timestamps.
+  Query via `GET /api/webhooks/{id}/deliveries`.
+- **Webhook retry with exponential backoff** — HTTP 5xx and network errors
+  trigger up to 3 retries (5s → 30s → 120s). Client 4xx errors fail immediately.
+- **New webhook events** — `gateway.registered`, `gateway.unregistered`,
+  `inference.updated`, `policy.updated` fire automatically after the
+  corresponding API actions.
+- **Enriched sandbox.created payload** — now includes `image`, `gpu`, and
+  `providers` fields from the creation request.
+- **API-key rotation** — `POST /api/auth/service-principals/{id}/rotate`
+  generates a new key and immediately invalidates the old one (admin only).
+- **API-key expiry** — optional `expires_at` timestamp on service principals.
+  Expired keys are rejected at auth time.
+- **API-key prefix** — new keys are prefixed with `sg_` and the first 12
+  characters are stored as `key_prefix` for identification without exposing
+  the full key. Legacy keys remain functional.
+- **Sandbox templates** — YAML-based full-stack templates (`data-science`,
+  `web-dev`, `secure-coding`) that pre-configure image, GPU, providers,
+  environment variables, and policy presets. Available via
+  `GET /api/sandbox-templates` and integrated into the wizard.
+- **Alembic migration 005** — adds `webhook_deliveries` table.
+- **Alembic migration 006** — adds `key_prefix` and `expires_at` columns
+  to `service_principals` table.
+
+### Changed
+
+- **Webhook service** — `fire()` now creates delivery records per target
+  before dispatching. `_deliver_http` replaced by `_deliver_http_with_retry`
+  with retry logic.
+- **Service principal creation** — keys now use `sg_` prefix format.
+  `list_service_principals()` returns `key_prefix` and `expires_at` fields.
+- **Users UI** — SP table shows key prefix, expiry badge (green/yellow/red),
+  and rotate button. SP creation form includes optional expiry date.
+- **Wizard UI** — step 1 shows sandbox template cards above community
+  sandboxes. Selecting a template pre-fills all fields and jumps to summary.
+  "Customize" button navigates back to configuration step.
+- **Formatters** — `_EVENT_LABELS`, `_SLACK_COLORS`, `_DISCORD_COLORS`
+  extended for 4 new events. `_payload_fields()` extracts provider, model,
+  image, and endpoint fields.
+- **Cleanup loop** — webhook delivery records older than 7 days are purged
+  alongside operations and audit entries.
+
 ## [0.15.0] — 2026-04-04
 
 ### Added
