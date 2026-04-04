@@ -20,7 +20,7 @@ classifiers = [
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Security",
     "Topic :: System :: Systems Administration",
 ]
@@ -78,7 +78,7 @@ include = ["shoreguard", "frontend", "LICENSE", "README.md"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "D"]
@@ -89,7 +89,7 @@ pydocstyle.convention = "google"
 "shoreguard/client/_proto/**" = ["D", "E", "F", "I", "UP"]
 
 [tool.pyright]
-pythonVersion = "3.12"
+pythonVersion = "3.14"
 typeCheckingMode = "standard"
 include = ["shoreguard"]
 exclude = ["shoreguard/client/_proto"]
