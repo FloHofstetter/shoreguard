@@ -184,7 +184,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.14.0",
+    version="0.15.0",
     lifespan=lifespan,
 )
 

@@ -46,8 +46,9 @@ These endpoints are **unauthenticated** and designed for container orchestration
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/gateway/list` | List all registered gateways |
-| `POST` | `/api/gateway/register` | Register a new gateway |
+| `GET` | `/api/gateway/list` | List all registered gateways (supports `?label=key:value` filter) |
+| `POST` | `/api/gateway/register` | Register a new gateway (accepts `description`, `labels`) |
+| `PATCH` | `/api/gateway/{name}` | Update gateway description and/or labels |
 | `DELETE` | `/api/gateway/{name}` | Remove a gateway |
 | `GET` | `/api/gateway/{name}/info` | Gateway details (status, endpoint, dates) |
 | `GET` | `/api/gateway/{name}/config` | Gateway configuration |
@@ -56,6 +57,35 @@ These endpoints are **unauthenticated** and designed for container orchestration
 | `POST` | `/api/gateway/{name}/stop` | Stop gateway (local mode only) |
 | `POST` | `/api/gateway/{name}/restart` | Restart gateway (local mode only) |
 | `GET` | `/api/gateways/{gw}/health` | Gateway health status |
+
+### Gateway metadata
+
+Gateways support an optional `description` (free text, max 1 000 chars) and
+`labels` (key-value dict, max 20 entries). Labels use Kubernetes-style keys
+(`[a-zA-Z0-9][a-zA-Z0-9._-]*`, max 63 chars) and free-text values (max 253
+chars).
+
+**Filtering by label:** append `?label=key:value` query parameters to
+`GET /api/gateway/list`. Multiple labels are AND-combined:
+
+```
+GET /api/gateway/list?label=env:prod&label=team:ml
+```
+
+**Updating metadata after registration:**
+
+```http
+PATCH /api/gateway/{name}
+Content-Type: application/json
+
+{
+  "description": "Production EU-West for ML team",
+  "labels": {"env": "prod", "team": "ml"}
+}
+```
+
+Only fields present in the request body are updated — omitted fields remain
+unchanged. Set a field to `null` to clear it.
 
 ## Sandboxes
 

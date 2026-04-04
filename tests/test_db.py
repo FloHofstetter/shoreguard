@@ -79,6 +79,8 @@ def test_gateways_table_columns():
         "client_cert",
         "client_key",
         "metadata_json",
+        "description",
+        "labels_json",
         "registered_at",
         "last_seen",
         "last_status",

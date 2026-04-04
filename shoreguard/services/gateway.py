@@ -13,7 +13,7 @@ import grpc
 from shoreguard.client import ShoreGuardClient
 from shoreguard.config import is_private_ip
 from shoreguard.exceptions import GatewayNotConnectedError, NotFoundError
-from shoreguard.services.registry import GatewayRegistry
+from shoreguard.services.registry import _UNSET, GatewayRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +296,8 @@ class GatewayService:
         client_cert: bytes | None = None,
         client_key: bytes | None = None,
         metadata: dict[str, Any] | None = None,
+        description: str | None = None,
+        labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Register a gateway and attempt initial connection.
 
@@ -308,6 +310,8 @@ class GatewayService:
             client_cert: Client certificate bytes for mTLS.
             client_key: Client private key bytes for mTLS.
             metadata: Optional metadata dict.
+            description: Optional free-text description.
+            labels: Optional key-value labels for filtering.
 
         Returns:
             dict[str, Any]: Gateway record with connection status.
@@ -322,6 +326,8 @@ class GatewayService:
             client_cert=client_cert,
             client_key=client_key,
             metadata=metadata,
+            description=description,
+            labels=labels,
         )
 
         # Attempt connection to validate
@@ -381,17 +387,51 @@ class GatewayService:
 
     # ── List & Info ───────────────────────────────────────────────────────
 
-    def list_all(self) -> list[dict[str, Any]]:
+    def update_gateway_metadata(
+        self,
+        name: str,
+        *,
+        description: str | None | object = _UNSET,
+        labels: dict[str, str] | None | object = _UNSET,
+    ) -> dict[str, Any]:
+        """Update description and/or labels for a gateway.
+
+        Args:
+            name: Gateway name.
+            description: New description, None to clear, or sentinel to skip.
+            labels: New labels dict, None to clear, or sentinel to skip.
+
+        Returns:
+            dict[str, Any]: Updated gateway record.
+
+        Raises:
+            NotFoundError: If the gateway does not exist.
+        """
+        kwargs: dict[str, Any] = {}
+        if description is not _UNSET:
+            kwargs["description"] = description
+        if labels is not _UNSET:
+            kwargs["labels"] = labels
+        result = self._registry.update_gateway_metadata(name, **kwargs)
+        if result is None:
+            raise NotFoundError(f"Gateway '{name}' not found")
+        return result
+
+    def list_all(self, *, labels_filter: dict[str, str] | None = None) -> list[dict[str, Any]]:
         """List all registered gateways with cached connection status.
 
         Uses the cached client state instead of live health probes to avoid
         N+1 blocking gRPC calls.  The background health monitor keeps
         ``last_status`` up-to-date.
 
+        Args:
+            labels_filter: If provided, only return gateways matching all
+                specified label key-value pairs.
+
         Returns:
             list[dict[str, Any]]: Gateway records with connection status.
         """
-        gateways = self._registry.list_all()
+        gateways = self._registry.list_all(labels_filter=labels_filter)
 
         for gw in gateways:
             with _clients_lock:

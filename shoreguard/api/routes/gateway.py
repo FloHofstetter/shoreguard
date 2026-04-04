@@ -11,7 +11,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 import grpc
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
 
 from shoreguard.api.auth import require_role
@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 _VALID_NAME_RE = VALID_GATEWAY_NAME_RE
 _MAX_CERT_BYTES = 65_536  # 64 KB — real certs are typically < 10 KB
 _MAX_METADATA_JSON_BYTES = 16_384  # 16 KB
+_MAX_DESCRIPTION_LEN = 1000
+_MAX_LABELS = 20
+_MAX_LABEL_VALUE_LEN = 253
+_LABEL_KEY_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$")
 
 router = APIRouter()
 
@@ -97,6 +101,8 @@ class RegisterGatewayRequest(BaseModel):
     client_cert: str | None = None
     client_key: str | None = None
     metadata: dict[str, Any] | None = None
+    description: str | None = None
+    labels: dict[str, str] | None = None
 
     @field_validator("scheme")
     @classmethod
@@ -163,17 +169,86 @@ class CreateGatewayRequest(BaseModel):
         return v
 
 
+class UpdateGatewayMetadataRequest(BaseModel):
+    """Request body for updating gateway description and/or labels.
+
+    Attributes:
+        description: New description (or null to clear).
+        labels: New key-value labels (or null to clear).
+    """
+
+    description: str | None = None
+    labels: dict[str, str] | None = None
+
+
+def _validate_description(description: str | None) -> None:
+    """Validate a gateway description.
+
+    Args:
+        description: Description string to validate.
+
+    Raises:
+        HTTPException: If the description exceeds the maximum length.
+    """
+    if description is not None and len(description) > _MAX_DESCRIPTION_LEN:
+        raise HTTPException(400, f"description exceeds maximum length of {_MAX_DESCRIPTION_LEN}")
+
+
+def _validate_labels(labels: dict[str, str] | None) -> None:
+    """Validate gateway labels.
+
+    Args:
+        labels: Label dict to validate.
+
+    Raises:
+        HTTPException: If any label key or value is invalid, or count exceeds limit.
+    """
+    if labels is None:
+        return
+    if len(labels) > _MAX_LABELS:
+        raise HTTPException(400, f"Too many labels (max {_MAX_LABELS})")
+    for key, value in labels.items():
+        if not _LABEL_KEY_RE.match(key):
+            raise HTTPException(
+                400,
+                f"Invalid label key '{key}': must match [a-zA-Z0-9][a-zA-Z0-9._-]* (max 63 chars)",
+            )
+        if len(value) > _MAX_LABEL_VALUE_LEN:
+            raise HTTPException(
+                400,
+                f"Label value for '{key}' exceeds maximum length of {_MAX_LABEL_VALUE_LEN}",
+            )
+
+
 # ─── Gateway queries ──────────────────────────────────────────────────────
 
 
 @router.get("/list")
-async def gateway_list() -> list[dict[str, Any]]:
+async def gateway_list(
+    label: list[str] | None = Query(None),
+) -> list[dict[str, Any]]:
     """List all registered gateways with metadata and status.
+
+    Args:
+        label: Optional label filters in ``key:value`` format. Multiple
+            labels are AND-combined.
 
     Returns:
         list[dict[str, Any]]: Gateway records.
+
+    Raises:
+        HTTPException: If a label filter has invalid format.
     """
-    return await asyncio.to_thread(_get_gateway_service().list_all)
+    labels_filter: dict[str, str] | None = None
+    if label:
+        labels_filter = {}
+        for item in label:
+            if ":" not in item or item.startswith(":"):
+                raise HTTPException(400, f"Invalid label filter '{item}': expected key:value")
+            key, value = item.split(":", 1)
+            labels_filter[key] = value
+    svc = _get_gateway_service()
+    return await asyncio.to_thread(svc.list_all, labels_filter=labels_filter)
 
 
 @router.get("/{name}/info")
@@ -245,6 +320,9 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
         if blob is not None and len(blob) > _MAX_CERT_BYTES:
             raise HTTPException(400, f"{label} exceeds maximum size of {_MAX_CERT_BYTES} bytes")
 
+    _validate_description(body.description)
+    _validate_labels(body.labels)
+
     if body.metadata is not None:
         import json as _json
 
@@ -269,6 +347,8 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
             client_cert=client_cert,
             client_key=client_key,
             metadata=body.metadata,
+            description=body.description,
+            labels=body.labels,
         )
     except ValueError as e:
         raise HTTPException(409, str(e)) from e
@@ -278,7 +358,12 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
         "gateway.register",
         "gateway",
         body.name,
-        detail={"endpoint": body.endpoint, "auth_mode": body.auth_mode},
+        detail={
+            "endpoint": body.endpoint,
+            "auth_mode": body.auth_mode,
+            "description": body.description,
+            "labels": body.labels,
+        },
     )
     return result
 
@@ -320,6 +405,59 @@ async def gateway_unregister(name: str, request: Request) -> dict[str, Any]:
     logger.info("Gateway unregistered (gateway=%s, actor=%s)", name, get_actor(request))
     await audit_log(request, "gateway.unregister", "gateway", name)
     return {"success": True, "name": name}
+
+
+@router.patch("/{name}", dependencies=[Depends(require_role("admin"))])
+async def gateway_update_metadata(
+    name: str, body: UpdateGatewayMetadataRequest, request: Request
+) -> dict[str, Any]:
+    """Update gateway description and/or labels.
+
+    Args:
+        name: Gateway name.
+        body: Fields to update.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Updated gateway record.
+
+    Raises:
+        HTTPException: If the gateway is not found or validation fails.
+    """
+    _validate_name_param(name)
+
+    provided = body.model_fields_set
+    if not provided:
+        raise HTTPException(400, "No fields to update")
+
+    if "description" in provided:
+        _validate_description(body.description)
+    if "labels" in provided:
+        _validate_labels(body.labels)
+
+    kwargs: dict[str, Any] = {}
+    if "description" in provided:
+        kwargs["description"] = body.description
+    if "labels" in provided:
+        kwargs["labels"] = body.labels
+
+    try:
+        result = await asyncio.to_thread(
+            _get_gateway_service().update_gateway_metadata,
+            name,
+            **kwargs,
+        )
+    except NotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+
+    await audit_log(
+        request,
+        "gateway.update_metadata",
+        "gateway",
+        name,
+        detail={"description": body.description, "labels": body.labels},
+    )
+    return result
 
 
 @router.post("/{name}/test-connection", dependencies=[Depends(require_role("admin"))])

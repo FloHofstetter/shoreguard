@@ -34,6 +34,8 @@ class Gateway(Base):
         client_cert: Optional client certificate bytes for mTLS.
         client_key: Optional client private key bytes for mTLS.
         metadata_json: Optional JSON-encoded metadata blob.
+        description: Optional free-text description of the gateway's purpose.
+        labels_json: Optional JSON-encoded key-value labels for filtering.
         registered_at: Timestamp when the gateway was registered.
         last_seen: Timestamp of the most recent health check.
         last_status: Last known health status string.
@@ -50,6 +52,8 @@ class Gateway(Base):
     client_cert: Mapped[bytes | None] = mapped_column(LargeBinary)
     client_key: Mapped[bytes | None] = mapped_column(LargeBinary)
     metadata_json: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
+    labels_json: Mapped[str | None] = mapped_column(Text)
     registered_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

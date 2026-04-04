@@ -90,7 +90,7 @@ Open [http://localhost:8888](http://localhost:8888) and complete the setup wizar
 
 ## Features
 
-- **[Gateway management](https://flohofstetter.github.io/shoreguard/guide/gateways/)** — register and monitor multiple remote OpenShell gateways with health probing
+- **[Gateway management](https://flohofstetter.github.io/shoreguard/guide/gateways/)** — register and monitor multiple remote OpenShell gateways with health probing, descriptions, and label-based filtering
 - **[Sandbox wizard](https://flohofstetter.github.io/shoreguard/guide/sandboxes/)** — step-by-step creation with agent types, images, and presets
 - **[Visual policy editor](https://flohofstetter.github.io/shoreguard/guide/policies/)** — network rules, filesystem paths, process settings — no YAML
 - **[Approval flow](https://flohofstetter.github.io/shoreguard/guide/approvals/)** — review agent-requested endpoint access in real-time
@@ -142,6 +142,7 @@ Full documentation is available at **[flohofstetter.github.io/shoreguard](https:
 - [x] Notification channels (Slack, Discord, Email)
 - [x] Prometheus `/metrics` endpoint
 - [x] Justfile for common development tasks
+- [x] Gateway descriptions and labels with API filtering
 
 **Planned:**
 

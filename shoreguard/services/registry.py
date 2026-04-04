@@ -14,6 +14,8 @@ from shoreguard.models import Gateway
 
 logger = logging.getLogger(__name__)
 
+_UNSET: object = object()
+
 
 class GatewayRegistry:
     """CRUD and health tracking for registered gateways.
@@ -36,6 +38,8 @@ class GatewayRegistry:
         client_cert: bytes | None = None,
         client_key: bytes | None = None,
         metadata: dict[str, Any] | None = None,
+        description: str | None = None,
+        labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Register a new gateway.
 
@@ -48,6 +52,8 @@ class GatewayRegistry:
             client_cert: Client certificate bytes for mTLS.
             client_key: Client private key bytes for mTLS.
             metadata: Optional metadata dict.
+            description: Optional free-text description.
+            labels: Optional key-value labels for filtering.
 
         Returns:
             dict[str, Any]: The registered gateway record.
@@ -65,6 +71,8 @@ class GatewayRegistry:
                 client_cert=client_cert,
                 client_key=client_key,
                 metadata_json=json.dumps(metadata) if metadata else None,
+                description=description,
+                labels_json=json.dumps(labels) if labels else None,
                 registered_at=datetime.now(UTC),
                 last_status="unknown",
             )
@@ -127,11 +135,15 @@ class GatewayRegistry:
             logger.error("Failed to get gateway '%s'", name, exc_info=True)
             raise
 
-    def list_all(self) -> list[dict[str, Any]]:
-        """Return all registered gateways.
+    def list_all(self, *, labels_filter: dict[str, str] | None = None) -> list[dict[str, Any]]:
+        """Return all registered gateways, optionally filtered by labels.
+
+        Args:
+            labels_filter: If provided, only return gateways whose labels
+                contain all specified key-value pairs.
 
         Returns:
-            list[dict[str, Any]]: All gateway records ordered by name.
+            list[dict[str, Any]]: Gateway records ordered by name.
 
         Raises:
             SQLAlchemyError: If the query fails.
@@ -139,10 +151,17 @@ class GatewayRegistry:
         try:
             with self._session_factory() as session:
                 gateways = session.query(Gateway).order_by(Gateway.name).all()
-                return [self._to_dict(gw) for gw in gateways]
+                result = [self._to_dict(gw) for gw in gateways]
         except SQLAlchemyError:
             logger.error("Failed to list gateways", exc_info=True)
             raise
+        if labels_filter:
+            result = [
+                gw
+                for gw in result
+                if all(gw.get("labels", {}).get(k) == v for k, v in labels_filter.items())
+            ]
+        return result
 
     def update_health(self, name: str, status: str, last_seen: datetime) -> None:
         """Update health status and last-seen timestamp.
@@ -195,6 +214,43 @@ class GatewayRegistry:
                 logger.error("Failed to update metadata for gateway '%s'", name, exc_info=True)
                 raise
 
+    def update_gateway_metadata(
+        self,
+        name: str,
+        *,
+        description: str | None | object = _UNSET,
+        labels: dict[str, str] | None | object = _UNSET,
+    ) -> dict[str, Any] | None:
+        """Update description and/or labels for a gateway.
+
+        Args:
+            name: Gateway name.
+            description: New description, None to clear, or _UNSET to skip.
+            labels: New labels dict, None to clear, or _UNSET to skip.
+
+        Returns:
+            dict[str, Any] | None: Updated gateway dict, or None if not found.
+
+        Raises:
+            SQLAlchemyError: If the commit fails.
+        """
+        with self._session_factory() as session:
+            gw = session.query(Gateway).filter(Gateway.name == name).first()
+            if gw is None:
+                return None
+            if description is not _UNSET:
+                gw.description = description  # type: ignore[assignment]
+            if labels is not _UNSET:
+                gw.labels_json = json.dumps(labels) if labels else None  # type: ignore[arg-type]
+            try:
+                session.commit()
+            except SQLAlchemyError:
+                session.rollback()
+                logger.error("Failed to update metadata for gateway '%s'", name, exc_info=True)
+                raise
+            logger.info("Updated metadata for gateway '%s'", name)
+            return self._to_dict(gw)
+
     def get_credentials(self, name: str) -> dict[str, str | bytes | None] | None:
         """Return raw cert bytes for a gateway (for connection logic only).
 
@@ -238,6 +294,11 @@ class GatewayRegistry:
         except json.JSONDecodeError:
             logger.warning("Corrupt metadata_json for gateway '%s'", gw.name)
             metadata = {}
+        try:
+            labels = json.loads(gw.labels_json) if gw.labels_json else {}
+        except json.JSONDecodeError:
+            logger.warning("Corrupt labels_json for gateway '%s'", gw.name)
+            labels = {}
         return {
             "name": gw.name,
             "endpoint": gw.endpoint,
@@ -247,6 +308,8 @@ class GatewayRegistry:
             "has_client_cert": gw.client_cert is not None,
             "has_client_key": gw.client_key is not None,
             "metadata": metadata,
+            "description": gw.description,
+            "labels": labels,
             "registered_at": gw.registered_at.isoformat() if gw.registered_at else None,
             "last_seen": gw.last_seen.isoformat() if gw.last_seen else None,
             "last_status": gw.last_status,

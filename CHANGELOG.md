@@ -5,6 +5,35 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] — 2026-04-04
+
+### Added
+
+- **Gateway description** — free-text `description` field on gateways for
+  documenting purpose and context (e.g. "Production EU-West for ML team").
+- **Gateway labels** — key-value labels (`env=prod`, `team=ml`, `region=eu-west`)
+  stored as `labels_json` column. Kubernetes-style key validation, max 20 labels
+  per gateway, values up to 253 chars.
+- **`PATCH /api/gateway/{name}`** — new endpoint to update gateway description
+  and/or labels after registration (admin only). Supports partial updates via
+  Pydantic `model_fields_set`.
+- **Label filtering** — `GET /api/gateway/list?label=env:prod&label=team:ml`
+  filters gateways by labels (AND semantics).
+- **Alembic migration 004** — adds `description` (Text) and `labels_json` (Text)
+  columns to the `gateways` table.
+
+### Changed
+
+- **Gateway list UI** — new description column (hidden on small screens) and
+  label badges displayed below gateway names.
+- **Gateway detail UI** — description and labels shown in details card with
+  inline edit form (admin only).
+- **Gateway registration modal** — new description textarea and labels textarea
+  (one `key=value` per line).
+- **`GatewayRegistry`** — `register()`, `_to_dict()`, and `list_all()` extended
+  for description, labels, and label filtering. New `update_gateway_metadata()`
+  method with sentinel-based partial updates.
+
 ## [0.14.0] — 2026-04-04
 
 ### Added

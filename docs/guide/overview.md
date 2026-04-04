@@ -12,7 +12,8 @@ area so you can get the most out of your deployment.
 
 Register and monitor multiple OpenShell gateways from a single dashboard.
 Health probing, connection testing, and gateway lifecycle management are all
-built in.
+built in. Organise your fleet with **descriptions** and **labels** (key=value
+pairs) and filter by label via the API.
 
 ### [Sandboxes](sandboxes.md)
 

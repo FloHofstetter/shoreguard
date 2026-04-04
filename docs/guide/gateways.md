@@ -15,7 +15,8 @@ need and manage them all from the ShoreGuard dashboard.
 
 Open the **Gateways** page and click **+ Register**. Fill in the gateway name,
 endpoint URL, authentication mode, and — if using mTLS — upload the
-certificates.
+certificates. You can also add an optional **description** and **labels**
+(key=value pairs) to help organise your fleet.
 
 ### Via the REST API
 
@@ -25,11 +26,13 @@ Content-Type: application/json
 
 {
   "name": "production-gw",
-  "endpoint": "grpc://gateway.example.com:443",
+  "endpoint": "10.0.0.5:8443",
   "auth_mode": "mtls",
   "ca_cert": "...",
   "client_cert": "...",
-  "client_key": "..."
+  "client_key": "...",
+  "description": "Production EU-West for ML team",
+  "labels": {"env": "prod", "team": "ml", "region": "eu-west"}
 }
 ```
 
@@ -40,6 +43,32 @@ Content-Type: application/json
 | `mtls` | Mutual TLS with CA, client certificate, and client key |
 | `api_key` | API key passed in gRPC metadata |
 | `none` | No authentication — development/testing only |
+
+## Description & labels
+
+Each gateway can have a free-text **description** (up to 1 000 characters) and
+up to **20 labels** (Kubernetes-style key=value pairs). Labels enable filtering
+in the API and help organise large fleets.
+
+- **Description** — visible in the gateway list and detail pages.
+- **Labels** — shown as badges, filterable via
+  `GET /api/gateway/list?label=env:prod&label=team:ml` (AND semantics).
+
+You can edit description and labels after registration from the gateway detail
+page (click **Edit**) or via the API:
+
+```http
+PATCH /api/gateway/{name}
+Content-Type: application/json
+
+{
+  "description": "Updated description",
+  "labels": {"env": "staging", "team": "infra"}
+}
+```
+
+Label keys must match `[a-zA-Z0-9][a-zA-Z0-9._-]*` (max 63 chars). Values
+are free-text strings up to 253 characters.
 
 ## Health monitoring
 

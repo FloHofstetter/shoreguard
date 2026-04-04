@@ -65,12 +65,12 @@ function gatewayList() {
 
 function gatewayRegister() {
     return {
-        form: { name: '', endpoint: '', scheme: 'https', auth_mode: 'mtls', gpu: false, caFile: null, certFile: null, keyFile: null },
+        form: { name: '', endpoint: '', scheme: 'https', auth_mode: 'mtls', gpu: false, caFile: null, certFile: null, keyFile: null, description: '', labelsText: '' },
         submitting: false,
         output: '',
 
         resetForm() {
-            this.form = { name: '', endpoint: '', scheme: 'https', auth_mode: 'mtls', gpu: false, caFile: null, certFile: null, keyFile: null };
+            this.form = { name: '', endpoint: '', scheme: 'https', auth_mode: 'mtls', gpu: false, caFile: null, certFile: null, keyFile: null, description: '', labelsText: '' };
             this.output = '';
             if (this.$refs.caInput) this.$refs.caInput.value = '';
             if (this.$refs.certInput) this.$refs.certInput.value = '';
@@ -92,6 +92,17 @@ function gatewayRegister() {
                     auth_mode: this.form.auth_mode,
                     metadata: { gpu: this.form.gpu },
                 };
+
+                const desc = this.form.description.trim();
+                if (desc) body.description = desc;
+
+                const labels = _parseLabelsText(this.form.labelsText);
+                if (labels === null) {
+                    this.output = '<div class="text-danger small">Invalid label format. Use key=value, one per line.</div>';
+                    this.submitting = false;
+                    return;
+                }
+                if (Object.keys(labels).length > 0) body.labels = labels;
 
                 if (this.form.caFile) body.ca_cert = await readFileAsBase64(this.form.caFile);
                 if (this.form.certFile) body.client_cert = await readFileAsBase64(this.form.certFile);
@@ -129,6 +140,10 @@ function gatewayDetail(name) {
         actionOutput: '',
         actionClass: '',
         acting: false,
+        editing: false,
+        editSaving: false,
+        editOutput: '',
+        editForm: { description: '', labelsText: '' },
 
         statusIcon(s) { return _gwStatusIcons[s || 'offline'] || 'circle'; },
         statusLabel(s) { return _gwStatusLabels[s || 'offline'] || (s || 'offline'); },
@@ -246,6 +261,49 @@ function gatewayDetail(name) {
             }
         },
 
+        startEdit() {
+            this.editing = true;
+            this.editOutput = '';
+            this.editForm.description = this.gw?.description || '';
+            this.editForm.labelsText = _labelsToText(this.gw?.labels);
+        },
+
+        cancelEdit() {
+            this.editing = false;
+            this.editOutput = '';
+        },
+
+        async saveEdit() {
+            this.editSaving = true;
+            this.editOutput = '';
+            const body = {};
+            const desc = this.editForm.description.trim();
+            body.description = desc || null;
+
+            const labels = _parseLabelsText(this.editForm.labelsText);
+            if (labels === null) {
+                this.editOutput = '<div class="text-danger small">Invalid label format. Use key=value, one per line.</div>';
+                this.editSaving = false;
+                return;
+            }
+            body.labels = Object.keys(labels).length > 0 ? labels : null;
+
+            try {
+                await apiFetch(`${API_GLOBAL}/gateway/${this.name}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                this.editing = false;
+                showToast('Gateway metadata updated.', 'success');
+                this.load();
+            } catch (e) {
+                this.editOutput = `<div class="text-danger small">${escapeHtml(e.message)}</div>`;
+            } finally {
+                this.editSaving = false;
+            }
+        },
+
         async unregister() {
             const confirmed = await showConfirm(
                 `Unregister gateway "${name}"? This removes it from Shoreguard but does not affect the running gateway.`,
@@ -342,6 +400,29 @@ function inferenceConfig() {
 }
 
 // ─── Shared Helpers ────────────────────────────────────────────────────────
+
+/**
+ * Parse a multiline "key=value" text into a labels dict.
+ * Returns null if any line is malformed.
+ */
+function _parseLabelsText(text) {
+    const labels = {};
+    for (const line of text.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const eq = trimmed.indexOf('=');
+        if (eq < 1) return null;
+        labels[trimmed.slice(0, eq)] = trimmed.slice(eq + 1);
+    }
+    return labels;
+}
+
+/**
+ * Convert a labels dict to multiline "key=value" text.
+ */
+function _labelsToText(labels) {
+    return Object.entries(labels || {}).map(([k, v]) => `${k}=${v}`).join('\n');
+}
 
 function readFileAsBase64(file) {
     return new Promise((resolve, reject) => {
