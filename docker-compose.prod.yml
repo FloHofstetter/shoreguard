@@ -1,3 +1,12 @@
+# Production compose — PostgreSQL + Caddy reverse proxy with automatic TLS
+#
+# Usage:
+#   cp .env.example .env   # edit values!
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Caddy obtains Let's Encrypt certificates automatically for the domain
+# set in SHOREGUARD_DOMAIN. Make sure DNS points to this server and ports
+# 80/443 are open.
 services:
   db:
     image: postgres:17-alpine
@@ -14,20 +23,19 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - shoreguard-net
+      - internal
     deploy:
       resources:
         limits:
           memory: 256M
 
   shoreguard:
+    image: ghcr.io/flohofstetter/shoreguard:${SHOREGUARD_VERSION:-latest}
     build:
       context: .
       args:
-        SHOREGUARD_VERSION: ${SHOREGUARD_VERSION:-dev}
+        SHOREGUARD_VERSION: ${SHOREGUARD_VERSION:-latest}
     restart: unless-stopped
-    ports:
-      - "${SHOREGUARD_PORT:-8888}:8888"
     environment:
       SHOREGUARD_DATABASE_URL: "postgresql+psycopg://shoreguard:${POSTGRES_PASSWORD}@db:5432/shoreguard"
       SHOREGUARD_SECRET_KEY: ${SHOREGUARD_SECRET_KEY:?set SHOREGUARD_SECRET_KEY}
@@ -38,14 +46,34 @@ services:
       db:
         condition: service_healthy
     networks:
-      - shoreguard-net
+      - internal
     deploy:
       resources:
         limits:
           memory: 512M
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SHOREGUARD_DOMAIN: ${SHOREGUARD_DOMAIN:?set SHOREGUARD_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - shoreguard
+    networks:
+      - internal
+
 networks:
-  shoreguard-net:
+  internal:
 
 volumes:
   pgdata:
+  caddy-data:
+  caddy-config:

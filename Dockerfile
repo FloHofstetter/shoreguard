@@ -12,7 +12,9 @@ RUN pip install --no-cache-dir hatchling \
 # ── Stage 2: Runtime ────────────────────────────────────────────────────────
 FROM python:3.12-slim
 
-ARG SHOREGUARD_VERSION=0.13.0
+# Pass version at build time: --build-arg SHOREGUARD_VERSION=0.16.0
+# CI sets this from the git tag; local builds default to "dev".
+ARG SHOREGUARD_VERSION=dev
 LABEL org.opencontainers.image.title="ShoreGuard" \
       org.opencontainers.image.description="Open-source control plane for NVIDIA OpenShell" \
       org.opencontainers.image.version="${SHOREGUARD_VERSION}" \

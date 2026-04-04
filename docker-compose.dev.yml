@@ -1,5 +1,8 @@
 # Development compose — SQLite, hot-reload, no auth
 # Usage: docker compose -f docker-compose.dev.yml up --build
+#
+# Source code is bind-mounted into the container so that uvicorn --reload
+# picks up changes immediately without rebuilding the image.
 services:
   shoreguard:
     build: .
@@ -10,8 +13,23 @@ services:
       SHOREGUARD_LOCAL_MODE: "true"
       SHOREGUARD_NO_AUTH: "true"
       SHOREGUARD_LOG_LEVEL: debug
+      PYTHONPATH: /app
     volumes:
+      - ./shoreguard:/app/shoreguard:ro
+      - ./frontend:/app/frontend:ro
       - shoreguard-data:/home/shoreguard/.config/shoreguard
+    entrypoint:
+      - python
+      - -m
+      - uvicorn
+      - shoreguard.api.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8888"
+      - --reload
+      - --reload-dir
+      - /app/shoreguard
 
 volumes:
   shoreguard-data:
