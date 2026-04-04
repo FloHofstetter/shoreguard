@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "shoreguard"
-version = "0.16.1"
+version = "0.16.2"
 description = "Open source control plane for NVIDIA OpenShell"
 license = "Apache-2.0"
 readme = "README.md"
@@ -38,6 +38,7 @@ dependencies = [
     "pwdlib[bcrypt]>=0.2",
     "prometheus_client>=0.21",
     "aiosmtplib>=3.0",
+    "httpx>=0.28",
 ]
 
 [dependency-groups]
