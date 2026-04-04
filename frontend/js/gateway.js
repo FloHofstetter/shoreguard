@@ -65,16 +65,37 @@ function gatewayList() {
 
 function gatewayRegister() {
     return {
-        form: { name: '', endpoint: '', scheme: 'https', auth_mode: 'mtls', gpu: false, caFile: null, certFile: null, keyFile: null, description: '', labelsText: '' },
+        form: { name: '', endpoint: '', scheme: 'https', auth_mode: 'mtls', gpu: false, caFile: null, certFile: null, keyFile: null, description: '' },
+        labelRows: [],
+        newLabelKey: '',
+        newLabelVal: '',
         submitting: false,
         output: '',
 
         resetForm() {
-            this.form = { name: '', endpoint: '', scheme: 'https', auth_mode: 'mtls', gpu: false, caFile: null, certFile: null, keyFile: null, description: '', labelsText: '' };
+            this.form = { name: '', endpoint: '', scheme: 'https', auth_mode: 'mtls', gpu: false, caFile: null, certFile: null, keyFile: null, description: '' };
+            this.labelRows = [];
+            this.newLabelKey = '';
+            this.newLabelVal = '';
             this.output = '';
             if (this.$refs.caInput) this.$refs.caInput.value = '';
             if (this.$refs.certInput) this.$refs.certInput.value = '';
             if (this.$refs.keyInput) this.$refs.keyInput.value = '';
+        },
+
+        addLabel() {
+            const key = this.newLabelKey.trim();
+            const val = this.newLabelVal.trim();
+            if (!key) return;
+            if (this.labelRows.some(r => r.key === key)) return;
+            if (this.labelRows.length >= 20) return;
+            this.labelRows.push({ key, val });
+            this.newLabelKey = '';
+            this.newLabelVal = '';
+        },
+
+        removeLabel(key) {
+            this.labelRows = this.labelRows.filter(r => r.key !== key);
         },
 
         async submit() {
@@ -96,13 +117,11 @@ function gatewayRegister() {
                 const desc = this.form.description.trim();
                 if (desc) body.description = desc;
 
-                const labels = _parseLabelsText(this.form.labelsText);
-                if (labels === null) {
-                    this.output = '<div class="text-danger small">Invalid label format. Use key=value, one per line.</div>';
-                    this.submitting = false;
-                    return;
+                if (this.labelRows.length > 0) {
+                    const labels = {};
+                    for (const r of this.labelRows) labels[r.key] = r.val;
+                    body.labels = labels;
                 }
-                if (Object.keys(labels).length > 0) body.labels = labels;
 
                 if (this.form.caFile) body.ca_cert = await readFileAsBase64(this.form.caFile);
                 if (this.form.certFile) body.client_cert = await readFileAsBase64(this.form.certFile);
@@ -143,7 +162,10 @@ function gatewayDetail(name) {
         editing: false,
         editSaving: false,
         editOutput: '',
-        editForm: { description: '', labelsText: '' },
+        editForm: { description: '' },
+        editLabels: [],
+        newEditKey: '',
+        newEditVal: '',
 
         statusIcon(s) { return _gwStatusIcons[s || 'offline'] || 'circle'; },
         statusLabel(s) { return _gwStatusLabels[s || 'offline'] || (s || 'offline'); },
@@ -265,12 +287,29 @@ function gatewayDetail(name) {
             this.editing = true;
             this.editOutput = '';
             this.editForm.description = this.gw?.description || '';
-            this.editForm.labelsText = _labelsToText(this.gw?.labels);
+            this.editLabels = Object.entries(this.gw?.labels || {}).map(([k, v]) => ({ key: k, val: v }));
+            this.newEditKey = '';
+            this.newEditVal = '';
         },
 
         cancelEdit() {
             this.editing = false;
             this.editOutput = '';
+        },
+
+        addEditLabel() {
+            const key = this.newEditKey.trim();
+            const val = this.newEditVal.trim();
+            if (!key) return;
+            if (this.editLabels.some(r => r.key === key)) return;
+            if (this.editLabels.length >= 20) return;
+            this.editLabels.push({ key, val });
+            this.newEditKey = '';
+            this.newEditVal = '';
+        },
+
+        removeEditLabel(key) {
+            this.editLabels = this.editLabels.filter(r => r.key !== key);
         },
 
         async saveEdit() {
@@ -280,13 +319,13 @@ function gatewayDetail(name) {
             const desc = this.editForm.description.trim();
             body.description = desc || null;
 
-            const labels = _parseLabelsText(this.editForm.labelsText);
-            if (labels === null) {
-                this.editOutput = '<div class="text-danger small">Invalid label format. Use key=value, one per line.</div>';
-                this.editSaving = false;
-                return;
+            if (this.editLabels.length > 0) {
+                const labels = {};
+                for (const r of this.editLabels) labels[r.key] = r.val;
+                body.labels = labels;
+            } else {
+                body.labels = null;
             }
-            body.labels = Object.keys(labels).length > 0 ? labels : null;
 
             try {
                 await apiFetch(`${API_GLOBAL}/gateway/${this.name}`, {
@@ -400,29 +439,6 @@ function inferenceConfig() {
 }
 
 // ─── Shared Helpers ────────────────────────────────────────────────────────
-
-/**
- * Parse a multiline "key=value" text into a labels dict.
- * Returns null if any line is malformed.
- */
-function _parseLabelsText(text) {
-    const labels = {};
-    for (const line of text.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        const eq = trimmed.indexOf('=');
-        if (eq < 1) return null;
-        labels[trimmed.slice(0, eq)] = trimmed.slice(eq + 1);
-    }
-    return labels;
-}
-
-/**
- * Convert a labels dict to multiline "key=value" text.
- */
-function _labelsToText(labels) {
-    return Object.entries(labels || {}).map(([k, v]) => `${k}=${v}`).join('\n');
-}
 
 function readFileAsBase64(file) {
     return new Promise((resolve, reject) => {

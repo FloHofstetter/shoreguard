@@ -76,15 +76,39 @@
             <div class="card-body">
                 <h6 class="text-muted mb-3"><i class="bi bi-pencil-square me-2"></i>Edit Gateway Metadata</h6>
                 <div class="mb-3">
-                    <label class="form-label">Description</label>
-                    <textarea class="form-control form-control-sm" x-model="editForm.description"
-                              placeholder="Production EU-West for ML team" rows="2" maxlength="1000"></textarea>
+                    <label class="form-label small text-muted">Description</label>
+                    <input type="text" class="form-control form-control-sm" x-model="editForm.description"
+                           placeholder="e.g. Production EU-West for ML team" maxlength="1000">
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Labels</label>
-                    <textarea class="form-control form-control-sm font-monospace" x-model="editForm.labelsText"
-                              placeholder="env=prod&#10;team=ml&#10;region=eu-west" rows="3"></textarea>
-                    <div class="form-text">One label per line: key=value (max 20 labels)</div>
+                    <label class="form-label small text-muted">Labels</label>
+                    <!-- Existing labels as removable chips -->
+                    <div x-show="editLabels.length > 0" class="mb-2 d-flex flex-wrap gap-1">
+                        <template x-for="lbl in editLabels" :key="lbl.key">
+                            <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+                                <span class="font-monospace" x-text="lbl.key"></span>
+                                <span class="text-muted">=</span>
+                                <span x-text="lbl.val"></span>
+                                <button type="button" class="btn-close btn-close-sm ms-1" style="font-size:.55rem"
+                                        @click="removeEditLabel(lbl.key)"></button>
+                            </span>
+                        </template>
+                    </div>
+                    <!-- Add label input row -->
+                    <div x-show="editLabels.length < 20" class="input-group input-group-sm">
+                        <input type="text" class="form-control font-monospace" x-model="newEditKey"
+                               placeholder="key" @keydown.enter.prevent="addEditLabel()">
+                        <span class="input-group-text">=</span>
+                        <input type="text" class="form-control" x-model="newEditVal"
+                               placeholder="value" @keydown.enter.prevent="addEditLabel()">
+                        <button class="btn btn-outline-success" type="button" @click="addEditLabel()"
+                                :disabled="!newEditKey.trim()">
+                            <i class="bi bi-plus"></i>
+                        </button>
+                    </div>
+                    <div x-show="editLabels.length >= 20" class="form-text text-warning">
+                        Maximum of 20 labels reached.
+                    </div>
                 </div>
                 <div class="d-flex gap-2">
                     <button class="btn btn-primary btn-sm" @click="saveEdit()" :disabled="editSaving">

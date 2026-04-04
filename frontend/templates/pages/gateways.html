@@ -156,14 +156,35 @@
                     </div>
                     <div class="mt-3">
                         <label class="form-label">Description</label>
-                        <textarea class="form-control form-control-sm" x-model="form.description"
-                                  placeholder="Production EU-West for ML team" rows="2" maxlength="1000"></textarea>
+                        <input type="text" class="form-control form-control-sm" x-model="form.description"
+                               placeholder="e.g. Production EU-West for ML team" maxlength="1000">
                     </div>
                     <div class="mt-3">
                         <label class="form-label">Labels</label>
-                        <textarea class="form-control form-control-sm font-monospace" x-model="form.labelsText"
-                                  placeholder="env=prod&#10;team=ml&#10;region=eu-west" rows="3"></textarea>
-                        <div class="form-text">One label per line: key=value (max 20 labels)</div>
+                        <!-- Existing labels as removable chips -->
+                        <div x-show="labelRows.length > 0" class="mb-2 d-flex flex-wrap gap-1">
+                            <template x-for="lbl in labelRows" :key="lbl.key">
+                                <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+                                    <span class="font-monospace" x-text="lbl.key"></span>
+                                    <span class="text-muted">=</span>
+                                    <span x-text="lbl.val"></span>
+                                    <button type="button" class="btn-close btn-close-sm ms-1" style="font-size:.55rem"
+                                            @click="removeLabel(lbl.key)"></button>
+                                </span>
+                            </template>
+                        </div>
+                        <!-- Add label input row -->
+                        <div x-show="labelRows.length < 20" class="input-group input-group-sm">
+                            <input type="text" class="form-control font-monospace" x-model="newLabelKey"
+                                   placeholder="key" @keydown.enter.prevent="addLabel()">
+                            <span class="input-group-text">=</span>
+                            <input type="text" class="form-control" x-model="newLabelVal"
+                                   placeholder="value" @keydown.enter.prevent="addLabel()">
+                            <button class="btn btn-outline-success" type="button" @click="addLabel()"
+                                    :disabled="!newLabelKey.trim()">
+                                <i class="bi bi-plus"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="mt-2">
                         <div x-show="output" x-html="output"></div>
