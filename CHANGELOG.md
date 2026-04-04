@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   image, and endpoint fields.
 - **Cleanup loop** — webhook delivery records older than 7 days are purged
   alongside operations and audit entries.
+- **Documentation** — API reference updated with sandbox templates, delivery
+  log, rotate endpoint, and new event types. Service principals guide expanded
+  with key rotation, expiry, and prefix sections. Sandbox guide includes
+  templates section with wizard integration.
 
 ## [0.15.0] — 2026-04-04
 
