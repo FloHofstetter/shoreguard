@@ -8,13 +8,49 @@ restrictions — all managed through the gateway's policy engine.
 
 ![Wizard](../screenshots/wizard.png)
 
+## Sandbox templates
+
+ShoreGuard ships with pre-configured templates that set up a complete sandbox
+environment in one click: container image, GPU allocation, providers,
+environment variables, and policy presets.
+
+| Template | Category | Description |
+|----------|----------|-------------|
+| `data-science` | ML | GPU-enabled with Ollama, PyPI, HuggingFace, Docker |
+| `web-dev` | Dev | Web development with npm, Docker, Slack |
+| `secure-coding` | Security | Minimal sandbox with PyPI and Docker only |
+
+### Using templates in the wizard
+
+Template cards appear at the top of step 1. Click a template to pre-fill all
+configuration and jump directly to the summary (step 4). Use the
+**Customize** button to go back to step 2 and adjust any settings before
+launching.
+
+### Via the REST API
+
+List available templates:
+
+```http
+GET /api/sandbox-templates
+```
+
+Get a specific template:
+
+```http
+GET /api/sandbox-templates/data-science
+```
+
+The response includes the full `sandbox` configuration (image, gpu, providers,
+environment, presets) that you can use as input for sandbox creation.
+
 ## Creating a sandbox
 
 ### Via the wizard
 
 The sandbox wizard walks you through creation step by step:
 
-1. **Agent type** — select the kind of agent (e.g., coding agent, research agent).
+1. **Agent type** — select a template, community image, or custom configuration.
 2. **Image** — choose a community sandbox image or specify a custom one.
 3. **Providers** — configure credentials for services the agent needs (GitHub, Slack, etc.).
 4. **Presets** — apply bundled security policy templates with one click.

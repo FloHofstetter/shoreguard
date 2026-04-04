@@ -24,6 +24,13 @@ shoreguard create-service-principal my-ci-bot --role viewer
 The API key is displayed **once** at creation time. Copy it immediately and
 store it in a secrets manager — ShoreGuard cannot show it again.
 
+## Key format and prefix
+
+New API keys use the format `sg_<random>` (e.g. `sg_dGhpcyBpcyBh...`). The
+first 12 characters are stored as `key_prefix` for identification in the UI
+and API responses — you can tell which key is which without exposing the full
+secret. Legacy keys created before v0.16.0 continue to work.
+
 ## How keys are stored
 
 API keys are **SHA-256 hashed** before being written to the database. The
@@ -68,6 +75,51 @@ For WebSocket connections, pass the key as a query parameter:
 ```
 ws://localhost:8888/ws/approvals?token=sg_live_abc123...
 ```
+
+## Key rotation
+
+Rotate a key without deleting and recreating the service principal. The old
+key is invalidated immediately, and a new key is returned once.
+
+```http
+POST /api/auth/service-principals/{id}/rotate
+Authorization: Bearer <admin-token>
+```
+
+Response:
+
+```json
+{
+  "key": "sg_new_key_here...",
+  "id": 3,
+  "name": "my-ci-bot",
+  "role": "viewer",
+  "key_prefix": "sg_new_key_he"
+}
+```
+
+In the UI, click the rotate button (↻) next to the service principal. A
+confirmation dialog appears, then the new key is shown in a copy-once modal.
+
+## Key expiry
+
+Service principals can optionally expire. Set `expires_at` during creation
+(ISO-8601 timestamp) or leave it empty for a non-expiring key.
+
+```http
+POST /api/auth/service-principals
+Content-Type: application/json
+
+{
+  "name": "temp-ci-key",
+  "role": "operator",
+  "expires_at": "2026-06-30T23:59:59Z"
+}
+```
+
+Expired keys are rejected at authentication time — the request receives a
+`401 Unauthorized` response. The Users page shows expiry badges: green
+(>30 days), yellow (<30 days), and red (expired).
 
 ## Deleting a service principal
 

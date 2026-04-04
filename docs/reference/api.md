@@ -30,8 +30,9 @@ ShoreGuard supports two authentication methods:
 | `POST` | `/api/auth/users` | Create or invite a user |
 | `DELETE` | `/api/auth/users` | Delete a user |
 | `GET` | `/api/auth/service-principals` | List service principals |
-| `POST` | `/api/auth/service-principals` | Create a service principal |
-| `DELETE` | `/api/auth/service-principals` | Delete a service principal |
+| `POST` | `/api/auth/service-principals` | Create a service principal (optional `expires_at`) |
+| `DELETE` | `/api/auth/service-principals/{id}` | Delete a service principal |
+| `POST` | `/api/auth/service-principals/{id}/rotate` | Rotate API key (generates new, invalidates old) |
 
 ## Health probes
 
@@ -86,6 +87,19 @@ Content-Type: application/json
 
 Only fields present in the request body are updated — omitted fields remain
 unchanged. Set a field to `null` to clear it.
+
+## Sandbox templates
+
+Pre-configured sandbox bundles (image, GPU, providers, presets, environment).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/sandbox-templates` | List available templates |
+| `GET` | `/api/sandbox-templates/{name}` | Get full template configuration |
+
+Built-in templates: `data-science`, `web-dev`, `secure-coding`. Templates are
+YAML files shipped with ShoreGuard — see the
+[sandbox guide](../guide/sandboxes.md#sandbox-templates) for details.
 
 ## Sandboxes
 
@@ -169,6 +183,7 @@ signed `POST` request whenever a subscribed event occurs.
 | `PUT` | `/api/webhooks/{id}` | Update a webhook (URL, events, active state, channel) |
 | `DELETE` | `/api/webhooks/{id}` | Delete a webhook |
 | `POST` | `/api/webhooks/{id}/test` | Send a test event |
+| `GET` | `/api/webhooks/{id}/deliveries` | List delivery attempts (newest first, `?limit=50`) |
 
 ### Channel types
 
@@ -194,11 +209,21 @@ For email channels, `extra_config` must include SMTP settings:
 }
 ```
 
+### Delivery log and retry
+
+Every delivery attempt is recorded in the `webhook_deliveries` table. Query
+with `GET /api/webhooks/{id}/deliveries`. HTTP 5xx and network errors trigger
+up to 3 automatic retries with exponential backoff (5 s → 30 s → 120 s).
+Client errors (4xx) fail immediately without retry. Delivery records older
+than 7 days are purged automatically.
+
 ### Event types
 
 Subscribe to specific events or use `*` for all:
 
 - `sandbox.created`, `sandbox.deleted`
+- `gateway.registered`, `gateway.unregistered`
+- `inference.updated`, `policy.updated`
 - `approval.pending`, `approval.approved`, `approval.rejected`
 - `webhook.test`
 

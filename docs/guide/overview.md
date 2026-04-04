@@ -18,8 +18,10 @@ pairs) and filter by label via the API.
 ### [Sandboxes](sandboxes.md)
 
 Create secure, isolated environments for AI agents using the step-by-step
-wizard or the REST API. Manage the full sandbox lifecycle — from creation
-through execution to teardown.
+wizard or the REST API. Pre-configured **sandbox templates** (data-science,
+web-dev, secure-coding) bundle image, GPU, providers, and policy presets for
+one-click creation. Manage the full sandbox lifecycle — from creation through
+execution to teardown.
 
 ### [Security Policies](policies.md)
 
@@ -39,15 +41,25 @@ WebSocket. Filter by level, source, or timestamp.
 
 ### Webhooks & Notifications
 
-Subscribe external services to ShoreGuard events (sandbox created, approval
-decisions, policy changes). Webhooks support multiple channel types:
+Subscribe external services to ShoreGuard events (sandbox lifecycle, gateway
+registration, approval decisions, policy and inference changes). Webhooks
+support multiple channel types:
 
 - **Generic** — HMAC-SHA256 signed HTTP POST for custom integrations
 - **Slack** — Block Kit formatted messages with color coding
 - **Discord** — Embed messages with color-coded fields
 - **Email** — SMTP delivery for ops team alerts
 
-See the [API reference](../reference/api.md#webhooks) for endpoint details.
+Every delivery is tracked in a **delivery log** with automatic **retry**
+(3 attempts with exponential backoff) for transient failures. See the
+[API reference](../reference/api.md#webhooks) for endpoint details.
+
+### API Key Management
+
+**Service principals** provide programmatic access for CI/CD pipelines and
+Terraform. Keys use an `sg_` prefix for identification and support optional
+**expiry** dates and **rotation** without downtime. See the
+[service principals guide](../admin/service-principals.md) for details.
 
 ### Prometheus Metrics
 
