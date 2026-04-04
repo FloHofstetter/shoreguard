@@ -126,6 +126,41 @@ All sandbox endpoints are scoped to a gateway via the `{gw}` path parameter.
 | `GET` | `/api/audit` | Query audit log (filter by actor, resource, action) |
 | `GET` | `/api/audit/export` | Export audit log as CSV or JSON |
 
+## Webhooks
+
+Admin-only endpoints for managing event subscriptions. Webhooks receive a
+signed `POST` request whenever a subscribed event occurs.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/webhooks` | List all webhooks |
+| `POST` | `/api/webhooks` | Create a webhook (returns secret) |
+| `GET` | `/api/webhooks/{id}` | Get a webhook by ID |
+| `PUT` | `/api/webhooks/{id}` | Update a webhook (URL, events, active state) |
+| `DELETE` | `/api/webhooks/{id}` | Delete a webhook |
+| `POST` | `/api/webhooks/{id}/test` | Send a test event |
+
+### Event types
+
+Subscribe to specific events or use `*` for all:
+
+- `sandbox.created`, `sandbox.deleted`
+- `approval.approved`, `approval.denied`
+- `policy.updated`
+- `webhook.test`
+
+### Signature verification
+
+Each delivery includes an `X-Shoreguard-Signature` header with an
+HMAC-SHA256 signature:
+
+```
+X-Shoreguard-Signature: sha256=<hex-digest>
+```
+
+Verify by computing `HMAC-SHA256(secret, request_body)` and comparing
+the hex digest.
+
 ## Operations
 
 | Method | Path | Description |

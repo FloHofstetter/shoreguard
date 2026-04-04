@@ -12,6 +12,14 @@ RUN pip install --no-cache-dir hatchling \
 # ── Stage 2: Runtime ────────────────────────────────────────────────────────
 FROM python:3.12-slim
 
+ARG SHOREGUARD_VERSION=0.13.0
+LABEL org.opencontainers.image.title="ShoreGuard" \
+      org.opencontainers.image.description="Open-source control plane for NVIDIA OpenShell" \
+      org.opencontainers.image.version="${SHOREGUARD_VERSION}" \
+      org.opencontainers.image.url="https://github.com/FloHofstetter/shoreguard" \
+      org.opencontainers.image.source="https://github.com/FloHofstetter/shoreguard" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
 RUN groupadd -g 1000 shoreguard \
     && useradd -u 1000 -g shoreguard -m shoreguard
 

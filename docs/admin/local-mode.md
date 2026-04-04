@@ -58,3 +58,36 @@ running on the same machine.
 > Local mode is designed for development and testing. For production
 > deployments, run gateways on dedicated hosts and register them as remote
 > gateways instead.
+
+## Developer workflow
+
+For day-to-day development, combine local mode with `--no-auth` to skip login:
+
+```bash
+shoreguard --local --no-auth
+```
+
+Or equivalently:
+
+```bash
+export SHOREGUARD_LOCAL_MODE=1
+export SHOREGUARD_NO_AUTH=1
+shoreguard
+```
+
+This gives you:
+
+- **SQLite** database (no PostgreSQL needed) at `~/.config/shoreguard/shoreguard.db`
+- **Hot-reload** on source changes (default behaviour)
+- **No login** required — all requests are treated as admin
+- **Gateway lifecycle** — create/start/stop/destroy containers from the UI
+
+### Resetting state
+
+To start fresh, delete the SQLite database:
+
+```bash
+rm ~/.config/shoreguard/shoreguard.db
+```
+
+ShoreGuard recreates it on next startup with a fresh schema.

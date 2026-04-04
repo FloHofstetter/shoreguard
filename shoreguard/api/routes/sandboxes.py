@@ -18,6 +18,7 @@ from shoreguard.exceptions import friendly_grpc_error
 from shoreguard.services.audit import audit_log
 from shoreguard.services.operations import operation_store
 from shoreguard.services.sandbox import SandboxService
+from shoreguard.services.webhooks import fire_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,10 @@ async def create_sandbox(
                     gateway=_audit_gw,
                     client_ip=_audit_ip,
                 )
+            await fire_webhook(
+                "sandbox.created",
+                {"sandbox": sandbox_name, "actor": _audit_actor, "gateway": _audit_gw},
+            )
         except asyncio.CancelledError:
             logger.warning("Sandbox creation cancelled for '%s'", sandbox_name)
             operation_store.fail(op.id, "Operation was cancelled")
@@ -248,8 +253,13 @@ async def delete_sandbox(
     """
     deleted = await asyncio.to_thread(svc.delete, name)
     if deleted:
-        logger.info("Sandbox deleted (sandbox=%s, actor=%s)", name, get_actor(request))
+        actor = get_actor(request)
+        logger.info("Sandbox deleted (sandbox=%s, actor=%s)", name, actor)
         await audit_log(request, "sandbox.delete", "sandbox", name, gateway=_current_gateway.get())
+        await fire_webhook(
+            "sandbox.deleted",
+            {"sandbox": name, "actor": actor, "gateway": _current_gateway.get()},
+        )
     return {"deleted": deleted}
 
 

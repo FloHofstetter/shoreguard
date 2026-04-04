@@ -135,15 +135,18 @@ def main(
     _LOG_FORMAT = "%(asctime)s %(levelname)-5s %(name)-20s  %(message)s"
     _LOG_DATE = "%H:%M:%S"
 
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper(), logging.INFO),
-        format=_LOG_FORMAT,
-        datefmt=_LOG_DATE,
-    )
-    # Shorten our own logger names: "shoreguard.api.main" → "api.main"
-    for name in logging.root.manager.loggerDict:
-        if name.startswith("shoreguard."):
-            logging.getLogger(name).name = name.removeprefix("shoreguard.")
+    class _ShortNameFormatter(logging.Formatter):
+        """Strip the ``shoreguard.`` prefix from logger names at render time."""
+
+        def format(self, record: logging.LogRecord) -> str:
+            if record.name.startswith("shoreguard."):
+                record.name = record.name.removeprefix("shoreguard.")
+            return super().format(record)
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(_ShortNameFormatter(_LOG_FORMAT, datefmt=_LOG_DATE))
+    logging.root.addHandler(handler)
+    logging.root.setLevel(getattr(logging, log_level.upper(), logging.INFO))
 
     # Propagate CLI flags to env so the lifespan picks them up
     if no_auth:

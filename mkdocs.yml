@@ -103,6 +103,7 @@ nav:
       - Service Principals: admin/service-principals.md
       - Deployment: admin/deployment.md
       - Local Mode: admin/local-mode.md
+      - Migration Runbook: admin/migration-runbook.md
   - Reference:
       - CLI: reference/cli.md
       - REST API: reference/api.md

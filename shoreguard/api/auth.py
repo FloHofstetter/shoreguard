@@ -123,8 +123,6 @@ def init_auth(session_factory: SessionMaker) -> None:
     _session_factory = session_factory
     _hmac_secret = _load_or_create_secret_key()
     _no_auth = os.environ.get("SHOREGUARD_NO_AUTH", "").lower() in ("1", "true", "yes")
-    if _no_auth:
-        logger.warning("Authentication DISABLED via SHOREGUARD_NO_AUTH — do not use in production")
 
 
 def reset() -> None:

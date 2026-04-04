@@ -190,3 +190,29 @@ class AuditEntry(Base):
     )
     detail: Mapped[str | None] = mapped_column(Text)
     client_ip: Mapped[str | None] = mapped_column(String(45))
+
+
+class Webhook(Base):
+    """A webhook endpoint for event notifications.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        url: Target URL for POST requests (max 2048 chars).
+        secret: HMAC-SHA256 signing secret.
+        event_types: JSON-encoded list of subscribed event types.
+        is_active: Whether the webhook is enabled.
+        created_by: Email or service principal name of the creator.
+        created_at: Timestamp when the webhook was created.
+    """
+
+    __tablename__ = "webhooks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    secret: Mapped[str] = mapped_column(String(128), nullable=False)
+    event_types: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]", server_default="[]"
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by: Mapped[str] = mapped_column(String(254), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)

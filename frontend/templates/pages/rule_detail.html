@@ -53,6 +53,7 @@
                                 <th>TLS</th>
                                 <th>Enforcement</th>
                                 <th>Access</th>
+                                <th>L7 Rules</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -75,6 +76,28 @@
                                     <td>
                                         <span x-show="ep.access" class="badge text-bg-success" x-text="ep.access"></span>
                                         <span x-show="!ep.access" class="text-muted">&mdash;</span>
+                                    </td>
+                                    <td>
+                                        <template x-if="(ep.rules || []).length > 0">
+                                            <div>
+                                                <template x-for="(r, ri) in (ep.rules || [])" :key="ri">
+                                                    <div class="mb-1">
+                                                        <span class="badge endpoint-badge me-1"
+                                                              x-text="(r.allow?.method || '*') + ' ' + (r.allow?.path || '/*')"></span>
+                                                        <code x-show="r.allow?.command" class="small ms-1" x-text="r.allow?.command"></code>
+                                                        <template x-if="r.allow?.query && Object.keys(r.allow.query).length > 0">
+                                                            <span class="ms-1">
+                                                                <template x-for="(matcher, param) in (r.allow?.query || {})" :key="param">
+                                                                    <span class="badge text-bg-light border small me-1"
+                                                                          x-text="param + ':' + (matcher.glob ? 'glob(' + matcher.glob + ')' : 'any(' + (matcher.any || []).join(',') + ')')"></span>
+                                                                </template>
+                                                            </span>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                        <span x-show="!(ep.rules || []).length" class="text-muted">&mdash;</span>
                                     </td>
                                 </tr>
                             </template>
@@ -187,6 +210,81 @@
                                         <option value="full">Full</option>
                                     </select>
                                 </div>
+                            </div>
+                            <!-- L7 Rules per endpoint -->
+                            <div class="mt-2 border-top pt-2">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="small text-muted fw-semibold">L7 Rules</span>
+                                    <button class="btn btn-outline-success btn-sm py-0 px-1" type="button" @click="addL7Rule(ep)">
+                                        <i class="bi bi-plus"></i> Rule
+                                    </button>
+                                </div>
+                                <template x-for="rule in ep.rules" :key="rule.id">
+                                    <div class="card bg-body-tertiary mb-1">
+                                        <div class="card-body py-1 px-2">
+                                            <div class="d-flex justify-content-end">
+                                                <button class="btn btn-outline-danger btn-sm py-0 px-1" type="button" @click="removeL7Rule(ep, rule.id)" title="Remove rule">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </div>
+                                            <div class="row g-2 mb-1">
+                                                <div class="col-md-3">
+                                                    <label class="form-label small text-muted mb-0">Method</label>
+                                                    <select class="form-select form-select-sm" x-model="rule.method">
+                                                        <option value="">* (any)</option>
+                                                        <option value="GET">GET</option>
+                                                        <option value="POST">POST</option>
+                                                        <option value="PUT">PUT</option>
+                                                        <option value="DELETE">DELETE</option>
+                                                        <option value="PATCH">PATCH</option>
+                                                        <option value="HEAD">HEAD</option>
+                                                        <option value="OPTIONS">OPTIONS</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-5">
+                                                    <label class="form-label small text-muted mb-0">Path</label>
+                                                    <input type="text" class="form-control form-control-sm" placeholder="/api/v1/*" x-model="rule.path">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label small text-muted mb-0">Command</label>
+                                                    <input type="text" class="form-control form-control-sm" placeholder="e.g. SELECT" x-model="rule.command">
+                                                </div>
+                                            </div>
+                                            <!-- Query Matchers -->
+                                            <div class="mt-1">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <span class="small text-muted">Query Matchers</span>
+                                                    <button class="btn btn-outline-secondary btn-sm py-0 px-1" type="button" @click="addQueryMatcher(rule)">
+                                                        <i class="bi bi-plus"></i> Matcher
+                                                    </button>
+                                                </div>
+                                                <template x-for="(qm, qi) in rule.query" :key="qi">
+                                                    <div class="row g-1 mb-1 align-items-end">
+                                                        <div class="col-3">
+                                                            <input type="text" class="form-control form-control-sm" placeholder="param" x-model="qm.param">
+                                                        </div>
+                                                        <div class="col-3">
+                                                            <select class="form-select form-select-sm" x-model="qm.type">
+                                                                <option value="glob">glob</option>
+                                                                <option value="any">any</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="col-5">
+                                                            <input type="text" class="form-control form-control-sm"
+                                                                   :placeholder="qm.type === 'glob' ? 'sk-*' : 'json,xml'"
+                                                                   x-model="qm.value">
+                                                        </div>
+                                                        <div class="col-1">
+                                                            <button class="btn btn-outline-danger btn-sm py-0 px-1" type="button" @click="removeQueryMatcher(rule, qi)">
+                                                                <i class="bi bi-x"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
                             </div>
                         </div>
                     </div>

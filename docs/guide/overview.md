@@ -35,3 +35,10 @@ approve, reject, or edit individual rules.
 
 Stream logs from sandboxes, gateways, and agent activity in real time via
 WebSocket. Filter by level, source, or timestamp.
+
+### Webhooks
+
+Subscribe external services to ShoreGuard events (sandbox created, approval
+decisions, policy changes). Each delivery is signed with HMAC-SHA256 so
+receivers can verify authenticity. See the
+[API reference](../reference/api.md#webhooks) for endpoint details.

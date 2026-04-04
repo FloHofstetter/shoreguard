@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: shoreguard
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
@@ -12,18 +13,36 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - shoreguard-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   shoreguard:
     build: .
+    restart: unless-stopped
     ports:
-      - "8888:8888"
+      - "${SHOREGUARD_PORT:-8888}:8888"
     environment:
       SHOREGUARD_DATABASE_URL: "postgresql+psycopg://shoreguard:${POSTGRES_PASSWORD}@db:5432/shoreguard"
       SHOREGUARD_SECRET_KEY: ${SHOREGUARD_SECRET_KEY:?set SHOREGUARD_SECRET_KEY}
       SHOREGUARD_ADMIN_PASSWORD: ${SHOREGUARD_ADMIN_PASSWORD:-}
+      SHOREGUARD_LOG_LEVEL: ${SHOREGUARD_LOG_LEVEL:-info}
+      SHOREGUARD_ALLOW_REGISTRATION: ${SHOREGUARD_ALLOW_REGISTRATION:-false}
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - shoreguard-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+networks:
+  shoreguard-net:
 
 volumes:
   pgdata:

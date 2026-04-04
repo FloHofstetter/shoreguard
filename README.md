@@ -14,6 +14,16 @@ Open-source control plane for [NVIDIA OpenShell](https://github.com/NVIDIA/OpenS
 
 Think of it like **Rancher for Kubernetes, but for OpenShell gateways**.
 
+## Why ShoreGuard?
+
+OpenShell gives you secure sandboxes — ShoreGuard gives you control over them:
+
+- **Visibility** — see every gateway, sandbox, and policy in one dashboard instead of juggling CLI sessions
+- **Guardrails** — visual policy editor with revision history, so security changes are auditable, not ad-hoc
+- **Approval flow** — agents request network access, humans approve or deny in real-time
+- **Multi-gateway** — manage dev, staging, and production gateways from a single pane
+- **Automation** — REST API and Terraform provider for CI/CD pipelines and GitOps workflows
+
 | Channel | Use case |
 |---------|----------|
 | **Web UI** | Ops teams, dashboards, approval flows |
@@ -57,12 +67,26 @@ graph TB
 
 ## Quick start
 
+### pip (local development)
+
 ```bash
 pip install shoreguard
-shoreguard
+shoreguard --local --no-auth
 ```
 
-Open [http://localhost:8888](http://localhost:8888) and complete the setup wizard. See the **[full documentation](https://flohofstetter.github.io/shoreguard/)** for details.
+Open [http://localhost:8888](http://localhost:8888). The `--local` flag enables Docker-based gateway management, `--no-auth` skips login for development.
+
+### Docker Compose (production)
+
+```bash
+git clone https://github.com/FloHofstetter/shoreguard.git
+cd shoreguard
+cp .env.example .env
+# Edit .env — set POSTGRES_PASSWORD and SHOREGUARD_SECRET_KEY
+docker compose up -d
+```
+
+Open [http://localhost:8888](http://localhost:8888) and complete the setup wizard. See the **[deployment guide](https://flohofstetter.github.io/shoreguard/admin/deployment/)** for TLS, reverse proxy, and production hardening.
 
 ## Features
 
@@ -74,6 +98,16 @@ Open [http://localhost:8888](http://localhost:8888) and complete the setup wizar
 - **[Docker deployment](https://flohofstetter.github.io/shoreguard/admin/deployment/)** — Dockerfile + docker-compose with PostgreSQL and health probes
 - **[Audit log](https://flohofstetter.github.io/shoreguard/guide/monitoring/)** — persistent, filterable, exportable audit trail
 - **[Terraform provider](https://flohofstetter.github.io/shoreguard/reference/terraform/)** — declarative infrastructure-as-code
+- **[Webhooks](https://flohofstetter.github.io/shoreguard/reference/api/)** — event subscriptions with HMAC-SHA256 signing
+
+<details>
+<summary><strong>Screenshots</strong></summary>
+
+| Policy Editor | Network Policies | Gateway Detail |
+|:---:|:---:|:---:|
+| ![Policy Editor](docs/screenshots/policy.png) | ![Network Policies](docs/screenshots/network-policies.png) | ![Gateway Detail](docs/screenshots/gateway-detail.png) |
+
+</details>
 
 ## Documentation
 
@@ -103,9 +137,11 @@ Full documentation is available at **[flohofstetter.github.io/shoreguard](https:
 - [x] Stateless gateway routing (URL-based, no server-side selection)
 - [x] Inference timeout configuration (OpenShell v0.0.22)
 - [x] L7 query parameter matchers for network policies
+- [x] Webhooks with HMAC-SHA256 signing
 
 **Planned:**
 
+- [ ] Justfile for common development tasks
 - [ ] DigitalOcean Marketplace integration
 - [ ] Paperclip adapter for agent orchestration
 - [ ] Multi-region gateway federation
@@ -116,10 +152,20 @@ Full documentation is available at **[flohofstetter.github.io/shoreguard](https:
 git clone https://github.com/FloHofstetter/shoreguard.git
 cd shoreguard
 uv sync --group dev
-uv run shoreguard
+uv run shoreguard --local --no-auth
 ```
 
-Run checks before pushing:
+This starts ShoreGuard with SQLite, hot-reload, no login, and local gateway management. Create a gateway from the UI or use the `openshell` CLI.
+
+Run checks with [just](https://github.com/casey/just):
+
+```bash
+just check    # lint + format + typecheck + tests
+just dev      # start dev server
+just test     # run unit tests
+```
+
+Or manually:
 
 ```bash
 uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest -m 'not integration'

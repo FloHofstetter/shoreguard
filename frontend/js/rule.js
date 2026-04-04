@@ -18,6 +18,7 @@ function ruleDetailPage(sandboxName, ruleKey) {
         editBinaries: '',
         endpoints: [],
         epCounter: 0,
+        l7Counter: 0,
 
         async init() {
             if (this.isNew) {
@@ -62,6 +63,7 @@ function ruleDetailPage(sandboxName, ruleKey) {
                 tls: ep.tls || '',
                 enforcement: ep.enforcement || '',
                 access: ep.access || '',
+                rules: (ep.rules || []).map(r => this._mapL7Rule(r)),
             }));
             this.editing = true;
         },
@@ -91,7 +93,46 @@ function ruleDetailPage(sandboxName, ruleKey) {
                 tls: '',
                 enforcement: '',
                 access: '',
+                rules: [],
             };
+        },
+
+        _mapL7Rule(r) {
+            const allow = r.allow || {};
+            const query = Object.entries(allow.query || {}).map(([param, matcher]) => ({
+                param,
+                type: matcher.glob ? 'glob' : 'any',
+                value: matcher.glob || (matcher.any || []).join(', '),
+            }));
+            return {
+                id: this.l7Counter++,
+                method: allow.method || '',
+                path: allow.path || '',
+                command: allow.command || '',
+                query,
+            };
+        },
+
+        addL7Rule(ep) {
+            ep.rules.push({
+                id: this.l7Counter++,
+                method: '',
+                path: '',
+                command: '',
+                query: [],
+            });
+        },
+
+        removeL7Rule(ep, ruleId) {
+            ep.rules = ep.rules.filter(r => r.id !== ruleId);
+        },
+
+        addQueryMatcher(rule) {
+            rule.query.push({ param: '', type: 'glob', value: '' });
+        },
+
+        removeQueryMatcher(rule, index) {
+            rule.query.splice(index, 1);
         },
 
         async save() {
@@ -105,6 +146,25 @@ function ruleDetailPage(sandboxName, ruleKey) {
                     if (ep.tls) o.tls = ep.tls;
                     if (ep.enforcement) o.enforcement = ep.enforcement;
                     if (ep.access) o.access = ep.access;
+                    const rules = (ep.rules || [])
+                        .filter(r => r.method || r.path || r.command)
+                        .map(r => {
+                            const allow = {};
+                            if (r.method) allow.method = r.method;
+                            if (r.path) allow.path = r.path;
+                            if (r.command) allow.command = r.command;
+                            const query = {};
+                            (r.query || []).filter(qm => qm.param.trim()).forEach(qm => {
+                                if (qm.type === 'glob') {
+                                    query[qm.param.trim()] = { glob: qm.value.trim() };
+                                } else {
+                                    query[qm.param.trim()] = { any: qm.value.split(',').map(v => v.trim()).filter(Boolean) };
+                                }
+                            });
+                            if (Object.keys(query).length) allow.query = query;
+                            return { allow };
+                        });
+                    if (rules.length) o.rules = rules;
                     return o;
                 });
             const binaries = this.editBinaries.trim()

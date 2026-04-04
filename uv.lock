@@ -1453,7 +1453,7 @@ wheels = [
 
 [[package]]
 name = "shoreguard"
-version = "0.12.0"
+version = "0.13.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },

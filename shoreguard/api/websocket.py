@@ -8,6 +8,7 @@ import grpc
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from shoreguard.exceptions import GatewayNotConnectedError, friendly_grpc_error
+from shoreguard.services.webhooks import fire_webhook
 
 from .auth import require_auth_ws
 from .deps import _VALID_GW_RE, _current_gateway, get_client
@@ -126,6 +127,17 @@ async def sandbox_events(
                 if event is None:
                     break
                 await websocket.send_json(event)
+                if event.get("type") == "draft_policy_update":
+                    asyncio.create_task(
+                        fire_webhook(
+                            "approval.pending",
+                            {
+                                "sandbox": sandbox_name,
+                                "gateway": gw,
+                                **event.get("data", {}),
+                            },
+                        )
+                    )
         finally:
             cancel_event.set()
             producer_task.cancel()

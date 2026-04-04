@@ -5,6 +5,48 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] — 2026-04-04
+
+### Added
+
+- **Docker deployment polish** — OCI image labels in `Dockerfile`, restart
+  policies, dedicated `shoreguard-net` bridge network, configurable port and
+  log level, and resource limits in `docker-compose.yml`.
+- **`.env.example`** — documented all environment variables with required/optional
+  separation for quick Docker Compose setup.
+- **`docker-compose.dev.yml`** — standalone development compose with SQLite,
+  hot-reload, no-auth, and local gateway mode. No PostgreSQL required.
+- **Justfile** — task runner with `dev`, `test`, `lint`, `format`, `check`,
+  `docker-build`, `docker-up`, `docker-down`, `docs`, and `sync` targets.
+- **Webhooks** — event subscriptions with HMAC-SHA256 signing, Alembic
+  migration 002, `WebhookService` with async delivery, and admin API
+  (`POST/GET/DELETE /api/webhooks`).
+
+### Changed
+
+- **README overhaul** — new "Why ShoreGuard?" section, dual quick-start paths
+  (pip + Docker Compose), collapsible screenshot gallery, expanded development
+  section with Justfile references, updated roadmap.
+- **Deployment docs expanded** — step-by-step Docker setup, full environment
+  variable reference table, backup/restore procedures, network isolation
+  explanation, upgrade process, and troubleshooting section.
+- **Contributing docs expanded** — "Clone to first sandbox" walkthrough,
+  Justfile task runner section, corrected clone URL and port references.
+- **Local mode docs expanded** — developer workflow section with `--no-auth`
+  combination, SQLite defaults, and state reset instructions.
+- **mkdocs nav** — added migration runbook to admin guide navigation.
+- Version bumped to `0.13.0`.
+
+### Fixed
+
+- **Duplicate auth log** — removed redundant "Authentication DISABLED" warning
+  from `init_auth()` that appeared unformatted when running with `--reload`.
+- **Logger name formatting** — replaced one-shot name rewriting with a custom
+  `Formatter` that strips the `shoreguard.` prefix at render time, so
+  late-created loggers (e.g. `shoreguard.db`) are also shortened correctly.
+- **Contributing docs** — corrected clone URL (`your-org` → `FloHofstetter`)
+  and port reference (`8000` → `8888`).
+
 ## [0.12.0] — 2026-04-03
 
 ### Added

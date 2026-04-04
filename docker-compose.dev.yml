@@ -1,0 +1,17 @@
+# Development compose — SQLite, hot-reload, no auth
+# Usage: docker compose -f docker-compose.dev.yml up --build
+services:
+  shoreguard:
+    build: .
+    ports:
+      - "8888:8888"
+    environment:
+      SHOREGUARD_RELOAD: "true"
+      SHOREGUARD_LOCAL_MODE: "true"
+      SHOREGUARD_NO_AUTH: "true"
+      SHOREGUARD_LOG_LEVEL: debug
+    volumes:
+      - shoreguard-data:/home/shoreguard/.config/shoreguard
+
+volumes:
+  shoreguard-data:

@@ -14,6 +14,7 @@ from shoreguard.api.deps import _current_gateway, get_actor, get_client
 from shoreguard.client import ShoreGuardClient
 from shoreguard.services.approvals import ApprovalService
 from shoreguard.services.audit import audit_log
+from shoreguard.services.webhooks import fire_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +130,10 @@ async def approve_chunk(
         gateway=_current_gateway.get(),
         detail={"sandbox": name},
     )
+    await fire_webhook(
+        "approval.approved",
+        {"sandbox": name, "chunk_id": chunk_id, "actor": actor, "gateway": _current_gateway.get()},
+    )
     return result
 
 
@@ -166,6 +171,16 @@ async def reject_chunk(
         gateway=_current_gateway.get(),
         detail={"sandbox": name, "reason": reason},
     )
+    await fire_webhook(
+        "approval.rejected",
+        {
+            "sandbox": name,
+            "chunk_id": chunk_id,
+            "reason": reason,
+            "actor": actor,
+            "gateway": _current_gateway.get(),
+        },
+    )
     return {"status": "rejected"}
 
 
@@ -200,6 +215,10 @@ async def approve_all(
         name,
         gateway=_current_gateway.get(),
         detail={"include_security_flagged": include_flagged},
+    )
+    await fire_webhook(
+        "approval.approved",
+        {"sandbox": name, "bulk": True, "actor": actor, "gateway": _current_gateway.get()},
     )
     return result
 
