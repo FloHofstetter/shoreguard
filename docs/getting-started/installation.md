@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Python 3.12** or newer
+- **Python 3.14** or newer
 - A running [NVIDIA OpenShell](https://docs.nvidia.com/openshell/) gateway
   (or use `--local` mode for local Docker-based gateways)
 

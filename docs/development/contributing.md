@@ -35,7 +35,7 @@ This walkthrough takes you from a fresh clone to creating your first sandbox.
 
 ### Prerequisites
 
-- Python 3.12+, [uv](https://docs.astral.sh/uv/)
+- Python 3.14+, [uv](https://docs.astral.sh/uv/)
 - Docker Engine running (`docker info` should succeed)
 - [openshell](https://github.com/NVIDIA/OpenShell) CLI on PATH
 
@@ -113,7 +113,7 @@ All of the following checks must pass on every pull request:
 - **Lint** -- ruff check
 - **Format** -- ruff format
 - **Typecheck** -- pyright
-- **Tests** -- pytest on Python 3.12 and 3.13
+- **Tests** -- pytest on Python 3.14
 
 ## Code style
 
