@@ -98,127 +98,102 @@
 
         <!-- Gateway details card -->
         <div class="card sg-card-themed mb-4">
-            <div class="card-body p-0">
-                <table class="table table-sm table-borderless mb-0 align-middle">
-                    <tbody>
-                        <!-- ── Metadata section (always editable for admins) ── -->
-                        <tr>
-                            <td colspan="2" class="ps-3 pt-3 pb-1">
-                                <span class="text-muted small fw-semibold text-uppercase">Metadata</span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="text-muted ps-3" style="width:140px"><i class="bi bi-card-text me-2"></i>Description</td>
-                            <td>
-                                <template x-if="$store.auth.hasRole('admin')">
-                                    <input type="text" class="form-control form-control-sm" x-model="metaForm.description"
-                                           placeholder="e.g. Production EU-West for ML team" maxlength="1000">
-                                </template>
-                                <template x-if="!$store.auth.hasRole('admin')">
-                                    <span>
-                                        <span x-show="gw?.description" x-text="gw?.description"></span>
-                                        <span x-show="!gw?.description" class="text-muted fst-italic">No description</span>
+            <div class="card-body">
+                <!-- ── Metadata ── -->
+                <fieldset class="sg-fieldset mb-3">
+                    <legend class="sg-legend">Metadata</legend>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small text-muted"><i class="bi bi-card-text me-1"></i>Description</label>
+                            <template x-if="$store.auth.hasRole('admin')">
+                                <input type="text" class="form-control form-control-sm" x-model="metaForm.description"
+                                       placeholder="e.g. Production EU-West for ML team" maxlength="1000">
+                            </template>
+                            <template x-if="!$store.auth.hasRole('admin')">
+                                <div class="form-control-plaintext small" x-text="gw?.description || '—'"></div>
+                            </template>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small text-muted"><i class="bi bi-tags me-1"></i>Labels</label>
+                            <div x-show="metaLabels.length > 0" class="mb-2 d-flex flex-wrap gap-1">
+                                <template x-for="lbl in metaLabels" :key="lbl.key">
+                                    <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+                                        <span class="font-monospace" x-text="lbl.key"></span>
+                                        <span class="text-muted">=</span>
+                                        <span x-text="lbl.val"></span>
+                                        <button x-show="$store.auth.hasRole('admin')" type="button"
+                                                class="btn-close btn-close-sm ms-1" style="font-size:.55rem"
+                                                @click="removeMetaLabel(lbl.key)"></button>
                                     </span>
                                 </template>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="text-muted ps-3 align-top pt-2"><i class="bi bi-tags me-2"></i>Labels</td>
-                            <td class="py-2">
-                                <div x-show="metaLabels.length > 0" class="mb-2 d-flex flex-wrap gap-1">
-                                    <template x-for="lbl in metaLabels" :key="lbl.key">
-                                        <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
-                                            <span class="font-monospace" x-text="lbl.key"></span>
-                                            <span class="text-muted">=</span>
-                                            <span x-text="lbl.val"></span>
-                                            <button x-show="$store.auth.hasRole('admin')" type="button"
-                                                    class="btn-close btn-close-sm ms-1" style="font-size:.55rem"
-                                                    @click="removeMetaLabel(lbl.key)"></button>
-                                        </span>
-                                    </template>
-                                </div>
-                                <div x-show="$store.auth.hasRole('admin') && metaLabels.length < 20"
-                                     class="input-group input-group-sm" style="max-width:400px">
-                                    <input type="text" class="form-control font-monospace" x-model="newMetaKey"
-                                           placeholder="key" @keydown.enter.prevent="addMetaLabel()">
-                                    <span class="input-group-text">=</span>
-                                    <input type="text" class="form-control" x-model="newMetaVal"
-                                           placeholder="value" @keydown.enter.prevent="addMetaLabel()">
-                                    <button class="btn btn-outline-success" type="button" @click="addMetaLabel()"
-                                            :disabled="!newMetaKey.trim()">
-                                        <i class="bi bi-plus"></i>
-                                    </button>
-                                </div>
-                                <span x-show="!$store.auth.hasRole('admin') && metaLabels.length === 0"
-                                      class="text-muted fst-italic">No labels</span>
-                            </td>
-                        </tr>
-                        <tr x-show="$store.auth.hasRole('admin')" x-cloak>
-                            <td></td>
-                            <td class="pb-2">
-                                <button class="btn btn-primary btn-sm" @click="saveMeta()" :disabled="metaSaving">
-                                    <template x-if="metaSaving"><span class="spinner-border spinner-border-sm me-1"></span></template>
-                                    <i x-show="!metaSaving" class="bi bi-check-lg me-1"></i>Save
+                            </div>
+                            <div x-show="$store.auth.hasRole('admin') && metaLabels.length < 20"
+                                 class="input-group input-group-sm" style="max-width:400px">
+                                <input type="text" class="form-control font-monospace" x-model="newMetaKey"
+                                       placeholder="key" @keydown.enter.prevent="addMetaLabel()">
+                                <span class="input-group-text">=</span>
+                                <input type="text" class="form-control" x-model="newMetaVal"
+                                       placeholder="value" @keydown.enter.prevent="addMetaLabel()">
+                                <button class="btn btn-outline-success" type="button" @click="addMetaLabel()"
+                                        :disabled="!newMetaKey.trim()">
+                                    <i class="bi bi-plus"></i>
                                 </button>
-                                <span x-show="metaOutput" class="ms-2 small" x-html="metaOutput"></span>
-                            </td>
-                        </tr>
+                            </div>
+                            <span x-show="!$store.auth.hasRole('admin') && metaLabels.length === 0"
+                                  class="text-muted fst-italic small">No labels</span>
+                        </div>
+                    </div>
+                </fieldset>
 
-                        <!-- ── Connection section ── -->
-                        <tr>
-                            <td colspan="2" class="ps-3 pt-3 pb-1">
-                                <span class="text-muted small fw-semibold text-uppercase">Connection</span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="text-muted ps-3" style="width:140px"><i class="bi bi-globe me-2"></i>URL</td>
-                            <td>
-                                <span class="endpoint-badge px-2 py-1" x-text="(gw?.scheme || 'https') + '://' + (gw?.endpoint || '\u2014')"></span>
-                            </td>
-                        </tr>
-                        <template x-if="gw?.auth_mode">
+                <!-- ── Connection ── -->
+                <fieldset class="sg-fieldset mb-3">
+                    <legend class="sg-legend">Connection</legend>
+                    <table class="table table-sm table-borderless mb-0 align-middle">
+                        <tbody>
                             <tr>
-                                <td class="text-muted ps-3"><i class="bi bi-shield-check me-2"></i>Auth</td>
-                                <td x-text="gw.auth_mode"></td>
-                            </tr>
-                        </template>
-                        <template x-if="gw?.registered_at">
-                            <tr>
-                                <td class="text-muted ps-3"><i class="bi bi-calendar-plus me-2"></i>Registered</td>
+                                <td class="text-muted" style="width:120px"><i class="bi bi-globe me-2"></i>URL</td>
                                 <td>
-                                    <span x-text="formatTimeAgo(gw.registered_at)"></span>
-                                    <span class="text-muted small ms-1" x-text="'(' + new Date(gw.registered_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) + ')'"></span>
+                                    <span class="endpoint-badge px-2 py-1" x-text="(gw?.scheme || 'https') + '://' + (gw?.endpoint || '\u2014')"></span>
                                 </td>
                             </tr>
-                        </template>
-                        <template x-if="gw?.last_seen">
-                            <tr>
-                                <td class="text-muted ps-3"><i class="bi bi-clock-history me-2"></i>Last Seen</td>
-                                <td>
-                                    <span x-text="formatTimeAgo(gw.last_seen)"></span>
-                                    <span class="text-muted small ms-1" x-text="'(' + new Date(gw.last_seen).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) + ')'"></span>
-                                </td>
-                            </tr>
-                        </template>
-                        <!-- ── Inference section (only when connected) ── -->
-                        <template x-if="gw?.connected">
-                            <tr x-data="inferenceConfig()" x-effect="if (gw?.connected && !loaded) load()">
-                                <td colspan="2" class="ps-3 pt-3 pb-1">
-                                    <span class="text-muted small fw-semibold text-uppercase">Inference</span>
-                                </td>
-                            </tr>
-                        </template>
-                    </tbody>
-                </table>
-                <!-- Inference form (outside table for proper layout) -->
-                <div x-show="gw?.connected" x-cloak class="px-3 pb-3"
-                     x-data="inferenceConfig()" x-effect="if (gw?.connected && !loaded) load()">
+                            <template x-if="gw?.auth_mode">
+                                <tr>
+                                    <td class="text-muted"><i class="bi bi-shield-check me-2"></i>Auth</td>
+                                    <td x-text="gw.auth_mode"></td>
+                                </tr>
+                            </template>
+                            <template x-if="gw?.registered_at">
+                                <tr>
+                                    <td class="text-muted"><i class="bi bi-calendar-plus me-2"></i>Registered</td>
+                                    <td>
+                                        <span x-text="formatTimeAgo(gw.registered_at)"></span>
+                                        <span class="text-muted small ms-1" x-text="'(' + new Date(gw.registered_at).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) + ')'"></span>
+                                    </td>
+                                </tr>
+                            </template>
+                            <template x-if="gw?.last_seen">
+                                <tr>
+                                    <td class="text-muted"><i class="bi bi-clock-history me-2"></i>Last Seen</td>
+                                    <td>
+                                        <span x-text="formatTimeAgo(gw.last_seen)"></span>
+                                        <span class="text-muted small ms-1" x-text="'(' + new Date(gw.last_seen).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }) + ')'"></span>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </fieldset>
+
+                <!-- ── Inference (only when connected) ── -->
+                <fieldset x-show="gw?.connected" x-cloak class="sg-fieldset mb-3"
+                          x-data="inferenceConfig()" x-effect="if (gw?.connected && !loaded) load()">
+                    <legend class="sg-legend">Inference</legend>
                     <div x-show="loading" class="text-muted small">
                         <div class="spinner-border spinner-border-sm me-2"></div>Loading provider config...
                     </div>
-                    <div x-show="!loading && gw?.connected" x-cloak>
-                        <form @submit.prevent="save()" class="row g-3 align-items-end">
-                            <div class="col-md-3">
+                    <div x-show="!loading" x-cloak>
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-4">
                                 <label class="form-label small text-muted">Provider</label>
                                 <select class="form-select form-select-sm" x-model="provider" @change="onProviderChange()">
                                     <option value="">— Select —</option>
@@ -232,17 +207,12 @@
                                 <input type="text" class="form-control form-control-sm" x-model="modelId"
                                        :placeholder="placeholder">
                             </div>
-                            <div class="col-md-2">
+                            <div class="col-md-4">
                                 <label class="form-label small text-muted">Timeout (s)</label>
                                 <input type="number" class="form-control form-control-sm"
                                        x-model.number="timeoutSecs" placeholder="0" min="0">
                             </div>
-                            <div class="col-md-3 d-flex gap-2">
-                                <button type="submit" class="btn btn-primary btn-sm" :disabled="saving">
-                                    <i class="bi bi-check-lg me-1"></i>Save
-                                </button>
-                            </div>
-                        </form>
+                        </div>
                         <div x-show="provider" class="mt-2 small text-muted">
                             <i class="bi bi-info-circle me-1"></i>
                             API key must be set as environment variable
@@ -255,8 +225,16 @@
                             <i class="bi bi-exclamation-triangle me-1"></i>
                             No inference provider configured. Sandboxes need a provider to run agents.
                         </div>
-                        <div x-show="saveOutput" class="mt-2" x-html="saveOutput"></div>
                     </div>
+                </fieldset>
+
+                <!-- ── Single Save button ── -->
+                <div x-show="$store.auth.hasRole('admin')" x-cloak class="d-flex align-items-center gap-2 pt-2">
+                    <button class="btn btn-primary btn-sm" @click="saveAll()" :disabled="saving">
+                        <template x-if="saving"><span class="spinner-border spinner-border-sm me-1"></span></template>
+                        <i x-show="!saving" class="bi bi-check-lg me-1"></i>Save
+                    </button>
+                    <span x-show="saveOutput" class="small" x-html="saveOutput"></span>
                 </div>
             </div>
         </div>

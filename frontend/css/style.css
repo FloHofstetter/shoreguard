@@ -289,6 +289,26 @@ body {
     padding-top: calc(var(--topbar-height) + 40px + 1.5rem);
 }
 
+/* ─── Fieldsets with legend ──────────────────────────────────────────── */
+
+.sg-fieldset {
+    border: 1px solid var(--sg-border);
+    border-radius: 2px;
+    padding: 0.75rem 1rem;
+}
+
+.sg-legend {
+    float: none;
+    width: auto;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--sg-text-muted);
+    padding: 0 0.4rem;
+    margin-bottom: 0.5rem;
+}
+
 /* ─── Shared badges ──────────────────────────────────────────────────── */
 
 .endpoint-badge {

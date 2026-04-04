@@ -163,8 +163,8 @@ function gatewayDetail(name) {
         metaLabels: [],
         newMetaKey: '',
         newMetaVal: '',
-        metaSaving: false,
-        metaOutput: '',
+        saving: false,
+        saveOutput: '',
 
         statusIcon(s) { return _gwStatusIcons[s || 'offline'] || 'circle'; },
         statusLabel(s) { return _gwStatusLabels[s || 'offline'] || (s || 'offline'); },
@@ -301,35 +301,62 @@ function gatewayDetail(name) {
             this.metaLabels = this.metaLabels.filter(r => r.key !== key);
         },
 
-        async saveMeta() {
-            this.metaSaving = true;
-            this.metaOutput = '';
-            const body = {};
-            const desc = this.metaForm.description.trim();
-            body.description = desc || null;
+        async saveAll() {
+            this.saving = true;
+            this.saveOutput = '';
+            const errors = [];
 
+            // Save metadata (always)
+            const metaBody = {};
+            const desc = this.metaForm.description.trim();
+            metaBody.description = desc || null;
             if (this.metaLabels.length > 0) {
                 const labels = {};
                 for (const r of this.metaLabels) labels[r.key] = r.val;
-                body.labels = labels;
+                metaBody.labels = labels;
             } else {
-                body.labels = null;
+                metaBody.labels = null;
             }
-
             try {
                 await apiFetch(`${API_GLOBAL}/gateway/${this.name}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body),
+                    body: JSON.stringify(metaBody),
                 });
-                this.metaOutput = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Saved</span>';
-                setTimeout(() => { this.metaOutput = ''; }, 2000);
-                this.load();
             } catch (e) {
-                this.metaOutput = `<span class="text-danger">${escapeHtml(e.message)}</span>`;
-            } finally {
-                this.metaSaving = false;
+                errors.push(`Metadata: ${e.message}`);
             }
+
+            // Save inference (only if connected and provider selected)
+            const inferenceEl = this.$root.querySelector('[x-data*="inferenceConfig"]');
+            if (inferenceEl && this.gw?.connected) {
+                const inferenceScope = Alpine.$data(inferenceEl);
+                if (inferenceScope?.provider) {
+                    try {
+                        await apiFetch(`${API}/inference`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                provider_name: inferenceScope.provider,
+                                model_id: inferenceScope.modelId,
+                                verify: false,
+                                timeout_secs: inferenceScope.timeoutSecs,
+                            }),
+                        });
+                    } catch (e) {
+                        errors.push(`Inference: ${e.message}`);
+                    }
+                }
+            }
+
+            if (errors.length === 0) {
+                this.saveOutput = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Saved</span>';
+                setTimeout(() => { this.saveOutput = ''; }, 2000);
+                this.load();
+            } else {
+                this.saveOutput = `<span class="text-danger">${errors.map(escapeHtml).join('; ')}</span>`;
+            }
+            this.saving = false;
         },
 
         async unregister() {
