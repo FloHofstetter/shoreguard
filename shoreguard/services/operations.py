@@ -226,6 +226,18 @@ class OperationStore:
         # Remove None fields
         return {k: v for k, v in d.items() if v is not None}
 
+    def status_counts(self) -> dict[str, int]:
+        """Return counts of operations grouped by status.
+
+        Returns:
+            dict[str, int]: Mapping of status to count.
+        """
+        with self._lock:
+            counts: dict[str, int] = {}
+            for op in self._ops.values():
+                counts[op.status] = counts.get(op.status, 0) + 1
+            return counts
+
     def _reset(self) -> None:
         """Clear all operations. For testing only."""
         with self._lock:

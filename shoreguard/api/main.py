@@ -25,6 +25,8 @@ from .auth import (
 from .cli import _import_filesystem_gateways, cli  # noqa: F401 — cli re-exported for entry point
 from .deps import get_client, resolve_gateway
 from .errors import register_error_handlers
+from .metrics import metrics_middleware, shoreguard_info
+from .metrics import router as metrics_router
 from .pages import FRONTEND_DIR
 from .pages import router as pages_router
 from .routes import approvals, audit, gateway, operations, policies, providers, sandboxes, webhooks
@@ -87,6 +89,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     webhook_mod.webhook_service = webhook_mod.WebhookService(session_factory)
     logger.info("Webhook service initialised")
+
+    # ── Metrics ─────────────────────────────────────────────────────────
+    from shoreguard import __version__
+
+    shoreguard_info.info({"version": __version__})
 
     # ── Auth ─────────────────────────────────────────────────────────────
     init_auth(session_factory)
@@ -177,7 +184,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.13.0",
+    version="0.14.0",
     lifespan=lifespan,
 )
 
@@ -233,6 +240,8 @@ async def readyz() -> JSONResponse:
 
 
 app.include_router(health_router)
+app.include_router(metrics_router)
+app.middleware("http")(metrics_middleware)
 
 
 # ─── Gateway-scoped API routes ──────────────────────────────────────────────

@@ -99,6 +99,24 @@ Health probes for container orchestration:
 - `GET /healthz` — liveness (process running)
 - `GET /readyz` — readiness (database reachable, services initialised)
 
+### Monitoring
+
+ShoreGuard exposes a Prometheus-compatible metrics endpoint:
+
+- `GET /metrics` — Prometheus text format (unauthenticated)
+
+Configure your Prometheus instance to scrape this endpoint:
+
+```yaml
+scrape_configs:
+  - job_name: shoreguard
+    static_configs:
+      - targets: ["shoreguard:8888"]
+```
+
+See the [API reference](../reference/api.md#metrics) for the full list
+of exposed metrics.
+
 ### Volumes and backups
 
 The `pgdata` volume persists PostgreSQL data across container restarts.

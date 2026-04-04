@@ -9,7 +9,7 @@ import hmac
 import json
 import logging
 import secrets
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker as SessionMaker
 
 from shoreguard.models import Webhook
+from shoreguard.services.formatters import FORMATTERS
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,22 @@ logger = logging.getLogger(__name__)
 webhook_service: WebhookService | None = None
 
 DELIVERY_TIMEOUT = 10.0
+
+
+class _Target(NamedTuple):
+    """Resolved delivery target for a webhook.
+
+    Attributes:
+        url: Target URL for delivery.
+        secret: HMAC signing secret.
+        channel_type: Channel type (generic, slack, discord, email).
+        extra_config: Optional JSON config for channel-specific settings.
+    """
+
+    url: str
+    secret: str
+    channel_type: str
+    extra_config: str | None
 
 
 class WebhookService:
@@ -58,7 +75,7 @@ class WebhookService:
             webhook_id: Primary key of the webhook.
 
         Returns:
-            dict or None: Webhook data, or None if not found.
+            dict[str, Any] | None: Webhook data, or None if not found.
         """
         try:
             with self._session_factory() as session:
@@ -68,13 +85,23 @@ class WebhookService:
             logger.exception("Failed to get webhook %d", webhook_id)
             return None
 
-    def create(self, *, url: str, event_types: list[str], created_by: str) -> dict[str, Any]:
+    def create(
+        self,
+        *,
+        url: str,
+        event_types: list[str],
+        created_by: str,
+        channel_type: str = "generic",
+        extra_config: str | None = None,
+    ) -> dict[str, Any]:
         """Create a new webhook with an auto-generated secret.
 
         Args:
             url: Target URL for POST requests.
             event_types: List of event type strings to subscribe to.
             created_by: Identity of the creator.
+            channel_type: Channel type (generic, slack, discord, email).
+            extra_config: Optional JSON config for channel-specific settings.
 
         Returns:
             dict[str, Any]: Created webhook data including the secret.
@@ -86,6 +113,8 @@ class WebhookService:
                 secret=secret,
                 event_types=json.dumps(event_types),
                 is_active=True,
+                channel_type=channel_type,
+                extra_config=extra_config,
                 created_by=created_by,
                 created_at=datetime.datetime.now(datetime.UTC),
             )
@@ -101,6 +130,8 @@ class WebhookService:
         url: str | None = None,
         event_types: list[str] | None = None,
         is_active: bool | None = None,
+        channel_type: str | None = None,
+        extra_config: str | None = None,
     ) -> dict[str, Any] | None:
         """Update an existing webhook.
 
@@ -109,9 +140,11 @@ class WebhookService:
             url: New target URL.
             event_types: New event type subscriptions.
             is_active: New active state.
+            channel_type: New channel type.
+            extra_config: New channel-specific config.
 
         Returns:
-            dict or None: Updated webhook data, or None if not found.
+            dict[str, Any] | None: Updated webhook data, or None if not found.
         """
         try:
             with self._session_factory() as session:
@@ -124,6 +157,10 @@ class WebhookService:
                     wh.event_types = json.dumps(event_types)
                 if is_active is not None:
                     wh.is_active = is_active
+                if channel_type is not None:
+                    wh.channel_type = channel_type
+                if extra_config is not None:
+                    wh.extra_config = extra_config
                 session.commit()
                 session.refresh(wh)
                 return self._to_dict(wh)
@@ -152,8 +189,15 @@ class WebhookService:
             logger.exception("Failed to delete webhook %d", webhook_id)
             return False
 
-    def _get_active_for_event(self, event_type: str) -> list[tuple[str, str]]:
-        """Return (url, secret) pairs for active webhooks subscribed to event_type."""
+    def _get_active_for_event(self, event_type: str) -> list[_Target]:
+        """Return targets for active webhooks subscribed to event_type.
+
+        Args:
+            event_type: The event type to match.
+
+        Returns:
+            list[_Target]: Matching delivery targets.
+        """
         try:
             with self._session_factory() as session:
                 rows = session.query(Webhook).filter(Webhook.is_active.is_(True)).all()
@@ -164,7 +208,14 @@ class WebhookService:
                     except (json.JSONDecodeError, TypeError):
                         continue
                     if event_type in types or "*" in types:
-                        result.append((wh.url, wh.secret))
+                        result.append(
+                            _Target(
+                                url=wh.url,
+                                secret=wh.secret,
+                                channel_type=wh.channel_type,
+                                extra_config=wh.extra_config,
+                            )
+                        )
                 return result
         except SQLAlchemyError:
             logger.exception("Failed to query webhooks for event %s", event_type)
@@ -181,42 +232,109 @@ class WebhookService:
         if not targets:
             return
 
-        body = json.dumps(
-            {
-                "event": event_type,
-                "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
-                "data": payload,
-            },
-            default=str,
-        )
+        timestamp = datetime.datetime.now(datetime.UTC).isoformat()
 
-        for url, secret in targets:
-            asyncio.create_task(self._deliver(url, secret, body))
+        for target in targets:
+            formatter = FORMATTERS.get(target.channel_type, FORMATTERS["generic"])
+            body = formatter(event_type, payload, timestamp)
+            asyncio.create_task(self._deliver(target, body))
 
     @staticmethod
-    async def _deliver(url: str, secret: str, body: str) -> None:
-        """POST a signed payload to a webhook URL.
+    async def _deliver(target: _Target, body: str) -> None:
+        """Deliver a payload to a webhook target.
 
         Args:
-            url: Target URL.
-            secret: HMAC signing secret.
+            target: Delivery target with URL, secret, and channel type.
+            body: Formatted request body string.
+        """
+        if target.channel_type == "email":
+            await WebhookService._deliver_email(target, body)
+            return
+        await WebhookService._deliver_http(target, body)
+
+    @staticmethod
+    async def _deliver_http(target: _Target, body: str) -> None:
+        """POST a payload to an HTTP webhook URL.
+
+        Args:
+            target: Delivery target.
             body: JSON-encoded request body.
         """
-        signature = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if target.channel_type == "generic":
+            signature = hmac.new(target.secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+            headers["X-Shoreguard-Signature"] = f"sha256={signature}"
+
         try:
             async with httpx.AsyncClient(timeout=DELIVERY_TIMEOUT) as client:
-                resp = await client.post(
-                    url,
-                    content=body,
-                    headers={
-                        "Content-Type": "application/json",
-                        "X-Shoreguard-Signature": f"sha256={signature}",
-                    },
-                )
+                resp = await client.post(target.url, content=body, headers=headers)
                 if resp.status_code >= 400:
-                    logger.warning("Webhook delivery to %s returned %d", url, resp.status_code)
+                    logger.warning(
+                        "Webhook delivery to %s returned %d", target.url, resp.status_code
+                    )
+                    WebhookService._inc_delivery_counter("failed")
+                else:
+                    WebhookService._inc_delivery_counter("success")
         except Exception:
-            logger.warning("Webhook delivery to %s failed", url, exc_info=True)
+            logger.warning("Webhook delivery to %s failed", target.url, exc_info=True)
+            WebhookService._inc_delivery_counter("failed")
+
+    @staticmethod
+    async def _deliver_email(target: _Target, body: str) -> None:
+        """Send a notification email via SMTP.
+
+        Args:
+            target: Delivery target with SMTP config in extra_config.
+            body: Plain-text email body.
+        """
+        try:
+            from email.message import EmailMessage
+
+            import aiosmtplib
+
+            config = json.loads(target.extra_config or "{}")
+            smtp_host = config.get("smtp_host", "localhost")
+            smtp_port = config.get("smtp_port", 587)
+            smtp_user = config.get("smtp_user")
+            smtp_pass = config.get("smtp_pass")
+            from_addr = config.get("from_addr", "shoreguard@localhost")
+            to_addrs = config.get("to_addrs", [target.url])
+
+            msg = EmailMessage()
+            msg["Subject"] = body.split("\n", 1)[0]  # First line as subject
+            msg["From"] = from_addr
+            msg["To"] = ", ".join(to_addrs)
+            msg.set_content(body)
+
+            kwargs: dict[str, Any] = {
+                "hostname": smtp_host,
+                "port": smtp_port,
+                "timeout": DELIVERY_TIMEOUT,
+            }
+            if smtp_user and smtp_pass:
+                kwargs["username"] = smtp_user
+                kwargs["password"] = smtp_pass
+                kwargs["use_tls"] = True
+
+            await aiosmtplib.send(msg, **kwargs)
+            WebhookService._inc_delivery_counter("success")
+        except Exception:
+            logger.warning("Email delivery failed", exc_info=True)
+            WebhookService._inc_delivery_counter("failed")
+
+    @staticmethod
+    def _inc_delivery_counter(status: str) -> None:
+        """Increment the Prometheus webhook delivery counter.
+
+        Args:
+            status: Delivery result ("success" or "failed").
+        """
+        try:
+            from shoreguard.api.metrics import webhook_deliveries_total
+
+            webhook_deliveries_total.labels(status=status).inc()
+        except ImportError:
+            pass
 
     @staticmethod
     def _to_dict(wh: Webhook) -> dict[str, Any]:
@@ -232,15 +350,22 @@ class WebhookService:
             event_types = json.loads(wh.event_types)
         except (json.JSONDecodeError, TypeError):
             event_types = []
-        return {
+        result: dict[str, Any] = {
             "id": wh.id,
             "url": wh.url,
             "secret": wh.secret,
             "event_types": event_types,
             "is_active": wh.is_active,
+            "channel_type": wh.channel_type,
             "created_by": wh.created_by,
             "created_at": wh.created_at.isoformat() if wh.created_at else None,
         }
+        if wh.extra_config:
+            try:
+                result["extra_config"] = json.loads(wh.extra_config)
+            except (json.JSONDecodeError, TypeError):
+                result["extra_config"] = wh.extra_config
+        return result
 
 
 async def fire_webhook(event_type: str, payload: dict[str, Any]) -> None:

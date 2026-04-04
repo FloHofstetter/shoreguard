@@ -36,9 +36,21 @@ approve, reject, or edit individual rules.
 Stream logs from sandboxes, gateways, and agent activity in real time via
 WebSocket. Filter by level, source, or timestamp.
 
-### Webhooks
+### Webhooks & Notifications
 
 Subscribe external services to ShoreGuard events (sandbox created, approval
-decisions, policy changes). Each delivery is signed with HMAC-SHA256 so
-receivers can verify authenticity. See the
-[API reference](../reference/api.md#webhooks) for endpoint details.
+decisions, policy changes). Webhooks support multiple channel types:
+
+- **Generic** — HMAC-SHA256 signed HTTP POST for custom integrations
+- **Slack** — Block Kit formatted messages with color coding
+- **Discord** — Embed messages with color-coded fields
+- **Email** — SMTP delivery for ops team alerts
+
+See the [API reference](../reference/api.md#webhooks) for endpoint details.
+
+### Prometheus Metrics
+
+ShoreGuard exposes a `/metrics` endpoint in Prometheus text format
+(unauthenticated, like the health probes). Tracks gateway status, operations,
+webhook deliveries, and HTTP request counts. See the
+[API reference](../reference/api.md#metrics) for the full metric list.

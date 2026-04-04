@@ -98,7 +98,8 @@ Open [http://localhost:8888](http://localhost:8888) and complete the setup wizar
 - **[Docker deployment](https://flohofstetter.github.io/shoreguard/admin/deployment/)** — Dockerfile + docker-compose with PostgreSQL and health probes
 - **[Audit log](https://flohofstetter.github.io/shoreguard/guide/monitoring/)** — persistent, filterable, exportable audit trail
 - **[Terraform provider](https://flohofstetter.github.io/shoreguard/reference/terraform/)** — declarative infrastructure-as-code
-- **[Webhooks](https://flohofstetter.github.io/shoreguard/reference/api/)** — event subscriptions with HMAC-SHA256 signing
+- **[Webhooks & Notifications](https://flohofstetter.github.io/shoreguard/reference/api/)** — Slack, Discord, Email, and generic webhook channels with HMAC-SHA256 signing
+- **[Prometheus metrics](https://flohofstetter.github.io/shoreguard/reference/api/)** — `/metrics` endpoint for Grafana, Datadog, and standard monitoring stacks
 
 <details>
 <summary><strong>Screenshots</strong></summary>
@@ -138,10 +139,12 @@ Full documentation is available at **[flohofstetter.github.io/shoreguard](https:
 - [x] Inference timeout configuration (OpenShell v0.0.22)
 - [x] L7 query parameter matchers for network policies
 - [x] Webhooks with HMAC-SHA256 signing
+- [x] Notification channels (Slack, Discord, Email)
+- [x] Prometheus `/metrics` endpoint
+- [x] Justfile for common development tasks
 
 **Planned:**
 
-- [ ] Justfile for common development tasks
 - [ ] DigitalOcean Marketplace integration
 - [ ] Paperclip adapter for agent orchestration
 - [ ] Multi-region gateway federation

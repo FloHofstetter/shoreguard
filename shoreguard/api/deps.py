@@ -68,14 +68,28 @@ def resolve_gateway(gw: str) -> None:
     _current_gateway.set(gw)
 
 
+def _require_gateway_name() -> str:
+    """Return the current gateway name, raising if not set.
+
+    Returns:
+        str: The gateway name from the request context.
+
+    Raises:
+        HTTPException: If no gateway context has been set.
+    """
+    gw = _current_gateway.get()
+    if gw is None:
+        raise HTTPException(500, "No gateway context — resolve_gateway dependency missing")
+    return gw
+
+
 def get_client() -> ShoreGuardClient:
     """Return a client for the current gateway (from ContextVar or active config).
 
     Returns:
         ShoreGuardClient: The client bound to the current gateway context.
     """
-    gw = _current_gateway.get()
-    return _get_gateway_service().get_client(name=gw)
+    return _get_gateway_service().get_client(name=_require_gateway_name())
 
 
 def set_client(client: ShoreGuardClient | None) -> None:
@@ -84,11 +98,9 @@ def set_client(client: ShoreGuardClient | None) -> None:
     Args:
         client: The client instance to set, or ``None`` to clear.
     """
-    gw = _current_gateway.get()
-    _get_gateway_service().set_client(client, name=gw)
+    _get_gateway_service().set_client(client, name=_require_gateway_name())
 
 
 def reset_backoff() -> None:
     """Reset the connection backoff for the current gateway."""
-    gw = _current_gateway.get()
-    _get_gateway_service().reset_backoff(name=gw)
+    _get_gateway_service().reset_backoff(name=_require_gateway_name())

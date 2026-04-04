@@ -136,23 +136,46 @@ signed `POST` request whenever a subscribed event occurs.
 | `GET` | `/api/webhooks` | List all webhooks |
 | `POST` | `/api/webhooks` | Create a webhook (returns secret) |
 | `GET` | `/api/webhooks/{id}` | Get a webhook by ID |
-| `PUT` | `/api/webhooks/{id}` | Update a webhook (URL, events, active state) |
+| `PUT` | `/api/webhooks/{id}` | Update a webhook (URL, events, active state, channel) |
 | `DELETE` | `/api/webhooks/{id}` | Delete a webhook |
 | `POST` | `/api/webhooks/{id}/test` | Send a test event |
+
+### Channel types
+
+Each webhook has a `channel_type` that controls payload formatting and delivery:
+
+| Type | Delivery | Payload format |
+|------|----------|---------------|
+| `generic` (default) | HTTP POST with HMAC-SHA256 signature | JSON envelope `{event, timestamp, data}` |
+| `slack` | HTTP POST to Slack incoming webhook URL | Slack Block Kit with mrkdwn and color coding |
+| `discord` | HTTP POST to Discord webhook URL | Discord embed with color-coded fields |
+| `email` | SMTP delivery via `extra_config` settings | Plain-text email |
+
+For email channels, `extra_config` must include SMTP settings:
+
+```json
+{
+  "smtp_host": "smtp.example.com",
+  "smtp_port": 587,
+  "smtp_user": "user",
+  "smtp_pass": "pass",
+  "from_addr": "shoreguard@example.com",
+  "to_addrs": ["ops@example.com"]
+}
+```
 
 ### Event types
 
 Subscribe to specific events or use `*` for all:
 
 - `sandbox.created`, `sandbox.deleted`
-- `approval.approved`, `approval.denied`
-- `policy.updated`
+- `approval.pending`, `approval.approved`, `approval.rejected`
 - `webhook.test`
 
 ### Signature verification
 
-Each delivery includes an `X-Shoreguard-Signature` header with an
-HMAC-SHA256 signature:
+Generic webhooks include an `X-Shoreguard-Signature` header with an
+HMAC-SHA256 signature (Slack and Discord channels do not use signing):
 
 ```
 X-Shoreguard-Signature: sha256=<hex-digest>
@@ -160,6 +183,24 @@ X-Shoreguard-Signature: sha256=<hex-digest>
 
 Verify by computing `HMAC-SHA256(secret, request_body)` and comparing
 the hex digest.
+
+## Metrics
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/metrics` | Prometheus metrics (unauthenticated) |
+
+Exposed metrics:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `shoreguard_info` | Info | Build version |
+| `shoreguard_gateways_total` | Gauge | Registered gateways by status |
+| `shoreguard_operations_total` | Gauge | Tracked operations by status |
+| `shoreguard_webhook_deliveries_total` | Counter | Webhook deliveries by result |
+| `shoreguard_http_requests_total` | Counter | HTTP requests by method and status |
+
+Configure Prometheus to scrape `http://<shoreguard-host>:8888/metrics`.
 
 ## Operations
 

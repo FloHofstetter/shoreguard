@@ -66,12 +66,11 @@ def test_resolve_gateway_rejects_empty():
 
 
 def test_get_client_with_none_gateway():
-    """get_client passes None when no gateway is set."""
+    """get_client raises HTTPException(500) when no gateway context is set."""
     _current_gateway.set(None)
-    with patch("shoreguard.services.gateway.gateway_service") as mock_svc:
-        mock_svc.get_client.return_value = MagicMock()
+    with pytest.raises(HTTPException) as exc_info:
         get_client()
-        mock_svc.get_client.assert_called_once_with(name=None)
+    assert exc_info.value.status_code == 500
 
 
 # ─── _get_gateway_service None check ──────────────────────────────────────

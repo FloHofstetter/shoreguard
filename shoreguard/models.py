@@ -201,6 +201,8 @@ class Webhook(Base):
         secret: HMAC-SHA256 signing secret.
         event_types: JSON-encoded list of subscribed event types.
         is_active: Whether the webhook is enabled.
+        channel_type: Channel type (generic, slack, discord, email).
+        extra_config: Optional JSON config for channel-specific settings.
         created_by: Email or service principal name of the creator.
         created_at: Timestamp when the webhook was created.
     """
@@ -214,5 +216,9 @@ class Webhook(Base):
         Text, nullable=False, default="[]", server_default="[]"
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    channel_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="generic", server_default="generic"
+    )
+    extra_config: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str] = mapped_column(String(254), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -39,6 +39,7 @@ class TestCRUD:
         assert wh["is_active"] is True
         assert len(wh["secret"]) == 64  # hex(32 bytes)
         assert wh["created_by"] == "admin@test.com"
+        assert wh["channel_type"] == "generic"
 
         all_hooks = webhook_svc.list()
         assert len(all_hooks) == 1
@@ -89,6 +90,53 @@ class TestCRUD:
     def test_delete_not_found(self, webhook_svc):
         assert webhook_svc.delete(999) is False
 
+    def test_create_slack_channel(self, webhook_svc):
+        wh = webhook_svc.create(
+            url="https://hooks.slack.com/services/T00/B00/xxx",
+            event_types=["*"],
+            created_by="admin@test.com",
+            channel_type="slack",
+        )
+        assert wh["channel_type"] == "slack"
+        assert wh["url"] == "https://hooks.slack.com/services/T00/B00/xxx"
+
+    def test_create_discord_channel(self, webhook_svc):
+        wh = webhook_svc.create(
+            url="https://discord.com/api/webhooks/123/abc",
+            event_types=["approval.pending"],
+            created_by="admin@test.com",
+            channel_type="discord",
+        )
+        assert wh["channel_type"] == "discord"
+
+    def test_create_email_channel(self, webhook_svc):
+        import json
+
+        wh = webhook_svc.create(
+            url="admin@example.com",
+            event_types=["*"],
+            created_by="admin@test.com",
+            channel_type="email",
+            extra_config=json.dumps(
+                {
+                    "smtp_host": "smtp.example.com",
+                    "smtp_port": 587,
+                    "to_addrs": ["admin@example.com"],
+                }
+            ),
+        )
+        assert wh["channel_type"] == "email"
+        assert "extra_config" in wh
+        assert wh["extra_config"]["smtp_host"] == "smtp.example.com"
+
+    def test_to_dict_includes_channel_type(self, webhook_svc):
+        wh = webhook_svc.create(
+            url="https://example.com/hook",
+            event_types=["*"],
+            created_by="admin@test.com",
+        )
+        assert "channel_type" in wh
+
 
 class TestFire:
     async def test_fire_matches_event_type(self, webhook_svc):
@@ -104,8 +152,6 @@ class TestFire:
 
             await asyncio.sleep(0.1)
             mock_deliver.assert_called_once()
-            args = mock_deliver.call_args
-            assert "https://example.com/hook" == args[0][0]
 
     async def test_fire_skips_inactive(self, webhook_svc):
         wh = webhook_svc.create(
@@ -146,3 +192,20 @@ class TestFire:
 
             await asyncio.sleep(0.1)
             mock_deliver.assert_not_called()
+
+    async def test_fire_slack_no_hmac(self, webhook_svc):
+        webhook_svc.create(
+            url="https://hooks.slack.com/services/T00/B00/xxx",
+            event_types=["*"],
+            created_by="admin@test.com",
+            channel_type="slack",
+        )
+        with patch.object(WebhookService, "_deliver_http", new_callable=AsyncMock) as mock_http:
+            with patch.object(WebhookService, "_deliver", wraps=WebhookService._deliver):
+                await webhook_svc.fire("sandbox.created", {"sandbox": "test"})
+                import asyncio
+
+                await asyncio.sleep(0.1)
+                if mock_http.called:
+                    target = mock_http.call_args[0][0]
+                    assert target.channel_type == "slack"

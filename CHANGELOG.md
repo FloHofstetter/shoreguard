@@ -5,6 +5,54 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] — 2026-04-04
+
+### Added
+
+- **Notification channels** — webhooks now support `channel_type` field with
+  values `generic` (default, HMAC-signed), `slack` (Block Kit formatting),
+  `discord` (embed formatting), and `email` (SMTP delivery). Alembic migration
+  003 adds `channel_type` and `extra_config` columns to the `webhooks` table.
+- **Message formatters** — `shoreguard/services/formatters.py` with
+  channel-specific formatting: Slack Block Kit with mrkdwn and color coding,
+  Discord embeds with color-coded fields, plain-text email bodies.
+- **Prometheus `/metrics` endpoint** — unauthenticated, exposes
+  `shoreguard_info`, `shoreguard_gateways_total` (by status),
+  `shoreguard_operations_total` (by status),
+  `shoreguard_webhook_deliveries_total` (success/failed),
+  and `shoreguard_http_requests_total` (by method and status code).
+- **HTTP request counting middleware** — counts all API requests by method
+  and status code for Prometheus.
+- **`OperationStore.status_counts()`** — thread-safe method returning
+  operation counts grouped by status.
+
+### Changed
+
+- **`WebhookService`** refactored for channel-type-aware delivery: `_deliver`
+  dispatches to `_deliver_http` (generic/slack/discord) or `_deliver_email`.
+  HMAC signature only applied for `generic` channel type.
+- **Webhook API routes** accept `channel_type` and `extra_config` in create
+  and update requests. Email channel requires `smtp_host` and `to_addrs`
+  in `extra_config`.
+- **Webhook API docs expanded** — channel types table, email `extra_config`
+  example, corrected event types, Prometheus metrics table with scrape config.
+- **Deployment docs** — new monitoring section with Prometheus scrape config.
+- **README** — notifications and Prometheus metrics in features list and roadmap.
+- Version bumped to `0.14.0`.
+- 791 tests (up from 770).
+
+### Fixed
+
+- **`deps.py` type safety** — `get_client()`, `set_client()`, and
+  `reset_backoff()` now raise `HTTPException(500)` when called without a
+  gateway context instead of passing `None` to the gateway service. Fixes
+  3 pre-existing pyright `reportArgumentType` errors.
+
+### Dependencies
+
+- Added `prometheus_client>=0.21`.
+- Added `aiosmtplib>=3.0`.
+
 ## [0.13.0] — 2026-04-04
 
 ### Added
