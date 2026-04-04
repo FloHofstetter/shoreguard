@@ -1,5 +1,5 @@
 # ── Stage 1: Build wheel ────────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /build
 COPY pyproject.toml README.md LICENSE ./
@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir hatchling \
     && python -m hatchling build -t wheel
 
 # ── Stage 2: Runtime ────────────────────────────────────────────────────────
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Pass version at build time: --build-arg SHOREGUARD_VERSION=0.16.0
 # CI sets this from the git tag; local builds default to "dev".
