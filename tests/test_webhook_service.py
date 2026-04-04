@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from shoreguard.models import Base
-from shoreguard.services.webhooks import WebhookService
+from shoreguard.services.webhooks import RETRY_DELAYS, WebhookService, _Target
 
 
 @pytest.fixture
@@ -211,3 +212,140 @@ class TestFire:
                 if mock_http.called:
                     target = mock_http.call_args[0][0]
                     assert target.channel_type == "slack"
+
+
+# ─── Delivery retry tests ─────────────────────────────────────────────────
+
+
+def _make_target(**overrides):
+    defaults = {
+        "webhook_id": 1,
+        "url": "https://example.com/hook",
+        "secret": "test-secret",
+        "channel_type": "generic",
+        "extra_config": None,
+    }
+    defaults.update(overrides)
+    return _Target(**defaults)
+
+
+class TestDeliveryRetry:
+    """Tests for _deliver_http_with_retry retry logic."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_sleep(self):
+        with patch("shoreguard.services.webhooks.asyncio.sleep", new_callable=AsyncMock) as mock:
+            self._mock_sleep = mock
+            yield
+
+    @pytest.fixture(autouse=True)
+    def _patch_update(self, webhook_svc):
+        webhook_svc._update_delivery = MagicMock()
+        webhook_svc._inc_delivery_counter = MagicMock()
+        self._svc = webhook_svc
+
+    async def test_success_on_first_attempt(self):
+        mock_resp = httpx.Response(200)
+        with patch("shoreguard.services.webhooks.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_resp
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await self._svc._deliver_http_with_retry(_make_target(), '{"a":1}', 42)
+
+        self._svc._update_delivery.assert_called_once()
+        assert self._svc._update_delivery.call_args.kwargs["status"] == "success"
+        self._svc._inc_delivery_counter.assert_called_once_with("success")
+        self._mock_sleep.assert_not_called()
+
+    async def test_5xx_retries_then_succeeds(self):
+        responses = [httpx.Response(502), httpx.Response(502), httpx.Response(200)]
+        with patch("shoreguard.services.webhooks.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.post.side_effect = responses
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await self._svc._deliver_http_with_retry(_make_target(), '{"a":1}', 42)
+
+        assert self._svc._update_delivery.call_args.kwargs["status"] == "success"
+        assert self._svc._update_delivery.call_args.kwargs["attempt"] == 3
+        assert self._mock_sleep.call_count == 2
+        self._mock_sleep.assert_any_call(RETRY_DELAYS[0])
+        self._mock_sleep.assert_any_call(RETRY_DELAYS[1])
+
+    async def test_4xx_does_not_retry(self):
+        mock_resp = httpx.Response(422)
+        with patch("shoreguard.services.webhooks.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_resp
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await self._svc._deliver_http_with_retry(_make_target(), '{"a":1}', 42)
+
+        self._svc._update_delivery.assert_called_once()
+        assert self._svc._update_delivery.call_args.kwargs["status"] == "failed"
+        self._svc._inc_delivery_counter.assert_called_once_with("failed")
+        self._mock_sleep.assert_not_called()
+
+    async def test_timeout_retries_then_exhausted(self):
+        max_attempts = len(RETRY_DELAYS) + 1
+        with patch("shoreguard.services.webhooks.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.post.side_effect = httpx.TimeoutException("timed out")
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await self._svc._deliver_http_with_retry(_make_target(), '{"a":1}', 42)
+
+        assert mock_client.post.call_count == max_attempts
+        assert self._svc._update_delivery.call_args.kwargs["status"] == "failed"
+        assert self._svc._update_delivery.call_args.kwargs["attempt"] == max_attempts
+        self._svc._inc_delivery_counter.assert_called_once_with("failed")
+
+    async def test_connect_error_triggers_retry(self):
+        responses = [httpx.ConnectError("refused"), httpx.Response(200)]
+        with patch("shoreguard.services.webhooks.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.post.side_effect = responses
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await self._svc._deliver_http_with_retry(_make_target(), '{"a":1}', 42)
+
+        assert self._svc._update_delivery.call_args.kwargs["status"] == "success"
+        assert self._mock_sleep.call_count == 1
+
+    async def test_hmac_signature_present_for_generic(self):
+        body = '{"event": "test"}'
+        with patch("shoreguard.services.webhooks.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = httpx.Response(200)
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await self._svc._deliver_http_with_retry(
+                _make_target(channel_type="generic", secret="my-secret"), body, 42
+            )
+
+        call_kwargs = mock_client.post.call_args
+        headers = call_kwargs.kwargs.get("headers", call_kwargs[1].get("headers", {}))
+        assert "X-Shoreguard-Signature" in headers
+        assert headers["X-Shoreguard-Signature"].startswith("sha256=")
+
+    async def test_no_hmac_for_slack(self):
+        with patch("shoreguard.services.webhooks.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = httpx.Response(200)
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await self._svc._deliver_http_with_retry(
+                _make_target(channel_type="slack"), '{"a":1}', 42
+            )
+
+        call_kwargs = mock_client.post.call_args
+        headers = call_kwargs.kwargs.get("headers", call_kwargs[1].get("headers", {}))
+        assert "X-Shoreguard-Signature" not in headers

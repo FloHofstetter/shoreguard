@@ -237,6 +237,7 @@ async def readyz() -> JSONResponse:
             conn.execute(text("SELECT 1"))
         checks["database"] = "ok"
     except Exception as exc:
+        logger.warning("Health check: database unreachable: %s", exc)
         checks["database"] = str(exc)
         healthy = False
 

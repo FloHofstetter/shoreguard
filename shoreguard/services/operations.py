@@ -98,6 +98,11 @@ class OperationStore:
                 and o.resource_key == resource_key
                 for o in self._ops.values()
             ):
+                logger.info(
+                    "Operation '%s/%s' already running, skipping",
+                    resource_type,
+                    resource_key,
+                )
                 return None
             self._ops[op.id] = op
         return op

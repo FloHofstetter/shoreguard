@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from shoreguard.api import auth
-from shoreguard.api.auth import create_user
+from shoreguard.api.auth import create_service_principal, create_user
 from shoreguard.models import Base
 
 # ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -535,5 +535,50 @@ class TestDuplicateInvite:
                 )
                 assert resp.status_code == 409
                 assert "already exists" in resp.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+
+# ─── Expired service principal ─────────────────────────────────────────────
+
+
+class TestExpiredServicePrincipal:
+    async def test_expired_sp_key_rejected(self, db, mock_client):
+        """An expired service principal key should return 401."""
+        from shoreguard.api.deps import get_client
+        from shoreguard.api.main import app
+
+        create_user("admin@test.com", "adminpass", "admin")
+        past = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)
+        key, _info = create_service_principal("expired-sp", "admin", expires_at=past)
+
+        app.dependency_overrides[get_client] = lambda: mock_client
+        try:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                resp = await c.get(
+                    "/api/gateway/list",
+                    headers={"Authorization": f"Bearer {key}"},
+                )
+                assert resp.status_code == 401
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_valid_sp_key_accepted(self, db, mock_client):
+        """A non-expired service principal key should authenticate successfully."""
+        from shoreguard.api.deps import get_client
+        from shoreguard.api.main import app
+
+        create_user("admin@test.com", "adminpass", "admin")
+        future = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=30)
+        key, _info = create_service_principal("valid-sp", "admin", expires_at=future)
+
+        app.dependency_overrides[get_client] = lambda: mock_client
+        try:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                resp = await c.get(
+                    "/api/gateway/list",
+                    headers={"Authorization": f"Bearer {key}"},
+                )
+                assert resp.status_code != 401
         finally:
             app.dependency_overrides.clear()

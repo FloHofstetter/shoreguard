@@ -1,6 +1,9 @@
-"""Tests for the Prometheus /metrics endpoint."""
+"""Tests for the Prometheus /metrics and health endpoints."""
 
 from __future__ import annotations
+
+import logging
+from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -36,3 +39,16 @@ class TestMetricsEndpoint:
         await client.get("/healthz")
         resp = await client.get("/metrics")
         assert "shoreguard_http_requests_total" in resp.text
+
+
+class TestHealthEndpoints:
+    async def test_readyz_logs_warning_on_db_failure(self, client, caplog):
+        with (
+            patch("shoreguard.db.get_engine", side_effect=RuntimeError("connection refused")),
+            caplog.at_level(logging.WARNING, logger="shoreguard.api.main"),
+        ):
+            resp = await client.get("/readyz")
+        assert resp.status_code == 503
+        assert resp.json()["status"] == "not ready"
+        assert "database unreachable" in caplog.text
+        assert "connection refused" in caplog.text

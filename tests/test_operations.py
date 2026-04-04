@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+
 from shoreguard.services.operations import OperationStore
 
 
@@ -170,3 +172,23 @@ def test_reset():
     store.create("sandbox", "sb1")
     store._reset()
     assert store.get("anything") is None
+
+
+def test_create_if_not_running_concurrent():
+    """Concurrent calls should result in exactly one operation created."""
+    store = OperationStore()
+    results: list[object] = [None] * 10
+    barrier = threading.Barrier(10)
+
+    def try_create(idx: int) -> None:
+        barrier.wait()
+        results[idx] = store.create_if_not_running("gateway", "gw-race")
+
+    threads = [threading.Thread(target=try_create, args=(i,)) for i in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    created = [r for r in results if r is not None]
+    assert len(created) == 1

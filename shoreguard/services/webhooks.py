@@ -209,7 +209,7 @@ class WebhookService:
                 for wh in rows:
                     try:
                         types = json.loads(wh.event_types)
-                    except (json.JSONDecodeError, TypeError):
+                    except json.JSONDecodeError, TypeError:
                         continue
                     if event_type in types or "*" in types:
                         result.append(
@@ -347,6 +347,12 @@ class WebhookService:
                             attempt=attempt,
                         )
                         self._inc_delivery_counter("success")
+                        logger.info(
+                            "Webhook %d delivered to %s (HTTP %d)",
+                            target.webhook_id,
+                            target.url,
+                            resp.status_code,
+                        )
                         return
                     if resp.status_code < 500:
                         # Client error — don't retry
@@ -442,6 +448,7 @@ class WebhookService:
                 attempt=1,
             )
             self._inc_delivery_counter("success")
+            logger.info("Email notification delivered for webhook %d", target.webhook_id)
         except Exception as e:
             logger.warning("Email delivery failed", exc_info=True)
             await asyncio.to_thread(
@@ -545,7 +552,7 @@ class WebhookService:
         """
         try:
             event_types = json.loads(wh.event_types)
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError, TypeError:
             event_types = []
         result: dict[str, Any] = {
             "id": wh.id,
@@ -560,7 +567,7 @@ class WebhookService:
         if wh.extra_config:
             try:
                 result["extra_config"] = json.loads(wh.extra_config)
-            except (json.JSONDecodeError, TypeError):
+            except json.JSONDecodeError, TypeError:
                 result["extra_config"] = wh.extra_config
         return result
 

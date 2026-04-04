@@ -18,6 +18,7 @@ jobs:
       - run: uv sync --group dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
+      - run: uv run pydoclint shoreguard
 
   typecheck:
     runs-on: ubuntu-latest

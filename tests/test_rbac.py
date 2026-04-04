@@ -230,6 +230,15 @@ class TestBootstrap:
         bootstrap_admin_user()
         assert list_users() == []
 
+    def test_bootstrap_propagates_exception(self, monkeypatch):
+        monkeypatch.setenv("SHOREGUARD_ADMIN_PASSWORD", "secret")
+        monkeypatch.setattr(
+            "shoreguard.api.auth.create_user",
+            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        with pytest.raises(RuntimeError, match="db down"):
+            bootstrap_admin_user()
+
 
 # ─── Integration: Role enforcement on routes ────────────────────────────────
 

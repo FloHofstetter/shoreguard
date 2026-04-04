@@ -145,6 +145,7 @@ class GatewayService:
                 raise GatewayNotConnectedError(f"Gateway '{gw_name}' not connected.")
             entry.client = new_client
             entry.backoff = 0.0
+        logger.info("Gateway '%s' reconnected successfully", gw_name)
         return new_client
 
     def set_client(self, client: ShoreGuardClient | None, name: str) -> None:
@@ -242,7 +243,7 @@ class GatewayService:
             )
             try:
                 client.close()
-            except (grpc.RpcError, OSError):
+            except grpc.RpcError, OSError:
                 logger.debug("Failed to close client for '%s'", name)
             return None
 
@@ -279,7 +280,7 @@ class GatewayService:
             logger.debug("Gateway '%s' health check failed: %s", name, e, exc_info=True)
             try:
                 client.close()
-            except (grpc.RpcError, OSError):
+            except grpc.RpcError, OSError:
                 logger.debug("Failed to close client for '%s'", name)
             return None
 
@@ -335,7 +336,7 @@ class GatewayService:
         try:
             self.get_client(name=name)
             connected = True
-        except (GatewayNotConnectedError, grpc.RpcError):
+        except GatewayNotConnectedError, grpc.RpcError:
             logger.debug("Could not connect to newly registered gateway '%s'", name)
 
         record["connected"] = connected

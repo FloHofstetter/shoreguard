@@ -92,6 +92,8 @@ class RegisterGatewayRequest(BaseModel):
         client_cert: Base64-encoded client certificate.
         client_key: Base64-encoded client private key.
         metadata: Optional metadata dict for the gateway.
+        description: Optional human-readable description.
+        labels: Optional key-value labels for the gateway.
     """
 
     name: str

@@ -21,6 +21,7 @@ import logging
 import os
 import secrets
 import time
+from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Cookie, HTTPException, Query, Request, WebSocket, status
@@ -68,7 +69,7 @@ def verify_password(password: str, hashed: str) -> bool:
     """
     try:
         return _hasher.verify(password, hashed)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         # Corrupt or unrecognised hash format — treat as non-match.
         logger.warning("Password verification error (corrupt hash?)")
         return False
@@ -337,7 +338,9 @@ def _lookup_sp_identity(key: str) -> dict | None:
             )
             if row is None:
                 return None
-            if row.expires_at is not None and row.expires_at <= datetime.datetime.now(datetime.UTC):
+            if row.expires_at is not None and row.expires_at.replace(
+                tzinfo=row.expires_at.tzinfo or datetime.UTC,
+            ) <= datetime.datetime.now(datetime.UTC):
                 logger.info("Service principal '%s' has expired", row.name)
                 return None
             row.last_used = datetime.datetime.now(datetime.UTC)
@@ -506,7 +509,7 @@ def require_auth(request: Request) -> None:
     )
 
 
-def require_role(minimum: str) -> Any:
+def require_role(minimum: str) -> Callable[..., Coroutine[Any, Any, None]]:
     """Return a FastAPI dependency that enforces a minimum role level.
 
     When inside a gateway-scoped route (``_current_gateway`` is set),
@@ -516,7 +519,8 @@ def require_role(minimum: str) -> Any:
         minimum: The minimum required role (``admin``, ``operator``, ``viewer``).
 
     Returns:
-        Any: An async FastAPI dependency callable.
+        Callable[..., Coroutine[Any, Any, None]]: An async FastAPI dependency
+            callable.
     """
     from shoreguard.api.deps import _current_gateway
 
@@ -1013,6 +1017,7 @@ def rotate_service_principal(sp_id: int) -> tuple[str, dict] | None:
 
     Raises:
         RuntimeError: If the database is not available.
+        Exception: On unexpected DB errors (re-raised after rollback).
     """
     if _session_factory is None:
         raise RuntimeError("Database not available")
@@ -1248,7 +1253,11 @@ def list_gateway_roles_for_sp(sp_id: int) -> list[dict]:
 
 
 def bootstrap_admin_user() -> None:
-    """Seed the first admin user from env var if the users table is empty."""
+    """Seed the first admin user from env var if the users table is empty.
+
+    Raises:
+        Exception: If user creation fails (re-raised after logging).
+    """
     password = os.environ.get("SHOREGUARD_ADMIN_PASSWORD")
     if not password or _session_factory is None:
         return
@@ -1259,3 +1268,4 @@ def bootstrap_admin_user() -> None:
         logger.info("Bootstrap admin user created (admin@localhost)")
     except Exception:
         logger.exception("Failed to bootstrap admin user")
+        raise
