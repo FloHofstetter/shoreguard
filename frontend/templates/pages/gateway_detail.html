@@ -229,68 +229,63 @@
                                 </td>
                             </tr>
                         </template>
+                        <!-- ── Inference section (only when connected) ── -->
+                        <template x-if="gw?.connected">
+                            <tr x-data="inferenceConfig()" x-effect="if (gw?.connected && !loaded) load()">
+                                <td colspan="2" class="ps-3 pt-3 pb-1">
+                                    <span class="text-muted small fw-semibold text-uppercase">Inference</span>
+                                </td>
+                            </tr>
+                        </template>
                     </tbody>
                 </table>
-            </div>
-        </div>
-
-        <!-- Inference Provider (only for active gateway) -->
-        <div x-show="gw?.connected" x-cloak class="card mb-4 sg-card-themed"
-             x-data="inferenceConfig()" x-effect="if (gw?.connected && !loaded) load()">
-            <div class="card-body">
-                <h6 class="text-muted mb-3"><i class="bi bi-cpu me-2"></i>Inference Provider</h6>
-
-                <!-- Loading -->
-                <div x-show="loading" class="text-muted small">
-                    <div class="spinner-border spinner-border-sm me-2"></div>Loading provider config...
-                </div>
-
-                <!-- Not connected -->
-                <div x-show="!loading && !gw?.connected" class="text-muted small">
-                    Connect to gateway to configure inference provider.
-                </div>
-
-                <!-- Config form -->
-                <div x-show="!loading && gw?.connected" x-cloak>
-                    <form @submit.prevent="save()" class="row g-3 align-items-end">
-                        <div class="col-md-3">
-                            <label class="form-label small text-muted">Provider</label>
-                            <select class="form-select form-select-sm" x-model="provider" @change="onProviderChange()">
-                                <option value="">— Select —</option>
-                                <template x-for="p in providers" :key="p.name">
-                                    <option :value="p.name" x-text="p.label" :selected="p.name === provider"></option>
-                                </template>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label small text-muted">Model ID</label>
-                            <input type="text" class="form-control form-control-sm" x-model="modelId"
-                                   :placeholder="placeholder">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small text-muted">Timeout (s)</label>
-                            <input type="number" class="form-control form-control-sm"
-                                   x-model.number="timeoutSecs" placeholder="0" min="0">
-                        </div>
-                        <div class="col-md-3 d-flex gap-2">
-                            <button type="submit" class="btn btn-primary btn-sm" :disabled="saving">
-                                <i class="bi bi-check-lg me-1"></i>Save
-                            </button>
-                        </div>
-                    </form>
-                    <div x-show="provider" class="mt-2 small text-muted">
-                        <i class="bi bi-info-circle me-1"></i>
-                        API key must be set as environment variable
-                        <template x-if="currentProvider?.env_var">
-                            <code x-text="currentProvider.env_var"></code>
-                        </template>
-                        on the gateway host.
+                <!-- Inference form (outside table for proper layout) -->
+                <div x-show="gw?.connected" x-cloak class="px-3 pb-3"
+                     x-data="inferenceConfig()" x-effect="if (gw?.connected && !loaded) load()">
+                    <div x-show="loading" class="text-muted small">
+                        <div class="spinner-border spinner-border-sm me-2"></div>Loading provider config...
                     </div>
-                    <div x-show="!provider" class="mt-2 small text-warning">
-                        <i class="bi bi-exclamation-triangle me-1"></i>
-                        No inference provider configured. Sandboxes need a provider to run agents.
+                    <div x-show="!loading && gw?.connected" x-cloak>
+                        <form @submit.prevent="save()" class="row g-3 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted">Provider</label>
+                                <select class="form-select form-select-sm" x-model="provider" @change="onProviderChange()">
+                                    <option value="">— Select —</option>
+                                    <template x-for="p in providers" :key="p.name">
+                                        <option :value="p.name" x-text="p.label" :selected="p.name === provider"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted">Model ID</label>
+                                <input type="text" class="form-control form-control-sm" x-model="modelId"
+                                       :placeholder="placeholder">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted">Timeout (s)</label>
+                                <input type="number" class="form-control form-control-sm"
+                                       x-model.number="timeoutSecs" placeholder="0" min="0">
+                            </div>
+                            <div class="col-md-3 d-flex gap-2">
+                                <button type="submit" class="btn btn-primary btn-sm" :disabled="saving">
+                                    <i class="bi bi-check-lg me-1"></i>Save
+                                </button>
+                            </div>
+                        </form>
+                        <div x-show="provider" class="mt-2 small text-muted">
+                            <i class="bi bi-info-circle me-1"></i>
+                            API key must be set as environment variable
+                            <template x-if="currentProvider?.env_var">
+                                <code x-text="currentProvider.env_var"></code>
+                            </template>
+                            on the gateway host.
+                        </div>
+                        <div x-show="!provider" class="mt-2 small text-warning">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            No inference provider configured. Sandboxes need a provider to run agents.
+                        </div>
+                        <div x-show="saveOutput" class="mt-2" x-html="saveOutput"></div>
                     </div>
-                    <div x-show="saveOutput" class="mt-2" x-html="saveOutput"></div>
                 </div>
             </div>
         </div>
