@@ -55,8 +55,8 @@
                     <i class="bi bi-plug me-1"></i>Test Connection
                 </button>
                 <button x-show="$store.auth.hasRole('admin')" x-cloak
-                        class="btn btn-outline-secondary btn-sm" @click="startEdit()">
-                    <i class="bi bi-pencil me-1"></i>Edit
+                        class="btn btn-outline-danger btn-sm" @click="unregister()">
+                    <i class="bi bi-trash me-1"></i>Unregister
                 </button>
                 <button class="btn btn-outline-secondary btn-sm" @click="load()" title="Refresh">
                     <i class="bi bi-arrow-clockwise"></i>
@@ -68,56 +68,6 @@
         <div x-show="actionOutput" x-cloak class="mb-3">
             <div class="log-output small">
                 <div class="log-line" :class="actionClass" x-html="actionOutput"></div>
-            </div>
-        </div>
-
-        <!-- Edit metadata -->
-        <div x-show="editing" x-cloak class="card sg-card-themed mb-4">
-            <div class="card-body">
-                <h6 class="text-muted mb-3"><i class="bi bi-pencil-square me-2"></i>Edit Gateway Metadata</h6>
-                <div class="mb-3">
-                    <label class="form-label small text-muted">Description</label>
-                    <input type="text" class="form-control form-control-sm" x-model="editForm.description"
-                           placeholder="e.g. Production EU-West for ML team" maxlength="1000">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small text-muted">Labels</label>
-                    <!-- Existing labels as removable chips -->
-                    <div x-show="editLabels.length > 0" class="mb-2 d-flex flex-wrap gap-1">
-                        <template x-for="lbl in editLabels" :key="lbl.key">
-                            <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
-                                <span class="font-monospace" x-text="lbl.key"></span>
-                                <span class="text-muted">=</span>
-                                <span x-text="lbl.val"></span>
-                                <button type="button" class="btn-close btn-close-sm ms-1" style="font-size:.55rem"
-                                        @click="removeEditLabel(lbl.key)"></button>
-                            </span>
-                        </template>
-                    </div>
-                    <!-- Add label input row -->
-                    <div x-show="editLabels.length < 20" class="input-group input-group-sm">
-                        <input type="text" class="form-control font-monospace" x-model="newEditKey"
-                               placeholder="key" @keydown.enter.prevent="addEditLabel()">
-                        <span class="input-group-text">=</span>
-                        <input type="text" class="form-control" x-model="newEditVal"
-                               placeholder="value" @keydown.enter.prevent="addEditLabel()">
-                        <button class="btn btn-outline-success" type="button" @click="addEditLabel()"
-                                :disabled="!newEditKey.trim()">
-                            <i class="bi bi-plus"></i>
-                        </button>
-                    </div>
-                    <div x-show="editLabels.length >= 20" class="form-text text-warning">
-                        Maximum of 20 labels reached.
-                    </div>
-                </div>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-primary btn-sm" @click="saveEdit()" :disabled="editSaving">
-                        <template x-if="editSaving"><span class="spinner-border spinner-border-sm me-1"></span></template>
-                        <i x-show="!editSaving" class="bi bi-check-lg me-1"></i>Save
-                    </button>
-                    <button class="btn btn-outline-secondary btn-sm" @click="cancelEdit()">Cancel</button>
-                </div>
-                <div x-show="editOutput" class="mt-2" x-html="editOutput"></div>
             </div>
         </div>
 
@@ -146,29 +96,111 @@
             </div>
         </div>
 
-        <!-- Details -->
+        <!-- Gateway details card -->
         <div class="card sg-card-themed mb-4">
             <div class="card-body p-0">
                 <table class="table table-sm table-borderless mb-0 align-middle">
                     <tbody>
-                        <template x-if="gw?.description">
+                        <!-- ── Metadata section (inline-editable) ── -->
+                        <tr>
+                            <td colspan="2" class="ps-3 pt-3 pb-1">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small fw-semibold text-uppercase">Metadata</span>
+                                    <button x-show="$store.auth.hasRole('admin') && !editing" x-cloak
+                                            class="btn btn-link btn-sm text-muted p-0" @click="startEdit()">
+                                        <i class="bi bi-pencil me-1"></i>Edit
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <!-- View mode -->
+                        <template x-if="!editing">
                             <tr>
-                                <td class="text-muted ps-3" style="width:160px"><i class="bi bi-card-text me-2"></i>Description</td>
-                                <td x-text="gw.description"></td>
-                            </tr>
-                        </template>
-                        <template x-if="Object.keys(gw?.labels || {}).length > 0">
-                            <tr>
-                                <td class="text-muted ps-3" style="width:160px"><i class="bi bi-tags me-2"></i>Labels</td>
+                                <td class="text-muted ps-3" style="width:140px"><i class="bi bi-card-text me-2"></i>Description</td>
                                 <td>
-                                    <template x-for="[k,v] in Object.entries(gw.labels)" :key="k">
-                                        <span class="badge text-bg-light border me-1" x-text="k + '=' + v"></span>
-                                    </template>
+                                    <span x-show="gw?.description" x-text="gw?.description"></span>
+                                    <span x-show="!gw?.description" class="text-muted fst-italic">No description</span>
                                 </td>
                             </tr>
                         </template>
+                        <template x-if="!editing">
+                            <tr>
+                                <td class="text-muted ps-3"><i class="bi bi-tags me-2"></i>Labels</td>
+                                <td>
+                                    <template x-if="Object.keys(gw?.labels || {}).length > 0">
+                                        <span>
+                                            <template x-for="[k,v] in Object.entries(gw.labels)" :key="k">
+                                                <span class="badge text-bg-light border me-1" x-text="k + '=' + v"></span>
+                                            </template>
+                                        </span>
+                                    </template>
+                                    <span x-show="Object.keys(gw?.labels || {}).length === 0" class="text-muted fst-italic">No labels</span>
+                                </td>
+                            </tr>
+                        </template>
+                        <!-- Edit mode -->
+                        <template x-if="editing">
+                            <tr>
+                                <td class="text-muted ps-3 align-top pt-2" style="width:140px"><i class="bi bi-card-text me-2"></i>Description</td>
+                                <td class="py-2">
+                                    <input type="text" class="form-control form-control-sm" x-model="editForm.description"
+                                           placeholder="e.g. Production EU-West for ML team" maxlength="1000">
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="editing">
+                            <tr>
+                                <td class="text-muted ps-3 align-top pt-2"><i class="bi bi-tags me-2"></i>Labels</td>
+                                <td class="py-2">
+                                    <div x-show="editLabels.length > 0" class="mb-2 d-flex flex-wrap gap-1">
+                                        <template x-for="lbl in editLabels" :key="lbl.key">
+                                            <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+                                                <span class="font-monospace" x-text="lbl.key"></span>
+                                                <span class="text-muted">=</span>
+                                                <span x-text="lbl.val"></span>
+                                                <button type="button" class="btn-close btn-close-sm ms-1" style="font-size:.55rem"
+                                                        @click="removeEditLabel(lbl.key)"></button>
+                                            </span>
+                                        </template>
+                                    </div>
+                                    <div x-show="editLabels.length < 20" class="input-group input-group-sm" style="max-width:400px">
+                                        <input type="text" class="form-control font-monospace" x-model="newEditKey"
+                                               placeholder="key" @keydown.enter.prevent="addEditLabel()">
+                                        <span class="input-group-text">=</span>
+                                        <input type="text" class="form-control" x-model="newEditVal"
+                                               placeholder="value" @keydown.enter.prevent="addEditLabel()">
+                                        <button class="btn btn-outline-success" type="button" @click="addEditLabel()"
+                                                :disabled="!newEditKey.trim()">
+                                            <i class="bi bi-plus"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="editing">
+                            <tr>
+                                <td></td>
+                                <td class="pb-3">
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-primary btn-sm" @click="saveEdit()" :disabled="editSaving">
+                                            <template x-if="editSaving"><span class="spinner-border spinner-border-sm me-1"></span></template>
+                                            <i x-show="!editSaving" class="bi bi-check-lg me-1"></i>Save
+                                        </button>
+                                        <button class="btn btn-outline-secondary btn-sm" @click="cancelEdit()">Cancel</button>
+                                    </div>
+                                    <div x-show="editOutput" class="mt-2" x-html="editOutput"></div>
+                                </td>
+                            </tr>
+                        </template>
+
+                        <!-- ── Connection section ── -->
                         <tr>
-                            <td class="text-muted ps-3" style="width:160px"><i class="bi bi-globe me-2"></i>URL</td>
+                            <td colspan="2" class="ps-3 pt-3 pb-1">
+                                <span class="text-muted small fw-semibold text-uppercase">Connection</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted ps-3" style="width:140px"><i class="bi bi-globe me-2"></i>URL</td>
                             <td>
                                 <span class="endpoint-badge px-2 py-1" x-text="(gw?.scheme || 'https') + '://' + (gw?.endpoint || '\u2014')"></span>
                             </td>
@@ -202,15 +234,8 @@
             </div>
         </div>
 
-        <!-- Unregister -->
-        <div x-show="$store.auth.hasRole('admin')" x-cloak class="border-top pt-3" style="border-color:var(--sg-border)!important">
-            <button class="btn btn-outline-danger btn-sm" @click="unregister()">
-                <i class="bi bi-trash me-1"></i>Unregister Gateway
-            </button>
-        </div>
-
         <!-- Inference Provider (only for active gateway) -->
-        <div x-show="gw?.connected" x-cloak class="card mb-4 mt-4 sg-card-themed"
+        <div x-show="gw?.connected" x-cloak class="card mb-4 sg-card-themed"
              x-data="inferenceConfig()" x-effect="if (gw?.connected && !loaded) load()">
             <div class="card-body">
                 <h6 class="text-muted mb-3"><i class="bi bi-cpu me-2"></i>Inference Provider</h6>
