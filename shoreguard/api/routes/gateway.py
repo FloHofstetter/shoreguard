@@ -58,7 +58,7 @@ def _validate_endpoint_format(endpoint: str) -> None:
     port = int(port_str)
     if port < 1 or port > 65535:
         raise ValueError("endpoint port must be between 1 and 65535")
-    if is_private_ip(host):
+    if is_private_ip(host) and not os.environ.get("SHOREGUARD_LOCAL_MODE"):
         raise ValueError(
             "endpoint must not point to a private/loopback address; use a routable IP or hostname"
         )
