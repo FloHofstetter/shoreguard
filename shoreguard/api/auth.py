@@ -512,7 +512,7 @@ def require_auth(request: Request) -> None:
 def require_role(minimum: str) -> Callable[..., Coroutine[Any, Any, None]]:
     """Return a FastAPI dependency that enforces a minimum role level.
 
-    When inside a gateway-scoped route (``_current_gateway`` is set),
+    When inside a gateway-scoped route (gateway name on ``request.state``),
     a per-gateway role override takes precedence over the global role.
 
     Args:
@@ -522,7 +522,7 @@ def require_role(minimum: str) -> Callable[..., Coroutine[Any, Any, None]]:
         Callable[..., Coroutine[Any, Any, None]]: An async FastAPI dependency
             callable.
     """
-    from shoreguard.api.deps import _current_gateway
+    from shoreguard.api.deps import get_gateway_name
 
     async def _dependency(request: Request) -> None:
         """Check that the caller has at least the required role.
@@ -545,7 +545,7 @@ def require_role(minimum: str) -> Callable[..., Coroutine[Any, Any, None]]:
             request.state.role = role
 
         # Check for a gateway-scoped role override
-        gateway = _current_gateway.get()
+        gateway = get_gateway_name(request)
         if gateway:
             user_db_id = getattr(request.state, "user_db_id", None)
             sp_db_id = getattr(request.state, "sp_db_id", None)

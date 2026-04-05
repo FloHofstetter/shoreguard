@@ -1,4 +1,4 @@
-"""Unit tests for api/deps.py — ContextVar delegation to gateway_service."""
+"""Unit tests for api/deps.py — request.state delegation to gateway_service."""
 
 from __future__ import annotations
 
@@ -16,29 +16,41 @@ from shoreguard.api.deps import (
 )
 
 
+def _fake_request(gateway: str | None = None) -> MagicMock:
+    """Build a minimal mock Request with optional gateway on state."""
+    req = MagicMock()
+    req.state = MagicMock()
+    if gateway is not None:
+        req.state._gateway = gateway
+    else:
+        # Simulate missing attribute
+        del req.state._gateway
+    return req
+
+
 def test_get_client_delegates():
-    """get_client() reads current gateway from ContextVar and delegates to gateway_service."""
-    _current_gateway.set("my-gw")
+    """get_client() reads gateway from request.state and delegates to gateway_service."""
+    req = _fake_request("my-gw")
     with patch("shoreguard.services.gateway.gateway_service") as mock_svc:
         mock_svc.get_client.return_value = MagicMock()
-        get_client()
+        get_client(req)
         mock_svc.get_client.assert_called_once_with(name="my-gw")
 
 
 def test_set_client_delegates():
-    """set_client() reads current gateway and delegates to gateway_service.set_client."""
-    _current_gateway.set("my-gw")
+    """set_client() reads gateway from request.state and delegates to gateway_service.set_client."""
+    req = _fake_request("my-gw")
     mock_client = MagicMock()
     with patch("shoreguard.services.gateway.gateway_service") as mock_svc:
-        set_client(mock_client)
+        set_client(mock_client, req)
         mock_svc.set_client.assert_called_once_with(mock_client, name="my-gw")
 
 
 def test_reset_backoff_delegates():
-    """reset_backoff() reads current gateway and delegates to gateway_service.reset_backoff."""
-    _current_gateway.set("my-gw")
+    """reset_backoff() reads gateway from request.state and delegates."""
+    req = _fake_request("my-gw")
     with patch("shoreguard.services.gateway.gateway_service") as mock_svc:
-        reset_backoff()
+        reset_backoff(req)
         mock_svc.reset_backoff.assert_called_once_with(name="my-gw")
 
 
@@ -46,31 +58,47 @@ def test_reset_backoff_delegates():
 
 
 def test_resolve_gateway_valid_name():
-    """resolve_gateway sets the ContextVar for a valid name."""
-    resolve_gateway("my-gw")
+    """resolve_gateway sets request.state._gateway and ContextVar."""
+    req = _fake_request()
+    resolve_gateway("my-gw", req)
+    assert req.state._gateway == "my-gw"
     assert _current_gateway.get() == "my-gw"
 
 
 def test_resolve_gateway_invalid_name_raises():
     """resolve_gateway raises HTTPException 400 for invalid names."""
+    req = _fake_request()
     with pytest.raises(HTTPException) as exc_info:
-        resolve_gateway("--malicious")
+        resolve_gateway("--malicious", req)
     assert exc_info.value.status_code == 400
 
 
 def test_resolve_gateway_rejects_empty():
     """resolve_gateway rejects empty string."""
+    req = _fake_request()
     with pytest.raises(HTTPException) as exc_info:
-        resolve_gateway("")
+        resolve_gateway("", req)
     assert exc_info.value.status_code == 400
 
 
 def test_get_client_with_none_gateway():
     """get_client raises HTTPException(500) when no gateway context is set."""
+    req = _fake_request()  # no gateway
     _current_gateway.set(None)
     with pytest.raises(HTTPException) as exc_info:
-        get_client()
+        get_client(req)
     assert exc_info.value.status_code == 500
+
+
+def test_get_client_falls_back_to_contextvar():
+    """get_client falls back to ContextVar when request.state has no gateway."""
+    _current_gateway.set("fallback-gw")
+    req = _fake_request()  # no gateway on state
+    with patch("shoreguard.services.gateway.gateway_service") as mock_svc:
+        mock_svc.get_client.return_value = MagicMock()
+        get_client(req)
+        mock_svc.get_client.assert_called_once_with(name="fallback-gw")
+    _current_gateway.set(None)
 
 
 # ─── _get_gateway_service None check ──────────────────────────────────────

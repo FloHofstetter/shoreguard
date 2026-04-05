@@ -337,7 +337,8 @@ def test_ws_streams_sandbox_events():
         ]
     )
 
-    with patch("shoreguard.api.websocket.get_client", return_value=mock_client):
+    with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
+        mock_gw_svc.return_value.get_client.return_value = mock_client
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb") as ws:
             msg1 = ws.receive_json()
@@ -365,7 +366,8 @@ def test_ws_handles_grpc_stream_error():
 
     mock_client.sandboxes.watch.side_effect = _FakeRpcError()
 
-    with patch("shoreguard.api.websocket.get_client", return_value=mock_client):
+    with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
+        mock_gw_svc.return_value.get_client.return_value = mock_client
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb") as ws:
             msg = ws.receive_json()
@@ -392,7 +394,8 @@ def test_ws_client_disconnect():
 
     mock_client.sandboxes.watch.return_value = slow_watch()
 
-    with patch("shoreguard.api.websocket.get_client", return_value=mock_client):
+    with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
+        mock_gw_svc.return_value.get_client.return_value = mock_client
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb") as ws:
             # Receive at least one event then disconnect

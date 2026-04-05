@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import _current_gateway, get_actor, get_client
+from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.client import ShoreGuardClient
 from shoreguard.services.audit import audit_log
 from shoreguard.services.providers import ProviderService
@@ -151,7 +151,7 @@ async def create_provider(
         "provider.create",
         "provider",
         body.name,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
         detail={"type": body.type},
     )
     return result
@@ -207,7 +207,7 @@ async def update_provider(
         name,
         get_actor(request),
     )
-    await audit_log(request, "provider.update", "provider", name, gateway=_current_gateway.get())
+    await audit_log(request, "provider.update", "provider", name, gateway=get_gateway_name(request))
     return result
 
 
@@ -238,6 +238,6 @@ async def delete_provider(
             get_actor(request),
         )
         await audit_log(
-            request, "provider.delete", "provider", name, gateway=_current_gateway.get()
+            request, "provider.delete", "provider", name, gateway=get_gateway_name(request)
         )
     return {"deleted": deleted}

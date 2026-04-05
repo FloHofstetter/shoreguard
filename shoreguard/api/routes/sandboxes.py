@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import _current_gateway, get_actor, get_client
+from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import friendly_grpc_error
 from shoreguard.services.audit import audit_log
@@ -217,7 +217,7 @@ async def create_sandbox(
     _audit_actor = get_actor(request)
     _audit_role = getattr(request.state, "role", "unknown")
     _audit_ip = request.client.host if request.client else None
-    _audit_gw = _current_gateway.get()
+    _audit_gw = get_gateway_name(request)
 
     task = asyncio.create_task(_run())
     _background_tasks.add(task)
@@ -262,10 +262,12 @@ async def delete_sandbox(
     if deleted:
         actor = get_actor(request)
         logger.info("Sandbox deleted (sandbox=%s, actor=%s)", name, actor)
-        await audit_log(request, "sandbox.delete", "sandbox", name, gateway=_current_gateway.get())
+        await audit_log(
+            request, "sandbox.delete", "sandbox", name, gateway=get_gateway_name(request)
+        )
         await fire_webhook(
             "sandbox.deleted",
-            {"sandbox": name, "actor": actor, "gateway": _current_gateway.get()},
+            {"sandbox": name, "actor": actor, "gateway": get_gateway_name(request)},
         )
     return {"deleted": deleted}
 
@@ -299,7 +301,7 @@ async def exec_in_sandbox(
         timeout_seconds=body.timeout_seconds,
     )
     logger.info("Command executed in sandbox (sandbox=%s, actor=%s)", name, get_actor(request))
-    await audit_log(request, "sandbox.exec", "sandbox", name, gateway=_current_gateway.get())
+    await audit_log(request, "sandbox.exec", "sandbox", name, gateway=get_gateway_name(request))
     return result
 
 
@@ -321,7 +323,9 @@ async def create_ssh_session(
     """
     result = await asyncio.to_thread(svc.create_ssh_session, name)
     logger.info("SSH session created (sandbox=%s, actor=%s)", name, get_actor(request))
-    await audit_log(request, "sandbox.ssh.create", "sandbox", name, gateway=_current_gateway.get())
+    await audit_log(
+        request, "sandbox.ssh.create", "sandbox", name, gateway=get_gateway_name(request)
+    )
     return result
 
 
@@ -345,7 +349,9 @@ async def revoke_ssh_session(
     """
     revoked = await asyncio.to_thread(svc.revoke_ssh_session, body.token)
     logger.info("SSH session revoked (sandbox=%s, actor=%s)", name, get_actor(request))
-    await audit_log(request, "sandbox.ssh.revoke", "sandbox", name, gateway=_current_gateway.get())
+    await audit_log(
+        request, "sandbox.ssh.revoke", "sandbox", name, gateway=get_gateway_name(request)
+    )
     return {"revoked": revoked}
 
 

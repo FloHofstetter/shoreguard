@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import _current_gateway, get_actor, get_client
+from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.client import ShoreGuardClient
 from shoreguard.services.approvals import ApprovalService
 from shoreguard.services.audit import audit_log
@@ -127,12 +127,17 @@ async def approve_chunk(
         "approval.approve",
         "approval",
         chunk_id,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
         detail={"sandbox": name},
     )
     await fire_webhook(
         "approval.approved",
-        {"sandbox": name, "chunk_id": chunk_id, "actor": actor, "gateway": _current_gateway.get()},
+        {
+            "sandbox": name,
+            "chunk_id": chunk_id,
+            "actor": actor,
+            "gateway": get_gateway_name(request),
+        },
     )
     return result
 
@@ -168,7 +173,7 @@ async def reject_chunk(
         "approval.reject",
         "approval",
         chunk_id,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
         detail={"sandbox": name, "reason": reason},
     )
     await fire_webhook(
@@ -178,7 +183,7 @@ async def reject_chunk(
             "chunk_id": chunk_id,
             "reason": reason,
             "actor": actor,
-            "gateway": _current_gateway.get(),
+            "gateway": get_gateway_name(request),
         },
     )
     return {"status": "rejected"}
@@ -213,12 +218,12 @@ async def approve_all(
         "approval.approve_all",
         "approval",
         name,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
         detail={"include_security_flagged": include_flagged},
     )
     await fire_webhook(
         "approval.approved",
-        {"sandbox": name, "bulk": True, "actor": actor, "gateway": _current_gateway.get()},
+        {"sandbox": name, "bulk": True, "actor": actor, "gateway": get_gateway_name(request)},
     )
     return result
 
@@ -251,7 +256,7 @@ async def edit_chunk(
         "approval.edit",
         "approval",
         chunk_id,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
         detail={"sandbox": name},
     )
     return {"status": "edited"}
@@ -283,7 +288,7 @@ async def undo_chunk(
         "approval.undo",
         "approval",
         chunk_id,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
         detail={"sandbox": name},
     )
     return result
@@ -308,7 +313,7 @@ async def clear_approvals(
     actor = get_actor(request)
     logger.info("Chunks cleared (sandbox=%s, actor=%s)", name, actor)
     result = await asyncio.to_thread(svc.clear, name)
-    await audit_log(request, "approval.clear", "approval", name, gateway=_current_gateway.get())
+    await audit_log(request, "approval.clear", "approval", name, gateway=get_gateway_name(request))
     return result
 
 

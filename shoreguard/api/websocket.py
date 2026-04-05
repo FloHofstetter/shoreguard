@@ -11,7 +11,7 @@ from shoreguard.exceptions import GatewayNotConnectedError, friendly_grpc_error
 from shoreguard.services.webhooks import fire_webhook
 
 from .auth import require_auth_ws
-from .deps import _VALID_GW_RE, _current_gateway, get_client
+from .deps import _VALID_GW_RE, _current_gateway, _get_gateway_service
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ async def sandbox_events(
             await websocket.send_json(
                 {"type": "error", "data": {"message": "Invalid gateway name"}}
             )
-        except (RuntimeError, WebSocketDisconnect):
+        except RuntimeError, WebSocketDisconnect:
             logger.debug(
                 "WebSocket closed before sending validation error: %s/%s",
                 gw,
@@ -53,13 +53,13 @@ async def sandbox_events(
 
     _current_gateway.set(gw)
     try:
-        client = await asyncio.to_thread(get_client)
+        client = await asyncio.to_thread(_get_gateway_service().get_client, name=gw)
     except GatewayNotConnectedError:
         try:
             await websocket.send_json(
                 {"type": "error", "data": {"message": f"Gateway '{gw}' not connected"}}
             )
-        except (RuntimeError, WebSocketDisconnect):
+        except RuntimeError, WebSocketDisconnect:
             logger.debug("WebSocket closed before sending error: %s/%s", gw, sandbox_name)
         return
 

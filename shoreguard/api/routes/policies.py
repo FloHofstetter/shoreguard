@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import _current_gateway, get_actor, get_client
+from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.client import ShoreGuardClient
 from shoreguard.presets import get_preset as _get_preset
 from shoreguard.presets import list_presets as _list_presets
@@ -117,7 +117,7 @@ async def update_policy(
         name,
         get_actor(request),
     )
-    gw = _current_gateway.get()
+    gw = get_gateway_name(request)
     await audit_log(request, "policy.update", "policy", name, gateway=gw)
     await fire_webhook(
         "policy.updated",
@@ -213,7 +213,7 @@ async def add_network_rule(
         "policy.network_rule.add",
         "policy",
         name,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
         detail={"key": body.key},
     )
     return result
@@ -252,7 +252,7 @@ async def delete_network_rule(
         "policy.network_rule.delete",
         "policy",
         name,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
         detail={"key": key},
     )
     return result
@@ -298,7 +298,7 @@ async def add_filesystem_path(
         "policy.filesystem.add",
         "policy",
         name,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
         detail={"path": body.path, "access": body.access},
     )
     return result
@@ -336,7 +336,7 @@ async def delete_filesystem_path(
         "policy.filesystem.delete",
         "policy",
         name,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
         detail={"path": path},
     )
     return result
@@ -383,7 +383,7 @@ async def update_process_policy(
         "policy.process.update",
         "policy",
         name,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
     )
     return result
 
@@ -461,7 +461,7 @@ async def apply_preset(
         "policy.preset.apply",
         "policy",
         name,
-        gateway=_current_gateway.get(),
+        gateway=get_gateway_name(request),
         detail={"preset": preset_name},
     )
     return result
