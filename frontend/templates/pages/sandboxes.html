@@ -50,6 +50,7 @@
             <thead>
                 <tr>
                     <th>Name</th>
+                    <th class="d-none d-lg-table-cell">Description</th>
                     <th class="d-none d-md-table-cell">Image</th>
                     <th>Phase</th>
                     <th class="d-none d-md-table-cell">Policy</th>
@@ -61,7 +62,17 @@
             <tbody>
                 <template x-for="sb in sandboxes" :key="sb.name">
                     <tr @click="navigateTo(gwUrl('/sandboxes/' + sb.name))" style="cursor:pointer">
-                        <td><strong x-text="sb.name"></strong></td>
+                        <td>
+                            <strong x-text="sb.name"></strong>
+                            <div x-show="sb.labels && Object.keys(sb.labels).length > 0" class="mt-1">
+                                <template x-for="(val, key) in sb.labels" :key="key">
+                                    <span class="badge text-bg-light border font-monospace me-1"
+                                          style="font-size:.6rem" x-text="key + '=' + val"></span>
+                                </template>
+                            </div>
+                        </td>
+                        <td class="d-none d-lg-table-cell small text-muted text-truncate"
+                            style="max-width:200px" x-text="sb.description || '—'"></td>
                         <td class="d-none d-md-table-cell">
                             <span class="font-monospace small cell-truncate" :title="sb.image || ''" x-text="sb.image || 'Default'"></span>
                         </td>

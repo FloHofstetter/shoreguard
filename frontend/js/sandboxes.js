@@ -51,6 +51,12 @@ function sandboxDetail(name) {
         pendingCount: 0,
         networkCount: 0,
         policy: null,
+        metaForm: { description: '' },
+        metaLabels: [],
+        newMetaKey: '',
+        newMetaVal: '',
+        saving: false,
+        saveOutput: '',
 
         async init() {
             await this.load();
@@ -67,6 +73,8 @@ function sandboxDetail(name) {
                 ]);
 
                 this.sandbox = sb;
+                this.metaForm.description = sb.description || '';
+                this.metaLabels = Object.entries(sb.labels || {}).map(([k, v]) => ({ key: k, val: v }));
                 this.pendingCount = pendingApprovals?.length || 0;
                 this.policy = policyData?.policy || null;
                 this.networkCount = this.policy ? Object.keys(this.policy.network_policies || {}).length : 0;
@@ -106,6 +114,49 @@ function sandboxDetail(name) {
                 phaseBadge.className = `badge ${SG.badges.phase[sb.phase] || 'text-bg-secondary'}`;
                 phaseBadge.textContent = sb.phase;
             }
+        },
+
+        addMetaLabel() {
+            const key = this.newMetaKey.trim();
+            const val = this.newMetaVal.trim();
+            if (!key) return;
+            if (this.metaLabels.some(r => r.key === key)) return;
+            if (this.metaLabels.length >= 20) return;
+            this.metaLabels.push({ key, val });
+            this.newMetaKey = '';
+            this.newMetaVal = '';
+        },
+
+        removeMetaLabel(key) {
+            this.metaLabels = this.metaLabels.filter(r => r.key !== key);
+        },
+
+        async saveMeta() {
+            this.saving = true;
+            this.saveOutput = '';
+            const body = {};
+            const desc = this.metaForm.description.trim();
+            body.description = desc || null;
+            if (this.metaLabels.length > 0) {
+                const labels = {};
+                for (const r of this.metaLabels) labels[r.key] = r.val;
+                body.labels = labels;
+            } else {
+                body.labels = null;
+            }
+            try {
+                await apiFetch(`${API}/sandboxes/${this.sandboxName}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                this.saveOutput = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Saved</span>';
+                setTimeout(() => { this.saveOutput = ''; }, 2000);
+                this.load();
+            } catch (e) {
+                this.saveOutput = `<span class="text-danger">${escapeHtml(e.message)}</span>`;
+            }
+            this.saving = false;
         },
     };
 }

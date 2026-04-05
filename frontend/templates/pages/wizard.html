@@ -95,6 +95,25 @@
                             <i class="bi bi-plus me-1"></i>Add Variable
                         </button>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description <span class="text-muted small">(optional)</span></label>
+                        <input type="text" id="wizard-description" class="form-control"
+                               placeholder="e.g. ML training sandbox for team-alpha" maxlength="1000">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Labels <span class="text-muted small">(optional)</span></label>
+                        <div id="wizard-labels" class="mb-1"></div>
+                        <div class="input-group input-group-sm" style="max-width:400px" id="wizard-label-input">
+                            <input type="text" class="form-control font-monospace" id="wizard-label-key"
+                                   placeholder="key" onkeydown="if(event.key==='Enter'){event.preventDefault();addWizardLabel()}">
+                            <span class="input-group-text">=</span>
+                            <input type="text" class="form-control" id="wizard-label-val"
+                                   placeholder="value" onkeydown="if(event.key==='Enter'){event.preventDefault();addWizardLabel()}">
+                            <button class="btn btn-outline-success" type="button" onclick="addWizardLabel()">
+                                <i class="bi bi-plus"></i>
+                            </button>
+                        </div>
+                    </div>
                     <div class="d-flex justify-content-between">
                         <button class="btn btn-outline-secondary" onclick="wizardPrev()">Back</button>
                         <button class="btn btn-primary" onclick="wizardNext()">Next</button>

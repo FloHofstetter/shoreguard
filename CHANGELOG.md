@@ -5,6 +5,19 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.18.1] — 2026-04-06
+
+### Added
+
+- **Sandbox metadata UI** — labels and description are now visible and
+  editable across the entire frontend:
+  - **Detail page**: Metadata fieldset with description input, label
+    badges (add/remove), and Save button (PATCH, operator role).
+  - **Wizard**: Description and labels fields in Step 2 (Configuration),
+    shown in Step 4 summary, included in create payload.
+  - **List page**: Description column (truncated) and label badges
+    inline under sandbox name.
+
 ## [0.18.0] — 2026-04-05
 
 ### Added

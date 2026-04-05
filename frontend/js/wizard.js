@@ -13,6 +13,9 @@ function initWizard() {
     wizardState = { step: 1, agent: null, presets: new Set(), defaultProvider: '', fromTemplate: false };
     const envVars = document.getElementById('wizard-env-vars');
     if (envVars) envVars.innerHTML = '';
+    _wizardLabels = {};
+    const labelsContainer = document.getElementById('wizard-labels');
+    if (labelsContainer) labelsContainer.innerHTML = '';
     updateWizardUI();
     _loadCommunitySandboxes();
     _loadSandboxTemplates();
@@ -71,6 +74,15 @@ async function selectTemplate(name) {
             }
         }
 
+        // Populate description and labels from template
+        const descEl = document.getElementById('wizard-description');
+        if (descEl) descEl.value = sb.description || '';
+        _wizardLabels = {};
+        if (sb.labels) {
+            for (const [k, v] of Object.entries(sb.labels)) _wizardLabels[k] = v;
+        }
+        _renderWizardLabels();
+
         // Populate presets
         wizardState.presets = new Set(sb.presets || []);
         wizardState.agent = name;
@@ -125,6 +137,46 @@ function collectEnvVars() {
         if (key) result[key] = val;
     });
     return result;
+}
+
+// ─── Label Helpers ──────────────────────────────────────────────────────────
+
+let _wizardLabels = {};
+
+function addWizardLabel(key, value) {
+    const keyEl = document.getElementById('wizard-label-key');
+    const valEl = document.getElementById('wizard-label-val');
+    const k = key || keyEl?.value?.trim();
+    const v = value || valEl?.value?.trim() || '';
+    if (!k || _wizardLabels[k] !== undefined) return;
+    if (Object.keys(_wizardLabels).length >= 20) return;
+    _wizardLabels[k] = v;
+    _renderWizardLabels();
+    if (keyEl) keyEl.value = '';
+    if (valEl) valEl.value = '';
+}
+
+function removeWizardLabel(key) {
+    delete _wizardLabels[key];
+    _renderWizardLabels();
+}
+
+function _renderWizardLabels() {
+    const container = document.getElementById('wizard-labels');
+    if (!container) return;
+    const entries = Object.entries(_wizardLabels);
+    if (entries.length === 0) { container.innerHTML = ''; return; }
+    container.innerHTML = '<div class="d-flex flex-wrap gap-1">' + entries.map(([k, v]) =>
+        `<span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+            <span class="font-monospace">${escapeHtml(k)}</span>
+            <span class="text-muted">=</span>
+            <span>${escapeHtml(v)}</span>
+            <button type="button" class="btn-close btn-close-sm ms-1" style="font-size:.55rem"
+                    onclick="removeWizardLabel('${escapeHtml(k)}')"></button>
+        </span>`
+    ).join('') + '</div>';
+    const input = document.getElementById('wizard-label-input');
+    if (input) input.style.display = entries.length >= 20 ? 'none' : '';
 }
 
 function wizardNext() {
@@ -254,6 +306,8 @@ function updateWizardSummary() {
     const envVars = collectEnvVars();
     const envEntries = Object.entries(envVars);
     const presets = [...wizardState.presets];
+    const description = document.getElementById('wizard-description')?.value || '';
+    const labelEntries = Object.entries(_wizardLabels);
 
     document.getElementById('wizard-summary').innerHTML = `
         <dl class="row mb-0">
@@ -273,6 +327,14 @@ function updateWizardSummary() {
                 <dt class="col-sm-3 text-muted">Env Vars</dt>
                 <dd class="col-sm-9">${envEntries.map(([k, v]) => `<span class="badge text-bg-secondary me-1 font-monospace">${escapeHtml(k)}=${escapeHtml(v)}</span>`).join('')}</dd>
             ` : ''}
+            ${description ? `
+                <dt class="col-sm-3 text-muted">Description</dt>
+                <dd class="col-sm-9">${escapeHtml(description)}</dd>
+            ` : ''}
+            ${labelEntries.length > 0 ? `
+                <dt class="col-sm-3 text-muted">Labels</dt>
+                <dd class="col-sm-9">${labelEntries.map(([k, v]) => `<span class="badge text-bg-light border font-monospace me-1">${escapeHtml(k)}=${escapeHtml(v)}</span>`).join('')}</dd>
+            ` : ''}
             <dt class="col-sm-3 text-muted">Presets</dt>
             <dd class="col-sm-9">${presets.length > 0 ? presets.map(p => `<span class="badge text-bg-secondary me-1">${p}</span>`).join('') : '<span class="text-muted">None</span>'}</dd>
         </dl>
@@ -288,6 +350,8 @@ async function launchSandbox() {
         : getSelectedProviders();
     const environment = collectEnvVars();
     const presets = [...wizardState.presets];
+    const description = document.getElementById('wizard-description')?.value?.trim() || '';
+    const labels = Object.keys(_wizardLabels).length > 0 ? { ..._wizardLabels } : undefined;
 
     document.getElementById('wizard-progress').style.display = '';
     document.getElementById('wizard-launch-btn').disabled = true;
@@ -315,6 +379,8 @@ async function launchSandbox() {
                 providers: providers.length > 0 ? providers : undefined,
                 environment: Object.keys(environment).length > 0 ? environment : undefined,
                 presets: presets.length > 0 ? presets : undefined,
+                description: description || undefined,
+                labels,
             }),
         });
 
