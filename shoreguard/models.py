@@ -200,6 +200,34 @@ class AuditEntry(Base):
     client_ip: Mapped[str | None] = mapped_column(String(45))
 
 
+class SandboxMeta(Base):
+    """ShoreGuard-side metadata for a sandbox (labels, description).
+
+    Sandboxes live on the OpenShell gateway; this table stores metadata
+    that ShoreGuard manages independently.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway_name: Name of the gateway the sandbox belongs to.
+        sandbox_name: Name of the sandbox (unique per gateway).
+        description: Optional free-text description.
+        labels_json: Optional JSON-encoded key-value labels.
+        created_at: Timestamp when the metadata was first stored.
+        updated_at: Timestamp of the last metadata update.
+    """
+
+    __tablename__ = "sandbox_meta"
+    __table_args__ = (UniqueConstraint("gateway_name", "sandbox_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway_name: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox_name: Mapped[str] = mapped_column(String(253), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    labels_json: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Webhook(Base):
     """A webhook endpoint for event notifications.
 

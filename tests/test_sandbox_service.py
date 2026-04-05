@@ -14,6 +14,20 @@ def sandbox_svc(mock_client):
     return SandboxService(mock_client)
 
 
+@pytest.fixture
+def meta_store():
+    """Real SandboxMetaStore backed by the in-memory test DB."""
+    import shoreguard.services.sandbox_meta as mod
+
+    return mod.sandbox_meta_store
+
+
+@pytest.fixture
+def sandbox_svc_with_meta(mock_client, meta_store):
+    """SandboxService with a mocked client and real metadata store."""
+    return SandboxService(mock_client, meta_store=meta_store)
+
+
 def test_create_ssh_session(sandbox_svc, mock_client):
     """SSH session resolves sandbox name to ID and delegates to client."""
     mock_client.sandboxes.get.return_value = {"id": "abc-123", "name": "sb1"}
@@ -305,3 +319,134 @@ def test_create_ssh_session_resolves_name(sandbox_svc, mock_client):
 
     mock_client.sandboxes.get.assert_called_once_with("mysb")
     mock_client.sandboxes.create_ssh_session.assert_called_once_with("id-555")
+
+
+# ─── Metadata tests ─────────────────────────────────────────────────────────
+
+
+def test_create_with_labels_stores_metadata(sandbox_svc_with_meta, mock_client, meta_store):
+    """create() with labels and description stores metadata in DB."""
+    mock_client.sandboxes.create.return_value = {"name": "sb1", "phase": "provisioning"}
+
+    result = sandbox_svc_with_meta.create(
+        name="sb1",
+        image="base",
+        gateway_name="gw1",
+        description="test sandbox",
+        labels={"team": "platform", "env": "dev"},
+    )
+
+    assert result["description"] == "test sandbox"
+    assert result["labels"] == {"team": "platform", "env": "dev"}
+    # Verify metadata is persisted
+    stored = meta_store.get("gw1", "sb1")
+    assert stored["description"] == "test sandbox"
+    assert stored["labels"] == {"team": "platform", "env": "dev"}
+
+
+def test_create_without_metadata_no_store_call(sandbox_svc_with_meta, mock_client, meta_store):
+    """create() without labels/description does not create metadata row."""
+    mock_client.sandboxes.create.return_value = {"name": "sb1"}
+
+    sandbox_svc_with_meta.create(name="sb1", gateway_name="gw1")
+
+    assert meta_store.get("gw1", "sb1") is None
+
+
+def test_get_merges_metadata(sandbox_svc_with_meta, mock_client, meta_store):
+    """get() merges stored metadata into gateway response."""
+    meta_store.upsert("gw1", "sb1", description="my sb", labels={"app": "web"})
+    mock_client.sandboxes.get.return_value = {"name": "sb1", "phase": "ready"}
+
+    result = sandbox_svc_with_meta.get("sb1", gateway_name="gw1")
+
+    assert result["name"] == "sb1"
+    assert result["description"] == "my sb"
+    assert result["labels"] == {"app": "web"}
+
+
+def test_get_without_metadata_returns_defaults(sandbox_svc_with_meta, mock_client):
+    """get() returns None/empty when no metadata exists."""
+    mock_client.sandboxes.get.return_value = {"name": "sb1", "phase": "ready"}
+
+    result = sandbox_svc_with_meta.get("sb1", gateway_name="gw1")
+
+    assert result["description"] is None
+    assert result["labels"] == {}
+
+
+def test_list_merges_metadata(sandbox_svc_with_meta, mock_client, meta_store):
+    """list() merges metadata for all sandboxes."""
+    meta_store.upsert("gw1", "sb1", labels={"team": "a"})
+    mock_client.sandboxes.list.return_value = [{"name": "sb1"}, {"name": "sb2"}]
+
+    result = sandbox_svc_with_meta.list(gateway_name="gw1")
+
+    assert result[0]["labels"] == {"team": "a"}
+    assert result[1]["labels"] == {}
+
+
+def test_list_filters_by_labels(sandbox_svc_with_meta, mock_client, meta_store):
+    """list() with labels_filter returns only matching sandboxes."""
+    meta_store.upsert("gw1", "sb1", labels={"team": "a"})
+    meta_store.upsert("gw1", "sb2", labels={"team": "b"})
+    mock_client.sandboxes.list.return_value = [{"name": "sb1"}, {"name": "sb2"}]
+
+    result = sandbox_svc_with_meta.list(gateway_name="gw1", labels_filter={"team": "a"})
+
+    assert len(result) == 1
+    assert result[0]["name"] == "sb1"
+
+
+def test_delete_cleans_up_metadata(sandbox_svc_with_meta, mock_client, meta_store):
+    """delete() removes metadata row after successful gateway delete."""
+    meta_store.upsert("gw1", "sb1", description="to delete", labels={"x": "y"})
+    mock_client.sandboxes.delete.return_value = True
+
+    sandbox_svc_with_meta.delete("sb1", gateway_name="gw1")
+
+    assert meta_store.get("gw1", "sb1") is None
+
+
+def test_delete_keeps_metadata_on_failure(sandbox_svc_with_meta, mock_client, meta_store):
+    """delete() keeps metadata when gateway delete returns False."""
+    meta_store.upsert("gw1", "sb1", description="keep me")
+    mock_client.sandboxes.delete.return_value = False
+
+    sandbox_svc_with_meta.delete("sb1", gateway_name="gw1")
+
+    assert meta_store.get("gw1", "sb1") is not None
+
+
+def test_update_metadata(sandbox_svc_with_meta, mock_client, meta_store):
+    """update_metadata() creates/updates metadata and returns merged sandbox."""
+    mock_client.sandboxes.get.return_value = {"name": "sb1", "phase": "ready"}
+
+    result = sandbox_svc_with_meta.update_metadata(
+        "gw1", "sb1", description="updated", labels={"env": "prod"}
+    )
+
+    assert result["description"] == "updated"
+    assert result["labels"] == {"env": "prod"}
+    assert result["name"] == "sb1"
+
+
+def test_update_metadata_partial(sandbox_svc_with_meta, mock_client, meta_store):
+    """update_metadata() with _UNSET leaves existing fields untouched."""
+    from shoreguard.services.sandbox import _UNSET
+
+    meta_store.upsert("gw1", "sb1", description="original", labels={"a": "1"})
+    mock_client.sandboxes.get.return_value = {"name": "sb1", "phase": "ready"}
+
+    result = sandbox_svc_with_meta.update_metadata(
+        "gw1", "sb1", description="new desc", labels=_UNSET
+    )
+
+    assert result["description"] == "new desc"
+    assert result["labels"] == {"a": "1"}
+
+
+def test_update_metadata_no_store_raises(sandbox_svc, mock_client):
+    """update_metadata() without meta store raises RuntimeError."""
+    with pytest.raises(RuntimeError, match="Metadata store not configured"):
+        sandbox_svc.update_metadata("gw1", "sb1", description="x")

@@ -26,7 +26,7 @@ def list_templates() -> list[dict[str, str]]:
     for path in sorted(_TEMPLATES_DIR.glob("*.yaml")):
         try:
             data = yaml.safe_load(path.read_text())
-        except (yaml.YAMLError, AttributeError, OSError):
+        except yaml.YAMLError, AttributeError, OSError:
             logger.warning("Failed to load template file %s", path.name, exc_info=True)
             continue
         if not isinstance(data, dict):
@@ -61,7 +61,7 @@ def get_template(template_name: str) -> dict[str, Any] | None:
         return None
     try:
         data = yaml.safe_load(template_path.read_text())
-    except (yaml.YAMLError, AttributeError, OSError):
+    except yaml.YAMLError, AttributeError, OSError:
         logger.warning("Failed to load template file %s", template_path.name, exc_info=True)
         return None
     if not isinstance(data, dict):

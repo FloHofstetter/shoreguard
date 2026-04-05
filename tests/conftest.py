@@ -39,6 +39,7 @@ def _init_gateway_service():
 
     import shoreguard.services.audit as audit_mod
     import shoreguard.services.gateway as gw_mod
+    import shoreguard.services.sandbox_meta as sandbox_meta_mod
     from shoreguard.models import Base
     from shoreguard.services.gateway import _reset_clients
     from shoreguard.services.registry import GatewayRegistry
@@ -53,9 +54,11 @@ def _init_gateway_service():
     registry = GatewayRegistry(factory)
     gw_mod.gateway_service = gw_mod.GatewayService(registry)
     audit_mod.audit_service = audit_mod.AuditService(factory)
+    sandbox_meta_mod.sandbox_meta_store = sandbox_meta_mod.SandboxMetaStore(factory)
     yield
     _reset_clients()
     audit_mod.audit_service = None
+    sandbox_meta_mod.sandbox_meta_store = None
     engine.dispose()
 
 

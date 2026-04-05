@@ -26,7 +26,7 @@ def list_presets() -> list[dict[str, str]]:
     for path in sorted(_PRESETS_DIR.glob("*.yaml")):
         try:
             data = yaml.safe_load(path.read_text())
-        except (yaml.YAMLError, AttributeError, OSError):
+        except yaml.YAMLError, AttributeError, OSError:
             logger.warning("Failed to load preset file %s", path.name, exc_info=True)
             continue
         if not isinstance(data, dict):
@@ -60,7 +60,7 @@ def get_preset(preset_name: str) -> dict[str, Any] | None:
         return None
     try:
         data = yaml.safe_load(preset_path.read_text())
-    except (yaml.YAMLError, AttributeError, OSError):
+    except yaml.YAMLError, AttributeError, OSError:
         logger.warning("Failed to load preset file %s", preset_path.name, exc_info=True)
         return None
     if not isinstance(data, dict):

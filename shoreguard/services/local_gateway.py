@@ -91,7 +91,7 @@ class LocalGatewayManager:
             groups = proc.stdout.strip().split() if proc.returncode == 0 else []
             result["user_groups"] = groups
             result["in_docker_group"] = "docker" in groups
-        except (subprocess.SubprocessError, OSError):
+        except subprocess.SubprocessError, OSError:
             result["user_groups"] = []
             result["in_docker_group"] = False
 
@@ -106,7 +106,7 @@ class LocalGatewayManager:
                 )
                 if proc.returncode == 0:
                     result["openshell_version"] = proc.stdout.strip()
-            except (subprocess.SubprocessError, OSError):
+            except subprocess.SubprocessError, OSError:
                 logger.debug("openshell --version check failed", exc_info=True)
 
         return result
@@ -486,7 +486,7 @@ class LocalGatewayManager:
                 timeout=5,
             )
             return proc.returncode == 0
-        except (subprocess.SubprocessError, OSError):
+        except subprocess.SubprocessError, OSError:
             logger.debug("Docker daemon check failed", exc_info=True)
             return False
 
@@ -625,7 +625,7 @@ class LocalGatewayManager:
             return cached
         try:
             return self._gw.get_client(name=name)
-        except (GatewayNotConnectedError, grpc.RpcError, OSError):
+        except GatewayNotConnectedError, grpc.RpcError, OSError:
             logger.debug(
                 "Could not connect to gateway '%s' for resource listing",
                 name,
@@ -644,7 +644,7 @@ class LocalGatewayManager:
         """
         try:
             return list_fn()
-        except (grpc.RpcError, OSError, ConnectionError):
+        except grpc.RpcError, OSError, ConnectionError:
             logger.debug("Failed to list resources via %s", list_fn, exc_info=True)
             return None
 

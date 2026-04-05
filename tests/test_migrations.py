@@ -192,7 +192,7 @@ def test_migrations_postgres_fresh_db():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         engine.dispose()
-    except (OperationalError, OSError, ImportError):
+    except OperationalError, OSError, ImportError:
         pytest.skip("PostgreSQL not available")
 
     _run_all_migrations(url)

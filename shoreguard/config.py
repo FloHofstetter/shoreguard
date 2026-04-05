@@ -42,7 +42,7 @@ def is_private_ip(host: str) -> bool:
             if not resolved:
                 return False
             addr = ipaddress.ip_address(resolved[0][4][0])
-        except (TimeoutError, socket.gaierror, ValueError, IndexError, OSError):
+        except TimeoutError, socket.gaierror, ValueError, IndexError, OSError:
             return False
     return addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
 

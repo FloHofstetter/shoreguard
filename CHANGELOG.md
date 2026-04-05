@@ -5,6 +5,21 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.18.0] — 2026-04-05
+
+### Added
+
+- **Sandbox labels & description** — sandboxes now support `labels`
+  (key-value pairs) and `description` metadata, stored in ShoreGuard's
+  DB (OpenShell is unaware). New `sandbox_meta` table with per-gateway
+  scoping.
+- **`PATCH /sandboxes/{name}`** — update labels and/or description on
+  existing sandboxes (requires operator role).
+- **Label filtering** — `GET /sandboxes?label=key:value` filters
+  sandboxes by labels (AND-combined, same semantics as gateway list).
+- **Alembic migration 007** — creates `sandbox_meta` table with
+  `(gateway_name, sandbox_name)` unique constraint.
+
 ## [0.17.0] — 2026-04-05
 
 ### Fixed

@@ -88,6 +88,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if imported:
             logger.info("Auto-imported %d gateway(s) from filesystem", imported)
 
+    # ── Sandbox metadata ───────────────────────────────────────────────
+    import shoreguard.services.sandbox_meta as sandbox_meta_mod
+
+    sandbox_meta_mod.sandbox_meta_store = sandbox_meta_mod.SandboxMetaStore(session_factory)
+    logger.info("Sandbox metadata store initialised")
+
     # ── Audit ────────────────────────────────────────────────────────────
     import shoreguard.services.audit as audit_mod
 

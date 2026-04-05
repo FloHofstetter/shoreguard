@@ -12,6 +12,7 @@ import grpc
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import SandboxError, ValidationError, friendly_grpc_error
 from shoreguard.services.policy import PolicyService
+from shoreguard.services.sandbox_meta import _UNSET, SandboxMetaStore
 
 logger = logging.getLogger(__name__)
 
@@ -24,45 +25,84 @@ class SandboxService:
 
     Args:
         client: OpenShell gRPC client instance.
+        meta_store: Optional metadata store for labels/description.
     """
 
-    def __init__(self, client: ShoreGuardClient) -> None:  # noqa: D107
+    def __init__(  # noqa: D107
+        self,
+        client: ShoreGuardClient,
+        meta_store: SandboxMetaStore | None = None,
+    ) -> None:
         self._client = client
         self._policy = PolicyService(client)
+        self._meta = meta_store
 
-    def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
-        """List all sandboxes.
+    def list(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        gateway_name: str | None = None,
+        labels_filter: dict[str, str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """List all sandboxes with merged metadata.
 
         Args:
             limit: Maximum number of sandboxes to return.
             offset: Number of sandboxes to skip.
+            gateway_name: Gateway name for metadata lookup.
+            labels_filter: Filter sandboxes by label key-value pairs.
 
         Returns:
-            list[dict[str, Any]]: Sandbox records.
+            list[dict[str, Any]]: Sandbox records with metadata.
         """
-        return self._client.sandboxes.list(limit=limit, offset=offset)
+        sandboxes = self._client.sandboxes.list(limit=limit, offset=offset)
+        if self._meta and gateway_name:
+            all_meta = self._meta.list_for_gateway(gateway_name)
+            for sb in sandboxes:
+                name = sb.get("name", "")
+                meta = all_meta.get(name)
+                sb["description"] = meta["description"] if meta else None
+                sb["labels"] = meta["labels"] if meta else {}
+            if labels_filter:
+                sandboxes = [
+                    sb
+                    for sb in sandboxes
+                    if all(sb.get("labels", {}).get(k) == v for k, v in labels_filter.items())
+                ]
+        return sandboxes
 
-    def get(self, name: str) -> dict[str, Any]:
-        """Get a sandbox by name.
+    def get(self, name: str, *, gateway_name: str | None = None) -> dict[str, Any]:
+        """Get a sandbox by name with merged metadata.
 
         Args:
             name: Sandbox name.
+            gateway_name: Gateway name for metadata lookup.
 
         Returns:
-            dict[str, Any]: Sandbox record.
+            dict[str, Any]: Sandbox record with metadata.
         """
-        return self._client.sandboxes.get(name)
+        sb = self._client.sandboxes.get(name)
+        if self._meta and gateway_name:
+            meta = self._meta.get(gateway_name, name)
+            sb["description"] = meta["description"] if meta else None
+            sb["labels"] = meta["labels"] if meta else {}
+        return sb
 
-    def delete(self, name: str) -> bool:
-        """Delete a sandbox by name.
+    def delete(self, name: str, *, gateway_name: str | None = None) -> bool:
+        """Delete a sandbox by name and clean up metadata.
 
         Args:
             name: Sandbox name.
+            gateway_name: Gateway name for metadata cleanup.
 
         Returns:
             bool: True if the sandbox was deleted.
         """
-        return self._client.sandboxes.delete(name)
+        deleted = self._client.sandboxes.delete(name)
+        if deleted and self._meta and gateway_name:
+            self._meta.delete(gateway_name, name)
+        return deleted
 
     def exec(
         self,
@@ -157,6 +197,38 @@ class SandboxService:
         """
         return self._client.sandboxes.revoke_ssh_session(token)
 
+    def update_metadata(
+        self,
+        gateway_name: str,
+        name: str,
+        *,
+        description: str | None | object = _UNSET,
+        labels: dict[str, str] | None | object = _UNSET,
+    ) -> dict[str, Any]:
+        """Update labels and/or description for a sandbox.
+
+        Args:
+            gateway_name: Name of the gateway.
+            name: Sandbox name.
+            description: New description (or _UNSET to skip).
+            labels: New labels (or _UNSET to skip).
+
+        Returns:
+            dict[str, Any]: Updated sandbox record with metadata.
+
+        Raises:
+            RuntimeError: If no meta store is configured.
+        """
+        if not self._meta:
+            raise RuntimeError("Metadata store not configured")
+        # Verify sandbox exists on gateway
+        sb = self._client.sandboxes.get(name)
+        self._meta.upsert(gateway_name, name, description=description, labels=labels)
+        meta = self._meta.get(gateway_name, name)
+        sb["description"] = meta["description"] if meta else None
+        sb["labels"] = meta["labels"] if meta else {}
+        return sb
+
     def create(
         self,
         *,
@@ -166,6 +238,9 @@ class SandboxService:
         providers: list[str] | None = None,
         environment: dict[str, str] | None = None,
         presets: list[str] | None = None,
+        gateway_name: str | None = None,
+        description: str | None = None,
+        labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Create a sandbox and optionally apply presets.
 
@@ -183,6 +258,9 @@ class SandboxService:
             providers: Provider names to attach.
             environment: Environment variables to set.
             presets: Policy presets to apply after creation.
+            gateway_name: Gateway name for metadata storage.
+            description: Optional sandbox description.
+            labels: Optional sandbox labels.
 
         Returns:
             dict[str, Any]: Created sandbox record with preset status.
@@ -196,6 +274,18 @@ class SandboxService:
         )
 
         sandbox_name = result.get("name", name)
+
+        # Store metadata if provided
+        if self._meta and gateway_name and (description is not None or labels is not None):
+            self._meta.upsert(
+                gateway_name,
+                sandbox_name,
+                description=description if description is not None else _UNSET,
+                labels=labels if labels is not None else _UNSET,
+            )
+            meta = self._meta.get(gateway_name, sandbox_name)
+            result["description"] = meta["description"] if meta else None
+            result["labels"] = meta["labels"] if meta else {}
 
         if not presets:
             return result

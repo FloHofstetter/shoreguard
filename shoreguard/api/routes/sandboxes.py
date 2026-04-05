@@ -18,11 +18,17 @@ from shoreguard.exceptions import friendly_grpc_error
 from shoreguard.services.audit import audit_log
 from shoreguard.services.operations import operation_store
 from shoreguard.services.sandbox import SandboxService
+from shoreguard.services.sandbox_meta import sandbox_meta_store
 from shoreguard.services.webhooks import fire_webhook
 
 logger = logging.getLogger(__name__)
 
 _VALID_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
+
+_MAX_DESCRIPTION_LEN = 1000
+_MAX_LABELS = 20
+_MAX_LABEL_VALUE_LEN = 253
+_LABEL_KEY_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$")
 
 router = APIRouter()
 
@@ -38,7 +44,7 @@ def _get_sandbox_service(client: ShoreGuardClient = Depends(get_client)) -> Sand
     Returns:
         SandboxService: Service instance bound to the client.
     """
-    return SandboxService(client)
+    return SandboxService(client, meta_store=sandbox_meta_store)
 
 
 class CreateSandboxRequest(BaseModel):
@@ -52,6 +58,8 @@ class CreateSandboxRequest(BaseModel):
         environment: Environment variables to set.
         policy: Optional policy to apply.
         presets: Policy presets to apply.
+        description: Optional free-text description.
+        labels: Optional key-value labels.
     """
 
     name: str = ""
@@ -61,6 +69,20 @@ class CreateSandboxRequest(BaseModel):
     environment: dict[str, str] = {}
     policy: dict | None = None
     presets: list[str] = []
+    description: str | None = None
+    labels: dict[str, str] | None = None
+
+
+class UpdateSandboxMetadataRequest(BaseModel):
+    """Request body for updating sandbox description and/or labels.
+
+    Attributes:
+        description: New description (or null to clear).
+        labels: New key-value labels (or null to clear).
+    """
+
+    description: str | None = None
+    labels: dict[str, str] | None = None
 
 
 class ExecRequest(BaseModel):
@@ -89,23 +111,93 @@ class RevokeSshRequest(BaseModel):
     token: str
 
 
-@router.get("")
-async def list_sandboxes(
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
-    svc: SandboxService = Depends(_get_sandbox_service),
-) -> list[dict[str, Any]]:
-    """List all sandboxes with pagination.
+def _validate_description(description: str | None) -> None:
+    """Validate a sandbox description.
 
     Args:
+        description: Description string to validate.
+
+    Raises:
+        HTTPException: If the description exceeds the maximum length.
+    """
+    if description is not None and len(description) > _MAX_DESCRIPTION_LEN:
+        raise HTTPException(400, f"description exceeds maximum length of {_MAX_DESCRIPTION_LEN}")
+
+
+def _validate_labels(labels: dict[str, str] | None) -> None:
+    """Validate sandbox labels.
+
+    Args:
+        labels: Label dict to validate.
+
+    Raises:
+        HTTPException: If any label key or value is invalid, or count exceeds limit.
+    """
+    if labels is None:
+        return
+    if len(labels) > _MAX_LABELS:
+        raise HTTPException(400, f"Too many labels (max {_MAX_LABELS})")
+    for key, value in labels.items():
+        if not _LABEL_KEY_RE.match(key):
+            raise HTTPException(
+                400,
+                f"Invalid label key '{key}': must match [a-zA-Z0-9][a-zA-Z0-9._-]* (max 63 chars)",
+            )
+        if len(value) > _MAX_LABEL_VALUE_LEN:
+            raise HTTPException(
+                400,
+                f"Label value for '{key}' exceeds maximum length of {_MAX_LABEL_VALUE_LEN}",
+            )
+
+
+def _parse_label_filters(label: list[str] | None) -> dict[str, str] | None:
+    """Parse label query parameters into a filter dict.
+
+    Args:
+        label: List of ``key:value`` strings.
+
+    Returns:
+        dict[str, str] | None: Parsed filter or None.
+
+    Raises:
+        HTTPException: If a filter string has invalid format.
+    """
+    if not label:
+        return None
+    result: dict[str, str] = {}
+    for item in label:
+        if ":" not in item or item.startswith(":"):
+            raise HTTPException(400, f"Invalid label filter '{item}': expected key:value")
+        key, value = item.split(":", 1)
+        result[key] = value
+    return result
+
+
+@router.get("")
+async def list_sandboxes(
+    request: Request,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    label: list[str] | None = Query(None),
+    svc: SandboxService = Depends(_get_sandbox_service),
+) -> list[dict[str, Any]]:
+    """List all sandboxes with pagination and optional label filtering.
+
+    Args:
+        request: Incoming HTTP request.
         limit: Maximum number of results to return.
         offset: Number of results to skip.
+        label: Optional label filters in ``key:value`` format.
         svc: Injected sandbox service.
 
     Returns:
         list[dict[str, Any]]: Sandbox records.
     """
-    return await asyncio.to_thread(svc.list, limit=limit, offset=offset)
+    labels_filter = _parse_label_filters(label)
+    gw = get_gateway_name(request)
+    return await asyncio.to_thread(
+        svc.list, limit=limit, offset=offset, gateway_name=gw, labels_filter=labels_filter
+    )
 
 
 @router.post("", status_code=202, dependencies=[Depends(require_role("operator"))])
@@ -131,11 +223,18 @@ async def create_sandbox(
     """
     if body.name and not _VALID_NAME_RE.match(body.name):
         raise HTTPException(400, "Invalid sandbox name: must match [a-zA-Z0-9][a-zA-Z0-9._-]*")
+    _validate_description(body.description)
+    _validate_labels(body.labels)
     sandbox_name = body.name or "unnamed"
     actor = get_actor(request)
     op = operation_store.create_if_not_running("sandbox", sandbox_name)
     if op is None:
         raise HTTPException(409, f"Sandbox '{sandbox_name}' creation already in progress")
+
+    _audit_actor = get_actor(request)
+    _audit_role = getattr(request.state, "role", "unknown")
+    _audit_ip = request.client.host if request.client else None
+    _audit_gw = get_gateway_name(request)
 
     async def _run() -> None:
         """Execute sandbox creation in the background."""
@@ -149,6 +248,9 @@ async def create_sandbox(
                 providers=body.providers or None,
                 environment=body.environment or None,
                 presets=body.presets or None,
+                gateway_name=_audit_gw,
+                description=body.description,
+                labels=body.labels,
             )
             sb_name = result.get("name", body.name)
             # Always wait for sandbox to become ready before completing
@@ -159,7 +261,7 @@ async def create_sandbox(
                         sb_name,
                         timeout_seconds=180.0,
                     )
-                    result = await asyncio.to_thread(svc.get, sb_name)
+                    result = await asyncio.to_thread(svc.get, sb_name, gateway_name=_audit_gw)
                 except TimeoutError:
                     result["warning"] = "Sandbox created but did not become ready within 180s"
             logger.info(
@@ -214,11 +316,6 @@ async def create_sandbox(
             except Exception:
                 logger.exception("Failed to record operation failure for %s", op.id)
 
-    _audit_actor = get_actor(request)
-    _audit_role = getattr(request.state, "role", "unknown")
-    _audit_ip = request.client.host if request.client else None
-    _audit_gw = get_gateway_name(request)
-
     task = asyncio.create_task(_run())
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
@@ -228,18 +325,56 @@ async def create_sandbox(
 @router.get("/{name}")
 async def get_sandbox(
     name: str,
+    request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> dict[str, Any]:
     """Get a sandbox by name.
 
     Args:
         name: Sandbox name.
+        request: Incoming HTTP request.
         svc: Injected sandbox service.
 
     Returns:
         dict[str, Any]: Sandbox record.
     """
-    return await asyncio.to_thread(svc.get, name)
+    gw = get_gateway_name(request)
+    return await asyncio.to_thread(svc.get, name, gateway_name=gw)
+
+
+@router.patch("/{name}", dependencies=[Depends(require_role("operator"))])
+async def update_sandbox_metadata(
+    name: str,
+    body: UpdateSandboxMetadataRequest,
+    request: Request,
+    svc: SandboxService = Depends(_get_sandbox_service),
+) -> dict[str, Any]:
+    """Update labels and/or description for a sandbox.
+
+    Args:
+        name: Sandbox name.
+        body: Metadata update payload.
+        request: Incoming HTTP request.
+        svc: Injected sandbox service.
+
+    Returns:
+        dict[str, Any]: Updated sandbox record with metadata.
+    """
+    _validate_description(body.description)
+    _validate_labels(body.labels)
+    gw = get_gateway_name(request)
+    from shoreguard.services.sandbox_meta import _UNSET
+
+    result = await asyncio.to_thread(
+        svc.update_metadata,
+        gw,
+        name,
+        description=body.description if body.description is not None else _UNSET,
+        labels=body.labels if body.labels is not None else _UNSET,
+    )
+    logger.info("Sandbox metadata updated (sandbox=%s, actor=%s)", name, get_actor(request))
+    await audit_log(request, "sandbox.metadata.update", "sandbox", name, gateway=gw)
+    return result
 
 
 @router.delete("/{name}", dependencies=[Depends(require_role("operator"))])
@@ -258,16 +393,15 @@ async def delete_sandbox(
     Returns:
         dict[str, bool]: Deletion status.
     """
-    deleted = await asyncio.to_thread(svc.delete, name)
+    gw = get_gateway_name(request)
+    deleted = await asyncio.to_thread(svc.delete, name, gateway_name=gw)
     if deleted:
         actor = get_actor(request)
         logger.info("Sandbox deleted (sandbox=%s, actor=%s)", name, actor)
-        await audit_log(
-            request, "sandbox.delete", "sandbox", name, gateway=get_gateway_name(request)
-        )
+        await audit_log(request, "sandbox.delete", "sandbox", name, gateway=gw)
         await fire_webhook(
             "sandbox.deleted",
-            {"sandbox": name, "actor": actor, "gateway": get_gateway_name(request)},
+            {"sandbox": name, "actor": actor, "gateway": gw},
         )
     return {"deleted": deleted}
 
