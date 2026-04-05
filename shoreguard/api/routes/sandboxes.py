@@ -15,10 +15,10 @@ from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import friendly_grpc_error
+from shoreguard.services import sandbox_meta as _sandbox_meta_mod
 from shoreguard.services.audit import audit_log
 from shoreguard.services.operations import operation_store
 from shoreguard.services.sandbox import SandboxService
-from shoreguard.services.sandbox_meta import sandbox_meta_store
 from shoreguard.services.webhooks import fire_webhook
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def _get_sandbox_service(client: ShoreGuardClient = Depends(get_client)) -> Sand
     Returns:
         SandboxService: Service instance bound to the client.
     """
-    return SandboxService(client, meta_store=sandbox_meta_store)
+    return SandboxService(client, meta_store=_sandbox_meta_mod.sandbox_meta_store)
 
 
 class CreateSandboxRequest(BaseModel):
