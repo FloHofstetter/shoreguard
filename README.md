@@ -4,198 +4,200 @@
 [![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 
-Open-source control plane for [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell). Manage AI agent sandboxes, gateways, and security policies from a web UI, REST API, or Terraform.
+**Open-source control plane for [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell).** Manage AI agent sandboxes, inference routing, and security policies — from a web UI, REST API, or Terraform.
 
 ![Sandbox Overview](docs/screenshots/sandbox-overview.png)
 
-## What is ShoreGuard?
+---
 
-[NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) provides secure, sandboxed environments for autonomous AI agents — but it ships with only a CLI and terminal UI. ShoreGuard adds the missing management layer: a web-based control plane to register gateways, create sandboxes, edit policies, and approve access requests — across multiple gateways from a single dashboard.
+## Architecture
 
-Think of it like **Rancher for Kubernetes, but for OpenShell gateways**.
+ShoreGuard sits between operators and OpenShell's secure runtime. Agents run inside hardened sandboxes with routed inference — they never see real API keys or provider endpoints.
+
+```mermaid
+graph LR
+    subgraph Operators
+        UI["Web UI"]
+        API["REST API"]
+        TF["Terraform"]
+    end
+
+    subgraph "ShoreGuard — Management Plane"
+        SG["ShoreGuard"]
+        DB[("PostgreSQL")]
+    end
+
+    subgraph "OpenShell — Secure Runtime"
+        OS["Controller"]
+
+        subgraph "Sandbox"
+            Agent["Agent<br/>OpenClaw / Claude Code"]
+        end
+
+        Proxy["Inference Proxy<br/>inference.local/v1"]
+    end
+
+    subgraph "LLM Providers"
+        LLM["Anthropic / NVIDIA / OpenAI"]
+    end
+
+    UI --> SG
+    API --> SG
+    TF --> SG
+    SG --> DB
+    SG -- "gRPC + mTLS" --> OS
+    OS --> Agent
+    Agent -. "inference.local" .-> Proxy
+    Proxy -- "real API key" --> LLM
+
+    style SG fill:#1a7f37,color:#fff,stroke:#1a7f37
+    style Agent fill:#c8e6c9,stroke:#388e3c,color:#1b5e20
+    style Proxy fill:#ffe0b2,stroke:#e65100,color:#bf360c
+```
+
+> **Key insight:** The agent inside the sandbox only knows `inference.local/v1`. OpenShell's L7 proxy injects the real credentials and routes to the actual provider. API keys are managed by ShoreGuard, never exposed to agent code.
+
+---
 
 ## Why ShoreGuard?
 
-OpenShell gives you secure sandboxes — ShoreGuard gives you control over them:
+[NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) provides hardened sandboxes for AI agents — but ships with only a CLI. [NemoClaw](https://github.com/NVIDIA/NemoClaw) adds orchestration, but is single-gateway and CLI-driven.
 
-- **Visibility** — see every gateway, sandbox, and policy in one dashboard instead of juggling CLI sessions
-- **Guardrails** — visual policy editor with revision history, so security changes are auditable, not ad-hoc
-- **Approval flow** — agents request network access, humans approve or deny in real-time
-- **Multi-gateway** — manage dev, staging, and production gateways from a single pane
-- **Automation** — REST API and Terraform provider for CI/CD pipelines and GitOps workflows
+ShoreGuard adds the missing management layer:
 
-| Channel | Use case |
-|---------|----------|
-| **Web UI** | Ops teams, dashboards, approval flows |
-| **REST API** | CI/CD pipelines, custom integrations |
-| **[Terraform Provider](https://github.com/FloHofstetter/terraform-provider-shoreguard)** | Infrastructure as Code, GitOps |
+| Capability | OpenShell CLI | NemoClaw | ShoreGuard |
+|------------|:---:|:---:|:---:|
+| Sandbox creation | CLI | CLI | Web UI + API + Terraform |
+| Multi-gateway | — | — | Multiple gateways, one dashboard |
+| Visual policy editor | — | — | Drag-and-drop with revision history |
+| Approval flow | — | — | Real-time notifications |
+| Inference routing | CLI | Blueprint profiles | API-driven, per-gateway |
+| Audit trail | — | — | Persistent, filterable, exportable |
+| RBAC | — | — | Admin / Operator / Viewer |
+| Agent frameworks | — | OpenClaw only | Paperclip, OpenClaw, custom |
+| Webhooks | — | — | Slack, Discord, Email, HMAC-signed |
 
-## Where ShoreGuard fits
+---
 
-```mermaid
-graph TB
-    subgraph Orchestration
-        PC[Paperclip]
-    end
-    subgraph Agents
-        OC[OpenClaw]
-        CC[Claude Code]
-        CX[Codex]
-    end
-    subgraph Secure Runtime
-        OS[NVIDIA OpenShell]
-    end
-    subgraph Management Plane
-        SG["ShoreGuard<br/>Web UI · REST API · Terraform"]
-    end
-    subgraph Infrastructure
-        DO[DigitalOcean / AWS / on-premise]
-    end
+## Quick Start
 
-    PC --> OC
-    PC --> CC
-    PC --> CX
-    OC --> OS
-    CC --> OS
-    CX --> OS
-    SG -- "gRPC / mTLS" --> OS
-    OS --> DO
-    SG --> DO
-
-    style SG fill:#1a7f37,color:#fff,stroke:#1a7f37
-```
-
-## Quick start
-
-### pip (local development)
+### Local development
 
 ```bash
 pip install shoreguard
 shoreguard --local --no-auth
 ```
 
-Open [http://localhost:8888](http://localhost:8888). The `--local` flag enables Docker-based gateway management, `--no-auth` skips login for development.
+Open [http://localhost:8888](http://localhost:8888). The `--local` flag enables Docker-based gateway management, `--no-auth` skips login.
 
 ### Docker Compose (production)
-
-The `deploy/` directory contains a modular Docker Compose stack with ShoreGuard, OpenShell, and optional integrations.
 
 ```bash
 git clone https://github.com/FloHofstetter/shoreguard.git
 cd shoreguard/deploy
 cp .env.example .env    # edit: set SHOREGUARD_SECRET_KEY, passwords
+docker compose up -d    # core: ShoreGuard + OpenShell + Caddy (HTTPS)
 ```
 
-**Core stack** (ShoreGuard + OpenShell):
+The stack automatically generates mTLS certificates, registers an OpenShell gateway, and provides HTTPS via Caddy with self-signed certificates.
+
+#### Optional profiles
 
 ```bash
-docker compose up -d
-```
-
-**With Paperclip** (agent orchestration):
-
-```bash
+# Add Paperclip agent orchestration
 docker compose --profile paperclip up -d
+
+# Add OpenClaw agent gateway (sandboxed)
+docker compose --profile openclaw up -d
 ```
 
-The stack automatically:
-- Generates mTLS certificates for the OpenShell gRPC connection
-- Registers an OpenShell gateway named "dev" in ShoreGuard
-- Creates a service principal for API access
+See the [deployment guide](https://flohofstetter.github.io/shoreguard/admin/deployment/) for production hardening, custom domains, and Let's Encrypt.
 
-Open [http://localhost:8888](http://localhost:8888) to access ShoreGuard (default login: `admin@localhost` / `admin`).
-
-#### Adding Paperclip integration
-
-After enabling the `paperclip` profile:
-
-1. **Onboard Paperclip** — run the interactive setup wizard:
-   ```bash
-   docker exec -it -u node deploy-paperclip-1 pnpm paperclipai onboard
-   ```
-   Open the invite URL in your browser to create your admin account.
-
-2. **Install the ShoreGuard adapter and plugin**:
-   ```bash
-   # Authenticate the CLI
-   docker exec deploy-paperclip-1 pnpm paperclipai auth login --instance-admin
-   # Open the printed URL in your browser to approve
-
-   # Install adapter (enables openshell_shoreguard agent type)
-   curl -X POST -H "Authorization: Bearer $BOARD_TOKEN" \
-     -H 'Content-Type: application/json' \
-     http://localhost:3100/api/adapters/install \
-     -d '{"packageName":"@shoreguard/paperclip-adapter"}'
-
-   # Install plugin (adds sandbox UI, tools, and gateway sync)
-   docker exec deploy-paperclip-1 pnpm paperclipai plugin install @shoreguard/paperclip-plugin
-   ```
-
-3. **Configure an agent** to use the OpenShell adapter — see the [Paperclip Plugin README](https://github.com/FloHofstetter/paperclip-plugin-shoreguard#4-create-an-agent) for adapter config details.
-
-See the **[deployment guide](https://flohofstetter.github.io/shoreguard/admin/deployment/)** for TLS, reverse proxy, and production hardening.
+---
 
 ## Features
 
-- **[Gateway management](https://flohofstetter.github.io/shoreguard/guide/gateways/)** — register and monitor multiple remote OpenShell gateways with health probing, descriptions, and label-based filtering
-- **[Sandbox wizard](https://flohofstetter.github.io/shoreguard/guide/sandboxes/)** — step-by-step creation with agent types, images, and presets
-- **[Visual policy editor](https://flohofstetter.github.io/shoreguard/guide/policies/)** — network rules, filesystem paths, process settings — no YAML
-- **[Approval flow](https://flohofstetter.github.io/shoreguard/guide/approvals/)** — review agent-requested endpoint access in real-time
-- **[RBAC](https://flohofstetter.github.io/shoreguard/admin/rbac/)** — Admin, Operator, Viewer roles with gateway-scoped overrides
-- **[Docker deployment](https://flohofstetter.github.io/shoreguard/admin/deployment/)** — Dockerfile + docker-compose with PostgreSQL and health probes
-- **[Audit log](https://flohofstetter.github.io/shoreguard/guide/monitoring/)** — persistent, filterable, exportable audit trail
-- **[Terraform provider](https://flohofstetter.github.io/shoreguard/reference/terraform/)** — declarative infrastructure-as-code
-- **[Webhooks & Notifications](https://flohofstetter.github.io/shoreguard/reference/api/)** — Slack, Discord, Email, and generic webhook channels with HMAC-SHA256 signing
-- **[Prometheus metrics](https://flohofstetter.github.io/shoreguard/reference/api/)** — `/metrics` endpoint for Grafana, Datadog, and standard monitoring stacks
+### Sandbox Management
+
+- **Sandbox wizard** — step-by-step creation with community images, GPU support, and policy presets
+- **Visual policy editor** — network rules, filesystem paths, process settings with revision history and diff viewer
+- **Approval flow** — agents request endpoint access, operators approve or deny in real-time
+- **Templates** — pre-configured sandboxes for data science, web development, and secure coding
+
+### Infrastructure
+
+- **Multi-gateway** — manage dev, staging, and production OpenShell clusters from one dashboard
+- **RBAC** — Admin, Operator, Viewer roles with gateway-scoped overrides
+- **Audit log** — persistent, filterable, exportable trail of all state changes
+- **Health monitoring** — automatic gateway probing with status indicators
+
+### Integrations
+
+- **REST API** — full CRUD for gateways, sandboxes, policies, providers, and inference
+- **Terraform provider** — declarative infrastructure as code
+- **Webhooks** — Slack, Discord, Email, and generic webhooks with HMAC-SHA256 signing
+- **Prometheus metrics** — `/metrics` endpoint for Grafana and standard monitoring
 
 <details>
 <summary><strong>Screenshots</strong></summary>
 
-| Policy Editor | Network Policies | Gateway Detail |
-|:---:|:---:|:---:|
-| ![Policy Editor](docs/screenshots/policy.png) | ![Network Policies](docs/screenshots/network-policies.png) | ![Gateway Detail](docs/screenshots/gateway-detail.png) |
+| Sandbox Overview | Policy Editor |
+|:---:|:---:|
+| ![Sandbox Overview](docs/screenshots/sandbox-overview.png) | ![Policy Editor](docs/screenshots/policy.png) |
+
+| Network Policies | Gateway Detail |
+|:---:|:---:|
+| ![Network Policies](docs/screenshots/network-policies.png) | ![Gateway Detail](docs/screenshots/gateway-detail.png) |
+
+| Providers | Audit Log |
+|:---:|:---:|
+| ![Providers](docs/screenshots/providers.png) | ![Audit Log](docs/screenshots/audit-log.png) |
 
 </details>
 
-## Documentation
+---
 
-Full documentation is available at **[flohofstetter.github.io/shoreguard](https://flohofstetter.github.io/shoreguard/)**.
+## Ecosystem
 
-- [Installation](https://flohofstetter.github.io/shoreguard/getting-started/installation/)
-- [CLI Reference](https://flohofstetter.github.io/shoreguard/reference/cli/)
-- [REST API Reference](https://flohofstetter.github.io/shoreguard/reference/api/)
-- [Configuration](https://flohofstetter.github.io/shoreguard/reference/configuration/)
-- [Architecture](https://flohofstetter.github.io/shoreguard/architecture/)
-- [Contributing](https://flohofstetter.github.io/shoreguard/development/contributing/)
+| Project | Description |
+|---------|-------------|
+| [Terraform Provider](https://github.com/FloHofstetter/terraform-provider-shoreguard) | Manage gateways, sandboxes, providers, and policies as code |
+| [Paperclip Plugin + Adapter](https://github.com/FloHofstetter/paperclip-plugin-shoreguard) | Run Paperclip agents in isolated OpenShell sandboxes |
+| [OpenClaw Plugin](https://github.com/FloHofstetter/openclaw-plugin-shoreguard) | `/shoreguard` slash commands for OpenClaw agents |
+| [OpenClaw Sandbox Image](images/openclaw/) | Hardened OpenClaw image for OpenShell deployment |
+| [Docker Compose Stack](deploy/) | One-command setup: ShoreGuard + OpenShell + Caddy + optional integrations |
+
+---
 
 ## Roadmap
 
-**Completed:**
+**Shipped:**
 
-- [x] Multi-gateway management with health monitoring
-- [x] RBAC — Admin, Operator, Viewer roles with gateway-scoped overrides
-- [x] Sandbox wizard with community images and presets
-- [x] Visual policy editor with revision history and diff viewer
-- [x] Approval flow with real-time notifications
-- [x] Terraform provider ([separate repo](https://github.com/FloHofstetter/terraform-provider-shoreguard))
-- [x] Alpine.js reactive frontend with dark/light theme
-- [x] Persistent audit log with export
-- [x] Docker image + docker-compose with PostgreSQL
-- [x] Health probes (`/healthz`, `/readyz`)
-- [x] Stateless gateway routing (URL-based, no server-side selection)
-- [x] Inference timeout configuration (OpenShell v0.0.22)
-- [x] L7 query parameter matchers for network policies
-- [x] Webhooks with HMAC-SHA256 signing
-- [x] Notification channels (Slack, Discord, Email)
-- [x] Prometheus `/metrics` endpoint
-- [x] Justfile for common development tasks
-- [x] Gateway descriptions and labels with API filtering
+- Multi-gateway management with health monitoring
+- RBAC with gateway-scoped overrides
+- Sandbox wizard with community images and presets
+- Visual policy editor with revision history
+- Real-time approval flow
+- Terraform provider
+- Persistent audit log with export
+- Webhooks (Slack, Discord, Email) with HMAC signing
+- Prometheus metrics
+- Paperclip adapter ([`@shoreguard/paperclip-plugin`](https://www.npmjs.com/package/@shoreguard/paperclip-plugin) + [`@shoreguard/paperclip-adapter`](https://www.npmjs.com/package/@shoreguard/paperclip-adapter))
+- Docker Compose stack with Caddy auto-TLS
+- Inference routing via OpenShell L7 proxy
+- OpenClaw sandbox image with NemoClaw-style hardening
+
+**In progress:**
+
+- Hardened sandbox deployment via gRPC API (blocked by [OpenShell API limitations](images/openclaw/README.md#known-limitations))
+- Routed inference for Paperclip adapter (replace credential injection with `inference.local`)
 
 **Planned:**
 
-- [ ] DigitalOcean Marketplace integration
-- [x] Paperclip adapter for agent orchestration ([`@shoreguard/paperclip-plugin`](https://www.npmjs.com/package/@shoreguard/paperclip-plugin) + [`@shoreguard/paperclip-adapter`](https://www.npmjs.com/package/@shoreguard/paperclip-adapter))
-- [ ] Multi-region gateway federation
+- Multi-region gateway federation
+- DigitalOcean Marketplace integration
+
+---
 
 ## Development
 
@@ -206,8 +208,6 @@ uv sync --group dev
 uv run shoreguard --local --no-auth
 ```
 
-This starts ShoreGuard with SQLite, hot-reload, no login, and local gateway management. Create a gateway from the UI or use the `openshell` CLI.
-
 Run checks with [just](https://github.com/casey/just):
 
 ```bash
@@ -216,24 +216,11 @@ just dev      # start dev server
 just test     # run unit tests
 ```
 
-Or manually:
-
-```bash
-uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest -m 'not integration'
-```
-
 See the [contributing guide](https://flohofstetter.github.io/shoreguard/development/contributing/) for details.
 
-## Ecosystem
+## Documentation
 
-ShoreGuard integrates with agent orchestration platforms and infrastructure tools:
-
-| Project | Description |
-|---------|-------------|
-| [Terraform Provider](https://github.com/FloHofstetter/terraform-provider-shoreguard) | Manage gateways, sandboxes, providers, and policies as code |
-| [Paperclip Plugin + Adapter](https://github.com/FloHofstetter/paperclip-plugin-shoreguard) | Run Paperclip agents in isolated OpenShell sandboxes |
-| [OpenClaw Plugin](https://github.com/FloHofstetter/openclaw-plugin-shoreguard) | `/shoreguard` slash commands for OpenClaw agents |
-| [Docker Compose Stack](deploy/) | One-command setup: ShoreGuard + OpenShell + Paperclip |
+Full docs: **[flohofstetter.github.io/shoreguard](https://flohofstetter.github.io/shoreguard/)**
 
 ## License
 
