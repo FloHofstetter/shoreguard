@@ -191,7 +191,7 @@ class SandboxManager:
             environment=dict(env or {}),
             timeout_seconds=timeout_seconds,
         )
-        grpc_timeout = max(self._timeout, (timeout_seconds or 0) + 10)
+        grpc_timeout = max(self._timeout, (timeout_seconds or 600) + 10)
         stream = self._stub.ExecSandbox(request, timeout=grpc_timeout)
 
         stdout_parts: list[bytes] = []
