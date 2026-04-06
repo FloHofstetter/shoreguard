@@ -65,6 +65,7 @@ services:
     privileged: true
     volumes:
       - openshell-data:/var/lib/rancher
+      - init-certs:/certs
     networks:
       - stack
     deploy:
@@ -114,6 +115,93 @@ services:
       - stack
 
   # ---------------------------------------------------------------------------
+  # Init — generate mTLS certificates for OpenShell's gRPC endpoint
+  #
+  # OpenShell's Helm chart expects TLS secrets for its gRPC server.
+  # This init container generates a self-signed CA, server cert, and client
+  # cert, then creates the required k8s secrets inside OpenShell's k3s
+  # cluster.  The client cert + CA are written to a shared volume so that
+  # init-gateway can register the gateway with mTLS credentials.
+  #
+  # For production, replace the self-signed CA with certs from your PKI or
+  # use cert-manager inside the k3s cluster.
+  # ---------------------------------------------------------------------------
+  init-openshell:
+    image: docker:cli
+    depends_on:
+      openshell:
+        condition: service_started
+    restart: "no"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - init-certs:/certs
+    command:
+      - sh
+      - -c
+      - |
+        OPENSHELL=deploy-openshell-1
+
+        echo "Waiting for k3s API inside OpenShell..."
+        until docker exec $$OPENSHELL kubectl get nodes > /dev/null 2>&1; do sleep 3; done
+        echo "k3s API ready."
+
+        echo "Waiting for openshell namespace..."
+        until docker exec $$OPENSHELL kubectl get ns openshell > /dev/null 2>&1; do sleep 3; done
+        echo "Namespace ready."
+
+        # Skip if secrets already exist (idempotent)
+        if docker exec $$OPENSHELL kubectl get secret openshell-server-tls -n openshell > /dev/null 2>&1; then
+          echo "TLS secrets already exist, skipping."
+          # Export CA for init-gateway if not on shared volume yet
+          if [ ! -f /certs/ca.crt ]; then
+            docker exec $$OPENSHELL kubectl get secret openshell-server-client-ca -n openshell \
+              -o jsonpath='{.data.ca\.crt}' | base64 -d > /certs/ca.crt
+          fi
+        else
+          echo "Generating mTLS certificates..."
+
+          # Generate certs on the shared volume (mounted in both containers)
+          docker exec $$OPENSHELL sh -c '
+            # --- CA ---
+            openssl genpkey -algorithm RSA -out /certs/ca.key -pkeyopt rsa_keygen_bits:2048 2>/dev/null
+            openssl req -x509 -new -key /certs/ca.key -out /certs/ca.crt -days 3650 \
+              -subj "/CN=openshell-ca" \
+              -addext "basicConstraints=critical,CA:TRUE" \
+              -addext "keyUsage=critical,keyCertSign,cRLSign" 2>/dev/null
+
+            # --- Server cert (for OpenShell gRPC) ---
+            openssl genpkey -algorithm RSA -out /certs/server.key -pkeyopt rsa_keygen_bits:2048 2>/dev/null
+            openssl req -new -key /certs/server.key -out /certs/server.csr -subj "/CN=openshell" 2>/dev/null
+            printf "subjectAltName=DNS:openshell,DNS:openshell-0,DNS:openshell.openshell.svc.cluster.local,DNS:localhost,IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n" > /certs/server.ext
+            openssl x509 -req -in /certs/server.csr -CA /certs/ca.crt -CAkey /certs/ca.key \
+              -CAcreateserial -out /certs/server.crt -days 3650 -extfile /certs/server.ext 2>/dev/null
+
+            # --- Client cert (for ShoreGuard to connect) ---
+            openssl genpkey -algorithm RSA -out /certs/client.key -pkeyopt rsa_keygen_bits:2048 2>/dev/null
+            openssl req -new -key /certs/client.key -out /certs/client.csr -subj "/CN=shoreguard-client" 2>/dev/null
+            printf "basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=clientAuth\n" > /certs/client.ext
+            openssl x509 -req -in /certs/client.csr -CA /certs/ca.crt -CAkey /certs/ca.key \
+              -CAcreateserial -out /certs/client.crt -days 3650 -extfile /certs/client.ext 2>/dev/null
+
+            # Make certs readable for init-gateway (runs as non-root)
+            chmod 644 /certs/*.crt /certs/*.key
+
+            # --- Create k8s secrets ---
+            kubectl create secret tls openshell-server-tls -n openshell \
+              --cert=/certs/server.crt --key=/certs/server.key
+            kubectl create secret generic openshell-server-client-ca -n openshell \
+              --from-file=ca.crt=/certs/ca.crt
+            kubectl create secret generic openshell-ssh-handshake -n openshell \
+              --from-literal=secret=$(openssl rand -hex 32)
+          '
+          echo "TLS secrets created."
+        fi
+
+        echo "Waiting for OpenShell pod to be ready..."
+        docker exec $$OPENSHELL kubectl wait --for=condition=ready pod/openshell-0 -n openshell --timeout=180s
+        echo "OpenShell init complete."
+
+  # ---------------------------------------------------------------------------
   # Init — register OpenShell gateway in ShoreGuard on first start
   # ---------------------------------------------------------------------------
   init-gateway:
@@ -121,20 +209,19 @@ services:
     depends_on:
       shoreguard:
         condition: service_started
-      openshell:
-        condition: service_started
+      init-openshell:
+        condition: service_completed_successfully
     networks:
       - stack
     restart: "no"
     entrypoint: ["sh", "-c"]
+    volumes:
+      - init-certs:/certs:ro
     command:
       - |
         echo "Waiting for ShoreGuard..."
         until curl -sf http://shoreguard:8888/healthz > /dev/null 2>&1; do sleep 2; done
         echo "ShoreGuard ready."
-
-        echo "Waiting for OpenShell gateway..."
-        sleep 30
 
         echo "Logging in..."
         curl -s -c /tmp/cookies -X POST http://shoreguard:8888/api/auth/login \
@@ -145,10 +232,13 @@ services:
         echo "Checking if gateway 'dev' exists..."
         GW_COUNT=$$(curl -s -b /tmp/cookies http://shoreguard:8888/api/gateway/list | grep -c '"name"')
         if [ "$$GW_COUNT" = "0" ]; then
-          echo "Registering gateway 'dev'..."
+          echo "Registering gateway 'dev' with mTLS..."
+          CA_B64=$$(cat /certs/ca.crt | base64 | tr -d '\n')
+          CLIENT_CERT_B64=$$(cat /certs/client.crt | base64 | tr -d '\n')
+          CLIENT_KEY_B64=$$(cat /certs/client.key | base64 | tr -d '\n')
           curl -s -b /tmp/cookies -X POST http://shoreguard:8888/api/gateway/register \
             -H 'Content-Type: application/json' \
-            -d '{"name":"dev","endpoint":"openshell:30051","scheme":"http","auth_mode":"insecure","description":"Local OpenShell cluster"}'
+            -d "{\"name\":\"dev\",\"endpoint\":\"openshell:30051\",\"scheme\":\"https\",\"auth_mode\":\"mtls\",\"description\":\"Local OpenShell cluster\",\"ca_cert\":\"$${CA_B64}\",\"client_cert\":\"$${CLIENT_CERT_B64}\",\"client_key\":\"$${CLIENT_KEY_B64}\"}"
           echo ""
           echo "Gateway registered."
         else
@@ -170,3 +260,4 @@ volumes:
   paperclip-pgdata:
   paperclip-data:
   openshell-data:
+  init-certs:
