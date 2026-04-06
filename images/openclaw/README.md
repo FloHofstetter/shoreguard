@@ -213,12 +213,9 @@ To fully support API-driven agent sandboxes, OpenShell needs:
 
 These would benefit not just ShoreGuard but any tool building on the OpenShell gRPC API.
 
-> [!TIP]
-> **Potential contribution**: A PR adding `repeated string command` to `SandboxSpec` in the OpenShell proto would unblock all API-driven orchestrators. This could be a good topic for the [NVIDIA Developer Discord](https://discord.gg/nvidia-developer).
-
 ## Next Steps
 
-- [ ] Propose `command` field addition to OpenShell proto (GitHub issue or Discord discussion)
+- [ ] Propose `command` field addition to OpenShell proto upstream
 - [ ] Alternative: Build-time config baking (like NemoClaw) as interim solution
 - [ ] Alternative: ShoreGuard calls `openshell` CLI via `docker exec` into the OpenShell container
 - [ ] Publish image to GHCR once deploy flow works end-to-end
