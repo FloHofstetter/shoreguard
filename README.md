@@ -16,21 +16,16 @@ ShoreGuard sits between operators and OpenShell's secure runtime. Agents run ins
 
 ```mermaid
 graph LR
-    subgraph "Operators"
+    subgraph "Operators — all use ShoreGuard REST API"
         UI["ShoreGuard Web UI"]
-        API["ShoreGuard REST API"]
         TF["Terraform Provider"]
-    end
-
-    subgraph "Agent Platforms"
-        PC["Paperclip UI"]
-        OC["OpenClaw UI"]
+        PC["Paperclip"]
+        OC["OpenClaw"]
     end
 
     subgraph "ShoreGuard — Management Plane"
-        SG["ShoreGuard"]
+        SG["ShoreGuard API"]
         DB[("PostgreSQL")]
-        Plugin["Plugins<br/>Paperclip / OpenClaw"]
     end
 
     subgraph "OpenShell — Secure Runtime"
@@ -48,13 +43,11 @@ graph LR
     end
 
     UI --> SG
-    API --> SG
     TF --> SG
-    PC --> Plugin
-    OC --> Plugin
-    Plugin --> SG
-    PC -.->|"controls"| Agent
-    OC -.->|"controls"| Agent
+    PC -->|"adapter plugin"| SG
+    OC -->|"slash commands"| SG
+    PC -.->|"controls agent"| Agent
+    OC -.->|"controls agent"| Agent
     SG --> DB
     SG -- "gRPC + mTLS" --> OS
     OS --> Agent
@@ -64,10 +57,9 @@ graph LR
     style SG fill:#1a7f37,color:#fff,stroke:#1a7f37
     style Agent fill:#c8e6c9,stroke:#388e3c,color:#1b5e20
     style Proxy fill:#ffe0b2,stroke:#e65100,color:#bf360c
-    style Plugin fill:#bbdefb,stroke:#1565c0,color:#0d47a1
 ```
 
-> **Key insight:** The agent inside the sandbox only knows `inference.local/v1`. OpenShell's L7 proxy injects the real credentials and routes to the actual provider. API keys are managed by ShoreGuard, never exposed to agent code. Agent platform UIs (Paperclip, OpenClaw) connect through ShoreGuard plugins and can also control agents directly.
+> **Key insight:** The agent inside the sandbox only knows `inference.local/v1`. OpenShell's L7 proxy injects the real credentials and routes to the actual provider. API keys are managed by ShoreGuard, never exposed to agent code. All operators — whether human (Web UI, Terraform) or agent platforms (Paperclip, OpenClaw) — use the same ShoreGuard REST API.
 
 ---
 
