@@ -84,7 +84,7 @@ services:
   #   3. Configure your LLM provider in the Paperclip UI
   #   4. Install the ShoreGuard plugin:
   #      docker exec deploy-paperclip-1 pnpm paperclipai plugin install \
-  #        /paperclip/paperclip-plugin-shoreguard
+  #        @shoreguard/paperclip-plugin
   # ---------------------------------------------------------------------------
   paperclip-db:
     image: postgres:17-alpine
