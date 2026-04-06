@@ -152,69 +152,156 @@ services:
       - stack
 
   # ---------------------------------------------------------------------------
-  # OpenClaw — agent gateway (optional, enable with --profile openclaw)
+  # OpenClaw — hardened agent sandbox (optional, enable with --profile openclaw)
   #
-  # After starting:
-  #   1. Open https://<host>:18789 and connect with OPENCLAW_GATEWAY_TOKEN
-  #   2. Install the ShoreGuard plugin:
-  #      docker compose --profile openclaw exec openclaw-gateway \
-  #        openclaw plugin install openclaw-plugin-shoreguard
-  #   3. Configure the plugin via /shoreguard commands in your OpenClaw session
+  # Deploys OpenClaw inside an OpenShell sandbox with:
+  #   - Routed inference via OpenShell L7 proxy (inference.local/v1)
+  #   - Hardened config (read-only, hash-pinned, Landlock-protected)
+  #   - Privilege separation (gateway user vs sandbox user)
+  #   - Network policies per binary+host+method
+  #
+  # The init container calls ShoreGuard's API to:
+  #   1. Create sandbox from the hardened OpenClaw image
+  #   2. Register the inference provider
+  #   3. Configure inference routing
+  #   4. Inject and lock openclaw.json
+  #   5. Apply the hardened policy preset
+  #
+  # After deployment, access the OpenClaw UI via:
+  #   https://<host>:18789 (proxied through Caddy)
   # ---------------------------------------------------------------------------
-  init-openclaw:
-    image: ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION:-latest}
+  init-openclaw-sandbox:
+    image: curlimages/curl:latest
     profiles: ["openclaw"]
-    restart: "no"
-    user: root
-    entrypoint: ["sh", "-c", "chown -R node:node /home/node/.openclaw"]
-    volumes:
-      - openclaw-config:/home/node/.openclaw
-
-  openclaw-gateway:
-    image: ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION:-latest}
-    profiles: ["openclaw"]
-    restart: unless-stopped
     depends_on:
-      init-openclaw:
+      shoreguard:
+        condition: service_started
+      init-gateway:
         condition: service_completed_successfully
-    environment:
-      HOME: /home/node
-      TERM: xterm-256color
-      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
-      OPENCLAW_ALLOW_INSECURE_PRIVATE_WS: "true"
-      TZ: ${OPENCLAW_TZ:-UTC}
-    volumes:
-      - openclaw-config:/home/node/.openclaw
-      - openclaw-workspace:/home/node/.openclaw/workspace
-      - ./openclaw.json:/home/node/.openclaw/openclaw.json:ro
     networks:
       - stack
-    init: true
+    restart: "no"
+    entrypoint: ["sh", "-c"]
     command:
-      - node
-      - dist/index.js
-      - gateway
-      - --bind
-      - lan
-      - --port
-      - "18789"
-      - --allow-unconfigured
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    deploy:
-      resources:
-        limits:
-          memory: 1G
+      - |
+        SG="http://shoreguard:8888"
+        GW="dev"
+        SB_NAME="openclaw"
+        SB_IMAGE="ghcr.io/shoreguard/openclaw-sandbox:latest"
+        PROVIDER_TYPE="${OPENCLAW_PROVIDER_TYPE:-anthropic}"
+        MODEL_ID="${OPENCLAW_MODEL_ID:-claude-sonnet-4-6}"
+
+        echo "Waiting for ShoreGuard..."
+        until curl -sf $$SG/healthz > /dev/null 2>&1; do sleep 2; done
+        echo "ShoreGuard ready."
+
+        echo "Logging in..."
+        curl -s -c /tmp/cookies -X POST $$SG/api/auth/login \
+          -H 'Content-Type: application/json' \
+          -d '{"email":"admin@localhost","password":"${SHOREGUARD_ADMIN_PASSWORD:-admin}"}'
+        echo ""
+
+        # --- Step 1: Create sandbox ---
+        echo "Creating sandbox '$$SB_NAME'..."
+        CREATE=$$(curl -s -b /tmp/cookies -X POST \
+          $$SG/api/gateways/$$GW/sandboxes \
+          -H 'Content-Type: application/json' \
+          -d "{
+            \"name\":\"$$SB_NAME\",
+            \"image\":\"$$SB_IMAGE\",
+            \"presets\":[\"openclaw\"],
+            \"labels\":{\"shoreguard.io/type\":\"openclaw\",\"shoreguard.io/provider\":\"$$PROVIDER_TYPE\"},
+            \"description\":\"OpenClaw agent ($$PROVIDER_TYPE/$$MODEL_ID)\"
+          }")
+        echo "Create: $$CREATE"
+
+        # Poll sandbox creation
+        OP_ID=$$(echo "$$CREATE" | grep -o '"operation_id":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$$OP_ID" ]; then
+          echo "Waiting for sandbox ready (op $$OP_ID)..."
+          for i in $$(seq 1 60); do
+            STATUS=$$(curl -s -b /tmp/cookies $$SG/api/operations/$$OP_ID \
+              | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+            [ "$$STATUS" = "succeeded" ] && break
+            [ "$$STATUS" = "failed" ] && { echo "Sandbox creation failed!"; exit 1; }
+            sleep 5
+          done
+        fi
+        echo "Sandbox ready."
+
+        # --- Step 2: Register inference provider ---
+        PROVIDER_NAME="$$SB_NAME-$$PROVIDER_TYPE"
+        echo "Registering provider '$$PROVIDER_NAME'..."
+        curl -s -b /tmp/cookies -X POST \
+          $$SG/api/gateways/$$GW/providers \
+          -H 'Content-Type: application/json' \
+          -d "{
+            \"name\":\"$$PROVIDER_NAME\",
+            \"provider_type\":\"$$PROVIDER_TYPE\",
+            \"api_key\":\"${OPENCLAW_API_KEY}\"
+          }" || true
+        echo ""
+
+        # --- Step 3: Configure inference routing ---
+        echo "Setting inference route..."
+        curl -s -b /tmp/cookies -X PUT \
+          $$SG/api/gateways/$$GW/inference \
+          -H 'Content-Type: application/json' \
+          -d "{
+            \"provider_name\":\"$$PROVIDER_NAME\",
+            \"model_id\":\"$$MODEL_ID\",
+            \"verify\":false
+          }"
+        echo ""
+
+        # --- Step 4: Inject openclaw.json via exec ---
+        echo "Injecting OpenClaw config..."
+        GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN}"
+        CONFIG=$$(cat <<JSONEOF
+        {
+          "agents":{"defaults":{"model":{"primary":"$$MODEL_ID"}}},
+          "models":{"mode":"merge","providers":{
+            "$$PROVIDER_TYPE":{"baseUrl":"https://inference.local/v1","models":[
+              {"id":"$$MODEL_ID","contextWindow":131072,"maxOutput":8192}
+            ]}
+          }},
+          "gateway":{
+            "mode":"local","bind":"lan",
+            "controlUi":{
+              "dangerouslyAllowHostHeaderOriginFallback":true,
+              "dangerouslyDisableDeviceAuth":true,
+              "allowedOrigins":["http://127.0.0.1:18789"]
+            },
+            "trustedProxies":["127.0.0.1","::1"],
+            "auth":{"mode":"token","token":"$$GATEWAY_TOKEN"}
+          }
+        }
+        JSONEOF
+        )
+
+        # Write config via exec (env var avoids shell injection)
+        curl -s -b /tmp/cookies -X POST \
+          $$SG/api/gateways/$$GW/sandboxes/$$SB_NAME/exec \
+          -H 'Content-Type: application/json' \
+          -d "{
+            \"command\":\"echo \\\"\\$$OPENCLAW_CONFIG\\\" > /home/node/.openclaw/openclaw.json\",
+            \"env\":{\"OPENCLAW_CONFIG\":$$(echo "$$CONFIG" | tr -d '\n' | sed 's/"/\\"/g')},
+            \"timeout_seconds\":10
+          }" || true
+        echo ""
+
+        # Lock config and pin hash
+        curl -s -b /tmp/cookies -X POST \
+          $$SG/api/gateways/$$GW/sandboxes/$$SB_NAME/exec \
+          -H 'Content-Type: application/json' \
+          -d "{
+            \"command\":\"chmod 444 /home/node/.openclaw/openclaw.json && chown root:root /home/node/.openclaw/openclaw.json && cd /home/node/.openclaw && sha256sum openclaw.json > .config-hash && chmod 444 .config-hash && chown root:root .config-hash\",
+            \"timeout_seconds\":10
+          }" || true
+        echo ""
+
+        echo "OpenClaw sandbox deployment complete."
+        echo "Access: https://<host>:18789 (token: $$GATEWAY_TOKEN)"
 
   # ---------------------------------------------------------------------------
   # Init — generate mTLS certificates for OpenShell's gRPC endpoint
@@ -368,6 +455,4 @@ volumes:
   paperclip-pgdata:
   paperclip-data:
   openshell-data:
-  openclaw-config:
-  openclaw-workspace:
   init-certs:

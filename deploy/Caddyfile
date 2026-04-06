@@ -19,13 +19,15 @@ https://:443 {
 }
 
 # OpenClaw Gateway — HTTPS + WebSocket on port 18789
+# Routes to OpenClaw running inside an OpenShell sandbox.
+# OpenShell forwards sandbox port 18789 to the host via NodePort.
 https://:18789 {
 	tls internal {
 		on_demand
 	}
 
-	reverse_proxy openclaw-gateway:18789 {
-		lb_try_duration 90s
-		lb_try_interval 2s
+	reverse_proxy openshell:18789 {
+		lb_try_duration 120s
+		lb_try_interval 3s
 	}
 }

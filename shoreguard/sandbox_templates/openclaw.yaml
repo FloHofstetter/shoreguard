@@ -1,0 +1,14 @@
+template:
+  name: openclaw
+  description: "Hardened OpenClaw agent gateway with inference routing"
+  category: agent
+
+sandbox:
+  image: ghcr.io/shoreguard/openclaw-sandbox:latest
+  gpu: false
+  providers: []
+  environment:
+    HOME: /home/node
+    TERM: xterm-256color
+  presets:
+    - openclaw

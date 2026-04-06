@@ -308,12 +308,14 @@ class SetInferenceRequest(BaseModel):
         model_id: Identifier of the model to use.
         verify: Whether to verify the configuration before applying.
         timeout_secs: Per-route request timeout in seconds (0 = default 60s).
+        route_name: Named inference route (empty for default cluster route).
     """
 
     provider_name: str
     model_id: str
     verify: bool = True
     timeout_secs: int = 0
+    route_name: str = ""
 
 
 @gw_api.get("/inference")
@@ -362,6 +364,7 @@ async def set_inference(
         model_id=body.model_id,
         verify=body.verify,
         timeout_secs=body.timeout_secs,
+        route_name=body.route_name,
     )
     from shoreguard.services.audit import audit_log
     from shoreguard.services.webhooks import fire_webhook

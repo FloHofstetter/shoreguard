@@ -1,0 +1,117 @@
+# Hardened OpenClaw sandbox policy — deny-by-default with explicit allows.
+#
+# Modeled after NemoClaw's openclaw-sandbox.yaml but adapted for ShoreGuard's
+# runtime config injection model.  The agent runs as 'node' user with
+# /home/node/.openclaw read-only (Landlock) and writable state in .openclaw-data.
+#
+# Additional network presets (slack, discord, npm, etc.) can be layered on
+# top via ShoreGuard's preset system.
+
+preset:
+  name: openclaw
+  description: "Hardened OpenClaw agent sandbox with inference routing"
+
+filesystem:
+  include_workdir: true
+  compatibility: best_effort
+  read_only:
+    - /home/node/.openclaw
+    - /usr
+    - /lib
+    - /etc
+    - /app
+    - /proc
+    - /dev/urandom
+  read_write:
+    - /home/node/.openclaw-data
+    - /tmp
+    - /dev/null
+    - /var/log
+
+process:
+  run_as_user: node
+  run_as_group: node
+
+network_policies:
+  # Inference routing — sandbox hits inference.local, OpenShell L7 proxy
+  # rewrites to the real provider (Anthropic, NVIDIA, OpenAI, etc.)
+  inference:
+    name: inference
+    endpoints:
+      - host: inference.local
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: passthrough
+        rules:
+          - allow: { method: POST, path: "/v1/**" }
+          - allow: { method: GET, path: "/v1/models" }
+    binaries:
+      - /usr/local/bin/node
+      - /usr/local/bin/openclaw
+
+  # OpenClaw gateway health and API (local only)
+  openclaw_gateway:
+    name: openclaw_gateway
+    endpoints:
+      - host: "127.0.0.1"
+        port: 18789
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/healthz" }
+          - allow: { method: GET, path: "/readyz" }
+          - allow: { method: GET, path: "/__openclaw__/**" }
+          - allow: { method: POST, path: "/__openclaw__/**" }
+    binaries:
+      - /usr/local/bin/node
+
+  # GitHub access for git operations
+  github:
+    name: github
+    endpoints:
+      - host: github.com
+        port: 443
+        access: full
+      - host: api.github.com
+        port: 443
+        access: full
+    binaries:
+      - /usr/bin/git
+      - /usr/bin/gh
+
+  # npm registry for plugin installation
+  npm_registry:
+    name: npm_registry
+    endpoints:
+      - host: registry.npmjs.org
+        port: 443
+        access: full
+    binaries:
+      - /usr/local/bin/npm
+      - /usr/local/bin/node
+      - /usr/local/bin/openclaw
+
+  # Claude Code API access (for Claude-based agents)
+  claude_code:
+    name: claude_code
+    endpoints:
+      - host: api.anthropic.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/**" }
+      - host: statsig.anthropic.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/**" }
+    binaries:
+      - /usr/local/bin/claude
+      - /usr/local/bin/node
