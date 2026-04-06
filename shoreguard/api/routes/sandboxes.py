@@ -406,16 +406,17 @@ async def delete_sandbox(
     return {"deleted": deleted}
 
 
-@router.post("/{name}/exec", dependencies=[Depends(require_role("operator"))])
+@router.post("/{name}/exec", status_code=202, dependencies=[Depends(require_role("operator"))])
 async def exec_in_sandbox(
     name: str,
     body: ExecRequest,
     request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> dict[str, Any]:
-    """Execute a command inside a running sandbox.
+    """Execute a command inside a running sandbox (async LRO).
 
-    Accepts command as a string (parsed with shlex) or a list of args.
+    Returns 202 with an operation ID. Poll ``GET /operations/{id}``
+    for the result.
 
     Args:
         name: Sandbox name.
@@ -424,19 +425,31 @@ async def exec_in_sandbox(
         svc: Injected sandbox service.
 
     Returns:
-        dict[str, Any]: Execution result with stdout, stderr, and exit code.
+        dict[str, Any]: Operation ID and status for polling.
     """
-    result = await asyncio.to_thread(
-        svc.exec,
-        name,
-        body.command,
-        workdir=body.workdir,
-        env=body.env or None,
-        timeout_seconds=body.timeout_seconds,
-    )
-    logger.info("Command executed in sandbox (sandbox=%s, actor=%s)", name, get_actor(request))
-    await audit_log(request, "sandbox.exec", "sandbox", name, gateway=get_gateway_name(request))
-    return result
+    op = operation_store.create("exec", f"{name}:{body.command[:60]}")
+
+    async def _run() -> None:
+        try:
+            result = await asyncio.to_thread(
+                svc.exec,
+                name,
+                body.command,
+                workdir=body.workdir,
+                env=body.env or None,
+                timeout_seconds=body.timeout_seconds,
+            )
+            operation_store.complete(op.id, result)
+            actor = get_actor(request)
+            logger.info("Exec completed (sandbox=%s, actor=%s)", name, actor)
+            gw = get_gateway_name(request)
+            await audit_log(request, "sandbox.exec", "sandbox", name, gateway=gw)
+        except Exception as exc:
+            operation_store.fail(op.id, str(exc))
+            logger.error("Exec failed in sandbox %s: %s", name, exc)
+
+    asyncio.create_task(_run())
+    return {"operation_id": op.id, "status": "running", "resource_type": "exec"}
 
 
 @router.post("/{name}/ssh", status_code=201, dependencies=[Depends(require_role("operator"))])
