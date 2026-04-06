@@ -78,15 +78,62 @@ Open [http://localhost:8888](http://localhost:8888). The `--local` flag enables 
 
 ### Docker Compose (production)
 
+The `deploy/` directory contains a modular Docker Compose stack with ShoreGuard, OpenShell, and optional integrations.
+
 ```bash
 git clone https://github.com/FloHofstetter/shoreguard.git
-cd shoreguard
-cp .env.example .env
-# Edit .env — set POSTGRES_PASSWORD and SHOREGUARD_SECRET_KEY
+cd shoreguard/deploy
+cp .env.example .env    # edit: set SHOREGUARD_SECRET_KEY, passwords
+```
+
+**Core stack** (ShoreGuard + OpenShell):
+
+```bash
 docker compose up -d
 ```
 
-Open [http://localhost:8888](http://localhost:8888) and complete the setup wizard. See the **[deployment guide](https://flohofstetter.github.io/shoreguard/admin/deployment/)** for TLS, reverse proxy, and production hardening.
+**With Paperclip** (agent orchestration):
+
+```bash
+docker compose --profile paperclip up -d
+```
+
+The stack automatically:
+- Generates mTLS certificates for the OpenShell gRPC connection
+- Registers an OpenShell gateway named "dev" in ShoreGuard
+- Creates a service principal for API access
+
+Open [http://localhost:8888](http://localhost:8888) to access ShoreGuard (default login: `admin@localhost` / `admin`).
+
+#### Adding Paperclip integration
+
+After enabling the `paperclip` profile:
+
+1. **Onboard Paperclip** — run the interactive setup wizard:
+   ```bash
+   docker exec -it -u node deploy-paperclip-1 pnpm paperclipai onboard
+   ```
+   Open the invite URL in your browser to create your admin account.
+
+2. **Install the ShoreGuard adapter and plugin**:
+   ```bash
+   # Authenticate the CLI
+   docker exec deploy-paperclip-1 pnpm paperclipai auth login --instance-admin
+   # Open the printed URL in your browser to approve
+
+   # Install adapter (enables openshell_shoreguard agent type)
+   curl -X POST -H "Authorization: Bearer $BOARD_TOKEN" \
+     -H 'Content-Type: application/json' \
+     http://localhost:3100/api/adapters/install \
+     -d '{"packageName":"@shoreguard/paperclip-adapter"}'
+
+   # Install plugin (adds sandbox UI, tools, and gateway sync)
+   docker exec deploy-paperclip-1 pnpm paperclipai plugin install @shoreguard/paperclip-plugin
+   ```
+
+3. **Configure an agent** to use the OpenShell adapter — see the [Paperclip Plugin README](https://github.com/FloHofstetter/paperclip-plugin-shoreguard#4-create-an-agent) for adapter config details.
+
+See the **[deployment guide](https://flohofstetter.github.io/shoreguard/admin/deployment/)** for TLS, reverse proxy, and production hardening.
 
 ## Features
 
@@ -147,7 +194,7 @@ Full documentation is available at **[flohofstetter.github.io/shoreguard](https:
 **Planned:**
 
 - [ ] DigitalOcean Marketplace integration
-- [ ] Paperclip adapter for agent orchestration
+- [x] Paperclip adapter for agent orchestration ([`@shoreguard/paperclip-plugin`](https://www.npmjs.com/package/@shoreguard/paperclip-plugin) + [`@shoreguard/paperclip-adapter`](https://www.npmjs.com/package/@shoreguard/paperclip-adapter))
 - [ ] Multi-region gateway federation
 
 ## Development
