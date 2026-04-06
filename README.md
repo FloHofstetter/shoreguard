@@ -177,6 +177,17 @@ uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run 
 
 See the [contributing guide](https://flohofstetter.github.io/shoreguard/development/contributing/) for details.
 
+## Ecosystem
+
+ShoreGuard integrates with agent orchestration platforms and infrastructure tools:
+
+| Project | Description |
+|---------|-------------|
+| [Terraform Provider](https://github.com/FloHofstetter/terraform-provider-shoreguard) | Manage gateways, sandboxes, providers, and policies as code |
+| [Paperclip Plugin + Adapter](https://github.com/FloHofstetter/paperclip-plugin-shoreguard) | Run Paperclip agents in isolated OpenShell sandboxes |
+| [OpenClaw Plugin](https://github.com/FloHofstetter/openclaw-plugin-shoreguard) | `/shoreguard` slash commands for OpenClaw agents |
+| [Docker Compose Stack](deploy/) | One-command setup: ShoreGuard + OpenShell + Paperclip |
+
 ## License
 
 [Apache 2.0](LICENSE)

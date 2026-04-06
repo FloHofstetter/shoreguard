@@ -1,0 +1,172 @@
+# ShoreGuard Stack — ShoreGuard + OpenShell + Paperclip
+#
+# Usage:
+#   cp .env.example .env   # edit as needed
+#   docker compose up -d
+#
+# Services:
+#   - shoreguard:    Control plane UI + API     → http://localhost:8888
+#   - paperclip:     Agent orchestration UI     → http://localhost:3100
+#   - openshell:     Sandbox runtime (k3s)      → port 8443 (internal)
+#   - shoreguard-db: PostgreSQL for ShoreGuard
+#   - paperclip-db:  PostgreSQL for Paperclip
+
+services:
+  # ---------------------------------------------------------------------------
+  # ShoreGuard — sandbox control plane
+  # ---------------------------------------------------------------------------
+  shoreguard-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shoreguard
+      POSTGRES_PASSWORD: ${SHOREGUARD_DB_PASSWORD:-shoreguard}
+      POSTGRES_DB: shoreguard
+    volumes:
+      - shoreguard-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shoreguard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - stack
+
+  shoreguard:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${SHOREGUARD_PORT:-8888}:8888"
+    environment:
+      SHOREGUARD_DATABASE_URL: "postgresql+psycopg://shoreguard:${SHOREGUARD_DB_PASSWORD:-shoreguard}@shoreguard-db:5432/shoreguard"
+      SHOREGUARD_SECRET_KEY: ${SHOREGUARD_SECRET_KEY}
+      SHOREGUARD_ADMIN_PASSWORD: ${SHOREGUARD_ADMIN_PASSWORD:-admin}
+      SHOREGUARD_LOG_LEVEL: ${SHOREGUARD_LOG_LEVEL:-info}
+      SHOREGUARD_ALLOW_REGISTRATION: "true"
+      SHOREGUARD_LOCAL_MODE: "true"
+    depends_on:
+      shoreguard-db:
+        condition: service_healthy
+    networks:
+      - stack
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # OpenShell — sandbox runtime (k3s in Docker)
+  # ---------------------------------------------------------------------------
+  openshell:
+    image: ghcr.io/nvidia/openshell/cluster:0.0.22
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - openshell-data:/var/lib/rancher
+    networks:
+      - stack
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ---------------------------------------------------------------------------
+  # Paperclip — agent orchestration
+  # ---------------------------------------------------------------------------
+  paperclip-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: paperclip
+      POSTGRES_PASSWORD: ${PAPERCLIP_DB_PASSWORD:-paperclip}
+      POSTGRES_DB: paperclip
+    volumes:
+      - paperclip-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paperclip"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - stack
+
+  paperclip:
+    image: ghcr.io/paperclipai/paperclip:latest
+    restart: unless-stopped
+    ports:
+      - "${PAPERCLIP_PORT:-3100}:3100"
+    environment:
+      DATABASE_URL: "postgres://paperclip:${PAPERCLIP_DB_PASSWORD:-paperclip}@paperclip-db:5432/paperclip"
+      PORT: "3100"
+      SERVE_UI: "true"
+      PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
+      PAPERCLIP_DEPLOYMENT_EXPOSURE: "private"
+      PAPERCLIP_PUBLIC_URL: "${PAPERCLIP_PUBLIC_URL:-http://localhost:3100}"
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+    volumes:
+      - paperclip-data:/paperclip
+    depends_on:
+      paperclip-db:
+        condition: service_healthy
+    networks:
+      - stack
+
+  # ---------------------------------------------------------------------------
+  # Init — register OpenShell gateway in ShoreGuard on first start
+  # ---------------------------------------------------------------------------
+  init-gateway:
+    image: curlimages/curl:latest
+    depends_on:
+      shoreguard:
+        condition: service_started
+      openshell:
+        condition: service_started
+    networks:
+      - stack
+    restart: "no"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        echo "Waiting for ShoreGuard..."
+        until curl -sf http://shoreguard:8888/healthz > /dev/null 2>&1; do sleep 2; done
+        echo "ShoreGuard ready."
+
+        echo "Waiting for OpenShell gateway..."
+        sleep 30
+
+        echo "Logging in..."
+        curl -s -c /tmp/cookies -X POST http://shoreguard:8888/api/auth/login \
+          -H 'Content-Type: application/json' \
+          -d '{"email": "admin@localhost", "password": "${SHOREGUARD_ADMIN_PASSWORD:-admin}"}'
+
+        echo ""
+        echo "Checking if gateway 'dev' exists..."
+        GW_COUNT=$$(curl -s -b /tmp/cookies http://shoreguard:8888/api/gateway/list | grep -c '"name"')
+        if [ "$$GW_COUNT" = "0" ]; then
+          echo "Registering gateway 'dev'..."
+          curl -s -b /tmp/cookies -X POST http://shoreguard:8888/api/gateway/register \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"dev","endpoint":"openshell:30051","scheme":"http","auth_mode":"insecure","description":"Local OpenShell cluster"}'
+          echo ""
+          echo "Gateway registered."
+        else
+          echo "Gateway already exists, skipping."
+        fi
+
+        echo "Creating service principal..."
+        curl -s -b /tmp/cookies -X POST http://shoreguard:8888/api/auth/service-principals \
+          -H 'Content-Type: application/json' \
+          -d '{"name":"paperclip","role":"operator"}' || true
+        echo ""
+        echo "Init complete."
+
+networks:
+  stack:
+
+volumes:
+  shoreguard-pgdata:
+  paperclip-pgdata:
+  paperclip-data:
+  openshell-data:
