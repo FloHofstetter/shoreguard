@@ -23,19 +23,30 @@ graph LR
         OC["OpenClaw"]
     end
 
+    subgraph "Observability"
+        Grafana["Grafana"]
+    end
+
     subgraph "ShoreGuard — Management Plane"
         SG["ShoreGuard API"]
         DB[("PostgreSQL")]
+        Metrics["/metrics"]
     end
 
-    subgraph "OpenShell — Secure Runtime"
-        OS["Controller"]
-
+    subgraph "Gateway: dev"
+        OS1["OpenShell Controller"]
         subgraph "Sandbox"
-            Agent["Agent<br/>OpenClaw / Claude Code"]
+            Agent1["Agent"]
         end
+        Proxy1["inference.local/v1"]
+    end
 
-        Proxy["Inference Proxy<br/>inference.local/v1"]
+    subgraph "Gateway: staging"
+        OS2["OpenShell Controller"]
+        subgraph "Sandbox "
+            Agent2["Agent"]
+        end
+        Proxy2["inference.local/v1"]
     end
 
     subgraph "LLM Providers"
@@ -46,20 +57,29 @@ graph LR
     TF --> SG
     PC -->|"adapter plugin"| SG
     OC -->|"slash commands"| SG
-    PC -.->|"controls agent"| Agent
-    OC -.->|"controls agent"| Agent
+    PC -.->|"controls"| Agent1
+    OC -.->|"controls"| Agent1
+    Grafana --> Metrics
     SG --> DB
-    SG -- "gRPC + mTLS" --> OS
-    OS --> Agent
-    Agent -. "inference.local" .-> Proxy
-    Proxy -- "real API key" --> LLM
+    SG --> Metrics
+    SG -- "gRPC + mTLS" --> OS1
+    SG -- "gRPC + mTLS" --> OS2
+    OS1 --> Agent1
+    OS2 --> Agent2
+    Agent1 -. "inference.local" .-> Proxy1
+    Agent2 -. "inference.local" .-> Proxy2
+    Proxy1 -- "real API key" --> LLM
+    Proxy2 -- "real API key" --> LLM
 
     style SG fill:#1a7f37,color:#fff,stroke:#1a7f37
-    style Agent fill:#c8e6c9,stroke:#388e3c,color:#1b5e20
-    style Proxy fill:#ffe0b2,stroke:#e65100,color:#bf360c
+    style Agent1 fill:#c8e6c9,stroke:#388e3c,color:#1b5e20
+    style Agent2 fill:#c8e6c9,stroke:#388e3c,color:#1b5e20
+    style Proxy1 fill:#ffe0b2,stroke:#e65100,color:#bf360c
+    style Proxy2 fill:#ffe0b2,stroke:#e65100,color:#bf360c
+    style Grafana fill:#bbdefb,stroke:#1565c0,color:#0d47a1
 ```
 
-> **Key insight:** The agent inside the sandbox only knows `inference.local/v1`. OpenShell's L7 proxy injects the real credentials and routes to the actual provider. API keys are managed by ShoreGuard, never exposed to agent code. All operators — whether human (Web UI, Terraform) or agent platforms (Paperclip, OpenClaw) — use the same ShoreGuard REST API.
+> **Key insight:** The agent inside the sandbox only knows `inference.local/v1`. OpenShell's L7 proxy injects the real credentials and routes to the actual provider. API keys are managed by ShoreGuard, never exposed to agent code. All operators — whether human (Web UI, Terraform) or agent platforms (Paperclip, OpenClaw) — use the same ShoreGuard REST API. One ShoreGuard instance manages multiple gateways (dev, staging, production).
 
 ---
 
