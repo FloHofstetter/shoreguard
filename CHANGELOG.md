@@ -5,6 +5,57 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.19.0] — 2026-04-07
+
+### Added
+
+- **Async sandbox exec** — `POST /sandboxes/{name}/exec` now returns a
+  long-running operation (LRO) with polling pattern instead of blocking.
+- **Exec audit fields** — `command`, `exit_code`, and `status` added to
+  `sandbox.exec` audit detail for full traceability.
+- **mTLS auto-generation** — `openshell-client-tls` secret with CA cert
+  is automatically created for OpenShell gateway connections.
+- **Docker Compose profiles** — optional `paperclip` profile for
+  Paperclip integration alongside ShoreGuard.
+- **Caddy reverse proxy** — new Caddy service and OpenClaw profile in
+  the deploy stack for production-ready TLS termination.
+- **Hardened OpenClaw sandbox** — dedicated sandbox image with security
+  documentation and deployment via generic ShoreGuard APIs.
+- **Deploy stack README** — ecosystem section and deploy stack overview
+  added to the project README.
+
+### Fixed
+
+- **gRPC exec timeout** — default timeout raised to 600 s for
+  long-running agent sessions.
+- **SetClusterInference** — `no_verify` flag now correctly set in the
+  gRPC request.
+- **LOCAL_MODE endpoints** — private IP addresses are now accepted when
+  registering gateways in local mode.
+- **Gateway context** — switched from `ContextVar` to `request.state`
+  to avoid cross-request leaks.
+- **openshell-client-tls** — secret now includes the CA certificate for
+  proper chain verification.
+- **sandbox_meta_store import** — resolved binding issue that caused
+  startup failures.
+- **Exec tests** — aligned with async LRO pattern and added shlex
+  validation before returning 202.
+
+### Changed
+
+- **README** — redesigned with updated architecture diagram and sandbox
+  vision narrative.
+- **Architecture diagram** — added multi-gateway topology, observability
+  components, unified operators, agent platform UIs, and plugins.
+- **Mermaid diagrams** — improved contrast for dark-mode rendering.
+
+### Docs
+
+- Deploy guide expanded with profiles and Paperclip integration steps.
+- Plugin install command updated to `@shoreguard/paperclip-plugin` from
+  npm.
+- Discord reference removed from OpenClaw README.
+
 ## [0.18.1] — 2026-04-06
 
 ### Added

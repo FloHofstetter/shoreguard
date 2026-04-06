@@ -1,3 +1,3 @@
 """Shoreguard — Open source control plane for NVIDIA OpenShell."""
 
-__version__ = "0.16.2"
+__version__ = "0.19.0"

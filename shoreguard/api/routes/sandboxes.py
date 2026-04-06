@@ -427,6 +427,9 @@ async def exec_in_sandbox(
 
     Returns:
         dict[str, Any]: Operation ID and status for polling.
+
+    Raises:
+        ValidationError: If the command string has invalid shell syntax.
     """
     # Validate shlex syntax synchronously before accepting the operation.
     if isinstance(body.command, str):
