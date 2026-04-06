@@ -44,9 +44,9 @@ graph TB
     GW -->|"inference.local/v1"| Proxy
     Proxy -->|"Real API + Key"| LLM
 
-    style GW fill:#e8f5e9,stroke:#2e7d32
-    style Proxy fill:#fff3e0,stroke:#e65100
-    style Agent fill:#e3f2fd,stroke:#1565c0
+    style GW fill:#c8e6c9,stroke:#388e3c,color:#1b5e20
+    style Proxy fill:#ffe0b2,stroke:#e65100,color:#bf360c
+    style Agent fill:#bbdefb,stroke:#1565c0,color:#0d47a1
 ```
 
 ### Inference Routing
