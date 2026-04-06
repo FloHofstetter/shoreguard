@@ -441,12 +441,38 @@ async def exec_in_sandbox(
             )
             operation_store.complete(op.id, result)
             actor = get_actor(request)
-            logger.info("Exec completed (sandbox=%s, actor=%s)", name, actor)
             gw = get_gateway_name(request)
-            await audit_log(request, "sandbox.exec", "sandbox", name, gateway=gw)
+            exit_code = result.get("exit_code")
+            logger.info("Exec completed (sandbox=%s, actor=%s)", name, actor)
+            await audit_log(
+                request,
+                "sandbox.exec",
+                "sandbox",
+                name,
+                gateway=gw,
+                detail={
+                    "command": body.command[:200],
+                    "exit_code": exit_code,
+                    "timeout_seconds": body.timeout_seconds,
+                    "status": "success" if exit_code == 0 else "failed",
+                },
+            )
         except Exception as exc:
             operation_store.fail(op.id, str(exc))
             logger.error("Exec failed in sandbox %s: %s", name, exc)
+            gw = get_gateway_name(request)
+            await audit_log(
+                request,
+                "sandbox.exec",
+                "sandbox",
+                name,
+                gateway=gw,
+                detail={
+                    "command": body.command[:200],
+                    "status": "error",
+                    "error": str(exc)[:200],
+                },
+            )
 
     asyncio.create_task(_run())
     return {"operation_id": op.id, "status": "running", "resource_type": "exec"}
