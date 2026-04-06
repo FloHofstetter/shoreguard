@@ -1,0 +1,31 @@
+# ShoreGuard Stack — Caddy reverse proxy
+#
+# Self-signed TLS by default (works for any IP / hostname).
+# For production with a real domain, replace the site addresses
+# with your domain (e.g. shoreguard.example.com) and Caddy will
+# automatically provision Let's Encrypt certificates.
+
+{
+	local_certs
+}
+
+# ShoreGuard UI + API — HTTPS on port 443
+https://:443 {
+	tls internal {
+		on_demand
+	}
+
+	reverse_proxy shoreguard:8888
+}
+
+# OpenClaw Gateway — HTTPS + WebSocket on port 18789
+https://:18789 {
+	tls internal {
+		on_demand
+	}
+
+	reverse_proxy openclaw-gateway:18789 {
+		lb_try_duration 90s
+		lb_try_interval 2s
+	}
+}

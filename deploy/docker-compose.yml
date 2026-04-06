@@ -1,19 +1,46 @@
 # ShoreGuard Stack — modular deployment with optional integrations
 #
 # Core (always active):
-#   - shoreguard:    Control plane UI + API     → http://localhost:8888
+#   - caddy:         Reverse proxy with auto-TLS → https://<host>
+#   - shoreguard:    Control plane UI + API     → https://<host>/
 #   - openshell:     Sandbox runtime (k3s)      → gRPC via mTLS
 #   - shoreguard-db: PostgreSQL for ShoreGuard
 #
 # Optional profiles:
 #   - paperclip:     Agent orchestration (Paperclip AI)
+#   - openclaw:      Agent gateway (OpenClaw)    → https://<host>:18789
 #
 # Usage:
 #   cp .env.example .env                          # edit as needed
 #   docker compose up -d                          # core only
 #   docker compose --profile paperclip up -d      # core + Paperclip
+#   docker compose --profile openclaw up -d       # core + OpenClaw
 
 services:
+  # ---------------------------------------------------------------------------
+  # Caddy — reverse proxy with automatic TLS
+  #
+  # Provides HTTPS for all browser-facing services. Uses self-signed certs
+  # by default (internal TLS). Set CADDY_DOMAIN to a real domain for
+  # automatic Let's Encrypt certificates.
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${SHOREGUARD_PORT:-443}:443"
+      - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - stack
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
   # ---------------------------------------------------------------------------
   # ShoreGuard — sandbox control plane
   # ---------------------------------------------------------------------------
@@ -39,8 +66,6 @@ services:
       context: ..
       dockerfile: Dockerfile
     restart: unless-stopped
-    ports:
-      - "${SHOREGUARD_PORT:-8888}:8888"
     environment:
       SHOREGUARD_DATABASE_URL: "postgresql+psycopg://shoreguard:${SHOREGUARD_DB_PASSWORD:-shoreguard}@shoreguard-db:5432/shoreguard"
       SHOREGUARD_SECRET_KEY: ${SHOREGUARD_SECRET_KEY}
@@ -125,6 +150,71 @@ services:
         condition: service_healthy
     networks:
       - stack
+
+  # ---------------------------------------------------------------------------
+  # OpenClaw — agent gateway (optional, enable with --profile openclaw)
+  #
+  # After starting:
+  #   1. Open https://<host>:18789 and connect with OPENCLAW_GATEWAY_TOKEN
+  #   2. Install the ShoreGuard plugin:
+  #      docker compose --profile openclaw exec openclaw-gateway \
+  #        openclaw plugin install openclaw-plugin-shoreguard
+  #   3. Configure the plugin via /shoreguard commands in your OpenClaw session
+  # ---------------------------------------------------------------------------
+  init-openclaw:
+    image: ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION:-latest}
+    profiles: ["openclaw"]
+    restart: "no"
+    user: root
+    entrypoint: ["sh", "-c", "chown -R node:node /home/node/.openclaw"]
+    volumes:
+      - openclaw-config:/home/node/.openclaw
+
+  openclaw-gateway:
+    image: ghcr.io/openclaw/openclaw:${OPENCLAW_VERSION:-latest}
+    profiles: ["openclaw"]
+    restart: unless-stopped
+    depends_on:
+      init-openclaw:
+        condition: service_completed_successfully
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
+      OPENCLAW_ALLOW_INSECURE_PRIVATE_WS: "true"
+      TZ: ${OPENCLAW_TZ:-UTC}
+    volumes:
+      - openclaw-config:/home/node/.openclaw
+      - openclaw-workspace:/home/node/.openclaw/workspace
+      - ./openclaw.json:/home/node/.openclaw/openclaw.json:ro
+    networks:
+      - stack
+    init: true
+    command:
+      - node
+      - dist/index.js
+      - gateway
+      - --bind
+      - lan
+      - --port
+      - "18789"
+      - --allow-unconfigured
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   # ---------------------------------------------------------------------------
   # Init — generate mTLS certificates for OpenShell's gRPC endpoint
@@ -272,8 +362,12 @@ networks:
   stack:
 
 volumes:
+  caddy-data:
+  caddy-config:
   shoreguard-pgdata:
   paperclip-pgdata:
   paperclip-data:
   openshell-data:
+  openclaw-config:
+  openclaw-workspace:
   init-certs:
