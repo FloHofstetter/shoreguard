@@ -244,6 +244,7 @@ class ShoreGuardClient:
                 provider_name=provider_name,
                 model_id=model_id,
                 verify=verify,
+                no_verify=not verify,
                 route_name=route_name,
                 timeout_secs=timeout_secs,
             ),
