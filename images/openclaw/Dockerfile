@@ -5,6 +5,8 @@
 # baked at build time — ShoreGuard injects it at deploy time via exec,
 # then locks it down with the entrypoint script.
 #
+# Uses /sandbox/ as HOME (OpenShell convention), not /home/node/.
+#
 # Build:
 #   docker build -t ghcr.io/shoreguard/openclaw-sandbox:latest .
 #
@@ -21,16 +23,15 @@ USER root
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install security and privilege-separation tools.
-# libcap2-bin: capsh for capability dropping
-# e2fsprogs: chattr for immutable symlinks (best-effort)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libcap2-bin \
         e2fsprogs \
+        iproute2 \
+        iptables \
         python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # gosu 1.19 for privilege separation (gateway vs sandbox user).
-# Pinned with per-arch SHA256 checksums.
 # hadolint ignore=DL4006
 RUN arch="$(dpkg --print-architecture)" \
     && case "$arch" in \
@@ -43,56 +44,58 @@ RUN arch="$(dpkg --print-architecture)" \
     && chmod +x /usr/local/bin/gosu \
     && gosu --version
 
-# Create gateway user for privilege separation.
-# The upstream image already has 'node' (uid 1000) which becomes our sandbox user.
-# The gateway process runs as 'gateway' so the sandbox user cannot kill/restart it.
+# Create gateway and sandbox users (OpenShell convention).
+# - sandbox: runs agent code, home=/sandbox, login shell
+# - gateway: runs OpenClaw gateway process, non-login shell
 RUN groupadd -r gateway \
-    && useradd -r -g gateway -d /home/node -s /usr/sbin/nologin gateway
+    && useradd -r -g gateway -d /sandbox -s /usr/sbin/nologin gateway \
+    && groupadd -r sandbox \
+    && useradd -r -g sandbox -d /sandbox -s /bin/bash sandbox \
+    && mkdir -p /sandbox \
+    && chown sandbox:sandbox /sandbox
 
 # Split .openclaw into immutable config dir + writable state dir.
-# Landlock policy will enforce /home/node/.openclaw as read-only.
+# OpenShell's Landlock will enforce /sandbox/.openclaw as read-only.
 # Writable state lives in .openclaw-data, reached via symlinks.
-RUN rm -rf /home/node/.openclaw \
-    && mkdir -p /home/node/.openclaw-data/agents/main/agent \
-        /home/node/.openclaw-data/extensions \
-        /home/node/.openclaw-data/workspace \
-        /home/node/.openclaw-data/skills \
-        /home/node/.openclaw-data/hooks \
-        /home/node/.openclaw-data/identity \
-        /home/node/.openclaw-data/devices \
-        /home/node/.openclaw-data/canvas \
-        /home/node/.openclaw-data/cron \
-        /home/node/.openclaw-data/memory \
-        /home/node/.openclaw-data/credentials \
-    && mkdir -p /home/node/.openclaw \
-    && ln -s /home/node/.openclaw-data/agents /home/node/.openclaw/agents \
-    && ln -s /home/node/.openclaw-data/extensions /home/node/.openclaw/extensions \
-    && ln -s /home/node/.openclaw-data/workspace /home/node/.openclaw/workspace \
-    && ln -s /home/node/.openclaw-data/skills /home/node/.openclaw/skills \
-    && ln -s /home/node/.openclaw-data/hooks /home/node/.openclaw/hooks \
-    && ln -s /home/node/.openclaw-data/identity /home/node/.openclaw/identity \
-    && ln -s /home/node/.openclaw-data/devices /home/node/.openclaw/devices \
-    && ln -s /home/node/.openclaw-data/canvas /home/node/.openclaw/canvas \
-    && ln -s /home/node/.openclaw-data/cron /home/node/.openclaw/cron \
-    && ln -s /home/node/.openclaw-data/memory /home/node/.openclaw/memory \
-    && ln -s /home/node/.openclaw-data/credentials /home/node/.openclaw/credentials \
-    && touch /home/node/.openclaw-data/update-check.json \
-    && ln -s /home/node/.openclaw-data/update-check.json /home/node/.openclaw/update-check.json \
-    && touch /home/node/.openclaw-data/exec-approvals.json \
-    && ln -s /home/node/.openclaw-data/exec-approvals.json /home/node/.openclaw/exec-approvals.json \
-    && chown -R node:node /home/node/.openclaw-data
-
-# .openclaw directory owned by root — sandbox user can read but not write.
-# openclaw.json will be injected by ShoreGuard at deploy time, then locked.
-RUN chown root:root /home/node/.openclaw \
-    && find /home/node/.openclaw -mindepth 1 -maxdepth 1 -exec chown -h root:root {} + \
-    && chmod 755 /home/node/.openclaw
+RUN mkdir -p /sandbox/.openclaw-data/agents/main/agent \
+        /sandbox/.openclaw-data/extensions \
+        /sandbox/.openclaw-data/workspace \
+        /sandbox/.openclaw-data/skills \
+        /sandbox/.openclaw-data/hooks \
+        /sandbox/.openclaw-data/identity \
+        /sandbox/.openclaw-data/devices \
+        /sandbox/.openclaw-data/canvas \
+        /sandbox/.openclaw-data/cron \
+        /sandbox/.openclaw-data/memory \
+        /sandbox/.openclaw-data/credentials \
+    && mkdir -p /sandbox/.openclaw \
+    && ln -s /sandbox/.openclaw-data/agents /sandbox/.openclaw/agents \
+    && ln -s /sandbox/.openclaw-data/extensions /sandbox/.openclaw/extensions \
+    && ln -s /sandbox/.openclaw-data/workspace /sandbox/.openclaw/workspace \
+    && ln -s /sandbox/.openclaw-data/skills /sandbox/.openclaw/skills \
+    && ln -s /sandbox/.openclaw-data/hooks /sandbox/.openclaw/hooks \
+    && ln -s /sandbox/.openclaw-data/identity /sandbox/.openclaw/identity \
+    && ln -s /sandbox/.openclaw-data/devices /sandbox/.openclaw/devices \
+    && ln -s /sandbox/.openclaw-data/canvas /sandbox/.openclaw/canvas \
+    && ln -s /sandbox/.openclaw-data/cron /sandbox/.openclaw/cron \
+    && ln -s /sandbox/.openclaw-data/memory /sandbox/.openclaw/memory \
+    && ln -s /sandbox/.openclaw-data/credentials /sandbox/.openclaw/credentials \
+    && touch /sandbox/.openclaw-data/update-check.json \
+    && ln -s /sandbox/.openclaw-data/update-check.json /sandbox/.openclaw/update-check.json \
+    && touch /sandbox/.openclaw-data/exec-approvals.json \
+    && ln -s /sandbox/.openclaw-data/exec-approvals.json /sandbox/.openclaw/exec-approvals.json \
+    && chown -R sandbox:sandbox /sandbox/.openclaw-data \
+    && chown -R sandbox:sandbox /sandbox/.openclaw
 
 COPY entrypoint.sh /usr/local/bin/shoreguard-start
-RUN chmod +x /usr/local/bin/shoreguard-start
+COPY sandbox-init.sh /usr/local/bin/sleep
+RUN chmod +x /usr/local/bin/shoreguard-start /usr/local/bin/sleep
 
-USER node
-WORKDIR /home/node
+ENV HOME=/sandbox
+ENV OPENCLAW_STATE_DIR=/sandbox/.openclaw
+
+USER sandbox
+WORKDIR /sandbox
 
 ENTRYPOINT ["/usr/local/bin/shoreguard-start"]
 CMD ["openclaw", "gateway", "run", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]

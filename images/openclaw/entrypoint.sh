@@ -14,8 +14,8 @@
 
 set -euo pipefail
 
-OPENCLAW_HOME="/home/node/.openclaw"
-OPENCLAW_DATA="/home/node/.openclaw-data"
+OPENCLAW_HOME="/sandbox/.openclaw"
+OPENCLAW_DATA="/sandbox/.openclaw-data"
 CONFIG_FILE="${OPENCLAW_HOME}/openclaw.json"
 HASH_FILE="${OPENCLAW_HOME}/.config-hash"
 LOG_DIR="/tmp/openclaw"

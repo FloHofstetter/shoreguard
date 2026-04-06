@@ -2,7 +2,7 @@
 #
 # Modeled after NemoClaw's openclaw-sandbox.yaml but adapted for ShoreGuard's
 # runtime config injection model.  The agent runs as 'node' user with
-# /home/node/.openclaw read-only (Landlock) and writable state in .openclaw-data.
+# /sandbox/.openclaw read-only (Landlock) and writable state in .openclaw-data.
 #
 # Additional network presets (slack, discord, npm, etc.) can be layered on
 # top via ShoreGuard's preset system.
@@ -15,7 +15,7 @@ filesystem:
   include_workdir: true
   compatibility: best_effort
   read_only:
-    - /home/node/.openclaw
+    - /sandbox/.openclaw
     - /usr
     - /lib
     - /etc
@@ -23,7 +23,7 @@ filesystem:
     - /proc
     - /dev/urandom
   read_write:
-    - /home/node/.openclaw-data
+    - /sandbox/.openclaw-data
     - /tmp
     - /dev/null
     - /var/log
