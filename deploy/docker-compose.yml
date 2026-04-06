@@ -203,6 +203,10 @@ services:
               --cert=/certs/server.crt --key=/certs/server.key
             kubectl create secret generic openshell-server-client-ca -n openshell \
               --from-file=ca.crt=/certs/ca.crt
+            kubectl create secret generic openshell-client-tls -n openshell \
+              --from-file=tls.crt=/certs/client.crt \
+              --from-file=tls.key=/certs/client.key \
+              --from-file=ca.crt=/certs/ca.crt
             kubectl create secret generic openshell-ssh-handshake -n openshell \
               --from-literal=secret=$(openssl rand -hex 32)
           '
