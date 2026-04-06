@@ -1,15 +1,17 @@
-# ShoreGuard Stack — ShoreGuard + OpenShell + Paperclip
+# ShoreGuard Stack — modular deployment with optional integrations
+#
+# Core (always active):
+#   - shoreguard:    Control plane UI + API     → http://localhost:8888
+#   - openshell:     Sandbox runtime (k3s)      → gRPC via mTLS
+#   - shoreguard-db: PostgreSQL for ShoreGuard
+#
+# Optional profiles:
+#   - paperclip:     Agent orchestration (Paperclip AI)
 #
 # Usage:
-#   cp .env.example .env   # edit as needed
-#   docker compose up -d
-#
-# Services:
-#   - shoreguard:    Control plane UI + API     → http://localhost:8888
-#   - paperclip:     Agent orchestration UI     → http://localhost:3100
-#   - openshell:     Sandbox runtime (k3s)      → port 8443 (internal)
-#   - shoreguard-db: PostgreSQL for ShoreGuard
-#   - paperclip-db:  PostgreSQL for Paperclip
+#   cp .env.example .env                          # edit as needed
+#   docker compose up -d                          # core only
+#   docker compose --profile paperclip up -d      # core + Paperclip
 
 services:
   # ---------------------------------------------------------------------------
@@ -74,10 +76,19 @@ services:
           memory: 2G
 
   # ---------------------------------------------------------------------------
-  # Paperclip — agent orchestration
+  # Paperclip — agent orchestration (optional, enable with --profile paperclip)
+  #
+  # After starting, complete the onboarding at http://localhost:3100:
+  #   1. Run: docker exec -it deploy-paperclip-1 pnpm paperclipai onboard
+  #   2. Open the invite URL in your browser to create your admin account
+  #   3. Configure your LLM provider in the Paperclip UI
+  #   4. Install the ShoreGuard plugin:
+  #      docker exec deploy-paperclip-1 pnpm paperclipai plugin install \
+  #        /paperclip/paperclip-plugin-shoreguard
   # ---------------------------------------------------------------------------
   paperclip-db:
     image: postgres:17-alpine
+    profiles: ["paperclip"]
     restart: unless-stopped
     environment:
       POSTGRES_USER: paperclip
@@ -95,6 +106,7 @@ services:
 
   paperclip:
     image: ghcr.io/paperclipai/paperclip:latest
+    profiles: ["paperclip"]
     restart: unless-stopped
     ports:
       - "${PAPERCLIP_PORT:-3100}:3100"
