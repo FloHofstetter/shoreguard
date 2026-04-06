@@ -68,7 +68,7 @@ class SandboxMetaStore:
                 session.add(meta)
             else:
                 if description is not _UNSET:
-                    meta.description = description
+                    meta.description = description  # type: ignore[assignment]
                 if labels is not _UNSET:
                     meta.labels_json = json.dumps(labels) if labels else None
                 meta.updated_at = now

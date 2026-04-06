@@ -192,8 +192,8 @@ async def test_exec_sandbox(api_client, mock_client):
         json={"command": "echo hello"},
     )
 
-    assert resp.status_code == 200
-    assert resp.json()["exit_code"] == 0
+    assert resp.status_code == 202
+    assert "operation_id" in resp.json()
 
 
 async def test_get_sandbox_logs(api_client, mock_client):

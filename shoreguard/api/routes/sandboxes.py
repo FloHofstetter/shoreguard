@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import shlex
 from typing import Any
 
 import grpc
@@ -14,7 +15,7 @@ from pydantic import BaseModel
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.client import ShoreGuardClient
-from shoreguard.exceptions import friendly_grpc_error
+from shoreguard.exceptions import ValidationError, friendly_grpc_error
 from shoreguard.services import sandbox_meta as _sandbox_meta_mod
 from shoreguard.services.audit import audit_log
 from shoreguard.services.operations import operation_store
@@ -427,6 +428,13 @@ async def exec_in_sandbox(
     Returns:
         dict[str, Any]: Operation ID and status for polling.
     """
+    # Validate shlex syntax synchronously before accepting the operation.
+    if isinstance(body.command, str):
+        try:
+            shlex.split(body.command)
+        except ValueError as e:
+            raise ValidationError(f"Invalid command syntax: {e}") from e
+
     op = operation_store.create("exec", f"{name}:{body.command[:60]}")
 
     async def _run() -> None:
