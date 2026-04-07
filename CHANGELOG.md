@@ -5,6 +5,40 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.21.0] — 2026-04-07
+
+### Added
+
+- **Rate limiting** — per-IP sliding-window rate limiter (`api/ratelimit.py`)
+  with configurable limits via `SHOREGUARD_RATELIMIT_*` env vars.
+- **Account lockout** — progressive lockout after failed login attempts
+  (`api/auth.py`) with configurable thresholds.
+- **Security headers** — `X-Content-Type-Options`, `X-Frame-Options`,
+  `Strict-Transport-Security`, etc. via middleware (`api/security_headers.py`).
+- **Password strength validation** — `api/password.py` with length, complexity,
+  and common-password checks.
+- **Structured error codes** — machine-readable `code` field (e.g.
+  `GATEWAY_NOT_FOUND`, `RATE_LIMITED`) in all error responses
+  (`api/error_codes.py`, `api/errors.py`).
+- **WebSocket server heartbeat** — periodic `{"type": "heartbeat"}` messages
+  during idle with `dropped_events` counter for backpressure visibility.
+- **WebSocket backpressure disconnect** — slow consumers disconnected after
+  configurable consecutive drop limit (`SHOREGUARD_WS_BACKPRESSURE_DROP_LIMIT`).
+- **WebSocket client reconnect hardening** — heartbeat watchdog (45 s timeout),
+  max retry limit (20), exponential backoff, and `sg:ws-state` events for
+  connection state UI indicator.
+- **Prometheus metrics** — `/metrics` endpoint with login and rate-limit
+  counters.
+
+### Changed
+
+- **Dynamic `__version__`** — `shoreguard/__init__.py` now reads version from
+  package metadata (`importlib.metadata`) instead of hardcoded string; single
+  source of truth in `pyproject.toml`.
+- **Deploy configs** — consolidated Caddyfile and standalone compose into
+  `deploy/` directory.
+- **.gitignore** — trimmed from ~200 to ~30 lines, removed stale entries.
+
 ## [0.20.0] — 2026-04-07
 
 ### Added

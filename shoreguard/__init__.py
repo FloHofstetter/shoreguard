@@ -1,3 +1,5 @@
 """Shoreguard — Open source control plane for NVIDIA OpenShell."""
 
-__version__ = "0.20.0"
+from importlib.metadata import version
+
+__version__ = version("shoreguard")
