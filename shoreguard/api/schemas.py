@@ -18,6 +18,7 @@ class ErrorResponse(BaseModel):
     """Standard error response returned by all error handlers."""
 
     detail: str
+    code: str | None = None
     request_id: str | None = None
 
 
