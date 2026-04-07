@@ -5,6 +5,70 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.20.0] — 2026-04-07
+
+### Added
+
+- **Pydantic Settings** — centralized `shoreguard/settings.py` with 11
+  nested sub-models replacing 11 `os.environ.get()` reads and 60+
+  hardcoded constants.  All tuneable via `SHOREGUARD_*` env vars
+  (e.g. `SHOREGUARD_GATEWAY_BACKOFF_MIN`, `SHOREGUARD_OPS_RUNNING_TTL`).
+- **Pydantic response models** — typed response schemas (`schemas.py`)
+  on all API endpoints with OpenAPI tag metadata.
+- **Request-ID tracking** — `X-Request-ID` header propagated through
+  middleware, available in all log records via `%(request_id)s`.
+- **Prometheus latency metrics** —
+  `shoreguard_request_duration_seconds` histogram with method/path/status
+  labels, plus `/metrics` endpoint.
+- **Structured JSON logging** — `SHOREGUARD_LOG_FORMAT=json` for
+  machine-readable log output.
+- **GZip compression** — responses ≥ 1 KB automatically compressed
+  via Starlette GZip middleware.
+- **Audit pagination** — `GET /api/audit` supports `offset`/`limit`
+  with `items`/`total` response format.
+- **Input validation module** — `api/validation.py` with reusable
+  description, label, and gateway-name validators.
+- **DB-backed operations** — `AsyncOperationService` with SQLAlchemy
+  async, orphan recovery, and configurable retention.
+- **SSE streaming for LROs** — `GET /api/operations/{id}/stream`
+  streams real-time status/progress updates via Server-Sent Events.
+- **`run_lro` helper** — `api/lro.py` with idempotency-key support,
+  automatic 202 response, and background task lifecycle.
+- **Async DB layer** — `init_async_db()` /
+  `get_async_session_factory()` in `db.py` for aiosqlite-backed async
+  sessions.
+- **Performance indexes** — migrations 008–010 adding indexes on audit
+  timestamp, webhook delivery, and operation status.
+- **Gateway register page** — `/gateways/new` with breadcrumb
+  navigation, description and labels fields (replaces modal).
+- **Provider create/edit pages** — `/gateways/{gw}/providers/new` and
+  `.../providers/{name}/edit` with Alpine.js `providerForm()` component
+  (replaces modal).
+
+### Changed
+
+- **Consistent pagination** — all list endpoints return
+  `{"items": [...], "total": N}` format.
+- **CLI env-var hack removed** — `cli.py` no longer writes
+  `os.environ["SHOREGUARD_*"]`; uses `override_settings()` instead.
+- **Frontend modals→pages** — gateway registration and provider
+  create/edit modals replaced with dedicated page routes and breadcrumb
+  navigation.
+
+### Removed
+
+- **In-memory LRO store** — replaced by DB-backed
+  `AsyncOperationService`.
+- **Hardcoded constants** — `_BACKOFF_MIN`, `_MAX_RESULT_BYTES`,
+  `DELIVERY_TIMEOUT`, `MAX_DESCRIPTION_LEN`, etc. now read from
+  Settings.
+- **Gateway/provider modals** — `#registerGatewayModal` and
+  `#createProviderModal` removed from frontend templates.
+
+### Dependencies
+
+- Added `pydantic-settings>=2.0`.
+
 ## [0.19.0] — 2026-04-07
 
 ### Added
