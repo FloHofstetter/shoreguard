@@ -41,6 +41,7 @@ from .routes import (
     webhooks,
 )
 from .schemas import HealthResponse, InferenceConfigResponse
+from .security_headers import security_headers_middleware
 from .websocket import router as ws_router
 
 logger = logging.getLogger(__name__)
@@ -298,6 +299,7 @@ async def readyz() -> JSONResponse:
 app.include_router(health_router)
 app.include_router(metrics_router)
 app.middleware("http")(metrics_middleware)
+app.middleware("http")(security_headers_middleware)
 
 # GZip compression for responses >= 1 KB (SSE streams and WebSockets unaffected).
 from starlette.middleware.gzip import GZipMiddleware  # noqa: E402

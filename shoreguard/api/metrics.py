@@ -8,7 +8,7 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, Info, generate_latest
 
 # ── Request-ID ContextVar ───────────────────────────────────────────────
@@ -58,12 +58,30 @@ router = APIRouter(tags=["metrics"])
 
 
 @router.get("/metrics")
-async def metrics() -> Response:
-    """Prometheus metrics endpoint (unauthenticated).
+async def metrics(request: Request) -> Response:
+    """Prometheus metrics endpoint.
+
+    Requires authentication unless ``SHOREGUARD_METRICS_PUBLIC=true`` or
+    auth is disabled entirely (``SHOREGUARD_NO_AUTH=true``).
+
+    Args:
+        request: Incoming HTTP request.
 
     Returns:
         Response: Prometheus text format metrics.
+
+    Raises:
+        HTTPException: 401 when authentication is required but missing.
     """
+    from shoreguard.settings import get_settings
+
+    settings = get_settings()
+    if not settings.auth.no_auth and not settings.auth.metrics_public:
+        from .auth import check_request_auth
+
+        identity = check_request_auth(request)
+        if identity is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
     await _collect_gauges()
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 

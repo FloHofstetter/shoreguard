@@ -143,6 +143,7 @@ def reset() -> None:
     _session_factory = None
     _hmac_secret = b""
     _no_auth = False
+    _account_failures.clear()
 
 
 def init_auth_for_test(session_factory: SessionMaker) -> None:
@@ -304,6 +305,75 @@ def authenticate_user(email: str, password: str) -> dict | None:
             logger.warning("Auth failed: invalid credentials (email=%s)", email)
             return None
         return {"id": user.id, "email": user.email, "role": user.role}
+
+
+# ── Account lockout ──────────────────────────────────────────────────────────
+# In-memory tracking of failed login attempts per (normalized) email.
+# Complements IP-based rate limiting: rate limiting blocks one IP attacking
+# many accounts; account lockout blocks many IPs attacking one account.
+
+_account_failures: dict[str, tuple[int, float]] = {}
+
+
+def record_failed_login(email: str) -> None:
+    """Increment the failure counter for *email*.
+
+    Args:
+        email: The email that failed authentication (will be lowered).
+    """
+    import time
+
+    key = email.strip().lower()
+    count, _ = _account_failures.get(key, (0, 0.0))
+    _account_failures[key] = (count + 1, time.monotonic())
+
+
+def is_account_locked(email: str) -> tuple[bool, int]:
+    """Check whether *email* is temporarily locked due to repeated failures.
+
+    Args:
+        email: The email to check.
+
+    Returns:
+        ``(locked, retry_after_seconds)``.  When *locked* is ``True``,
+        *retry_after* indicates how long the caller should wait.
+    """
+    import time
+
+    from shoreguard.settings import get_settings
+
+    key = email.strip().lower()
+    entry = _account_failures.get(key)
+    if entry is None:
+        return False, 0
+
+    count, last_failure = entry
+    settings = get_settings().auth
+    if count < settings.account_lockout_attempts:
+        return False, 0
+
+    elapsed = time.monotonic() - last_failure
+    remaining = settings.account_lockout_duration - elapsed
+    if remaining <= 0:
+        # Lockout expired — clear
+        _account_failures.pop(key, None)
+        return False, 0
+
+    return True, int(remaining) + 1
+
+
+def clear_lockout(email: str) -> None:
+    """Clear the failure counter on successful login.
+
+    Args:
+        email: The email to clear.
+    """
+    _account_failures.pop(email.strip().lower(), None)
+
+
+def reset_lockouts() -> None:
+    """Clear all lockout state (for tests)."""
+    _account_failures.clear()
 
 
 def _lookup_user(user_id: int) -> dict | None:

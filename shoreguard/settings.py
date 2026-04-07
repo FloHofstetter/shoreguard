@@ -50,6 +50,20 @@ class AuthSettings(BaseSettings):
     cookie_name: str = "sg_session"
     session_max_age: int = 86400 * 7  # 7 days
     invite_max_age: int = 86400 * 7  # 7 days
+    password_min_length: int = 8
+    password_require_complexity: bool = False
+    login_rate_limit_attempts: int = 10
+    login_rate_limit_window: int = 300  # 5 minutes
+    login_rate_limit_lockout: int = 900  # 15 minutes
+    account_lockout_attempts: int = 5
+    account_lockout_duration: int = 900  # 15 minutes
+    metrics_public: bool = False
+    hsts_enabled: bool = False
+    hsts_max_age: int = 63072000  # 2 years
+    csp_policy: str = (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; connect-src 'self' wss:"
+    )
 
 
 class GatewaySettings(BaseSettings):

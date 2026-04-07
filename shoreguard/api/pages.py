@@ -29,23 +29,28 @@ from .auth import (
     accept_invite,
     authenticate_user,
     check_request_auth,
+    clear_lockout,
     create_service_principal,
     create_session_token,
     create_user,
     delete_service_principal,
     delete_user,
+    is_account_locked,
     is_registration_enabled,
     is_setup_complete,
     list_gateway_roles_for_sp,
     list_gateway_roles_for_user,
     list_service_principals,
     list_users,
+    record_failed_login,
     remove_gateway_role,
     require_role,
     rotate_service_principal,
     set_gateway_role,
     verify_session_token,
 )
+from .password import check_password
+from .ratelimit import get_login_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +79,28 @@ def _client_ip(request: Request) -> str:
         str: Client IP address or ``"unknown"``.
     """
     return request.client.host if request.client else "unknown"
+
+
+def _check_rate_limit(request: Request) -> JSONResponse | None:
+    """Return a 429 response if the client IP is rate-limited, else ``None``.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        A 429 ``JSONResponse`` with ``Retry-After`` header, or ``None``.
+    """
+    limiter = get_login_limiter()
+    ip = _client_ip(request)
+    blocked, retry_after = limiter.is_limited(ip)
+    if blocked:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests. Try again later."},
+            headers={"Retry-After": str(retry_after)},
+        )
+    limiter.record(ip)
+    return None
 
 
 def _get_actor(request: Request) -> str:
@@ -142,6 +169,9 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
     Returns:
         JSONResponse: Session cookie on success, or error details.
     """
+    rate_resp = _check_rate_limit(request)
+    if rate_resp:
+        return rate_resp
     if not is_setup_complete():
         return JSONResponse(
             status_code=400,
@@ -151,8 +181,16 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
         return JSONResponse(
             status_code=400, content={"detail": "Password must be at most 128 characters"}
         )
+    locked, lockout_retry = is_account_locked(body.email)
+    if locked:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests. Try again later."},
+            headers={"Retry-After": str(lockout_retry)},
+        )
     user = authenticate_user(body.email, body.password)
     if not user:
+        record_failed_login(body.email)
         logger.warning("Login failed: invalid credentials (client=%s)", _client_ip(request))
         request.state.user_id = body.email
         request.state.role = "unknown"
@@ -161,6 +199,7 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
             status_code=401,
             content={"detail": "Invalid email or password"},
         )
+    clear_lockout(body.email)
     client_ip = _client_ip(request)
     logger.info(
         "Login successful (client=%s, email=%s, role=%s)", client_ip, user["email"], user["role"]
@@ -288,20 +327,18 @@ async def setup(request: Request, body: SetupRequest) -> JSONResponse:
     Returns:
         JSONResponse: Session cookie on success, or error details.
     """
+    rate_resp = _check_rate_limit(request)
+    if rate_resp:
+        return rate_resp
     if is_setup_complete():
         return JSONResponse(status_code=400, content={"detail": "Setup already complete"})
     if not body.email.strip() or not body.password:
         return JSONResponse(status_code=400, content={"detail": "Email and password are required"})
     if not _valid_email(body.email):
         return JSONResponse(status_code=400, content={"detail": "Invalid email format"})
-    if len(body.password) < 8:
-        return JSONResponse(
-            status_code=400, content={"detail": "Password must be at least 8 characters"}
-        )
-    if len(body.password) > 128:
-        return JSONResponse(
-            status_code=400, content={"detail": "Password must be at most 128 characters"}
-        )
+    pwd_err = check_password(body.password)
+    if pwd_err:
+        return JSONResponse(status_code=400, content={"detail": pwd_err})
     try:
         info = create_user(body.email.strip(), body.password, "admin")
     except IntegrityError:
@@ -752,14 +789,11 @@ async def accept_invite_endpoint(request: Request, body: AcceptInviteRequest) ->
     Returns:
         JSONResponse: Session cookie on success, or error details.
     """
-    if not body.password or len(body.password) < 8:
-        return JSONResponse(
-            status_code=400, content={"detail": "Password must be at least 8 characters"}
-        )
-    if len(body.password) > 128:
-        return JSONResponse(
-            status_code=400, content={"detail": "Password must be at most 128 characters"}
-        )
+    if not body.password:
+        return JSONResponse(status_code=400, content={"detail": "Password is required"})
+    pwd_err = check_password(body.password)
+    if pwd_err:
+        return JSONResponse(status_code=400, content={"detail": pwd_err})
     user = accept_invite(body.token, body.password)
     if not user:
         return JSONResponse(status_code=400, content={"detail": "Invalid or expired invite token"})
@@ -814,6 +848,9 @@ async def register_endpoint(request: Request, body: RegisterRequest) -> JSONResp
     Returns:
         JSONResponse: Session cookie on success, or error details.
     """
+    rate_resp = _check_rate_limit(request)
+    if rate_resp:
+        return rate_resp
     if not is_registration_enabled():
         return JSONResponse(status_code=403, content={"detail": "Registration is disabled"})
     if not is_setup_complete():
@@ -824,14 +861,9 @@ async def register_endpoint(request: Request, body: RegisterRequest) -> JSONResp
         return JSONResponse(status_code=400, content={"detail": "Email and password are required"})
     if not _valid_email(body.email):
         return JSONResponse(status_code=400, content={"detail": "Invalid email format"})
-    if len(body.password) < 8:
-        return JSONResponse(
-            status_code=400, content={"detail": "Password must be at least 8 characters"}
-        )
-    if len(body.password) > 128:
-        return JSONResponse(
-            status_code=400, content={"detail": "Password must be at most 128 characters"}
-        )
+    pwd_err = check_password(body.password)
+    if pwd_err:
+        return JSONResponse(status_code=400, content={"detail": pwd_err})
     try:
         info = create_user(body.email.strip(), body.password, "viewer")
     except IntegrityError:
