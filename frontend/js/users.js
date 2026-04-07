@@ -156,10 +156,14 @@ function showKeyModal(key, name) {
 // ─── Gateway Roles Modal ───────────────────────────────────────────────────
 
 async function openGatewayRolesModal(entityType, entityId, entityLabel) {
-    const isUser = entityType === 'user';
-    const basePath = isUser
-        ? `/api/auth/users/${entityId}/gateway-roles`
-        : `/api/auth/service-principals/${entityId}/gateway-roles`;
+    let basePath;
+    if (entityType === 'user') {
+        basePath = `/api/auth/users/${entityId}/gateway-roles`;
+    } else if (entityType === 'group') {
+        basePath = `/api/auth/groups/${entityId}/gateway-roles`;
+    } else {
+        basePath = `/api/auth/service-principals/${entityId}/gateway-roles`;
+    }
 
     const existing = document.getElementById('gatewayRolesModal');
     if (existing) existing.remove();

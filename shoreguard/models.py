@@ -164,6 +164,70 @@ class SPGatewayRole(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False)
 
 
+class Group(Base):
+    """A named collection of users for group-based RBAC.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        name: Unique group name (max 100 chars).
+        description: Optional human-readable description.
+        role: Global group role (``admin``, ``operator``, ``viewer``).
+        created_at: Timestamp when the group was created.
+    """
+
+    __tablename__ = "groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="viewer")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class GroupMember(Base):
+    """Junction table linking users to groups.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        group_id: FK to the group.
+        user_id: FK to the user.
+    """
+
+    __tablename__ = "group_members"
+    __table_args__ = (UniqueConstraint("group_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+
+class GroupGatewayRole(Base):
+    """A per-gateway role override for a group.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        group_id: FK to the group.
+        gateway_id: FK to the gateway.
+        role: Scoped role for this group on this gateway.
+    """
+
+    __tablename__ = "group_gateway_roles"
+    __table_args__ = (UniqueConstraint("group_id", "gateway_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False
+    )
+    gateway_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("gateways.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+
+
 class AuditEntry(Base):
     """A persistent audit log entry for state-changing operations.
 

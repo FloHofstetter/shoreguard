@@ -27,26 +27,36 @@ from .auth import (
     COOKIE_NAME,
     ROLES,
     accept_invite,
+    add_group_member,
     authenticate_user,
     check_request_auth,
     clear_lockout,
+    create_group,
     create_service_principal,
     create_session_token,
     create_user,
+    delete_group,
     delete_service_principal,
     delete_user,
+    get_group,
     is_account_locked,
     is_registration_enabled,
     is_setup_complete,
     list_gateway_roles_for_sp,
     list_gateway_roles_for_user,
+    list_group_gateway_roles,
+    list_groups,
     list_service_principals,
     list_users,
     record_failed_login,
     remove_gateway_role,
+    remove_group_gateway_role,
+    remove_group_member,
     require_role,
     rotate_service_principal,
     set_gateway_role,
+    set_group_gateway_role,
+    update_group,
     verify_session_token,
 )
 from .password import check_password
@@ -1039,6 +1049,309 @@ async def rotate_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | J
     return {"key": plaintext, **info}
 
 
+# ─── Group management (admin-only) ──────────────────────────────────────────
+
+
+class CreateGroupRequest(BaseModel):
+    """Request body for creating a group."""
+
+    name: str
+    role: str = "viewer"
+    description: str | None = None
+
+
+class UpdateGroupRequest(BaseModel):
+    """Request body for updating a group."""
+
+    name: str | None = None
+    role: str | None = None
+    description: str | None = None
+
+
+class AddGroupMemberRequest(BaseModel):
+    """Request body for adding a member to a group."""
+
+    user_id: int
+
+
+@router.get("/api/auth/groups", dependencies=[Depends(require_role("admin"))])
+async def get_groups(request: Request) -> list[dict[str, Any]]:
+    """List all groups with member counts.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        list[dict[str, Any]]: Group info dicts.
+    """
+    return await asyncio.to_thread(list_groups)
+
+
+@router.post(
+    "/api/auth/groups",
+    dependencies=[Depends(require_role("admin"))],
+    status_code=201,
+    response_model=None,
+)
+async def create_group_endpoint(
+    request: Request, body: CreateGroupRequest
+) -> dict[str, Any] | JSONResponse:
+    """Create a new group.
+
+    Args:
+        request: The incoming HTTP request.
+        body: Group creation payload.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Created group or error response.
+    """
+    if body.role not in ROLES:
+        return JSONResponse(status_code=400, content={"detail": f"Invalid role: {body.role!r}"})
+    try:
+        result = await asyncio.to_thread(create_group, body.name, body.role, body.description)
+    except IntegrityError:
+        return JSONResponse(status_code=409, content={"detail": "Group name already exists"})
+    await audit_log(request, "group.create", "group", body.name, detail={"role": body.role})
+    return result
+
+
+@router.get(
+    "/api/auth/groups/{group_id}",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
+)
+async def get_group_endpoint(request: Request, group_id: int) -> dict[str, Any] | JSONResponse:
+    """Get a group with its member list.
+
+    Args:
+        request: The incoming HTTP request.
+        group_id: Database ID of the group.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Group info or 404.
+    """
+    result = await asyncio.to_thread(get_group, group_id)
+    if result is None:
+        return JSONResponse(status_code=404, content={"detail": "Group not found"})
+    return result
+
+
+@router.put(
+    "/api/auth/groups/{group_id}",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
+)
+async def update_group_endpoint(
+    request: Request, group_id: int, body: UpdateGroupRequest
+) -> dict[str, Any] | JSONResponse:
+    """Update a group.
+
+    Args:
+        request: The incoming HTTP request.
+        group_id: Database ID of the group.
+        body: Update payload.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Updated group or error.
+    """
+    if body.role is not None and body.role not in ROLES:
+        return JSONResponse(status_code=400, content={"detail": f"Invalid role: {body.role!r}"})
+    try:
+        result = await asyncio.to_thread(
+            update_group, group_id, name=body.name, role=body.role, description=body.description
+        )
+    except ValueError as exc:
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+    except IntegrityError:
+        return JSONResponse(status_code=409, content={"detail": "Group name already exists"})
+    changes = {k: v for k, v in body.model_dump().items() if v is not None}
+    await audit_log(request, "group.update", "group", result["name"], detail=changes)
+    return result
+
+
+@router.delete(
+    "/api/auth/groups/{group_id}",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
+)
+async def delete_group_endpoint(request: Request, group_id: int) -> dict[str, Any] | JSONResponse:
+    """Delete a group.
+
+    Args:
+        request: The incoming HTTP request.
+        group_id: Database ID of the group.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Success or 404.
+    """
+    # Fetch group name for audit before deleting
+    info = await asyncio.to_thread(get_group, group_id)
+    if info is None:
+        return JSONResponse(status_code=404, content={"detail": "Group not found"})
+    await asyncio.to_thread(delete_group, group_id)
+    await audit_log(request, "group.delete", "group", info["name"])
+    return {"ok": True}
+
+
+# ─── Group membership (admin-only) ──────────────────────────────────────────
+
+
+@router.post(
+    "/api/auth/groups/{group_id}/members",
+    dependencies=[Depends(require_role("admin"))],
+    status_code=201,
+    response_model=None,
+)
+async def add_group_member_endpoint(
+    request: Request, group_id: int, body: AddGroupMemberRequest
+) -> dict[str, Any] | JSONResponse:
+    """Add a user to a group.
+
+    Args:
+        request: The incoming HTTP request.
+        group_id: Database ID of the group.
+        body: Member payload with user_id.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Membership info or error.
+    """
+    try:
+        result = await asyncio.to_thread(add_group_member, group_id, body.user_id)
+    except ValueError as exc:
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+    except IntegrityError:
+        return JSONResponse(status_code=409, content={"detail": "User is already a member"})
+    await audit_log(
+        request,
+        "group.member.add",
+        "group",
+        result["group_name"],
+        detail={"user_id": body.user_id, "user_email": result["user_email"]},
+    )
+    return result
+
+
+@router.delete(
+    "/api/auth/groups/{group_id}/members/{user_id}",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
+)
+async def remove_group_member_endpoint(
+    request: Request, group_id: int, user_id: int
+) -> dict[str, Any] | JSONResponse:
+    """Remove a user from a group.
+
+    Args:
+        request: The incoming HTTP request.
+        group_id: Database ID of the group.
+        user_id: Database ID of the user to remove.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Success or 404.
+    """
+    # Fetch group name for audit
+    info = await asyncio.to_thread(get_group, group_id)
+    if info is None:
+        return JSONResponse(status_code=404, content={"detail": "Group not found"})
+    removed = await asyncio.to_thread(remove_group_member, group_id, user_id)
+    if not removed:
+        return JSONResponse(status_code=404, content={"detail": "Membership not found"})
+    await audit_log(
+        request,
+        "group.member.remove",
+        "group",
+        info["name"],
+        detail={"user_id": user_id},
+    )
+    return {"ok": True}
+
+
+# ─── Group gateway roles (admin-only) ───────────────────────────────────────
+
+
+@router.get(
+    "/api/auth/groups/{group_id}/gateway-roles",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def get_group_gateway_roles_endpoint(request: Request, group_id: int) -> list[dict[str, Any]]:
+    """List gateway-scoped roles for a group.
+
+    Args:
+        request: The incoming HTTP request.
+        group_id: Database ID of the group.
+
+    Returns:
+        list[dict[str, Any]]: Gateway role dicts.
+    """
+    return await asyncio.to_thread(list_group_gateway_roles, group_id)
+
+
+@router.put(
+    "/api/auth/groups/{group_id}/gateway-roles/{gw}",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
+)
+async def set_group_gateway_role_endpoint(
+    request: Request, group_id: int, gw: str, body: SetGatewayRoleRequest
+) -> dict[str, Any] | JSONResponse:
+    """Set a per-gateway role for a group.
+
+    Args:
+        request: The incoming HTTP request.
+        group_id: Database ID of the group.
+        gw: Gateway name.
+        body: Role payload.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Saved role or error.
+    """
+    if body.role not in ROLES:
+        return JSONResponse(status_code=400, content={"detail": f"Invalid role: {body.role!r}"})
+    try:
+        result = await asyncio.to_thread(set_group_gateway_role, group_id, gw, body.role)
+    except ValueError as exc:
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+    await audit_log(
+        request,
+        "group.gateway_role.set",
+        "group",
+        str(group_id),
+        detail={"gateway": gw, "role": body.role},
+    )
+    return result
+
+
+@router.delete(
+    "/api/auth/groups/{group_id}/gateway-roles/{gw}",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=None,
+)
+async def delete_group_gateway_role_endpoint(
+    request: Request, group_id: int, gw: str
+) -> dict[str, Any] | JSONResponse:
+    """Remove a per-gateway role for a group.
+
+    Args:
+        request: The incoming HTTP request.
+        group_id: Database ID of the group.
+        gw: Gateway name.
+
+    Returns:
+        dict[str, Any] | JSONResponse: Success or 404.
+    """
+    removed = await asyncio.to_thread(remove_group_gateway_role, group_id, gw)
+    if not removed:
+        return JSONResponse(status_code=404, content={"detail": "Gateway role not found"})
+    await audit_log(
+        request,
+        "group.gateway_role.remove",
+        "group",
+        str(group_id),
+        detail={"gateway": gw},
+    )
+    return {"ok": True}
+
+
 # ─── Page helpers ────────────────────────────────────────────────────────────
 
 
@@ -1439,6 +1752,35 @@ async def audit_page(request: Request) -> TemplateResponse | RedirectResponse | 
         request,
         "pages/audit.html",
         {"active_page": "audit"},
+    )
+
+
+@router.get("/groups", response_model=None)
+async def groups_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
+    """Group management page (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse | HTMLResponse: Rendered groups page
+            or access denied error.
+    """
+    redirect = _require_page_auth(request)
+    if redirect:
+        return redirect
+    if getattr(request.state, "role", None) != "admin":
+        return _render_error(
+            request,
+            403,
+            "Access Denied",
+            "You need admin privileges to manage groups.",
+            icon="shield-lock",
+        )
+    return templates.TemplateResponse(
+        request,
+        "pages/groups.html",
+        {"active_page": "groups"},
     )
 
 

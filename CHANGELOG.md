@@ -5,6 +5,30 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.22.0] — 2026-04-08
+
+### Added
+
+- **User groups / teams** — named collections of users for group-based RBAC.
+  Groups have a global role and optional per-gateway role overrides, mirroring
+  the existing individual user role system.
+- **Group membership management** — add/remove users to groups via API and
+  frontend UI (`/groups` page with member modal).
+- **Group gateway-scoped roles** — per-gateway role overrides for groups, reusing
+  the gateway roles modal from user/SP management.
+- **4-tier role resolution** — individual gateway > group gateway > individual
+  global > group global. When a user belongs to multiple groups the highest rank
+  wins.
+- **Group audit trail** — `group.create`, `group.update`, `group.delete`,
+  `group.member.add`, `group.member.remove`, `group.gateway_role.set`,
+  `group.gateway_role.remove` actions logged.
+- **65 new tests** — CRUD, membership, cascade deletes, role resolution priority
+  chain, and HTTP-level endpoint tests (`test_group_rbac.py`). Total: 1086.
+
+### Changed
+
+- **Gateway roles modal** — now supports `user`, `sp`, and `group` entity types.
+
 ## [0.21.0] — 2026-04-07
 
 ### Added
