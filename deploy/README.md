@@ -1,13 +1,22 @@
-# ShoreGuard Stack — Quick Start
+# ShoreGuard Deployment
+
+This directory contains two deployment variants:
+
+| File | What it runs | Use case |
+|------|-------------|----------|
+| `docker-compose.yml` + `Caddyfile` | Full stack: ShoreGuard + OpenShell + Paperclip + OpenClaw | Demo / dev with real sandboxes |
+| `docker-compose.standalone.yml` + `Caddyfile.standalone` | ShoreGuard + PostgreSQL + Caddy | Production without OpenShell on same host |
+
+## Full Stack (default)
 
 Run ShoreGuard + OpenShell + Paperclip with one command.
 
-## Prerequisites
+### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) with Compose v2
 - ~4 GB RAM available for containers
 
-## Setup
+### Setup
 
 ```bash
 cd deploy
@@ -50,3 +59,19 @@ Once Paperclip is bootstrapped:
 docker compose down        # stop containers
 docker compose down -v     # stop + delete all data
 ```
+
+---
+
+## Standalone Production
+
+ShoreGuard + PostgreSQL + Caddy with automatic Let's Encrypt TLS. No OpenShell on the same host — connect to a remote gateway instead.
+
+```bash
+cd deploy
+cp ../.env.example .env
+# Edit .env: set POSTGRES_PASSWORD, SHOREGUARD_SECRET_KEY, SHOREGUARD_DOMAIN
+
+docker compose -f docker-compose.standalone.yml up -d
+```
+
+Caddy automatically provisions TLS certificates for the domain in `SHOREGUARD_DOMAIN`. Make sure DNS points to the server and ports 80/443 are open.
