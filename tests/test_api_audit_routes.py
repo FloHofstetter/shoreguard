@@ -94,27 +94,33 @@ class TestListAudit:
         assert resp.status_code == 200
         data = resp.json()
         # 3 seeded + 1 login audit entry from admin_client fixture
-        assert len(data) >= 3
+        assert len(data["entries"]) >= 3
+        assert data["total"] >= 3
 
     async def test_list_without_seed(self, admin_client):
         resp = await admin_client.get("/api/audit")
         assert resp.status_code == 200
+        data = resp.json()
         # At least the login audit entry exists
-        assert len(resp.json()) >= 1
+        assert len(data["entries"]) >= 1
+        assert data["total"] >= 1
 
     async def test_list_with_filters(self, admin_client):
         _seed_audit(5)
         resp = await admin_client.get("/api/audit?actor=user0@test.com")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 1
-        assert data[0]["actor"] == "user0@test.com"
+        assert len(data["entries"]) == 1
+        assert data["entries"][0]["actor"] == "user0@test.com"
+        assert data["total"] == 1
 
     async def test_list_pagination(self, admin_client):
         _seed_audit(10)
         resp = await admin_client.get("/api/audit?limit=3&offset=0")
         assert resp.status_code == 200
-        assert len(resp.json()) == 3
+        data = resp.json()
+        assert len(data["entries"]) == 3
+        assert data["total"] >= 10
 
 
 class TestExportAudit:

@@ -15,7 +15,9 @@ async def test_list_providers(api_client, mock_client):
     resp = await api_client.get(BASE)
 
     assert resp.status_code == 200
-    assert len(resp.json()) == 2
+    data = resp.json()
+    assert len(data["items"]) == 2
+    assert data["total"] is None
 
 
 async def test_create_provider(api_client, mock_client):

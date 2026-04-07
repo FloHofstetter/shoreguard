@@ -21,8 +21,9 @@ async def test_list_sandboxes(api_client, mock_client):
 
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 2
-    assert data[0]["name"] == "sb1"
+    assert data["total"] is None
+    assert len(data["items"]) == 2
+    assert data["items"][0]["name"] == "sb1"
 
 
 async def test_create_sandbox_validation(api_client, mock_client):
@@ -261,10 +262,11 @@ async def test_create_sandbox_invalid_name(api_client, mock_client):
 
 async def test_get_operation_found(api_client):
     """GET /api/operations/{id} returns 200 for an existing operation."""
-    from shoreguard.services.operations import operation_store
+    from shoreguard.services.operations import operation_service
 
-    op = operation_store.create("sandbox", "test-sb")
-    operation_store.complete(op.id, {"name": "test-sb"})
+    op = operation_service._svc.create("sandbox", "test-sb")
+    operation_service._svc.start(op.id)
+    operation_service._svc.complete(op.id, {"name": "test-sb"})
     resp = await api_client.get(f"/api/operations/{op.id}")
     assert resp.status_code == 200
     data = resp.json()
@@ -292,6 +294,8 @@ async def test_sandbox_create_lro_success(api_client, mock_client):
         json={"name": "lro-sb", "image": "base"},
     )
     assert resp.status_code == 202
+    assert resp.headers.get("location") is not None
+    assert resp.headers.get("retry-after") == "2"
     op_id = resp.json()["operation_id"]
 
     await asyncio.sleep(0.2)
@@ -331,9 +335,9 @@ async def test_create_sandbox_empty_name(api_client, mock_client):
     )
     assert resp.status_code == 202
     op_id = resp.json()["operation_id"]
-    from shoreguard.services.operations import operation_store
+    from shoreguard.services.operations import operation_service
 
-    op = operation_store.get(op_id)
+    op = operation_service._svc.get(op_id)
     assert op.resource_key == "unnamed"
 
 

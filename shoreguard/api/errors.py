@@ -58,6 +58,21 @@ def _detect_feature_from_path(path: str) -> str:
     return "This operation"
 
 
+def _get_request_id(request: Request) -> str | None:
+    """Extract the request ID set by metrics middleware."""
+    return getattr(request.state, "request_id", None)
+
+
+def _error_body(detail: str, request: Request, **extra: object) -> dict:
+    """Build a consistent error response body with optional request_id."""
+    body: dict = {"detail": detail}
+    rid = _get_request_id(request)
+    if rid:
+        body["request_id"] = rid
+    body.update(extra)
+    return body
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Register all exception handlers on the FastAPI app.
 
@@ -83,7 +98,7 @@ def register_error_handlers(app: FastAPI) -> None:
             logger.error("Unhandled domain error: %s (status=%d)", exc, status, exc_info=True)
         else:
             logger.warning("Domain error: %s (status=%d)", exc, status)
-        return JSONResponse(status_code=status, content={"detail": str(exc)})
+        return JSONResponse(status_code=status, content=_error_body(str(exc), request))
 
     @app.exception_handler(TimeoutError)
     async def timeout_error_handler(request: Request, exc: TimeoutError) -> JSONResponse:
@@ -97,7 +112,7 @@ def register_error_handlers(app: FastAPI) -> None:
             JSONResponse: 504 error response.
         """
         logger.warning("Timeout on %s: %s", request.url.path, exc)
-        return JSONResponse(status_code=504, content={"detail": str(exc)})
+        return JSONResponse(status_code=504, content=_error_body(str(exc), request))
 
     @app.exception_handler(grpc.RpcError)
     async def grpc_exception_handler(request: Request, exc: grpc.RpcError) -> JSONResponse:
@@ -125,11 +140,11 @@ def register_error_handlers(app: FastAPI) -> None:
             )
             return JSONResponse(
                 status_code=501,
-                content={"detail": detail, "feature": feature, "upgrade_required": True},
+                content=_error_body(detail, request, feature=feature, upgrade_required=True),
             )
         detail = friendly_grpc_error(exc)
         http_status = _GRPC_STATUS_MAP.get(code, 500) if code is not None else 500
-        return JSONResponse(status_code=http_status, content={"detail": detail})
+        return JSONResponse(status_code=http_status, content=_error_body(detail, request))
 
     @app.exception_handler(Exception)
     async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -143,4 +158,4 @@ def register_error_handlers(app: FastAPI) -> None:
             JSONResponse: Generic 500 error response.
         """
         logger.error("Unhandled exception on %s: %s", request.url.path, exc, exc_info=True)
-        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+        return JSONResponse(status_code=500, content=_error_body("Internal server error", request))

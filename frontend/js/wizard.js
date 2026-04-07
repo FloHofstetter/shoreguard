@@ -368,10 +368,9 @@ async function launchSandbox() {
     try {
         addLog('Creating sandbox...');
         if (presets.length > 0) addLog(`Presets: ${presets.join(', ')}`);
-        progressBar.style.width = '50%';
+        progressBar.style.width = '20%';
 
-        // Single API call — backend handles wait + preset application
-        const sandbox = await apiFetch(`${API}/sandboxes`, {
+        const response = await apiFetch(`${API}/sandboxes`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -384,6 +383,20 @@ async function launchSandbox() {
             }),
         });
 
+        addLog('Sandbox submitted, waiting for ready state...');
+
+        const op = await pollOperation(response.operation_id, {
+            onProgress: (pct, msg) => {
+                progressBar.style.width = `${Math.max(20, pct)}%`;
+                if (msg) addLog(msg);
+            },
+        });
+
+        if (op.status === 'failed') {
+            throw new Error(op.error || 'Sandbox creation failed');
+        }
+
+        const sandbox = op.result;
         addLog(`Sandbox "${sandbox.name}" created.`, 'log-info');
 
         if (sandbox.presets_applied?.length > 0) {

@@ -129,6 +129,56 @@ class AuditService:
             logger.exception("Failed to list audit entries")
             return []
 
+    def list_with_count(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        actor: str | None = None,
+        action: str | None = None,
+        resource_type: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Query audit entries with total count for pagination.
+
+        Args:
+            limit: Maximum number of entries to return.
+            offset: Number of entries to skip.
+            actor: Filter by actor identity.
+            action: Filter by action type.
+            resource_type: Filter by resource type.
+            since: ISO-format start timestamp filter.
+            until: ISO-format end timestamp filter.
+
+        Returns:
+            tuple[list[dict[str, Any]], int]: Entries and total matching count.
+        """
+        from sqlalchemy import func
+
+        try:
+            with self._session_factory() as session:
+                q = session.query(AuditEntry)
+                if actor:
+                    q = q.filter(AuditEntry.actor == actor)
+                if action:
+                    q = q.filter(AuditEntry.action == action)
+                if resource_type:
+                    q = q.filter(AuditEntry.resource_type == resource_type)
+                if since:
+                    since_dt = datetime.datetime.fromisoformat(since)
+                    q = q.filter(AuditEntry.timestamp >= since_dt)
+                if until:
+                    until_dt = datetime.datetime.fromisoformat(until)
+                    q = q.filter(AuditEntry.timestamp <= until_dt)
+                total = q.with_entities(func.count(AuditEntry.id)).scalar() or 0
+                q = q.order_by(AuditEntry.timestamp.desc())
+                rows = q.offset(offset).limit(limit).all()
+                return [self._to_dict(r) for r in rows], total
+        except SQLAlchemyError:
+            logger.exception("Failed to list audit entries")
+            return [], 0
+
     def export_csv(
         self,
         *,
@@ -150,8 +200,10 @@ class AuditService:
         Returns:
             str: CSV-formatted string of matching entries.
         """
+        from shoreguard.settings import get_settings
+
         entries = self.list(
-            limit=10000,
+            limit=get_settings().audit.export_limit,
             actor=actor,
             action=action,
             resource_type=resource_type,
@@ -178,7 +230,7 @@ class AuditService:
         writer.writerows(entries)
         return output.getvalue()
 
-    def cleanup(self, older_than_days: int = 90) -> int:
+    def cleanup(self, older_than_days: int | None = None) -> int:
         """Delete audit entries older than the given number of days.
 
         Args:
@@ -187,6 +239,10 @@ class AuditService:
         Returns:
             int: Number of entries deleted.
         """
+        if older_than_days is None:
+            from shoreguard.settings import get_settings
+
+            older_than_days = get_settings().audit.retention_days
         cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=older_than_days)
         try:
             with self._session_factory() as session:

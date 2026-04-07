@@ -11,6 +11,12 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 import shoreguard.services.webhooks as webhook_mod
+from shoreguard.api.schemas import (
+    MessageResponse,
+    PaginatedResponse,
+    WebhookDeliveryResponse,
+    WebhookResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,18 +82,19 @@ def _validate_channel_type(channel_type: str) -> None:
         )
 
 
-@router.get("")
-async def list_webhooks() -> list[dict[str, Any]]:
+@router.get("", response_model=PaginatedResponse)
+async def list_webhooks() -> dict[str, Any]:
     """List all registered webhooks.
 
     Returns:
-        list[dict[str, Any]]: All webhook entries.
+        dict[str, Any]: Paginated webhook entries.
     """
     svc = _get_svc()
-    return await asyncio.to_thread(svc.list)
+    items = await asyncio.to_thread(svc.list)
+    return {"items": items, "total": len(items)}
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=WebhookResponse)
 async def create_webhook(body: WebhookCreateRequest, request: Request) -> dict[str, Any]:
     """Create a new webhook with an auto-generated signing secret.
 
@@ -130,7 +137,7 @@ async def create_webhook(body: WebhookCreateRequest, request: Request) -> dict[s
     return result
 
 
-@router.get("/{webhook_id}")
+@router.get("/{webhook_id}", response_model=WebhookResponse)
 async def get_webhook(webhook_id: int) -> dict[str, Any]:
     """Get a webhook by ID.
 
@@ -150,7 +157,7 @@ async def get_webhook(webhook_id: int) -> dict[str, Any]:
     return result
 
 
-@router.put("/{webhook_id}")
+@router.put("/{webhook_id}", response_model=WebhookResponse)
 async def update_webhook(webhook_id: int, body: WebhookUpdateRequest) -> dict[str, Any]:
     """Update an existing webhook.
 
@@ -199,7 +206,7 @@ async def delete_webhook(webhook_id: int) -> None:
         raise HTTPException(404, "Webhook not found")
 
 
-@router.post("/{webhook_id}/test")
+@router.post("/{webhook_id}/test", response_model=MessageResponse)
 async def test_webhook(webhook_id: int) -> dict[str, str]:
     """Send a test event to a specific webhook.
 
@@ -223,7 +230,7 @@ async def test_webhook(webhook_id: int) -> dict[str, str]:
     return {"status": "Test event sent"}
 
 
-@router.get("/{webhook_id}/deliveries")
+@router.get("/{webhook_id}/deliveries", response_model=list[WebhookDeliveryResponse])
 async def list_deliveries(
     webhook_id: int, limit: int = Query(50, ge=1, le=500)
 ) -> list[dict[str, Any]]:

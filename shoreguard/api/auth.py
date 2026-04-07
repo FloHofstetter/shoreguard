@@ -81,6 +81,17 @@ _session_factory: SessionMaker | None = None
 _hmac_secret: bytes = b""
 _no_auth: bool = False
 
+
+def _get_auth_settings():  # noqa: ANN202
+    """Return auth settings from the central Settings singleton."""
+    from shoreguard.settings import get_settings
+
+    return get_settings().auth
+
+
+# Module-level aliases so existing ``from .auth import COOKIE_NAME`` works.
+# The values are read once at import time; if they ever need to vary at
+# runtime, call ``_get_auth_settings()`` directly instead.
 COOKIE_NAME = "sg_session"
 SESSION_MAX_AGE = 86400 * 7  # 7 days
 
@@ -91,9 +102,9 @@ def _load_or_create_secret_key() -> bytes:
     Returns:
         bytes: 32-byte HMAC signing key.
     """
-    env_key = os.environ.get("SHOREGUARD_SECRET_KEY")
-    if env_key:
-        return hashlib.sha256(env_key.encode()).digest()
+    auth_cfg = _get_auth_settings()
+    if auth_cfg.secret_key:
+        return hashlib.sha256(auth_cfg.secret_key.encode()).digest()
 
     from shoreguard.config import shoreguard_config_dir
 
@@ -123,7 +134,7 @@ def init_auth(session_factory: SessionMaker) -> None:
     global _session_factory, _hmac_secret, _no_auth  # noqa: PLW0603
     _session_factory = session_factory
     _hmac_secret = _load_or_create_secret_key()
-    _no_auth = os.environ.get("SHOREGUARD_NO_AUTH", "").lower() in ("1", "true", "yes")
+    _no_auth = _get_auth_settings().no_auth
 
 
 def reset() -> None:
@@ -152,7 +163,7 @@ def is_registration_enabled() -> bool:
     Returns:
         bool: ``True`` if ``SHOREGUARD_ALLOW_REGISTRATION`` is set.
     """
-    return os.environ.get("SHOREGUARD_ALLOW_REGISTRATION", "").lower() in ("1", "true", "yes")
+    return _get_auth_settings().allow_registration
 
 
 def is_setup_complete() -> bool:
@@ -204,7 +215,7 @@ def create_session_token(user_id: int, role: str) -> str:
         str: Signed session token string.
     """
     nonce = secrets.token_urlsafe(24)
-    expiry = str(int(time.time()) + SESSION_MAX_AGE)
+    expiry = str(int(time.time()) + _get_auth_settings().session_max_age)
     payload = f"{nonce}.{expiry}.{user_id}.{role}"
     sig = hmac.new(_hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}.{sig}"
@@ -712,13 +723,13 @@ def create_user(email: str, password: str | None, role: str) -> dict:
             raise
 
 
-INVITE_MAX_AGE = 86400 * 7  # 7 days
+INVITE_MAX_AGE = 86400 * 7  # 7 days — module-level alias for backwards compat
 
 
 def accept_invite(token: str, password: str) -> dict | None:
     """Accept an invite by setting the user's password.
 
-    Rejects tokens older than ``INVITE_MAX_AGE`` seconds.
+    Rejects tokens older than the configured invite max age.
 
     Args:
         token: The invite token from the invite link.
@@ -752,7 +763,7 @@ def accept_invite(token: str, password: str) -> dict | None:
                 if created_at.tzinfo is None:
                     created_at = created_at.replace(tzinfo=datetime.UTC)
                 age = (datetime.datetime.now(datetime.UTC) - created_at).total_seconds()
-                if age > INVITE_MAX_AGE:
+                if age > _get_auth_settings().invite_max_age:
                     logger.warning(
                         "Invite token expired (email=%s, age_hours=%.1f)", user.email, age / 3600
                     )
@@ -1258,7 +1269,7 @@ def bootstrap_admin_user() -> None:
     Raises:
         Exception: If user creation fails (re-raised after logging).
     """
-    password = os.environ.get("SHOREGUARD_ADMIN_PASSWORD")
+    password = _get_auth_settings().admin_password
     if not password or _session_factory is None:
         return
     if is_setup_complete():

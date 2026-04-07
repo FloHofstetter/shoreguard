@@ -6,12 +6,13 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from shoreguard.api.schemas import TemplateDetailResponse, TemplateSummaryResponse
 from shoreguard.sandbox_templates import get_template, list_templates
 
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", response_model=list[TemplateSummaryResponse])
 async def list_sandbox_templates() -> list[dict[str, str]]:
     """List all available sandbox templates.
 
@@ -21,7 +22,7 @@ async def list_sandbox_templates() -> list[dict[str, str]]:
     return list_templates()
 
 
-@router.get("/{name}")
+@router.get("/{name}", response_model=TemplateDetailResponse)
 async def get_sandbox_template(name: str) -> dict[str, Any]:
     """Get a sandbox template by name.
 

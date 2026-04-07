@@ -12,6 +12,7 @@ from sqlalchemy import create_engine as sa_create_engine
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 from shoreguard.config import default_database_url
 
@@ -132,3 +133,48 @@ def get_engine() -> Engine:
     if _engine is None:
         raise RuntimeError("Database not initialised — call init_db() first")
     return _engine
+
+
+# ── Async engine (for AsyncOperationService) ─────────────────────────────
+
+_async_engine: AsyncEngine | None = None
+_async_session_factory: async_sessionmaker | None = None
+
+
+def init_async_db(sync_url: str) -> AsyncEngine:
+    """Create an async engine matching the sync database URL.
+
+    Args:
+        sync_url: The synchronous SQLAlchemy URL used by :func:`init_db`.
+
+    Returns:
+        AsyncEngine: The initialised async engine.
+    """
+    global _async_engine, _async_session_factory  # noqa: PLW0603
+
+    if sync_url.startswith("sqlite:///"):
+        async_url = sync_url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+    elif sync_url.startswith("sqlite://"):
+        async_url = sync_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+    else:
+        async_url = sync_url
+
+    _async_engine = create_async_engine(async_url, pool_pre_ping=True)
+    _async_session_factory = async_sessionmaker(bind=_async_engine, expire_on_commit=False)
+
+    logger.info("Async database engine initialised (%s)", async_url.split("://")[0])
+    return _async_engine
+
+
+def get_async_session_factory() -> async_sessionmaker:
+    """Return the async session factory.
+
+    Returns:
+        async_sessionmaker: The active async session factory.
+
+    Raises:
+        RuntimeError: If ``init_async_db()`` has not been called yet.
+    """
+    if _async_session_factory is None:
+        raise RuntimeError("Async database not initialised — call init_async_db() first")
+    return _async_session_factory

@@ -128,61 +128,108 @@ def main(
         database_url: SQLAlchemy database URL override.
         version: Print version and exit (handled by callback).
     """
-    import os
-
     import uvicorn
 
-    _LOG_FORMAT = "%(asctime)s %(levelname)-5s %(name)-20s  %(message)s"
-    _LOG_DATE = "%H:%M:%S"
+    from shoreguard.settings import get_settings, override_settings
 
-    class _ShortNameFormatter(logging.Formatter):
-        """Strip the ``shoreguard.`` prefix from logger names at render time."""
+    # Push CLI-resolved values into the Settings singleton so the rest of
+    # the application (lifespan, services, routes) reads from one place.
+    settings = get_settings()
+    override_settings(
+        settings.model_copy(
+            update={
+                "server": settings.server.model_copy(
+                    update={
+                        "host": host,
+                        "port": port,
+                        "log_level": log_level,
+                        "reload": reload,
+                        "local_mode": local,
+                        "database_url": database_url or settings.server.database_url,
+                    },
+                ),
+                "auth": settings.auth.model_copy(update={"no_auth": no_auth}),
+            },
+        ),
+    )
+    settings = get_settings()
 
-        def format(self, record: logging.LogRecord) -> str:
-            if record.name.startswith("shoreguard."):
-                record.name = record.name.removeprefix("shoreguard.")
-            return super().format(record)
+    use_json = settings.server.log_format == "json"
 
     handler = logging.StreamHandler()
-    handler.setFormatter(_ShortNameFormatter(_LOG_FORMAT, datefmt=_LOG_DATE))
+    if use_json:
+        from shoreguard.api.logging_config import JSONFormatter
+
+        handler.setFormatter(JSONFormatter())
+    else:
+        _LOG_FORMAT = "%(asctime)s %(levelname)-5s %(name)-20s  %(message)s"
+        _LOG_DATE = "%H:%M:%S"
+
+        class _ShortNameFormatter(logging.Formatter):
+            """Strip the ``shoreguard.`` prefix from logger names."""
+
+            def format(self, record: logging.LogRecord) -> str:
+                if record.name.startswith("shoreguard."):
+                    record.name = record.name.removeprefix("shoreguard.")
+                return super().format(record)
+
+        handler.setFormatter(_ShortNameFormatter(_LOG_FORMAT, datefmt=_LOG_DATE))
+
     logging.root.addHandler(handler)
     logging.root.setLevel(getattr(logging, log_level.upper(), logging.INFO))
 
-    # Propagate CLI flags to env so the lifespan picks them up
     if no_auth:
-        os.environ["SHOREGUARD_NO_AUTH"] = "1"
         logger.warning("Authentication DISABLED — do not use in production")
     if local:
-        os.environ["SHOREGUARD_LOCAL_MODE"] = "1"
         logger.info("Local mode enabled")
     if database_url:
-        os.environ["SHOREGUARD_DATABASE_URL"] = database_url
         logger.info("Using database: %s", database_url.split("://")[0])
 
-    # Unified log config for uvicorn so all output uses the same format
-    _uvicorn_log_config: dict = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "default": {"format": _LOG_FORMAT, "datefmt": _LOG_DATE},
-        },
-        "handlers": {
-            "default": {
-                "formatter": "default",
-                "class": "logging.StreamHandler",
-                "stream": "ext://sys.stderr",
+    # Unified log config for uvicorn so all output uses the same format.
+    # In JSON mode, let uvicorn logs propagate to the root logger which has
+    # the JSONFormatter installed.  In text mode, use the same text format.
+    if use_json:
+        _uvicorn_log_config: dict = {
+            "version": 1,
+            "disable_existing_loggers": False,
+            "handlers": {},
+            "loggers": {
+                "uvicorn": {"level": log_level.upper(), "propagate": True},
+                "uvicorn.error": {"level": log_level.upper(), "propagate": True},
+                "uvicorn.access": {"level": log_level.upper(), "propagate": True},
             },
-        },
-        "loggers": {
-            "uvicorn": {"handlers": ["default"], "level": log_level.upper(), "propagate": False},
-            "uvicorn.error": {"level": log_level.upper(), "propagate": False},
-            "uvicorn.access": {
-                "handlers": ["default"],
-                "level": log_level.upper(),
-                "propagate": False,
+        }
+    else:
+        _uvicorn_log_config = {
+            "version": 1,
+            "disable_existing_loggers": False,
+            "formatters": {
+                "default": {
+                    "format": "%(asctime)s %(levelname)-5s %(name)-20s  %(message)s",
+                    "datefmt": "%H:%M:%S",
+                },
             },
-        },
-    }
+            "handlers": {
+                "default": {
+                    "formatter": "default",
+                    "class": "logging.StreamHandler",
+                    "stream": "ext://sys.stderr",
+                },
+            },
+            "loggers": {
+                "uvicorn": {
+                    "handlers": ["default"],
+                    "level": log_level.upper(),
+                    "propagate": False,
+                },
+                "uvicorn.error": {"level": log_level.upper(), "propagate": False},
+                "uvicorn.access": {
+                    "handlers": ["default"],
+                    "level": log_level.upper(),
+                    "propagate": False,
+                },
+            },
+        }
 
     uvicorn.run(
         "shoreguard.api.main:app",
@@ -191,7 +238,7 @@ def main(
         reload=reload,
         log_level=log_level,
         log_config=_uvicorn_log_config,
-        timeout_graceful_shutdown=5,
+        timeout_graceful_shutdown=settings.server.graceful_shutdown_timeout,
     )
 
 
@@ -212,7 +259,6 @@ def _import_filesystem_gateways(
         tuple[int, int]: ``(imported, skipped)`` counts.
     """
     import json as json_mod
-    import os
     from urllib.parse import urlparse
 
     from shoreguard.config import (
@@ -222,6 +268,7 @@ def _import_filesystem_gateways(
         VALID_GATEWAY_NAME_RE as _VALID_IMPORT_NAME_RE,
     )
     from shoreguard.config import is_private_ip, openshell_config_dir
+    from shoreguard.settings import get_settings
 
     def _log(msg: str, *, level: int = logging.INFO) -> None:
         if log_fn is not None:
@@ -267,7 +314,7 @@ def _import_filesystem_gateways(
         ca_cert = None
         client_cert = None
         client_key = None
-        _max_cert = 65_536  # 64 KB — same limit as the API route
+        _max_cert = get_settings().limits.max_cert_bytes
         mtls_dir = entry / "mtls"
         if mtls_dir.exists():
             ca_file = mtls_dir / "ca.crt"
@@ -321,7 +368,7 @@ def _import_filesystem_gateways(
         port = parsed.port or (443 if scheme == "https" else 80)
         clean_endpoint = f"{host}:{port}"
 
-        if is_private_ip(host) and not os.environ.get("SHOREGUARD_LOCAL_MODE"):
+        if is_private_ip(host) and not get_settings().server.local_mode:
             _log(f"  skip  {name} (private/loopback address: '{host}')", level=logging.WARNING)
             skipped += 1
             continue
@@ -366,15 +413,23 @@ def _cli_init_db(database_url: str | None):  # type: ignore[no-untyped-def]
     Args:
         database_url: Optional database URL override.
     """  # noqa: DOC201
-    import os
-
     from sqlalchemy.orm import sessionmaker as sa_sessionmaker
 
     from shoreguard.api.auth import init_auth
     from shoreguard.db import init_db
+    from shoreguard.settings import get_settings, override_settings
 
     if database_url:
-        os.environ["SHOREGUARD_DATABASE_URL"] = database_url
+        settings = get_settings()
+        override_settings(
+            settings.model_copy(
+                update={
+                    "server": settings.server.model_copy(
+                        update={"database_url": database_url},
+                    ),
+                },
+            ),
+        )
     engine = init_db()
     init_auth(sa_sessionmaker(bind=engine))
     return engine

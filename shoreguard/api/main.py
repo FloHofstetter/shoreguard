@@ -25,7 +25,7 @@ from .auth import (
 from .cli import _import_filesystem_gateways, cli  # noqa: F401 — cli re-exported for entry point
 from .deps import get_client, resolve_gateway
 from .errors import register_error_handlers
-from .metrics import metrics_middleware, shoreguard_info
+from .metrics import RequestIdFilter, metrics_middleware, shoreguard_info
 from .metrics import router as metrics_router
 from .pages import FRONTEND_DIR
 from .pages import router as pages_router
@@ -40,6 +40,7 @@ from .routes import (
     templates,
     webhooks,
 )
+from .schemas import HealthResponse, InferenceConfigResponse
 from .websocket import router as ws_router
 
 logger = logging.getLogger(__name__)
@@ -58,9 +59,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Raises:
         Exception: If database initialisation fails.
     """
-    import os
-
     from sqlalchemy.orm import sessionmaker as sa_sessionmaker
+
+    from shoreguard.settings import get_settings
+
+    settings = get_settings()
+
+    # Install request-ID log filter so %(request_id)s is available in all loggers.
+    logging.getLogger().addFilter(RequestIdFilter())
 
     import shoreguard.services.gateway as gw_mod
     from shoreguard.db import init_db
@@ -76,7 +82,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     gw_mod.gateway_service = gw_mod.GatewayService(registry)
     logger.info("Gateway service initialised")
 
-    if os.environ.get("SHOREGUARD_LOCAL_MODE"):
+    if settings.server.local_mode:
         import shoreguard.services.local_gateway as local_mod
 
         local_mod.local_gateway_manager = local_mod.LocalGatewayManager(gw_mod.gateway_service)
@@ -93,6 +99,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     sandbox_meta_mod.sandbox_meta_store = sandbox_meta_mod.SandboxMetaStore(session_factory)
     logger.info("Sandbox metadata store initialised")
+
+    # ── Operations ──────────────────────────────────────────────────────
+    import shoreguard.services.operations as ops_mod
+    from shoreguard.db import get_async_session_factory, init_async_db
+
+    init_async_db(str(engine.url))
+    async_sf = get_async_session_factory()
+    ops_mod.operation_service = ops_mod.AsyncOperationService(
+        async_sf,
+        running_ttl=settings.ops.running_ttl,
+        retention_days=settings.ops.retention_days,
+    )
+    orphaned = await ops_mod.operation_service.recover_orphans()
+    if orphaned:
+        logger.info("Recovered %d orphaned operations from previous run", orphaned)
+    logger.info("Operation service initialised (async)")
 
     # ── Audit ────────────────────────────────────────────────────────────
     import shoreguard.services.audit as audit_mod
@@ -125,17 +147,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ── Background tasks ─────────────────────────────────────────────────
     async def _cleanup_operations() -> None:
         """Periodically purge expired operations and audit entries."""
-        from shoreguard.services.operations import operation_store
-
-        base_interval = 600
-        max_interval = 900
-        backoff_threshold = 10
+        base_interval = settings.background.cleanup_interval
+        max_interval = settings.background.cleanup_max_interval
+        backoff_threshold = settings.background.cleanup_backoff_threshold
         consecutive_failures = 0
         interval = base_interval
         while True:
             await asyncio.sleep(interval)
             try:
-                await asyncio.to_thread(operation_store.cleanup)
+                if ops_mod.operation_service:
+                    await ops_mod.operation_service.cleanup()
                 if audit_mod.audit_service:
                     await asyncio.to_thread(audit_mod.audit_service.cleanup)
                 if webhook_mod.webhook_service:
@@ -159,9 +180,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     async def _health_monitor() -> None:
         """Periodically check health of all registered gateways."""
-        base_interval = 30
-        max_interval = 300
-        backoff_threshold = 10
+        base_interval = settings.background.health_interval
+        max_interval = settings.background.health_max_interval
+        backoff_threshold = settings.background.health_backoff_threshold
         consecutive_failures = 0
         interval = base_interval
         while True:
@@ -204,6 +225,22 @@ app = FastAPI(
     description="Open source control plane for NVIDIA OpenShell",
     version="0.16.2",
     lifespan=lifespan,
+    openapi_tags=[
+        {"name": "health", "description": "Liveness and readiness probes"},
+        {"name": "sandboxes", "description": "Manage sandboxes within a gateway"},
+        {
+            "name": "policies",
+            "description": "Gateway-scoped policy management (network rules, filesystem, presets)",
+        },
+        {"name": "policies-global", "description": "Global policy presets (not gateway-scoped)"},
+        {"name": "approvals", "description": "Draft policy approval workflow"},
+        {"name": "providers", "description": "Inference provider CRUD"},
+        {"name": "gateway", "description": "Gateway registration, lifecycle, and diagnostics"},
+        {"name": "operations", "description": "Long-running operation tracking and polling"},
+        {"name": "audit", "description": "Audit log queries and export (admin only)"},
+        {"name": "webhooks", "description": "Webhook subscription management (admin only)"},
+        {"name": "templates", "description": "Sandbox template listing"},
+    ],
 )
 
 register_error_handlers(app)
@@ -214,7 +251,7 @@ register_error_handlers(app)
 health_router = APIRouter(tags=["health"])
 
 
-@health_router.get("/healthz")
+@health_router.get("/healthz", response_model=HealthResponse)
 async def healthz() -> dict[str, str]:
     """Liveness probe — returns 200 if the process is running.
 
@@ -261,6 +298,11 @@ async def readyz() -> JSONResponse:
 app.include_router(health_router)
 app.include_router(metrics_router)
 app.middleware("http")(metrics_middleware)
+
+# GZip compression for responses >= 1 KB (SSE streams and WebSockets unaffected).
+from starlette.middleware.gzip import GZipMiddleware  # noqa: E402
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 # ─── Gateway-scoped API routes ──────────────────────────────────────────────
@@ -318,7 +360,7 @@ class SetInferenceRequest(BaseModel):
     route_name: str = ""
 
 
-@gw_api.get("/inference")
+@gw_api.get("/inference", response_model=InferenceConfigResponse)
 async def get_inference(gw: str, client: ShoreGuardClient = Depends(get_client)) -> dict[str, Any]:
     """Return current cluster inference configuration.
 
@@ -332,7 +374,11 @@ async def get_inference(gw: str, client: ShoreGuardClient = Depends(get_client))
     return await asyncio.to_thread(client.get_cluster_inference)
 
 
-@gw_api.put("/inference", dependencies=[Depends(require_role("operator"))])
+@gw_api.put(
+    "/inference",
+    response_model=InferenceConfigResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def set_inference(
     gw: str,
     body: SetInferenceRequest,

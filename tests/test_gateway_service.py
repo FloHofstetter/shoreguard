@@ -119,7 +119,10 @@ def test_get_client_backoff_escalation(svc):
             svc.get_client(name=GW)
 
     entry = gw_module._clients[GW]
-    assert entry.backoff == gw_module._BACKOFF_MIN
+    from shoreguard.settings import get_settings
+
+    gw_cfg = get_settings().gateway
+    assert entry.backoff == gw_cfg.backoff_min
 
     # Force past the backoff window
     entry.last_attempt = 0.0
@@ -127,7 +130,7 @@ def test_get_client_backoff_escalation(svc):
         with pytest.raises(GatewayNotConnectedError):
             svc.get_client(name=GW)
 
-    assert entry.backoff == gw_module._BACKOFF_MIN * gw_module._BACKOFF_FACTOR
+    assert entry.backoff == gw_cfg.backoff_min * gw_cfg.backoff_factor
 
 
 def test_backoff_prevents_rapid_reconnect(svc):

@@ -8,17 +8,27 @@ import re
 import shlex
 from typing import Any
 
-import grpc
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
+from starlette.responses import JSONResponse
 
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
+from shoreguard.api.lro import run_lro
+from shoreguard.api.schemas import (
+    LogEntryResponse,
+    PaginatedResponse,
+    SandboxDeleteResponse,
+    SandboxResponse,
+    SshRevokeResponse,
+    SshSessionResponse,
+)
+from shoreguard.api.validation import validate_description, validate_labels
 from shoreguard.client import ShoreGuardClient
-from shoreguard.exceptions import ValidationError, friendly_grpc_error
+from shoreguard.exceptions import ValidationError
+from shoreguard.services import operations as _ops_mod
 from shoreguard.services import sandbox_meta as _sandbox_meta_mod
 from shoreguard.services.audit import audit_log
-from shoreguard.services.operations import operation_store
 from shoreguard.services.sandbox import SandboxService
 from shoreguard.services.webhooks import fire_webhook
 
@@ -26,14 +36,7 @@ logger = logging.getLogger(__name__)
 
 _VALID_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 
-_MAX_DESCRIPTION_LEN = 1000
-_MAX_LABELS = 20
-_MAX_LABEL_VALUE_LEN = 253
-_LABEL_KEY_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$")
-
 router = APIRouter()
-
-_background_tasks: set[asyncio.Task] = set()
 
 
 def _get_sandbox_service(client: ShoreGuardClient = Depends(get_client)) -> SandboxService:
@@ -112,45 +115,6 @@ class RevokeSshRequest(BaseModel):
     token: str
 
 
-def _validate_description(description: str | None) -> None:
-    """Validate a sandbox description.
-
-    Args:
-        description: Description string to validate.
-
-    Raises:
-        HTTPException: If the description exceeds the maximum length.
-    """
-    if description is not None and len(description) > _MAX_DESCRIPTION_LEN:
-        raise HTTPException(400, f"description exceeds maximum length of {_MAX_DESCRIPTION_LEN}")
-
-
-def _validate_labels(labels: dict[str, str] | None) -> None:
-    """Validate sandbox labels.
-
-    Args:
-        labels: Label dict to validate.
-
-    Raises:
-        HTTPException: If any label key or value is invalid, or count exceeds limit.
-    """
-    if labels is None:
-        return
-    if len(labels) > _MAX_LABELS:
-        raise HTTPException(400, f"Too many labels (max {_MAX_LABELS})")
-    for key, value in labels.items():
-        if not _LABEL_KEY_RE.match(key):
-            raise HTTPException(
-                400,
-                f"Invalid label key '{key}': must match [a-zA-Z0-9][a-zA-Z0-9._-]* (max 63 chars)",
-            )
-        if len(value) > _MAX_LABEL_VALUE_LEN:
-            raise HTTPException(
-                400,
-                f"Label value for '{key}' exceeds maximum length of {_MAX_LABEL_VALUE_LEN}",
-            )
-
-
 def _parse_label_filters(label: list[str] | None) -> dict[str, str] | None:
     """Parse label query parameters into a filter dict.
 
@@ -174,14 +138,14 @@ def _parse_label_filters(label: list[str] | None) -> dict[str, str] | None:
     return result
 
 
-@router.get("")
+@router.get("", response_model=PaginatedResponse)
 async def list_sandboxes(
     request: Request,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     label: list[str] | None = Query(None),
     svc: SandboxService = Depends(_get_sandbox_service),
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """List all sandboxes with pagination and optional label filtering.
 
     Args:
@@ -192,22 +156,23 @@ async def list_sandboxes(
         svc: Injected sandbox service.
 
     Returns:
-        list[dict[str, Any]]: Sandbox records.
+        dict[str, Any]: Paginated sandbox records.
     """
     labels_filter = _parse_label_filters(label)
     gw = get_gateway_name(request)
-    return await asyncio.to_thread(
+    items = await asyncio.to_thread(
         svc.list, limit=limit, offset=offset, gateway_name=gw, labels_filter=labels_filter
     )
+    return {"items": items, "total": None}
 
 
-@router.post("", status_code=202, dependencies=[Depends(require_role("operator"))])
+@router.post("", dependencies=[Depends(require_role("operator"))])
 async def create_sandbox(
     body: CreateSandboxRequest,
     request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
     client: ShoreGuardClient = Depends(get_client),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Create a new sandbox. Returns 202 with an operation ID for polling.
 
     Args:
@@ -224,106 +189,66 @@ async def create_sandbox(
     """
     if body.name and not _VALID_NAME_RE.match(body.name):
         raise HTTPException(400, "Invalid sandbox name: must match [a-zA-Z0-9][a-zA-Z0-9._-]*")
-    _validate_description(body.description)
-    _validate_labels(body.labels)
+    validate_description(body.description)
+    validate_labels(body.labels)
     sandbox_name = body.name or "unnamed"
     actor = get_actor(request)
-    op = operation_store.create_if_not_running("sandbox", sandbox_name)
-    if op is None:
-        raise HTTPException(409, f"Sandbox '{sandbox_name}' creation already in progress")
+    gw = get_gateway_name(request)
 
-    _audit_actor = get_actor(request)
-    _audit_role = getattr(request.state, "role", "unknown")
-    _audit_ip = request.client.host if request.client else None
-    _audit_gw = get_gateway_name(request)
-
-    async def _run() -> None:
-        """Execute sandbox creation in the background."""
+    async def work(op):
         logger.info("Starting sandbox creation: '%s' (op=%s, actor=%s)", sandbox_name, op.id, actor)
-        try:
-            result = await asyncio.to_thread(
-                svc.create,
-                name=body.name,
-                image=body.image,
-                gpu=body.gpu,
-                providers=body.providers or None,
-                environment=body.environment or None,
-                presets=body.presets or None,
-                gateway_name=_audit_gw,
-                description=body.description,
-                labels=body.labels,
-            )
-            sb_name = result.get("name", body.name)
-            # Always wait for sandbox to become ready before completing
-            if sb_name:
-                try:
-                    await asyncio.to_thread(
-                        client.sandboxes.wait_ready,
-                        sb_name,
-                        timeout_seconds=180.0,
-                    )
-                    result = await asyncio.to_thread(svc.get, sb_name, gateway_name=_audit_gw)
-                except TimeoutError:
-                    result["warning"] = "Sandbox created but did not become ready within 180s"
-            logger.info(
-                "Sandbox creation completed: '%s' (op=%s, actor=%s)",
-                sandbox_name,
-                op.id,
-                actor,
-            )
-            operation_store.complete(op.id, result)
-            from shoreguard.services.audit import audit_service
+        result = await asyncio.to_thread(
+            svc.create,
+            name=body.name,
+            image=body.image,
+            gpu=body.gpu,
+            providers=body.providers or None,
+            environment=body.environment or None,
+            presets=body.presets or None,
+            gateway_name=gw,
+            description=body.description,
+            labels=body.labels,
+        )
+        sb_name = result.get("name", body.name)
+        await _ops_mod.operation_service.update_progress(op.id, 30, "Waiting for ready state")
+        if sb_name:
+            try:
+                from shoreguard.settings import get_settings
 
-            if audit_service:
+                ready_timeout = get_settings().sandbox.ready_timeout
                 await asyncio.to_thread(
-                    audit_service.log,
-                    actor=_audit_actor,
-                    actor_role=_audit_role,
-                    action="sandbox.create",
-                    resource_type="sandbox",
-                    resource_id=sandbox_name,
-                    gateway=_audit_gw,
-                    client_ip=_audit_ip,
+                    client.sandboxes.wait_ready, sb_name, timeout_seconds=ready_timeout
                 )
-            await fire_webhook(
-                "sandbox.created",
-                {
-                    "sandbox": sandbox_name,
-                    "actor": _audit_actor,
-                    "gateway": _audit_gw,
-                    "image": body.image or "",
-                    "gpu": body.gpu,
-                    "providers": body.providers or [],
-                },
-            )
-        except asyncio.CancelledError:
-            logger.warning("Sandbox creation cancelled for '%s'", sandbox_name)
-            operation_store.fail(op.id, "Operation was cancelled")
-        except (grpc.RpcError, OSError, TimeoutError, RuntimeError) as e:
-            logger.error("Sandbox creation failed for '%s': %s", sandbox_name, e, exc_info=True)
-            msg = (
-                friendly_grpc_error(e)
-                if isinstance(e, grpc.RpcError)
-                else "Sandbox creation failed unexpectedly"
-            )
-            try:
-                operation_store.fail(op.id, msg)
-            except Exception:
-                logger.exception("Failed to record operation failure for %s", op.id)
-        except Exception:
-            logger.exception("Sandbox creation failed unexpectedly for '%s'", sandbox_name)
-            try:
-                operation_store.fail(op.id, "Unexpected internal error")
-            except Exception:
-                logger.exception("Failed to record operation failure for %s", op.id)
+                result = await asyncio.to_thread(svc.get, sb_name, gateway_name=gw)
+            except TimeoutError:
+                result["warning"] = "Sandbox created but did not become ready in time"
+        logger.info("Sandbox creation completed: '%s' (op=%s)", sandbox_name, op.id)
+        await audit_log(request, "sandbox.create", "sandbox", sandbox_name, gateway=gw)
+        await fire_webhook(
+            "sandbox.created",
+            {
+                "sandbox": sandbox_name,
+                "actor": actor,
+                "gateway": gw,
+                "image": body.image or "",
+                "gpu": body.gpu,
+                "providers": body.providers or [],
+            },
+        )
+        return result
 
-    task = asyncio.create_task(_run())
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
-    return {"operation_id": op.id, "status": "running", "resource_type": "sandbox"}
+    return await run_lro(
+        resource_type="sandbox",
+        resource_key=sandbox_name,
+        work=work,
+        unique=True,
+        actor=actor,
+        gateway_name=gw,
+        idempotency_key=request.headers.get("Idempotency-Key"),
+    )
 
 
-@router.get("/{name}")
+@router.get("/{name}", response_model=SandboxResponse)
 async def get_sandbox(
     name: str,
     request: Request,
@@ -343,7 +268,11 @@ async def get_sandbox(
     return await asyncio.to_thread(svc.get, name, gateway_name=gw)
 
 
-@router.patch("/{name}", dependencies=[Depends(require_role("operator"))])
+@router.patch(
+    "/{name}",
+    response_model=SandboxResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def update_sandbox_metadata(
     name: str,
     body: UpdateSandboxMetadataRequest,
@@ -361,8 +290,8 @@ async def update_sandbox_metadata(
     Returns:
         dict[str, Any]: Updated sandbox record with metadata.
     """
-    _validate_description(body.description)
-    _validate_labels(body.labels)
+    validate_description(body.description)
+    validate_labels(body.labels)
     gw = get_gateway_name(request)
     from shoreguard.services.sandbox_meta import _UNSET
 
@@ -378,7 +307,11 @@ async def update_sandbox_metadata(
     return result
 
 
-@router.delete("/{name}", dependencies=[Depends(require_role("operator"))])
+@router.delete(
+    "/{name}",
+    response_model=SandboxDeleteResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def delete_sandbox(
     name: str,
     request: Request,
@@ -407,13 +340,13 @@ async def delete_sandbox(
     return {"deleted": deleted}
 
 
-@router.post("/{name}/exec", status_code=202, dependencies=[Depends(require_role("operator"))])
+@router.post("/{name}/exec", dependencies=[Depends(require_role("operator"))])
 async def exec_in_sandbox(
     name: str,
     body: ExecRequest,
     request: Request,
     svc: SandboxService = Depends(_get_sandbox_service),
-) -> dict[str, Any]:
+) -> JSONResponse:
     """Execute a command inside a running sandbox (async LRO).
 
     Returns 202 with an operation ID. Poll ``GET /operations/{id}``
@@ -426,70 +359,62 @@ async def exec_in_sandbox(
         svc: Injected sandbox service.
 
     Returns:
-        dict[str, Any]: Operation ID and status for polling.
+        JSONResponse: Operation ID and status for polling.
 
     Raises:
         ValidationError: If the command string has invalid shell syntax.
     """
-    # Validate shlex syntax synchronously before accepting the operation.
     if isinstance(body.command, str):
         try:
             shlex.split(body.command)
         except ValueError as e:
             raise ValidationError(f"Invalid command syntax: {e}") from e
 
-    op = operation_store.create("exec", f"{name}:{body.command[:60]}")
+    actor = get_actor(request)
+    gw = get_gateway_name(request)
 
-    async def _run() -> None:
-        try:
-            result = await asyncio.to_thread(
-                svc.exec,
-                name,
-                body.command,
-                workdir=body.workdir,
-                env=body.env or None,
-                timeout_seconds=body.timeout_seconds,
-            )
-            operation_store.complete(op.id, result)
-            actor = get_actor(request)
-            gw = get_gateway_name(request)
-            exit_code = result.get("exit_code")
-            logger.info("Exec completed (sandbox=%s, actor=%s)", name, actor)
-            await audit_log(
-                request,
-                "sandbox.exec",
-                "sandbox",
-                name,
-                gateway=gw,
-                detail={
-                    "command": body.command[:200],
-                    "exit_code": exit_code,
-                    "timeout_seconds": body.timeout_seconds,
-                    "status": "success" if exit_code == 0 else "failed",
-                },
-            )
-        except Exception as exc:
-            operation_store.fail(op.id, str(exc))
-            logger.error("Exec failed in sandbox %s: %s", name, exc)
-            gw = get_gateway_name(request)
-            await audit_log(
-                request,
-                "sandbox.exec",
-                "sandbox",
-                name,
-                gateway=gw,
-                detail={
-                    "command": body.command[:200],
-                    "status": "error",
-                    "error": str(exc)[:200],
-                },
-            )
+    async def work(op):
+        result = await asyncio.to_thread(
+            svc.exec,
+            name,
+            body.command,
+            workdir=body.workdir,
+            env=body.env or None,
+            timeout_seconds=body.timeout_seconds,
+        )
+        exit_code = result.get("exit_code")
+        logger.info("Exec completed (sandbox=%s, actor=%s)", name, actor)
+        await audit_log(
+            request,
+            "sandbox.exec",
+            "sandbox",
+            name,
+            gateway=gw,
+            detail={
+                "command": body.command[:200],
+                "exit_code": exit_code,
+                "timeout_seconds": body.timeout_seconds,
+                "status": "success" if exit_code == 0 else "failed",
+            },
+        )
+        return result
 
-    asyncio.create_task(_run())
-    return {"operation_id": op.id, "status": "running", "resource_type": "exec"}
+    return await run_lro(
+        resource_type="exec",
+        resource_key=f"{name}:{body.command[:60]}",
+        work=work,
+        actor=actor,
+        gateway_name=gw,
+        idempotency_key=request.headers.get("Idempotency-Key"),
+    )
 
 
-@router.post("/{name}/ssh", status_code=201, dependencies=[Depends(require_role("operator"))])
+@router.post(
+    "/{name}/ssh",
+    status_code=201,
+    response_model=SshSessionResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def create_ssh_session(
     name: str,
     request: Request,
@@ -513,7 +438,11 @@ async def create_ssh_session(
     return result
 
 
-@router.delete("/{name}/ssh", dependencies=[Depends(require_role("operator"))])
+@router.delete(
+    "/{name}/ssh",
+    response_model=SshRevokeResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def revoke_ssh_session(
     name: str,
     body: RevokeSshRequest,
@@ -539,7 +468,7 @@ async def revoke_ssh_session(
     return {"revoked": revoked}
 
 
-@router.get("/{name}/logs")
+@router.get("/{name}/logs", response_model=list[LogEntryResponse])
 async def get_sandbox_logs(
     name: str,
     lines: int = Query(200, ge=1, le=10000),

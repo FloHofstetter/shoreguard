@@ -11,6 +11,13 @@ from pydantic import BaseModel
 
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
+from shoreguard.api.schemas import (
+    ApprovalBulkResponse,
+    ApprovalChunkResponse,
+    ApprovalClearResponse,
+    ApprovalDraftResponse,
+    MessageResponse,
+)
 from shoreguard.client import ShoreGuardClient
 from shoreguard.services.approvals import ApprovalService
 from shoreguard.services.audit import audit_log
@@ -63,7 +70,7 @@ class EditChunkRequest(BaseModel):
     proposed_rule: dict
 
 
-@router.get("/{name}/approvals")
+@router.get("/{name}/approvals", response_model=ApprovalDraftResponse)
 async def get_approvals(
     name: str,
     status_filter: str = "",
@@ -82,7 +89,7 @@ async def get_approvals(
     return await asyncio.to_thread(svc.get_draft, name, status_filter=status_filter)
 
 
-@router.get("/{name}/approvals/pending")
+@router.get("/{name}/approvals/pending", response_model=list[ApprovalChunkResponse])
 async def get_pending_approvals(
     name: str,
     svc: ApprovalService = Depends(_get_approval_service),
@@ -100,7 +107,9 @@ async def get_pending_approvals(
 
 
 @router.post(
-    "/{name}/approvals/{chunk_id}/approve", dependencies=[Depends(require_role("operator"))]
+    "/{name}/approvals/{chunk_id}/approve",
+    response_model=ApprovalChunkResponse,
+    dependencies=[Depends(require_role("operator"))],
 )
 async def approve_chunk(
     request: Request,
@@ -143,7 +152,9 @@ async def approve_chunk(
 
 
 @router.post(
-    "/{name}/approvals/{chunk_id}/reject", dependencies=[Depends(require_role("operator"))]
+    "/{name}/approvals/{chunk_id}/reject",
+    response_model=MessageResponse,
+    dependencies=[Depends(require_role("operator"))],
 )
 async def reject_chunk(
     request: Request,
@@ -189,7 +200,11 @@ async def reject_chunk(
     return {"status": "rejected"}
 
 
-@router.post("/{name}/approvals/approve-all", dependencies=[Depends(require_role("operator"))])
+@router.post(
+    "/{name}/approvals/approve-all",
+    response_model=ApprovalBulkResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def approve_all(
     request: Request,
     name: str,
@@ -228,7 +243,11 @@ async def approve_all(
     return result
 
 
-@router.post("/{name}/approvals/{chunk_id}/edit", dependencies=[Depends(require_role("operator"))])
+@router.post(
+    "/{name}/approvals/{chunk_id}/edit",
+    response_model=MessageResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def edit_chunk(
     request: Request,
     name: str,
@@ -262,7 +281,11 @@ async def edit_chunk(
     return {"status": "edited"}
 
 
-@router.post("/{name}/approvals/{chunk_id}/undo", dependencies=[Depends(require_role("operator"))])
+@router.post(
+    "/{name}/approvals/{chunk_id}/undo",
+    response_model=ApprovalChunkResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def undo_chunk(
     request: Request,
     name: str,
@@ -294,7 +317,11 @@ async def undo_chunk(
     return result
 
 
-@router.post("/{name}/approvals/clear", dependencies=[Depends(require_role("operator"))])
+@router.post(
+    "/{name}/approvals/clear",
+    response_model=ApprovalClearResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
 async def clear_approvals(
     request: Request,
     name: str,
@@ -317,7 +344,7 @@ async def clear_approvals(
     return result
 
 
-@router.get("/{name}/approvals/history")
+@router.get("/{name}/approvals/history", response_model=list[ApprovalChunkResponse])
 async def get_approval_history(
     name: str,
     svc: ApprovalService = Depends(_get_approval_service),

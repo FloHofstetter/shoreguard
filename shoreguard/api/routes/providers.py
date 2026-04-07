@@ -11,6 +11,12 @@ from pydantic import BaseModel
 
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
+from shoreguard.api.schemas import (
+    PaginatedResponse,
+    ProviderDeleteResponse,
+    ProviderResponse,
+    ProviderTypeResponse,
+)
 from shoreguard.client import ShoreGuardClient
 from shoreguard.services.audit import audit_log
 from shoreguard.services.providers import ProviderService
@@ -64,7 +70,7 @@ class UpdateProviderRequest(BaseModel):
     config: dict[str, str] = {}
 
 
-@router.get("/types")
+@router.get("/types", response_model=list[ProviderTypeResponse])
 async def list_provider_types() -> list[dict[str, str]]:
     """List known provider types with metadata (label, icon, cred_key).
 
@@ -94,12 +100,12 @@ async def list_community_sandboxes() -> list[dict[str, Any]]:
     return ProviderService.list_community_sandboxes()
 
 
-@router.get("")
+@router.get("", response_model=PaginatedResponse)
 async def list_providers(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     svc: ProviderService = Depends(_get_provider_service),
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """List all providers.
 
     Args:
@@ -108,14 +114,16 @@ async def list_providers(
         svc: Injected provider service.
 
     Returns:
-        list[dict[str, Any]]: Provider records.
+        dict[str, Any]: Paginated provider records.
     """
-    return await asyncio.to_thread(svc.list, limit=limit, offset=offset)
+    items = await asyncio.to_thread(svc.list, limit=limit, offset=offset)
+    return {"items": items, "total": None}
 
 
 @router.post(
     "",
     status_code=201,
+    response_model=ProviderResponse,
     dependencies=[Depends(require_role("operator"))],
 )
 async def create_provider(
@@ -157,7 +165,7 @@ async def create_provider(
     return result
 
 
-@router.get("/{name}")
+@router.get("/{name}", response_model=ProviderResponse)
 async def get_provider(
     name: str,
     svc: ProviderService = Depends(_get_provider_service),
@@ -176,6 +184,7 @@ async def get_provider(
 
 @router.put(
     "/{name}",
+    response_model=ProviderResponse,
     dependencies=[Depends(require_role("operator"))],
 )
 async def update_provider(
@@ -213,6 +222,7 @@ async def update_provider(
 
 @router.delete(
     "/{name}",
+    response_model=ProviderDeleteResponse,
     dependencies=[Depends(require_role("operator"))],
 )
 async def delete_provider(

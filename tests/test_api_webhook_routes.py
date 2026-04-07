@@ -90,15 +90,16 @@ class TestListWebhooks:
     async def test_list_empty(self, admin_client):
         resp = await admin_client.get("/api/webhooks")
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json() == {"items": [], "total": 0}
 
     async def test_list_returns_created(self, admin_client):
         await _create_webhook(admin_client)
         resp = await admin_client.get("/api/webhooks")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 1
-        assert data[0]["url"] == "https://example.com/hook"
+        assert len(data["items"]) == 1
+        assert data["items"][0]["url"] == "https://example.com/hook"
+        assert data["total"] == 1
 
 
 class TestCreateWebhook:

@@ -19,6 +19,7 @@ import grpc
 from shoreguard.client import ShoreGuardClient
 from shoreguard.config import openshell_config_dir
 from shoreguard.exceptions import GatewayNotConnectedError
+from shoreguard.settings import get_settings
 
 from .gateway import GatewayService
 
@@ -165,8 +166,9 @@ class LocalGatewayManager:
             result = self._docker_start_container(gw_name)
             if result["success"]:
                 self._gw.reset_backoff(name=gw_name)
-                for attempt in range(10):
-                    time.sleep(2)
+                lgw = get_settings().local_gw
+                for attempt in range(lgw.startup_retries):
+                    time.sleep(lgw.startup_sleep)
                     try:
                         self._gw.get_client(name=gw_name)
                         break
@@ -188,7 +190,7 @@ class LocalGatewayManager:
             return {"success": False, "error": "openshell CLI not found"}
 
         args = ["gateway", "start", "--name", gw_name]
-        result = self._run_openshell(args, timeout=600)
+        result = self._run_openshell(args, timeout=int(get_settings().local_gw.openshell_timeout))
 
         if result["success"]:
             try:
@@ -285,7 +287,7 @@ class LocalGatewayManager:
         if gpu:
             args.append("--gpu")
 
-        result = self._run_openshell(args, timeout=600)
+        result = self._run_openshell(args, timeout=int(get_settings().local_gw.openshell_timeout))
 
         if result["success"]:
             try:
@@ -373,7 +375,7 @@ class LocalGatewayManager:
 
         return self._run_openshell(
             ["gateway", "destroy", "--name", name],
-            timeout=30,
+            timeout=int(get_settings().local_gw.docker_timeout),
         )
 
     # ── Docker helpers ────────────────────────────────────────────────────
@@ -423,11 +425,12 @@ class LocalGatewayManager:
         """
         container = self._get_container_name(gateway_name)
         try:
+            docker_timeout = int(get_settings().local_gw.docker_timeout)
             proc = subprocess.run(
                 ["docker", "start", container],
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=docker_timeout,
             )
             if proc.returncode == 0:
                 logger.info("Docker container started for '%s'", gateway_name)
@@ -453,11 +456,12 @@ class LocalGatewayManager:
         """
         container = self._get_container_name(gateway_name)
         try:
+            docker_timeout = int(get_settings().local_gw.docker_timeout)
             proc = subprocess.run(
                 ["docker", "stop", container],
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=docker_timeout,
             )
             if proc.returncode == 0:
                 logger.info("Docker container stopped for '%s'", gateway_name)
@@ -552,7 +556,7 @@ class LocalGatewayManager:
                 ports.add(port)
         return ports
 
-    def _next_free_port(self, start: int = 8080) -> int:
+    def _next_free_port(self, start: int | None = None) -> int:
         """Find the next free port starting from the given number.
 
         Args:
@@ -564,6 +568,8 @@ class LocalGatewayManager:
         Raises:
             RuntimeError: If no free port is found in valid range.
         """
+        if start is None:
+            start = get_settings().local_gw.starting_port
         used = self._get_used_ports()
         port = start
         while port in used:

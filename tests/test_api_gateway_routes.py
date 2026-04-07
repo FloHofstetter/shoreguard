@@ -32,7 +32,8 @@ async def test_gateway_list(gw_client, mock_gw_svc):
     mock_gw_svc.list_all.return_value = [{"name": "gw1", "status": "connected"}]
     resp = await gw_client.get("/api/gateway/list")
     assert resp.status_code == 200
-    assert resp.json()[0]["name"] == "gw1"
+    assert resp.json()["items"][0]["name"] == "gw1"
+    assert resp.json()["total"] == 1
     mock_gw_svc.list_all.assert_called_once()
 
 

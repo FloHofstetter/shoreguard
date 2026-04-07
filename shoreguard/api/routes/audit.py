@@ -11,13 +11,14 @@ from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
 import shoreguard.services.audit as audit_mod
+from shoreguard.api.schemas import AuditListResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", response_model=AuditListResponse)
 async def list_audit_entries(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -26,7 +27,7 @@ async def list_audit_entries(
     resource_type: str | None = None,
     since: str | None = None,
     until: str | None = None,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """List audit log entries with optional filters (admin only).
 
     Args:
@@ -39,12 +40,12 @@ async def list_audit_entries(
         until: ISO-8601 upper bound for the entry timestamp.
 
     Returns:
-        list[dict[str, Any]]: A list of audit log entry dicts.
+        dict[str, Any]: Paginated entries with total count.
     """
     if audit_mod.audit_service is None:
-        return []
-    return await asyncio.to_thread(
-        audit_mod.audit_service.list,
+        return {"entries": [], "total": 0}
+    entries, total = await asyncio.to_thread(
+        audit_mod.audit_service.list_with_count,
         limit=limit,
         offset=offset,
         actor=actor,
@@ -53,6 +54,7 @@ async def list_audit_entries(
         since=since,
         until=until,
     )
+    return {"entries": entries, "total": total}
 
 
 @router.get("/export", response_model=None)

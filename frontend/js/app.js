@@ -48,6 +48,68 @@ async function apiFetch(url, options = {}) {
     }
 }
 
+// ─── Operation Polling ──────────────────────────────────────────────────────
+
+const _ACTIVE_STATUSES = new Set(['pending', 'running', 'cancelling']);
+
+/**
+ * Wait for a long-running operation to reach a terminal state.
+ *
+ * Tries Server-Sent Events first for real-time updates.  Falls back to
+ * long-poll requests if SSE is unavailable or errors out.
+ *
+ * @param {string} operationId - The operation ID to poll.
+ * @param {Object} [options] - Polling options.
+ * @param {number} [options.timeoutMs=300000] - Maximum wait time (5 minutes).
+ * @param {Function} [options.onProgress] - Callback for progress updates (pct, message).
+ * @returns {Promise<Object>} The completed operation.
+ */
+async function pollOperation(operationId, { timeoutMs = 300000, onProgress } = {}) {
+    if (typeof EventSource !== 'undefined') {
+        try {
+            return await _pollSSE(operationId, { timeoutMs, onProgress });
+        } catch {
+            // SSE failed — fall through to long-poll.
+        }
+    }
+    return _pollLongPoll(operationId, { timeoutMs, onProgress });
+}
+
+function _pollSSE(operationId, { timeoutMs, onProgress }) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            source.close();
+            reject(new Error('Operation timed out waiting for completion'));
+        }, timeoutMs);
+        const source = new EventSource(`/api/operations/${operationId}/stream`);
+        source.onmessage = (event) => {
+            const op = JSON.parse(event.data);
+            if (onProgress && op.progress > 0) onProgress(op.progress, op.progress_message);
+            if (!_ACTIVE_STATUSES.has(op.status)) {
+                source.close();
+                clearTimeout(timer);
+                resolve(op);
+            }
+        };
+        source.onerror = () => {
+            source.close();
+            clearTimeout(timer);
+            reject(new Error('SSE connection failed'));
+        };
+    });
+}
+
+async function _pollLongPoll(operationId, { timeoutMs = 300000, onProgress } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const remainingSecs = Math.min(30, Math.ceil((deadline - Date.now()) / 1000));
+        const op = await apiFetch(`/api/operations/${operationId}?wait=${remainingSecs}`);
+        if (onProgress && op.progress > 0) onProgress(op.progress, op.progress_message);
+        if (!_ACTIVE_STATUSES.has(op.status)) return op;
+    }
+    throw new Error('Operation timed out waiting for completion');
+}
+
 // ─── Confirm Modal ───────────────────────────────────────────────────────────
 
 function showConfirm(message, { icon = 'exclamation-triangle', iconColor = 'text-warning', btnClass = 'btn-danger', btnLabel = 'Confirm' } = {}) {

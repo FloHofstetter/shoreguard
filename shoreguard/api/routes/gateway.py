@@ -6,21 +6,29 @@ import asyncio
 import base64
 import binascii
 import logging
-import os
 import re
 from typing import TYPE_CHECKING, Any
 
-import grpc
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
+from starlette.responses import JSONResponse
 
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import _get_gateway_service, get_actor
+from shoreguard.api.lro import run_lro
+from shoreguard.api.schemas import (
+    ConnectionTestResponse,
+    GatewayResponse,
+    GatewayUnregisterResponse,
+    PaginatedResponse,
+)
+from shoreguard.api.validation import validate_description, validate_labels
 from shoreguard.config import ENDPOINT_RE, VALID_GATEWAY_NAME_RE, is_private_ip
-from shoreguard.exceptions import NotFoundError, friendly_grpc_error
+from shoreguard.exceptions import NotFoundError
+from shoreguard.services import operations as _ops_mod
 from shoreguard.services.audit import audit_log
-from shoreguard.services.operations import operation_store
 from shoreguard.services.webhooks import fire_webhook
+from shoreguard.settings import get_settings
 
 if TYPE_CHECKING:
     from shoreguard.services.local_gateway import LocalGatewayManager
@@ -29,16 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 _VALID_NAME_RE = VALID_GATEWAY_NAME_RE
-_MAX_CERT_BYTES = 65_536  # 64 KB — real certs are typically < 10 KB
-_MAX_METADATA_JSON_BYTES = 16_384  # 16 KB
-_MAX_DESCRIPTION_LEN = 1000
-_MAX_LABELS = 20
-_MAX_LABEL_VALUE_LEN = 253
-_LABEL_KEY_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$")
-
 router = APIRouter()
-
-_background_tasks: set[asyncio.Task] = set()
 
 _ENDPOINT_RE = ENDPOINT_RE
 
@@ -58,7 +57,7 @@ def _validate_endpoint_format(endpoint: str) -> None:
     port = int(port_str)
     if port < 1 or port > 65535:
         raise ValueError("endpoint port must be between 1 and 65535")
-    if is_private_ip(host) and not os.environ.get("SHOREGUARD_LOCAL_MODE"):
+    if is_private_ip(host) and not get_settings().server.local_mode:
         raise ValueError(
             "endpoint must not point to a private/loopback address; use a routable IP or hostname"
         )
@@ -70,7 +69,7 @@ def _get_local_manager() -> LocalGatewayManager | None:
     Returns:
         LocalGatewayManager | None: Manager instance or None if not in local mode.
     """
-    if not os.environ.get("SHOREGUARD_LOCAL_MODE"):
+    if not get_settings().server.local_mode:
         return None
     from shoreguard.services.local_gateway import local_gateway_manager
 
@@ -184,52 +183,13 @@ class UpdateGatewayMetadataRequest(BaseModel):
     labels: dict[str, str] | None = None
 
 
-def _validate_description(description: str | None) -> None:
-    """Validate a gateway description.
-
-    Args:
-        description: Description string to validate.
-
-    Raises:
-        HTTPException: If the description exceeds the maximum length.
-    """
-    if description is not None and len(description) > _MAX_DESCRIPTION_LEN:
-        raise HTTPException(400, f"description exceeds maximum length of {_MAX_DESCRIPTION_LEN}")
-
-
-def _validate_labels(labels: dict[str, str] | None) -> None:
-    """Validate gateway labels.
-
-    Args:
-        labels: Label dict to validate.
-
-    Raises:
-        HTTPException: If any label key or value is invalid, or count exceeds limit.
-    """
-    if labels is None:
-        return
-    if len(labels) > _MAX_LABELS:
-        raise HTTPException(400, f"Too many labels (max {_MAX_LABELS})")
-    for key, value in labels.items():
-        if not _LABEL_KEY_RE.match(key):
-            raise HTTPException(
-                400,
-                f"Invalid label key '{key}': must match [a-zA-Z0-9][a-zA-Z0-9._-]* (max 63 chars)",
-            )
-        if len(value) > _MAX_LABEL_VALUE_LEN:
-            raise HTTPException(
-                400,
-                f"Label value for '{key}' exceeds maximum length of {_MAX_LABEL_VALUE_LEN}",
-            )
-
-
 # ─── Gateway queries ──────────────────────────────────────────────────────
 
 
-@router.get("/list")
+@router.get("/list", response_model=PaginatedResponse)
 async def gateway_list(
     label: list[str] | None = Query(None),
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """List all registered gateways with metadata and status.
 
     Args:
@@ -237,7 +197,7 @@ async def gateway_list(
             labels are AND-combined.
 
     Returns:
-        list[dict[str, Any]]: Gateway records.
+        dict[str, Any]: Paginated gateway records.
 
     Raises:
         HTTPException: If a label filter has invalid format.
@@ -251,10 +211,11 @@ async def gateway_list(
             key, value = item.split(":", 1)
             labels_filter[key] = value
     svc = _get_gateway_service()
-    return await asyncio.to_thread(svc.list_all, labels_filter=labels_filter)
+    items = await asyncio.to_thread(svc.list_all, labels_filter=labels_filter)
+    return {"items": items, "total": len(items)}
 
 
-@router.get("/{name}/info")
+@router.get("/{name}/info", response_model=GatewayResponse)
 async def gateway_info(name: str) -> dict[str, Any]:
     """Return gateway configuration and connection status.
 
@@ -285,7 +246,12 @@ async def gateway_config(name: str) -> dict[str, Any]:
 # ─── Registration (v0.3) ──────────────────────────────────────────────────
 
 
-@router.post("/register", status_code=201, dependencies=[Depends(require_role("admin"))])
+@router.post(
+    "/register",
+    status_code=201,
+    response_model=GatewayResponse,
+    dependencies=[Depends(require_role("admin"))],
+)
 async def gateway_register(body: RegisterGatewayRequest, request: Request) -> dict[str, Any]:
     """Register a remote gateway.
 
@@ -318,13 +284,16 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
     except binascii.Error as e:
         raise HTTPException(400, f"Invalid base64 in certificate field: {e}") from e
 
+    limits = get_settings().limits
     cert_fields = [("ca_cert", ca_cert), ("client_cert", client_cert), ("client_key", client_key)]
     for label, blob in cert_fields:
-        if blob is not None and len(blob) > _MAX_CERT_BYTES:
-            raise HTTPException(400, f"{label} exceeds maximum size of {_MAX_CERT_BYTES} bytes")
+        if blob is not None and len(blob) > limits.max_cert_bytes:
+            raise HTTPException(
+                400, f"{label} exceeds maximum size of {limits.max_cert_bytes} bytes"
+            )
 
-    _validate_description(body.description)
-    _validate_labels(body.labels)
+    validate_description(body.description)
+    validate_labels(body.labels)
 
     if body.metadata is not None:
         import json as _json
@@ -333,10 +302,10 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
             metadata_size = len(_json.dumps(body.metadata))
         except (TypeError, ValueError) as e:
             raise HTTPException(400, f"metadata is not JSON-serializable: {e}") from e
-        if metadata_size > _MAX_METADATA_JSON_BYTES:
+        if metadata_size > limits.max_metadata_json_bytes:
             raise HTTPException(
                 400,
-                f"metadata exceeds maximum size of {_MAX_METADATA_JSON_BYTES} bytes",
+                f"metadata exceeds maximum size of {limits.max_metadata_json_bytes} bytes",
             )
 
     try:
@@ -394,7 +363,11 @@ def _validate_name_param(name: str) -> None:
         )
 
 
-@router.delete("/{name}", dependencies=[Depends(require_role("admin"))])
+@router.delete(
+    "/{name}",
+    response_model=GatewayUnregisterResponse,
+    dependencies=[Depends(require_role("admin"))],
+)
 async def gateway_unregister(name: str, request: Request) -> dict[str, Any]:
     """Unregister a gateway.
 
@@ -422,7 +395,11 @@ async def gateway_unregister(name: str, request: Request) -> dict[str, Any]:
     return {"success": True, "name": name}
 
 
-@router.patch("/{name}", dependencies=[Depends(require_role("admin"))])
+@router.patch(
+    "/{name}",
+    response_model=GatewayResponse,
+    dependencies=[Depends(require_role("admin"))],
+)
 async def gateway_update_metadata(
     name: str, body: UpdateGatewayMetadataRequest, request: Request
 ) -> dict[str, Any]:
@@ -446,9 +423,9 @@ async def gateway_update_metadata(
         raise HTTPException(400, "No fields to update")
 
     if "description" in provided:
-        _validate_description(body.description)
+        validate_description(body.description)
     if "labels" in provided:
-        _validate_labels(body.labels)
+        validate_labels(body.labels)
 
     kwargs: dict[str, Any] = {}
     if "description" in provided:
@@ -475,7 +452,11 @@ async def gateway_update_metadata(
     return result
 
 
-@router.post("/{name}/test-connection", dependencies=[Depends(require_role("admin"))])
+@router.post(
+    "/{name}/test-connection",
+    response_model=ConnectionTestResponse,
+    dependencies=[Depends(require_role("admin"))],
+)
 async def gateway_test_connection(name: str, request: Request) -> dict[str, Any]:
     """Explicitly test connectivity to a registered gateway.
 
@@ -625,8 +606,8 @@ async def gateway_destroy(name: str, request: Request, force: bool = False) -> d
     return result
 
 
-@router.post("/create", status_code=202, dependencies=[Depends(require_role("admin"))])
-async def gateway_create(body: CreateGatewayRequest, request: Request) -> dict[str, Any]:
+@router.post("/create", dependencies=[Depends(require_role("admin"))])
+async def gateway_create(body: CreateGatewayRequest, request: Request) -> JSONResponse:
     """Create a new local gateway. Returns 202 with operation ID (local mode).
 
     Args:
@@ -634,7 +615,7 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> dict[s
         request: Incoming HTTP request.
 
     Returns:
-        dict[str, Any]: Operation tracking object with id and status.
+        JSONResponse: Operation tracking object with id and status.
 
     Raises:
         HTTPException: If not in local mode, name is invalid, or creation is
@@ -646,66 +627,30 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> dict[s
 
     if not _VALID_NAME_RE.match(body.name):
         raise HTTPException(400, "Invalid gateway name: must match [a-zA-Z0-9][a-zA-Z0-9._-]*")
-    op = operation_store.create_if_not_running("gateway", body.name)
-    if op is None:
-        raise HTTPException(409, f"Gateway '{body.name}' creation already in progress")
 
     actor = get_actor(request)
-    _audit_actor = actor
-    _audit_role = getattr(request.state, "role", "unknown")
-    _audit_ip = request.client.host if request.client else None
 
-    async def _run() -> None:
-        """Execute gateway creation in the background."""
+    async def work(op):
         logger.info("Starting gateway creation: '%s' (op=%s, actor=%s)", body.name, op.id, actor)
-        try:
-            result = await asyncio.to_thread(
-                mgr.create,
-                name=body.name,
-                port=body.port,
-                remote_host=body.remote_host,
-                gpu=body.gpu,
-            )
-            if result.get("success") is False:
-                operation_store.fail(op.id, result.get("error", "Gateway creation failed"))
-            else:
-                logger.info("Gateway creation completed: '%s' (op=%s)", body.name, op.id)
-                operation_store.complete(op.id, result)
-                from shoreguard.services.audit import audit_service
+        await _ops_mod.operation_service.update_progress(op.id, 10, "Starting gateway container")
+        result = await asyncio.to_thread(
+            mgr.create,
+            name=body.name,
+            port=body.port,
+            remote_host=body.remote_host,
+            gpu=body.gpu,
+        )
+        if result.get("success") is False:
+            raise RuntimeError(result.get("error", "Gateway creation failed"))
+        logger.info("Gateway creation completed: '%s' (op=%s)", body.name, op.id)
+        await audit_log(request, "gateway.create", "gateway", body.name, gateway=body.name)
+        return result
 
-                if audit_service:
-                    await asyncio.to_thread(
-                        audit_service.log,
-                        actor=_audit_actor,
-                        actor_role=_audit_role,
-                        action="gateway.create",
-                        resource_type="gateway",
-                        resource_id=body.name,
-                        gateway=body.name,
-                        client_ip=_audit_ip,
-                    )
-        except asyncio.CancelledError:
-            logger.warning("Gateway creation cancelled for '%s'", body.name)
-            operation_store.fail(op.id, "Operation was cancelled")
-        except (grpc.RpcError, OSError, TimeoutError, RuntimeError) as e:
-            logger.error("Gateway creation failed for '%s': %s", body.name, e, exc_info=True)
-            msg = (
-                friendly_grpc_error(e)
-                if isinstance(e, grpc.RpcError)
-                else "Gateway creation failed unexpectedly"
-            )
-            try:
-                operation_store.fail(op.id, msg)
-            except Exception:
-                logger.exception("Failed to record operation failure for %s", op.id)
-        except Exception:
-            logger.exception("Gateway creation failed unexpectedly for '%s'", body.name)
-            try:
-                operation_store.fail(op.id, "Unexpected internal error")
-            except Exception:
-                logger.exception("Failed to record operation failure for %s", op.id)
-
-    task = asyncio.create_task(_run())
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
-    return {"operation_id": op.id, "status": "running", "resource_type": "gateway"}
+    return await run_lro(
+        resource_type="gateway",
+        resource_key=body.name,
+        work=work,
+        unique=True,
+        actor=actor,
+        idempotency_key=request.headers.get("Idempotency-Key"),
+    )

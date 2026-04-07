@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
+from shoreguard.api.schemas import PolicyDiffResponse, PolicyResponse, PresetSummaryResponse
 from shoreguard.client import ShoreGuardClient
 from shoreguard.presets import get_preset as _get_preset
 from shoreguard.presets import list_presets as _list_presets
@@ -73,7 +74,7 @@ class ProcessPolicyRequest(BaseModel):
     landlock_compatibility: str | None = None
 
 
-@router.get("/sandboxes/{name}/policy")
+@router.get("/sandboxes/{name}/policy", response_model=PolicyResponse)
 async def get_policy(
     name: str,
     svc: PolicyService = Depends(_get_policy_service),
@@ -92,6 +93,7 @@ async def get_policy(
 
 @router.put(
     "/sandboxes/{name}/policy",
+    response_model=PolicyResponse,
     dependencies=[Depends(require_role("operator"))],
 )
 async def update_policy(
@@ -152,7 +154,7 @@ async def list_policy_revisions(
     )
 
 
-@router.get("/sandboxes/{name}/policy/diff")
+@router.get("/sandboxes/{name}/policy/diff", response_model=PolicyDiffResponse)
 async def diff_policy_revisions(
     name: str,
     version_a: int = Query(..., ge=1),
@@ -178,6 +180,7 @@ async def diff_policy_revisions(
 
 @router.post(
     "/sandboxes/{name}/policy/network-rules",
+    response_model=PolicyResponse,
     dependencies=[Depends(require_role("operator"))],
 )
 async def add_network_rule(
@@ -221,6 +224,7 @@ async def add_network_rule(
 
 @router.delete(
     "/sandboxes/{name}/policy/network-rules/{key}",
+    response_model=PolicyResponse,
     dependencies=[Depends(require_role("operator"))],
 )
 async def delete_network_rule(
@@ -263,6 +267,7 @@ async def delete_network_rule(
 
 @router.post(
     "/sandboxes/{name}/policy/filesystem",
+    response_model=PolicyResponse,
     dependencies=[Depends(require_role("operator"))],
 )
 async def add_filesystem_path(
@@ -306,6 +311,7 @@ async def add_filesystem_path(
 
 @router.delete(
     "/sandboxes/{name}/policy/filesystem",
+    response_model=PolicyResponse,
     dependencies=[Depends(require_role("operator"))],
 )
 async def delete_filesystem_path(
@@ -347,6 +353,7 @@ async def delete_filesystem_path(
 
 @router.put(
     "/sandboxes/{name}/policy/process",
+    response_model=PolicyResponse,
     dependencies=[Depends(require_role("operator"))],
 )
 async def update_process_policy(
@@ -395,7 +402,7 @@ async def update_process_policy(
 preset_router = APIRouter()
 
 
-@preset_router.get("/policies/presets")
+@preset_router.get("/policies/presets", response_model=list[PresetSummaryResponse])
 async def list_presets() -> list[dict[str, str]]:
     """List available policy presets (local YAML files, no gateway needed).
 
@@ -430,6 +437,7 @@ async def get_preset(preset_name: str) -> dict[str, Any]:
 # Apply-preset stays on the gateway-scoped router (needs a sandbox context).
 @router.post(
     "/sandboxes/{name}/policy/presets/{preset_name}",
+    response_model=PolicyResponse,
     dependencies=[Depends(require_role("operator"))],
 )
 async def apply_preset(

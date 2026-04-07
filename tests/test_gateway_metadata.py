@@ -169,19 +169,19 @@ class TestListAllFiltering:
 
 class TestValidationHelpers:
     def test_validate_labels_valid(self):
-        from shoreguard.api.routes.gateway import _validate_labels
+        from shoreguard.api.validation import validate_labels as _validate_labels
 
         _validate_labels({"env": "prod", "team": "ml"})  # Should not raise
 
     def test_validate_labels_none(self):
-        from shoreguard.api.routes.gateway import _validate_labels
+        from shoreguard.api.validation import validate_labels as _validate_labels
 
         _validate_labels(None)  # Should not raise
 
     def test_validate_labels_invalid_key(self):
         from fastapi import HTTPException
 
-        from shoreguard.api.routes.gateway import _validate_labels
+        from shoreguard.api.validation import validate_labels as _validate_labels
 
         with pytest.raises(HTTPException) as exc_info:
             _validate_labels({"--bad": "value"})
@@ -190,7 +190,7 @@ class TestValidationHelpers:
     def test_validate_labels_too_many(self):
         from fastapi import HTTPException
 
-        from shoreguard.api.routes.gateway import _validate_labels
+        from shoreguard.api.validation import validate_labels as _validate_labels
 
         labels = {f"key{i}": f"val{i}" for i in range(21)}
         with pytest.raises(HTTPException) as exc_info:
@@ -200,27 +200,27 @@ class TestValidationHelpers:
     def test_validate_labels_value_too_long(self):
         from fastapi import HTTPException
 
-        from shoreguard.api.routes.gateway import _validate_labels
+        from shoreguard.api.validation import validate_labels as _validate_labels
 
         with pytest.raises(HTTPException) as exc_info:
             _validate_labels({"key": "x" * 254})
         assert exc_info.value.status_code == 400
 
     def test_validate_description_valid(self):
-        from shoreguard.api.routes.gateway import _validate_description
+        from shoreguard.api.validation import validate_description as _validate_description
 
         _validate_description("Short description")  # Should not raise
 
     def test_validate_description_too_long(self):
         from fastapi import HTTPException
 
-        from shoreguard.api.routes.gateway import _validate_description
+        from shoreguard.api.validation import validate_description as _validate_description
 
         with pytest.raises(HTTPException) as exc_info:
             _validate_description("x" * 1001)
         assert exc_info.value.status_code == 400
 
     def test_validate_description_none(self):
-        from shoreguard.api.routes.gateway import _validate_description
+        from shoreguard.api.validation import validate_description as _validate_description
 
         _validate_description(None)  # Should not raise

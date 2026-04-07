@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from typing import Any
@@ -14,14 +13,11 @@ from shoreguard.client import ShoreGuardClient
 from shoreguard.config import is_private_ip
 from shoreguard.exceptions import GatewayNotConnectedError, NotFoundError
 from shoreguard.services.registry import _UNSET, GatewayRegistry
+from shoreguard.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
 # ─── Connection state ────────────────────────────────────────────────────────
-
-_BACKOFF_MIN = 5.0
-_BACKOFF_MAX = 60.0
-_BACKOFF_FACTOR = 2.0
 
 
 class _ClientEntry:
@@ -138,10 +134,11 @@ class GatewayService:
         # Phase 5: write result under the lock
         with _clients_lock:
             if new_client is None:
+                gw_cfg = get_settings().gateway
                 if entry.backoff == 0:
-                    entry.backoff = _BACKOFF_MIN
+                    entry.backoff = gw_cfg.backoff_min
                 else:
-                    entry.backoff = min(entry.backoff * _BACKOFF_FACTOR, _BACKOFF_MAX)
+                    entry.backoff = min(entry.backoff * gw_cfg.backoff_factor, gw_cfg.backoff_max)
                 raise GatewayNotConnectedError(f"Gateway '{gw_name}' not connected.")
             entry.client = new_client
             entry.backoff = 0.0
@@ -210,7 +207,7 @@ class GatewayService:
         """
         endpoint = str(creds["endpoint"])
         host = endpoint.rsplit(":", 1)[0] if ":" in endpoint else endpoint
-        if is_private_ip(host) and not os.environ.get("SHOREGUARD_LOCAL_MODE"):
+        if is_private_ip(host) and not get_settings().server.local_mode:
             logger.warning(
                 "Gateway '%s' endpoint '%s' resolves to a private IP — blocking connection",
                 name,

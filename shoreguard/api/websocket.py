@@ -67,7 +67,10 @@ async def sandbox_events(
         sandbox = await asyncio.to_thread(client.sandboxes.get, sandbox_name)
         sandbox_id = sandbox["id"]
 
-        queue: asyncio.Queue[dict | None] = asyncio.Queue(maxsize=1000)
+        from shoreguard.settings import get_settings
+
+        ws_cfg = get_settings().websocket
+        queue: asyncio.Queue[dict | None] = asyncio.Queue(maxsize=ws_cfg.queue_maxsize)
         cancel_event = threading.Event()
 
         async def _producer():
@@ -119,7 +122,7 @@ async def sandbox_events(
         try:
             while True:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=1.0)
+                    event = await asyncio.wait_for(queue.get(), timeout=ws_cfg.queue_get_timeout)
                 except TimeoutError:
                     if cancel_event.is_set():
                         break

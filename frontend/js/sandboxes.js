@@ -208,20 +208,26 @@ function terminalPage(sandboxName) {
             this._scrollOutput();
 
             try {
-                const result = await apiFetch(`${API}/sandboxes/${this.sandboxName}/exec`, {
+                const response = await apiFetch(`${API}/sandboxes/${this.sandboxName}/exec`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ command: cmd }),
                 });
 
-                if (result.stdout) {
-                    this.outputLines.push({ text: result.stdout, css: 'white-space:pre-wrap' });
-                }
-                if (result.stderr) {
-                    this.outputLines.push({ text: result.stderr, css: 'white-space:pre-wrap', cls: 'log-error' });
-                }
-                if (result.exit_code !== 0) {
-                    this.outputLines.push({ text: `exit code: ${result.exit_code}`, cls: 'log-error' });
+                const op = await pollOperation(response.operation_id);
+                if (op.status === 'failed') {
+                    this.outputLines.push({ text: `Error: ${op.error || 'Command failed'}`, cls: 'log-error' });
+                } else {
+                    const result = op.result;
+                    if (result.stdout) {
+                        this.outputLines.push({ text: result.stdout, css: 'white-space:pre-wrap' });
+                    }
+                    if (result.stderr) {
+                        this.outputLines.push({ text: result.stderr, css: 'white-space:pre-wrap', cls: 'log-error' });
+                    }
+                    if (result.exit_code !== 0) {
+                        this.outputLines.push({ text: `exit code: ${result.exit_code}`, cls: 'log-error' });
+                    }
                 }
             } catch (e) {
                 this.outputLines.push({ text: `Error: ${e.message}`, cls: 'log-error' });

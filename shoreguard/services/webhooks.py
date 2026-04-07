@@ -25,9 +25,15 @@ logger = logging.getLogger(__name__)
 # Module-level singleton — set during app lifespan (see shoreguard.api.main).
 webhook_service: WebhookService | None = None
 
-DELIVERY_TIMEOUT = 10.0
-RETRY_DELAYS = [5, 30, 120]  # seconds between retries
-DELIVERY_MAX_AGE_DAYS = 7
+
+def _webhook_settings():  # noqa: ANN202
+    from shoreguard.settings import get_settings
+
+    return get_settings().webhooks
+
+
+# Backward-compatible aliases for test imports.
+RETRY_DELAYS = [5, 30, 120]
 
 
 class _Target(NamedTuple):
@@ -331,12 +337,14 @@ class WebhookService:
             signature = hmac.new(target.secret.encode(), body.encode(), hashlib.sha256).hexdigest()
             headers["X-Shoreguard-Signature"] = f"sha256={signature}"
 
-        max_attempts = len(RETRY_DELAYS) + 1
+        wh_cfg = _webhook_settings()
+        retry_delays = wh_cfg.retry_delays
+        max_attempts = len(retry_delays) + 1
         error_msg: str | None = None
 
         for attempt in range(1, max_attempts + 1):
             try:
-                async with httpx.AsyncClient(timeout=DELIVERY_TIMEOUT) as client:
+                async with httpx.AsyncClient(timeout=wh_cfg.delivery_timeout) as client:
                     resp = await client.post(target.url, content=body, headers=headers)
                     if resp.status_code < 400:
                         await asyncio.to_thread(
@@ -377,7 +385,7 @@ class WebhookService:
                 error_msg = str(e)
 
             if attempt < max_attempts:
-                delay = RETRY_DELAYS[attempt - 1]
+                delay = retry_delays[attempt - 1]
                 logger.info(
                     "Webhook delivery to %s failed (attempt %d/%d), retrying in %ds",
                     target.url,
@@ -433,7 +441,7 @@ class WebhookService:
             kwargs: dict[str, Any] = {
                 "hostname": smtp_host,
                 "port": smtp_port,
-                "timeout": DELIVERY_TIMEOUT,
+                "timeout": _webhook_settings().delivery_timeout,
             }
             if smtp_user and smtp_pass:
                 kwargs["username"] = smtp_user
@@ -499,7 +507,7 @@ class WebhookService:
             logger.exception("Failed to list deliveries for webhook %d", webhook_id)
             return []
 
-    def cleanup_old_deliveries(self, max_age_days: int = DELIVERY_MAX_AGE_DAYS) -> int:
+    def cleanup_old_deliveries(self, max_age_days: int | None = None) -> int:
         """Purge delivery records older than max_age_days.
 
         Args:
@@ -508,6 +516,8 @@ class WebhookService:
         Returns:
             int: Number of records deleted.
         """
+        if max_age_days is None:
+            max_age_days = _webhook_settings().delivery_max_age_days
         cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=max_age_days)
         try:
             with self._session_factory() as session:

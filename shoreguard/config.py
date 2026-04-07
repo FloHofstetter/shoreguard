@@ -78,11 +78,24 @@ def shoreguard_config_dir() -> Path:
 
 
 def default_database_url() -> str:
-    """Return the database URL, from env or SQLite default.
+    """Return the database URL from Settings, env, or SQLite default.
+
+    Checks the Settings singleton first (which reads ``SHOREGUARD_DATABASE_URL``
+    via pydantic-settings).  Falls back to the env var directly for early
+    startup before Settings is initialised.
 
     Returns:
-        str: Value of ``$SHOREGUARD_DATABASE_URL`` or a SQLite file URL.
+        str: Resolved database URL.
     """
+    try:
+        from shoreguard.settings import get_settings
+
+        url = get_settings().server.database_url
+        if url:
+            return url
+    except Exception:  # noqa: BLE001 — startup fallback
+        pass
+
     env_url = os.environ.get("SHOREGUARD_DATABASE_URL")
     if env_url:
         return env_url

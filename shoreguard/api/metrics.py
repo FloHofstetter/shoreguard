@@ -1,11 +1,21 @@
-"""Prometheus metrics endpoint and HTTP request middleware."""
+"""Prometheus metrics endpoint, HTTP request middleware, and request-ID tracking."""
 
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import logging
+import time
+import uuid
 
 from fastapi import APIRouter, Request, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Info, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, Info, generate_latest
+
+# ── Request-ID ContextVar ───────────────────────────────────────────────
+
+request_id_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "request_id", default=None
+)
 
 # ── Metrics definitions ──────────────────────────────────────────────────
 
@@ -35,6 +45,13 @@ http_requests_total = Counter(
     ["method", "status"],
 )
 
+http_request_duration_seconds = Histogram(
+    "shoreguard_http_request_duration_seconds",
+    "HTTP request latency in seconds",
+    ["method", "path_template"],
+    buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+)
+
 # ── Router ───────────────────────────────────────────────────────────────
 
 router = APIRouter(tags=["metrics"])
@@ -47,15 +64,26 @@ async def metrics() -> Response:
     Returns:
         Response: Prometheus text format metrics.
     """
-    await asyncio.to_thread(_collect_gauges)
+    await _collect_gauges()
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# ── Log filter ───────────────────────────────────────────────────────────
+
+
+class RequestIdFilter(logging.Filter):
+    """Inject ``request_id`` into every log record from the ContextVar."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003, D102
+        record.request_id = request_id_ctx.get() or "-"  # type: ignore[attr-defined]
+        return True
 
 
 # ── Middleware ────────────────────────────────────────────────────────────
 
 
 async def metrics_middleware(request: Request, call_next: object) -> Response:
-    """Count HTTP requests by method and status code.
+    """Track request-ID, latency, and count for every HTTP request.
 
     Args:
         request: The incoming HTTP request.
@@ -64,26 +92,46 @@ async def metrics_middleware(request: Request, call_next: object) -> Response:
     Returns:
         Response: The response from the next middleware/handler.
     """
-    response = await call_next(request)  # type: ignore[operator]
+    # ── Request-ID: honour inbound header or generate ──
+    rid = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:16]
+    request.state.request_id = rid
+    request_id_ctx.set(rid)
+
+    start = time.monotonic()
+    response: Response = await call_next(request)  # type: ignore[assignment]
+    duration = time.monotonic() - start
+
+    # ── Response header ──
+    response.headers["X-Request-ID"] = rid
+
+    # ── Metrics (skip /metrics itself) ──
     if not request.url.path.startswith("/metrics"):
         http_requests_total.labels(
             method=request.method,
             status=str(response.status_code),
         ).inc()
-    return response  # type: ignore[return-value]
+
+        route = request.scope.get("route")
+        path_template = route.path if route else request.url.path
+        http_request_duration_seconds.labels(
+            method=request.method,
+            path_template=path_template,
+        ).observe(duration)
+
+    return response
 
 
 # ── Gauge collection ─────────────────────────────────────────────────────
 
 
-def _collect_gauges() -> None:
+async def _collect_gauges() -> None:
     """Update gauge values from current service state."""
     import shoreguard.services.gateway as gw_mod
-    from shoreguard.services.operations import operation_store
+    import shoreguard.services.operations as ops_mod
 
     # Gateway status counts
     if gw_mod.gateway_service is not None:
-        all_gw = gw_mod.gateway_service.list_all()
+        all_gw = await asyncio.to_thread(gw_mod.gateway_service.list_all)
         counts: dict[str, int] = {}
         for g in all_gw:
             status = g.get("status", "unknown")
@@ -93,7 +141,8 @@ def _collect_gauges() -> None:
             gateways_total.labels(status=status).set(count)
 
     # Operation status counts
-    op_counts = operation_store.status_counts()
     operations_total._metrics.clear()
-    for status, count in op_counts.items():
-        operations_total.labels(status=status).set(count)
+    if ops_mod.operation_service is not None:
+        op_counts = await ops_mod.operation_service.status_counts()
+        for status, count in op_counts.items():
+            operations_total.labels(status=status).set(count)
