@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import threading
+import time
 
 import grpc
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
@@ -72,12 +73,15 @@ async def sandbox_events(
         ws_cfg = get_settings().websocket
         queue: asyncio.Queue[dict | None] = asyncio.Queue(maxsize=ws_cfg.queue_maxsize)
         cancel_event = threading.Event()
+        drop_count = 0
 
         async def _producer():
             """Run the blocking gRPC watch in a thread and enqueue events."""
 
             def _iter_watch() -> None:
                 """Iterate the gRPC watch stream, forwarding events to the queue."""
+                nonlocal drop_count
+                consecutive_drops = 0
                 try:
                     for event in client.sandboxes.watch(
                         sandbox_id,
@@ -89,11 +93,24 @@ async def sandbox_events(
                             break
                         try:
                             queue.put_nowait(event)
+                            consecutive_drops = 0
                         except asyncio.QueueFull:
+                            drop_count += 1
+                            consecutive_drops += 1
                             logger.warning(
-                                "WebSocket event queue full for %s, dropping event",
+                                "WebSocket queue full for %s, dropped %d total (%d consecutive)",
                                 sandbox_name,
+                                drop_count,
+                                consecutive_drops,
                             )
+                            if consecutive_drops >= ws_cfg.backpressure_drop_limit:
+                                logger.warning(
+                                    "Disconnecting slow consumer for %s after %d consecutive drops",
+                                    sandbox_name,
+                                    consecutive_drops,
+                                )
+                                cancel_event.set()
+                                break
                 except grpc.RpcError as exc:
                     if cancel_event.is_set():
                         return
@@ -118,6 +135,7 @@ async def sandbox_events(
             await asyncio.to_thread(_iter_watch)
 
         producer_task = asyncio.create_task(_producer())
+        last_send_time = time.monotonic()
 
         try:
             while True:
@@ -126,10 +144,16 @@ async def sandbox_events(
                 except TimeoutError:
                     if cancel_event.is_set():
                         break
+                    if time.monotonic() - last_send_time >= ws_cfg.heartbeat_interval:
+                        await websocket.send_json(
+                            {"type": "heartbeat", "data": {"dropped_events": drop_count}}
+                        )
+                        last_send_time = time.monotonic()
                     continue
                 if event is None:
                     break
                 await websocket.send_json(event)
+                last_send_time = time.monotonic()
                 if event.get("type") == "draft_policy_update":
                     asyncio.create_task(
                         fire_webhook(

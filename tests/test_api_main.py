@@ -404,6 +404,90 @@ def test_ws_client_disconnect():
         # Exiting the context manager disconnects - no crash expected
 
 
+def test_ws_sends_heartbeat_on_idle():
+    """WebSocket sends heartbeat when no events arrive within the interval."""
+    import time
+
+    from starlette.testclient import TestClient
+
+    from shoreguard.api.main import app
+    from shoreguard.settings import Settings, WebSocketSettings, override_settings, reset_settings
+
+    settings = Settings()
+    settings.websocket = WebSocketSettings(heartbeat_interval=0.5, queue_get_timeout=0.3)
+    override_settings(settings)
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
+
+    def slow_watch(**kwargs):
+        time.sleep(2)
+        return
+        yield  # make it a generator
+
+    mock_client.sandboxes.watch.return_value = slow_watch()
+
+    try:
+        with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
+            mock_gw_svc.return_value.get_client.return_value = mock_client
+            client = TestClient(app)
+            with client.websocket_connect("/ws/test-gw/test-sb") as ws:
+                msg = ws.receive_json()
+                assert msg["type"] == "heartbeat"
+                assert "dropped_events" in msg["data"]
+                assert msg["data"]["dropped_events"] == 0
+    finally:
+        reset_settings()
+
+
+def test_ws_heartbeat_reports_dropped_events():
+    """Heartbeat includes count of events dropped due to backpressure."""
+    import time
+
+    from starlette.testclient import TestClient
+
+    from shoreguard.api.main import app
+    from shoreguard.settings import Settings, WebSocketSettings, override_settings, reset_settings
+
+    settings = Settings()
+    settings.websocket = WebSocketSettings(
+        queue_maxsize=2,
+        heartbeat_interval=0.3,
+        queue_get_timeout=0.2,
+        backpressure_drop_limit=1000,  # high limit — don't disconnect
+    )
+    override_settings(settings)
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
+
+    def burst_then_idle(**kwargs):
+        # Burst: many events exceed queue capacity → drops.
+        # Then idle: heartbeat fires with drop count.
+        for i in range(20):
+            yield {"type": "log", "data": {"message": f"msg-{i}"}}
+        time.sleep(1.5)
+
+    mock_client.sandboxes.watch.return_value = burst_then_idle()
+
+    try:
+        with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
+            mock_gw_svc.return_value.get_client.return_value = mock_client
+            client = TestClient(app)
+            with client.websocket_connect("/ws/test-gw/test-sb") as ws:
+                # Drain until heartbeat
+                heartbeat = None
+                for _ in range(50):
+                    msg = ws.receive_json()
+                    if msg["type"] == "heartbeat":
+                        heartbeat = msg
+                        break
+                assert heartbeat is not None, "No heartbeat received"
+                assert heartbeat["data"]["dropped_events"] > 0
+    finally:
+        reset_settings()
+
+
 # ─── 3D: CLI (Typer) ─────────────────────────────────────────────────────────
 
 

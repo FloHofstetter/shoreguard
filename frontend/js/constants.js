@@ -53,6 +53,8 @@ const SG = {
         approvalToastDelay: 10000,
         actionRefreshDelay: 2000,
         wsMaxBackoff: 30000,
+        wsHeartbeatTimeout: 45000,
+        wsMaxRetries: 20,
         logLinesDefault: 200,
         wizardStepDelay: 200,
     },

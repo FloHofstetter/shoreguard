@@ -16,9 +16,29 @@ function connectWebSocket(sandboxName, sandboxId) {
     _doConnect(sandboxName, sandboxId);
 }
 
+function _dispatchWsState(sandboxName, state) {
+    document.dispatchEvent(new CustomEvent('sg:ws-state', {
+        detail: { sandboxName, state },
+    }));
+}
+
 function _doConnect(sandboxName, sandboxId) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws/${GW}/${sandboxName}`);
+    let heartbeatTimer = null;
+
+    function resetHeartbeatTimer() {
+        clearTimeout(heartbeatTimer);
+        heartbeatTimer = setTimeout(() => {
+            console.warn(`WebSocket: heartbeat timeout for ${sandboxName}`);
+            ws.close();
+        }, SG.config.wsHeartbeatTimeout);
+    }
+
+    ws.onopen = () => {
+        resetHeartbeatTimer();
+        _dispatchWsState(sandboxName, 'connected');
+    };
 
     ws.onmessage = (event) => {
         let data;
@@ -28,18 +48,33 @@ function _doConnect(sandboxName, sandboxId) {
             console.warn('WebSocket: failed to parse message', event.data);
             return;
         }
+        resetHeartbeatTimer();
         // Reset reconnect counter on successful message
         if (_wsReconnectState[sandboxName]) _wsReconnectState[sandboxName].attempts = 0;
+
+        // Heartbeats are keepalives only — don't pass to event handler
+        if (data.type === 'heartbeat') return;
+
         handleWebSocketEvent(sandboxName, data);
     };
 
     ws.onclose = () => {
+        clearTimeout(heartbeatTimer);
         delete activeWebSockets[sandboxName];
+        _dispatchWsState(sandboxName, 'disconnected');
+
         // Reconnect if still on detail page for this sandbox
         if (window.location.pathname.includes('/sandboxes/')) {
             const state = _wsReconnectState[sandboxName];
             if (state) {
                 state.attempts++;
+                if (state.attempts > SG.config.wsMaxRetries) {
+                    console.error(`WebSocket: max retries reached for ${sandboxName}`);
+                    _dispatchWsState(sandboxName, 'failed');
+                    showToast(`Live updates unavailable for ${sandboxName}. Refresh to retry.`, 'warning');
+                    return;
+                }
+                _dispatchWsState(sandboxName, 'reconnecting');
                 const backoff = Math.min(1000 * Math.pow(2, state.attempts - 1), SG.config.wsMaxBackoff);
                 setTimeout(() => {
                     if (window.location.pathname.includes('/sandboxes/')) {

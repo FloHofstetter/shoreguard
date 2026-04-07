@@ -140,6 +140,8 @@ class WebSocketSettings(BaseSettings):
 
     queue_maxsize: int = 1000
     queue_get_timeout: float = 1.0
+    heartbeat_interval: float = 15.0
+    backpressure_drop_limit: int = 50
 
 
 class SandboxSettings(BaseSettings):

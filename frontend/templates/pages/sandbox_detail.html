@@ -19,6 +19,14 @@
                 <div class="d-flex align-items-center gap-3 mb-2">
                     <h3 class="mb-0" x-text="sandbox.name"></h3>
                     <span class="badge" :class="phaseBadge()" x-text="sandbox.phase"></span>
+                    <span x-data="{ wsState: 'connecting' }"
+                          @sg:ws-state.window="if ($event.detail.sandboxName === sandboxName) wsState = $event.detail.state"
+                          x-show="wsState !== 'connected'"
+                          x-cloak
+                          class="badge text-bg-warning ms-1">
+                        <i class="bi bi-wifi-off"></i>
+                        <span x-text="wsState === 'reconnecting' ? 'Reconnecting\u2026' : wsState === 'failed' ? 'Disconnected' : ''"></span>
+                    </span>
                 </div>
                 <div class="sandbox-meta">
                     <span class="font-monospace" x-text="sandbox.image || 'Default image'"></span>
