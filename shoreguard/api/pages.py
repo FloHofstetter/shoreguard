@@ -1205,6 +1205,14 @@ async def gateway_detail_or_sub(
     gw = parts[0]
     rest = parts[1] if len(parts) > 1 else ""
 
+    # Register new gateway page
+    if gw == "new" and not rest:
+        return templates.TemplateResponse(
+            request,
+            "pages/gateway_register.html",
+            {"active_page": "gateways"},
+        )
+
     # Gateway detail (no sub-path)
     if not rest:
         return templates.TemplateResponse(
@@ -1297,6 +1305,24 @@ async def gateway_detail_or_sub(
         ctx["active_page"] = "providers"
         ctx["provider_types"] = [{"type": k, **v} for k, v in meta.provider_types.items()]
         return templates.TemplateResponse(request, "pages/providers.html", ctx)
+
+    if rest == "providers/new":
+        meta = _openshell_meta()
+        ctx["active_page"] = "providers"
+        ctx["provider_types"] = [{"type": k, **v} for k, v in meta.provider_types.items()]
+        ctx["mode"] = "create"
+        ctx["provider_name"] = ""
+        return templates.TemplateResponse(request, "pages/provider_form.html", ctx)
+
+    if rest.startswith("providers/") and rest.endswith("/edit"):
+        provider_name = rest[len("providers/") : -len("/edit")]
+        if provider_name:
+            meta = _openshell_meta()
+            ctx["active_page"] = "providers"
+            ctx["provider_types"] = [{"type": k, **v} for k, v in meta.provider_types.items()]
+            ctx["mode"] = "edit"
+            ctx["provider_name"] = provider_name
+            return templates.TemplateResponse(request, "pages/provider_form.html", ctx)
 
     # Wizard
     if rest == "wizard":

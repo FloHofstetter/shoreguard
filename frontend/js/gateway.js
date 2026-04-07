@@ -61,9 +61,10 @@ function gatewayList() {
     };
 }
 
-// ─── Gateway Register Component ────────────────────────────────────────────
+// ─── Gateway Register Page Component ──────────────────────────────────────
+// Full-page version (used by /gateways/new) — redirects on success.
 
-function gatewayRegister() {
+function gatewayRegisterPage() {
     return {
         form: { name: '', endpoint: '', scheme: 'https', auth_mode: 'mtls', gpu: false, caFile: null, certFile: null, keyFile: null, description: '' },
         labelRows: [],
@@ -71,17 +72,6 @@ function gatewayRegister() {
         newLabelVal: '',
         submitting: false,
         output: '',
-
-        resetForm() {
-            this.form = { name: '', endpoint: '', scheme: 'https', auth_mode: 'mtls', gpu: false, caFile: null, certFile: null, keyFile: null, description: '' };
-            this.labelRows = [];
-            this.newLabelKey = '';
-            this.newLabelVal = '';
-            this.output = '';
-            if (this.$refs.caInput) this.$refs.caInput.value = '';
-            if (this.$refs.certInput) this.$refs.certInput.value = '';
-            if (this.$refs.keyInput) this.$refs.keyInput.value = '';
-        },
 
         addLabel() {
             const key = this.newLabelKey.trim();
@@ -133,12 +123,8 @@ function gatewayRegister() {
                     body: JSON.stringify(body),
                 });
 
-                this.output = '<div class="text-success small"><i class="bi bi-check-circle me-1"></i>Gateway registered!</div>';
                 showToast(`Gateway "${body.name}" registered.`, 'success');
-                bootstrap.Modal.getInstance(document.getElementById('registerGatewayModal'))?.hide();
-                Alpine.store('health').check();
-                // Refresh the gateway list
-                window.dispatchEvent(new CustomEvent('gateway-registered'));
+                navigateTo('/gateways');
             } catch (e) {
                 this.output = `<div class="text-danger small">${escapeHtml(e.message)}</div>`;
             } finally {

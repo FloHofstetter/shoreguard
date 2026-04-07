@@ -47,9 +47,9 @@ async function loadProvidersPage() {
                 <div class="text-center text-muted py-5">
                     <i class="bi bi-key fs-1 d-block mb-3"></i>
                     <p>No providers configured.</p>
-                    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#createProviderModal">
+                    <a class="btn btn-success btn-sm" href="${window.location.pathname}/new">
                         <i class="bi bi-plus me-1"></i>Create Provider
-                    </button>
+                    </a>
                 </div>`;
             return;
         }
@@ -97,9 +97,9 @@ function renderProviderRow(provider) {
             <td class="d-none d-md-table-cell small font-monospace">${configDisplay}</td>
             <td class="text-end">
                 ${_sgHasRole('operator') ? `
-                <button class="btn btn-sm text-muted" onclick="editProvider('${escapeHtml(provider.name)}')" title="Edit">
+                <a class="btn btn-sm text-muted" href="${window.location.pathname}/${escapeHtml(provider.name)}/edit" title="Edit">
                     <i class="bi bi-pencil"></i>
-                </button>
+                </a>
                 <button class="btn btn-sm text-muted delete-btn" onclick="deleteProvider('${escapeHtml(provider.name)}')" title="Delete">
                     <i class="bi bi-trash3"></i>
                 </button>` : ''}
@@ -123,139 +123,113 @@ function _parseKeyValueLines(text) {
     return result;
 }
 
-function onProviderTypeChange() {
-    const type = document.getElementById('new-prov-type').value;
-    const label = document.getElementById('new-prov-cred-label');
-    const keyName = _getProviderCredKey(type);
-    if (label) label.textContent = keyName;
-}
 
-async function createProvider(e) {
-    if (e) e.preventDefault();
+// ─── Provider Form Page Component (create / edit) ──────────────────────────
+// Used by /gateways/{gw}/providers/new and /gateways/{gw}/providers/{name}/edit
 
-    const name = document.getElementById('new-prov-name').value.trim();
-    const type = document.getElementById('new-prov-type').value;
-    const apiKey = document.getElementById('new-prov-apikey').value.trim();
-    const credsText = document.getElementById('new-prov-creds').value;
-    const configText = document.getElementById('new-prov-config').value;
-    const output = document.getElementById('create-prov-output');
-    const btn = document.getElementById('create-prov-btn');
+function providerForm(mode, providerName) {
+    return {
+        mode,
+        providerName,
+        form: { name: '', type: '', apiKey: '', creds: '', config: '' },
+        credLabel: 'API_KEY',
+        apiKeyPlaceholder: 'sk-...',
+        submitting: false,
+        output: '',
 
-    if (!name) { output.innerHTML = '<div class="text-danger small">Name is required.</div>'; return; }
-    if (!type) { output.innerHTML = '<div class="text-danger small">Type is required.</div>'; return; }
-    if (!apiKey) { output.innerHTML = '<div class="text-danger small">API key is required.</div>'; return; }
+        async init() {
+            await _ensureProviderTypes();
+            if (this.mode === 'edit' && this.providerName) {
+                try {
+                    const providers = await apiFetch(`${API}/providers`);
+                    const provider = providers.find(p => p.name === this.providerName);
+                    if (provider) {
+                        this.form.name = provider.name;
+                        this.form.type = provider.type;
+                        this.onTypeChange();
+                        const configObj = provider.config || {};
+                        this.form.config = Object.entries(configObj).map(([k, v]) => `${k}=${v}`).join('\n');
+                    }
+                } catch (e) {
+                    this.output = `<div class="text-danger small">${escapeHtml(e.message)}</div>`;
+                }
+            }
+        },
 
-    const extraCreds = _parseKeyValueLines(credsText);
-    const config = _parseKeyValueLines(configText);
+        onTypeChange() {
+            this.credLabel = _getProviderCredKey(this.form.type);
+            this.apiKeyPlaceholder = this.mode === 'edit' ? '(leave blank to keep current)' : 'sk-...';
+        },
 
-    btn.disabled = true;
-    output.innerHTML = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Creating...</div>';
+        async submit() {
+            if (this.mode === 'create') {
+                await this._create();
+            } else {
+                await this._update();
+            }
+        },
 
-    try {
-        await apiFetch(`${API}/providers`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name, type, api_key: apiKey,
-                credentials: Object.keys(extraCreds).length > 0 ? extraCreds : undefined,
-                config: Object.keys(config).length > 0 ? config : undefined,
-            }),
-        });
-        output.innerHTML = '<div class="text-success small"><i class="bi bi-check-circle me-1"></i>Provider created!</div>';
-        showToast(`Provider "${name}" created.`, 'success');
-        bootstrap.Modal.getInstance(document.getElementById('createProviderModal'))?.hide();
-        loadProvidersPage();
-    } catch (e) {
-        output.innerHTML = `<div class="text-danger small"><i class="bi bi-x-circle me-1"></i>${escapeHtml(e.message)}</div>`;
-    } finally {
-        btn.disabled = false;
-    }
-}
+        async _create() {
+            if (!this.form.name.trim()) { this.output = '<div class="text-danger small">Name is required.</div>'; return; }
+            if (!this.form.type) { this.output = '<div class="text-danger small">Type is required.</div>'; return; }
+            if (!this.form.apiKey.trim()) { this.output = '<div class="text-danger small">API key is required.</div>'; return; }
 
-function editProvider(name) {
-    const provider = _providerCache.find(p => p.name === name);
-    if (!provider) return;
+            this.submitting = true;
+            this.output = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Creating...</div>';
 
-    // Reuse the create modal for editing
-    document.getElementById('new-prov-name').value = provider.name;
-    document.getElementById('new-prov-name').disabled = true;
-    document.getElementById('new-prov-type').value = provider.type;
-    document.getElementById('new-prov-type').disabled = true;
-    onProviderTypeChange();
-    document.getElementById('new-prov-apikey').value = '';
-    document.getElementById('new-prov-apikey').placeholder = '(leave blank to keep current)';
-    document.getElementById('new-prov-apikey').required = false;
+            try {
+                const extraCreds = _parseKeyValueLines(this.form.creds);
+                const config = _parseKeyValueLines(this.form.config);
+                await apiFetch(`${API}/providers`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: this.form.name.trim(),
+                        type: this.form.type,
+                        api_key: this.form.apiKey.trim(),
+                        credentials: Object.keys(extraCreds).length > 0 ? extraCreds : undefined,
+                        config: Object.keys(config).length > 0 ? config : undefined,
+                    }),
+                });
+                showToast(`Provider "${this.form.name}" created.`, 'success');
+                navigateTo(window.location.pathname.replace('/providers/new', '/providers'));
+            } catch (e) {
+                this.output = `<div class="text-danger small"><i class="bi bi-x-circle me-1"></i>${escapeHtml(e.message)}</div>`;
+            } finally {
+                this.submitting = false;
+            }
+        },
 
-    const configObj = provider.config || {};
-    document.getElementById('new-prov-config').value =
-        Object.entries(configObj).map(([k, v]) => `${k}=${v}`).join('\n');
-    document.getElementById('new-prov-creds').value = '';
+        async _update() {
+            this.submitting = true;
+            this.output = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Saving...</div>';
 
-    const title = document.querySelector('#createProviderModal .modal-title');
-    const btn = document.getElementById('create-prov-btn');
-    title.innerHTML = '<i class="bi bi-pencil me-2"></i>Edit Provider';
-    btn.innerHTML = '<i class="bi bi-check me-1"></i>Save';
-    btn.onclick = (ev) => updateProvider(ev, name);
-    document.getElementById('create-prov-output').innerHTML = '';
-
-    new bootstrap.Modal(document.getElementById('createProviderModal')).show();
-}
-
-function _resetProviderModal() {
-    document.getElementById('new-prov-name').disabled = false;
-    document.getElementById('new-prov-type').disabled = false;
-    document.getElementById('new-prov-apikey').placeholder = 'sk-...';
-    document.getElementById('new-prov-apikey').required = true;
-    const title = document.querySelector('#createProviderModal .modal-title');
-    const btn = document.getElementById('create-prov-btn');
-    title.innerHTML = '<i class="bi bi-key me-2"></i>New Provider';
-    btn.innerHTML = '<i class="bi bi-plus me-1"></i>Create';
-    btn.onclick = (ev) => createProvider(ev);
-    document.getElementById('create-provider-form').reset();
-    document.getElementById('create-prov-output').innerHTML = '';
-}
-
-async function updateProvider(e, name) {
-    if (e) e.preventDefault();
-
-    const apiKey = document.getElementById('new-prov-apikey').value.trim();
-    const configText = document.getElementById('new-prov-config').value;
-    const credsText = document.getElementById('new-prov-creds').value;
-    const output = document.getElementById('create-prov-output');
-    const btn = document.getElementById('create-prov-btn');
-
-    const config = _parseKeyValueLines(configText);
-    const extraCreds = _parseKeyValueLines(credsText);
-
-    const body = {
-        type: document.getElementById('new-prov-type').value,
-        config: Object.keys(config).length > 0 ? config : {},
+            try {
+                const config = _parseKeyValueLines(this.form.config);
+                const extraCreds = _parseKeyValueLines(this.form.creds);
+                const body = {
+                    type: this.form.type,
+                    config: Object.keys(config).length > 0 ? config : {},
+                };
+                if (this.form.apiKey.trim() || Object.keys(extraCreds).length > 0) {
+                    const keyName = _getProviderCredKey(this.form.type);
+                    body.credentials = { ...extraCreds };
+                    if (this.form.apiKey.trim()) body.credentials[keyName] = this.form.apiKey.trim();
+                }
+                await apiFetch(`${API}/providers/${this.providerName}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                showToast(`Provider "${this.providerName}" updated.`, 'success');
+                navigateTo(window.location.pathname.replace(`/providers/${this.providerName}/edit`, '/providers'));
+            } catch (e) {
+                this.output = `<div class="text-danger small"><i class="bi bi-x-circle me-1"></i>${escapeHtml(e.message)}</div>`;
+            } finally {
+                this.submitting = false;
+            }
+        },
     };
-    // Only send credentials if user entered something
-    if (apiKey || Object.keys(extraCreds).length > 0) {
-        const keyName = _getProviderCredKey(body.type);
-        body.credentials = { ...extraCreds };
-        if (apiKey) body.credentials[keyName] = apiKey;
-    }
-
-    btn.disabled = true;
-    output.innerHTML = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Saving...</div>';
-
-    try {
-        await apiFetch(`${API}/providers/${name}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-        output.innerHTML = '<div class="text-success small"><i class="bi bi-check-circle me-1"></i>Provider updated!</div>';
-        showToast(`Provider "${name}" updated.`, 'success');
-        bootstrap.Modal.getInstance(document.getElementById('createProviderModal'))?.hide();
-        loadProvidersPage();
-    } catch (e) {
-        output.innerHTML = `<div class="text-danger small"><i class="bi bi-x-circle me-1"></i>${escapeHtml(e.message)}</div>`;
-    } finally {
-        btn.disabled = false;
-    }
 }
 
 async function deleteProvider(name) {
