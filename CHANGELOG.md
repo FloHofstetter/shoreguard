@@ -5,6 +5,50 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.23.0] — 2026-04-08
+
+### Added
+
+- **OIDC/SSO authentication** — multi-provider support with callback flow,
+  role mapping, and state validation (`api/oidc.py`,
+  `alembic/versions/012_oidc_fields.py`).
+- **SSRF validation** — URL allowlist/blocklist for webhook targets prevents
+  server-side request forgery via internal addresses.
+- **Input sanitization** — centralized validators for names, URLs, certs,
+  env vars, and command strings with configurable limits via
+  `SHOREGUARD_LIMIT_*` env vars.
+- **pip-audit in CI** — automated dependency vulnerability scanning in the
+  GitHub Actions workflow.
+- **Deep health checks** — `/readyz` now measures DB latency, reports gateway
+  health summary (total/connected/degraded), supports `?verbose=true` for
+  per-gateway details.
+- **PostgreSQL connection pooling** — `DatabaseSettings` with `pool_size`,
+  `max_overflow`, `pool_recycle`, `statement_timeout_ms` via
+  `SHOREGUARD_DB_*` env vars.
+- **Graceful shutdown** — LRO task cancellation (`shutdown_lros()`), webhook
+  delivery task tracking with `shutdown()`, ordered resource disposal.
+- **Async engine disposal** — `dispose_async_engine()` for clean DB shutdown.
+- **Docs** — OIDC guide, security concepts, troubleshooting, audit guide,
+  webhooks guide, Prometheus integration, gateway roles admin.
+- **108+ new tests** — OIDC, input validation, SSRF, webhook secret leak.
+  Total: ~1194.
+
+### Changed
+
+- **Typed API response models** — `extra="forbid"` on Category-A models
+  prevents uncontrolled field leakage through `extra="allow"`.
+- **Webhook HMAC secret** no longer exposed on GET/LIST endpoints — only
+  returned on create (`WebhookCreateResponse`).
+- **Docs restructured** — `guide/` → `guides/`, new `concepts/` and
+  `integrations/` directories.
+- **`graceful_shutdown_timeout`** default raised from 5 → 15 seconds.
+
+### Security
+
+- Fixed webhook HMAC signing secret leak on all GET/PUT responses.
+- SSRF protection for webhook target URLs.
+- Input length/format validation on all mutation endpoints.
+
 ## [0.22.0] — 2026-04-08
 
 ### Added
