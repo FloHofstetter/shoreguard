@@ -203,10 +203,10 @@ async def page_client():
         yield client
 
 
-async def test_root_redirects(page_client):
-    resp = await page_client.get("/", follow_redirects=False)
-    assert resp.status_code == 302
-    assert resp.headers["location"] == "/gateways"
+async def test_root_renders_dashboard(page_client):
+    resp = await page_client.get("/")
+    assert resp.status_code == 200
+    assert "Dashboard" in resp.text
 
 
 async def test_gateways_page(page_client):

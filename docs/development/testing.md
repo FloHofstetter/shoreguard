@@ -7,7 +7,7 @@ keep confidence high during refactors.
 
 | Category    | Count   | Scope                                              |
 | ----------- | ------- | -------------------------------------------------- |
-| Unit        | ~700    | Client, services, API routes, DB, registry         |
+| Unit        | ~1 100  | Client, services, API routes, DB, registry, OIDC   |
 | Integration | 35      | Live gRPC calls against a real OpenShell gateway    |
 | Mutation    | 72% kill rate | Fault injection via mutmut                    |
 

@@ -77,20 +77,14 @@ wizard (or skip it if `SHOREGUARD_ADMIN_PASSWORD` was set).
 
 ### Environment variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `POSTGRES_PASSWORD` | Yes | — | PostgreSQL password |
-| `SHOREGUARD_SECRET_KEY` | Yes | — | HMAC secret for session cookies |
-| `SHOREGUARD_ADMIN_PASSWORD` | No | — | Bootstrap admin account (skip wizard) |
-| `SHOREGUARD_LOG_LEVEL` | No | `info` | `debug`, `info`, `warning`, `error` |
-| `SHOREGUARD_PORT` | No | `8888` | Host port mapping |
-| `SHOREGUARD_ALLOW_REGISTRATION` | No | `false` | Allow self-registration |
-| `SHOREGUARD_HOST` | No | `0.0.0.0` | Network interface to listen on |
-| `SHOREGUARD_DATABASE_URL` | No | SQLite | SQLAlchemy database URL (set automatically in Docker Compose) |
-| `SHOREGUARD_LOCAL_MODE` | No | `false` | Enable Docker gateway lifecycle management |
-| `SHOREGUARD_NO_AUTH` | No | `false` | Disable authentication (development only) |
+The most important variables for Docker deployments:
 
-See the [Configuration](../reference/configuration.md) page for details.
+- `POSTGRES_PASSWORD` — PostgreSQL password (**required**)
+- `SHOREGUARD_SECRET_KEY` — HMAC secret for session cookies (**required**)
+- `SHOREGUARD_ADMIN_PASSWORD` — bootstrap admin account (skip wizard)
+
+See the [Configuration reference](../reference/configuration.md) for the
+complete list of all environment variables.
 
 ### Health probes
 
@@ -101,21 +95,9 @@ Health probes for container orchestration:
 
 ### Monitoring
 
-ShoreGuard exposes a Prometheus-compatible metrics endpoint:
-
-- `GET /metrics` — Prometheus text format (unauthenticated)
-
-Configure your Prometheus instance to scrape this endpoint:
-
-```yaml
-scrape_configs:
-  - job_name: shoreguard
-    static_configs:
-      - targets: ["shoreguard:8888"]
-```
-
-See the [API reference](../reference/api.md#metrics) for the full list
-of exposed metrics.
+ShoreGuard exposes a Prometheus-compatible `/metrics` endpoint. See the
+[Prometheus integration guide](../integrations/prometheus.md) for scrape
+configuration and the full metric list.
 
 ### Volumes and backups
 
@@ -189,21 +171,10 @@ localhost. Use a reverse proxy to expose it to the network.
 
 ## Database
 
-### SQLite (default)
-
-ShoreGuard creates a SQLite database at `~/.config/shoreguard/shoreguard.db`
-on first run. No setup required — this works well for single-node deployments.
-
-### PostgreSQL
-
-For multi-instance or high-availability setups, point ShoreGuard at PostgreSQL:
-
-```bash
-export SHOREGUARD_DATABASE_URL="postgresql+psycopg://user:pass@db-host:5432/shoreguard"
-shoreguard --no-reload
-```
-
-Migrations are applied automatically on startup.
+SQLite is used by default (no setup required). For multi-instance or production
+deployments, use PostgreSQL. See
+[Configuration — Database](../reference/configuration.md#database) for setup
+instructions.
 
 ## Reverse proxy
 
@@ -258,55 +229,5 @@ shoreguard create-user admin@example.com --role admin
 
 ## Troubleshooting
 
-### Port already in use
-
-```
-Error: bind: address already in use
-```
-
-Another process is using port 8888. Either stop it or change the port:
-
-```bash
-SHOREGUARD_PORT=9999 docker compose up -d
-```
-
-### Database connection refused
-
-```
-sqlalchemy.exc.OperationalError: connection refused
-```
-
-The PostgreSQL container may not be ready yet. Check its health:
-
-```bash
-docker compose ps
-docker compose logs db
-```
-
-Wait for the `db` service to show `healthy` status.
-
-### Docker socket permission denied
-
-```
-permission denied while trying to connect to the Docker daemon socket
-```
-
-Add your user to the `docker` group:
-
-```bash
-sudo usermod -aG docker $USER
-# Log out and back in for the change to take effect
-```
-
-### Healthcheck failing
-
-```bash
-# Check ShoreGuard logs
-docker compose logs shoreguard
-
-# Test readiness manually
-curl -s http://localhost:8888/readyz | python3 -m json.tool
-```
-
-Common causes: database not reachable, missing `SHOREGUARD_SECRET_KEY`,
-or the application failed to start (check logs for Python tracebacks).
+See the [Troubleshooting guide](troubleshooting.md) for common issues and
+solutions.

@@ -46,6 +46,26 @@ logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[None]] = set()
 
 
+async def shutdown_lros(timeout: float = 10.0) -> int:
+    """Cancel all running LRO tasks and wait for completion.
+
+    Each task's CancelledError handler marks its operation as failed.
+
+    Args:
+        timeout: Maximum seconds to wait for tasks to finish.
+
+    Returns:
+        int: Number of tasks that were cancelled.
+    """
+    tasks = list(_background_tasks)
+    if not tasks:
+        return 0
+    for t in tasks:
+        t.cancel()
+    await asyncio.wait(tasks, timeout=timeout)
+    return len(tasks)
+
+
 async def run_lro(
     *,
     resource_type: str,

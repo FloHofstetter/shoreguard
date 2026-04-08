@@ -5,7 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/shoreguard?color=%2376b900&style=flat-square)](https://pypi.org/project/shoreguard/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](https://github.com/FloHofstetter/shoreguard/blob/main/LICENSE)
 [![Python](https://img.shields.io/pypi/pyversions/shoreguard?style=flat-square)](https://pypi.org/project/shoreguard/)
-[![Tests](https://img.shields.io/badge/tests-759%20passed-brightgreen?style=flat-square)](https://github.com/FloHofstetter/shoreguard)
+[![Tests](https://img.shields.io/badge/tests-1149%20passed-brightgreen?style=flat-square)](https://github.com/FloHofstetter/shoreguard)
 
 ![Sandbox Overview](screenshots/sandbox-overview.png)
 
@@ -86,14 +86,18 @@ ShoreGuard replaces this with a visual editor, one-click presets, and diagnostic
 
 ## Feature highlights
 
-- **[Gateway management](guide/gateways.md)** — register and monitor multiple remote OpenShell gateways with health probing
-- **[Sandbox wizard](guide/sandboxes.md)** — step-by-step creation with agent types, community images, and policy presets
-- **[Visual policy editor](guide/policies.md)** — network rules, filesystem paths, process settings — no YAML
-- **[Approval flow](guide/approvals.md)** — review agent-requested endpoint access with real-time notifications
+- **[Gateway management](guides/gateways.md)** — register and monitor multiple remote OpenShell gateways with health probing
+- **[Sandbox wizard](guides/sandboxes.md)** — step-by-step creation with agent types, community images, and policy presets
+- **[Visual policy editor](guides/policies.md)** — network rules, filesystem paths, process settings — no YAML
+- **[Approval flow](guides/approvals.md)** — review agent-requested endpoint access with real-time notifications
 - **[RBAC](admin/rbac.md)** — Admin, Operator, Viewer roles with invite flow and service principals
+- **[OIDC / SSO](admin/oidc.md)** — sign in with Google, Entra ID, Okta, or any OIDC provider
+- **[Webhooks](guides/webhooks.md)** — notify Slack, Discord, email, or any HTTP endpoint on events
 - **[Local mode](admin/local-mode.md)** — manage Docker gateway lifecycle from the browser
-- **[Live monitoring](guide/monitoring.md)** — real-time logs and events via WebSocket
-- **[Terraform provider](reference/terraform.md)** — declarative infrastructure-as-code for OpenShell
+- **[Live monitoring](guides/monitoring.md)** — real-time logs and events via WebSocket
+- **[Audit log](guides/audit.md)** — persistent audit trail with CSV/JSON export
+- **[Terraform provider](integrations/terraform.md)** — declarative infrastructure-as-code for OpenShell
+- **[Prometheus metrics](integrations/prometheus.md)** — built-in observability endpoint
 
 ## Quick start
 

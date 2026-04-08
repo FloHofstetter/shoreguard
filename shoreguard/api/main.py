@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from shoreguard.client import ShoreGuardClient
@@ -137,6 +137,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ── Auth ─────────────────────────────────────────────────────────────
     init_auth(session_factory)
     bootstrap_admin_user()
+    from shoreguard.api.oidc import init_oidc
+
+    init_oidc()
 
     # Hide OpenAPI docs when authentication is enabled to avoid leaking
     # the full API schema to unauthenticated users.
@@ -210,15 +213,40 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cleanup_task = asyncio.create_task(_cleanup_operations())
     health_task = asyncio.create_task(_health_monitor())
     yield
+
+    # ── Graceful shutdown ──────────────────────────────────────────
+    logger.info("Shutdown started")
+
+    # 1. Stop background polling (fast)
     cleanup_task.cancel()
     health_task.cancel()
+
+    # 2. Cancel LRO tasks (CancelledError handler marks ops as failed)
+    from shoreguard.api.lro import shutdown_lros
+
+    lro_count = await shutdown_lros(timeout=10.0)
+    if lro_count:
+        logger.info("Cancelled %d LRO task(s)", lro_count)
+
+    # 3. Cancel in-flight webhook deliveries
+    if webhook_mod.webhook_service:
+        wh_count = await webhook_mod.webhook_service.shutdown(timeout=3.0)
+        if wh_count:
+            logger.info("Cancelled %d webhook delivery task(s)", wh_count)
+
+    # 4. Await background task cancellation
     for task in (cleanup_task, health_task):
         try:
             await task
         except asyncio.CancelledError:
             pass
+
+    # 5. Dispose DB engines
     engine.dispose()
-    logger.debug("Database engine disposed")
+    from shoreguard.db import dispose_async_engine
+
+    await dispose_async_engine()
+    logger.info("Shutdown complete")
 
 
 app = FastAPI(
@@ -263,30 +291,60 @@ async def healthz() -> dict[str, str]:
 
 
 @health_router.get("/readyz")
-async def readyz() -> JSONResponse:
-    """Readiness probe — checks database and service initialisation.
+async def readyz(verbose: bool = False) -> JSONResponse:
+    """Readiness probe — checks database connectivity and gateway health.
+
+    Args:
+        verbose: If True, include per-gateway breakdown.
 
     Returns:
         JSONResponse: 200 with check details when ready, 503 otherwise.
     """
+    import time
+
     import shoreguard.services.gateway as gw_mod
     from shoreguard.db import get_engine
 
-    checks: dict[str, str] = {}
+    checks: dict[str, Any] = {}
     healthy = True
 
+    # ── Database ──────────────────────────────────────────────────
     try:
         engine = get_engine()
+        t0 = time.monotonic()
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+        db_latency_ms = round((time.monotonic() - t0) * 1000, 1)
         checks["database"] = "ok"
+        checks["database_latency_ms"] = db_latency_ms
     except Exception as exc:
         logger.warning("Health check: database unreachable: %s", exc)
         checks["database"] = str(exc)
         healthy = False
 
+    # ── Gateway service ───────────────────────────────────────────
     if gw_mod.gateway_service is not None:
         checks["gateway_service"] = "ok"
+        try:
+            gateways = await asyncio.to_thread(gw_mod.gateway_service._registry.list_all)
+            total = len(gateways)
+            connected = sum(1 for g in gateways if g.get("connected"))
+            checks["gateways_total"] = total
+            checks["gateways_connected"] = connected
+            if total > 0 and connected < total:
+                checks["gateways_degraded"] = True
+            if verbose:
+                checks["gateways"] = [
+                    {
+                        "name": g["name"],
+                        "status": g.get("last_status", "unknown"),
+                        "last_seen": g.get("last_seen"),
+                        "connected": g.get("connected", False),
+                    }
+                    for g in gateways
+                ]
+        except Exception:
+            logger.debug("Health check: failed to query gateway list", exc_info=True)
     else:
         checks["gateway_service"] = "not initialised"
         healthy = False
@@ -355,11 +413,11 @@ class SetInferenceRequest(BaseModel):
         route_name: Named inference route (empty for default cluster route).
     """
 
-    provider_name: str
-    model_id: str
+    provider_name: str = Field(min_length=1, max_length=253)
+    model_id: str = Field(min_length=1, max_length=253)
     verify: bool = True
-    timeout_secs: int = 0
-    route_name: str = ""
+    timeout_secs: int = Field(default=0, ge=0, le=3600)
+    route_name: str = Field(default="", max_length=253)
 
 
 @gw_api.get("/inference", response_model=InferenceConfigResponse)

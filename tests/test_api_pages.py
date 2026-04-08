@@ -105,15 +105,14 @@ class TestSetup:
             "/api/auth/setup",
             json={"email": "admin@test.com", "password": "x" * 200},
         )
-        assert resp.status_code == 400
-        assert "128" in resp.json()["detail"]
+        assert resp.status_code == 422
 
     async def test_setup_empty_fields(self, fresh_client):
         resp = await fresh_client.post(
             "/api/auth/setup",
             json={"email": "", "password": ""},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 # ─── Login endpoint ──────────────────────────────────────────────────────────
@@ -152,8 +151,7 @@ class TestLogin:
                 "/api/auth/login",
                 json={"email": ADMIN_EMAIL, "password": "x" * 200},
             )
-            assert resp.status_code == 400
-            assert "128" in resp.json()["detail"]
+            assert resp.status_code == 422
 
 
 # ─── User management (admin-only) ────────────────────────────────────────────

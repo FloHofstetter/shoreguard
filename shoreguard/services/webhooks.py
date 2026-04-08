@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
+from shoreguard.config import is_private_ip
+
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker as SessionMaker
 
@@ -63,6 +65,7 @@ class WebhookService:
 
     def __init__(self, session_factory: SessionMaker) -> None:  # noqa: D107
         self._session_factory = session_factory
+        self._delivery_tasks: set[asyncio.Task[None]] = set()
 
     def list(self) -> list[dict[str, Any]]:
         """Return all registered webhooks.
@@ -131,7 +134,7 @@ class WebhookService:
             session.add(wh)
             session.commit()
             session.refresh(wh)
-            return self._to_dict(wh)
+            return self._to_dict_with_secret(wh)
 
     def update(
         self,
@@ -252,7 +255,26 @@ class WebhookService:
             )
             formatter = FORMATTERS.get(target.channel_type, FORMATTERS["generic"])
             body = formatter(event_type, payload, timestamp)
-            asyncio.create_task(self._deliver(target, body, delivery_id))
+            task = asyncio.create_task(self._deliver(target, body, delivery_id))
+            self._delivery_tasks.add(task)
+            task.add_done_callback(self._delivery_tasks.discard)
+
+    async def shutdown(self, timeout: float = 5.0) -> int:
+        """Cancel all in-flight webhook deliveries.
+
+        Args:
+            timeout: Maximum seconds to wait for tasks to finish.
+
+        Returns:
+            int: Number of tasks that were cancelled.
+        """
+        tasks = list(self._delivery_tasks)
+        if not tasks:
+            return 0
+        for t in tasks:
+            t.cancel()
+        await asyncio.wait(tasks, timeout=timeout)
+        return len(tasks)
 
     def _create_delivery(self, webhook_id: int, event_type: str, payload_json: str) -> int:
         """Create a pending delivery record.
@@ -332,6 +354,26 @@ class WebhookService:
             body: JSON-encoded request body.
             delivery_id: Delivery record ID.
         """
+        # DNS-rebinding protection: re-check target at delivery time
+        from urllib.parse import urlparse
+
+        hostname = urlparse(target.url).hostname
+        if hostname and is_private_ip(hostname):
+            logger.warning(
+                "SSRF blocked: webhook %d target %s resolves to private address",
+                target.webhook_id,
+                target.url,
+            )
+            await asyncio.to_thread(
+                self._update_delivery,
+                delivery_id,
+                status="failed",
+                error_message="SSRF blocked: target resolves to private address",
+                attempt=1,
+            )
+            self._inc_delivery_counter("failed")
+            return
+
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if target.channel_type == "generic":
             signature = hmac.new(target.secret.encode(), body.encode(), hashlib.sha256).hexdigest()
@@ -427,6 +469,23 @@ class WebhookService:
             config = json.loads(target.extra_config or "{}")
             smtp_host = config.get("smtp_host", "localhost")
             smtp_port = config.get("smtp_port", 587)
+
+            # DNS-rebinding protection for SMTP targets
+            if is_private_ip(smtp_host):
+                logger.warning(
+                    "SSRF blocked: webhook %d SMTP host %s resolves to private address",
+                    target.webhook_id,
+                    smtp_host,
+                )
+                await asyncio.to_thread(
+                    self._update_delivery,
+                    delivery_id,
+                    status="failed",
+                    error_message="SSRF blocked: SMTP host resolves to private address",
+                    attempt=1,
+                )
+                self._inc_delivery_counter("failed")
+                return
             smtp_user = config.get("smtp_user")
             smtp_pass = config.get("smtp_pass")
             from_addr = config.get("from_addr", "shoreguard@localhost")
@@ -552,7 +611,7 @@ class WebhookService:
 
     @staticmethod
     def _to_dict(wh: Webhook) -> dict[str, Any]:
-        """Convert a Webhook ORM object to a plain dict.
+        """Convert a Webhook ORM object to a plain dict (without secret).
 
         Args:
             wh: The webhook to convert.
@@ -567,7 +626,6 @@ class WebhookService:
         result: dict[str, Any] = {
             "id": wh.id,
             "url": wh.url,
-            "secret": wh.secret,
             "event_types": event_types,
             "is_active": wh.is_active,
             "channel_type": wh.channel_type,
@@ -579,6 +637,22 @@ class WebhookService:
                 result["extra_config"] = json.loads(wh.extra_config)
             except json.JSONDecodeError, TypeError:
                 result["extra_config"] = wh.extra_config
+        return result
+
+    @staticmethod
+    def _to_dict_with_secret(wh: Webhook) -> dict[str, Any]:
+        """Convert a Webhook ORM object including the HMAC secret.
+
+        Used only for the creation response (secret shown once).
+
+        Args:
+            wh: The webhook to convert.
+
+        Returns:
+            dict[str, Any]: JSON-serializable representation including secret.
+        """
+        result = WebhookService._to_dict(wh)
+        result["secret"] = wh.secret
         return result
 
 

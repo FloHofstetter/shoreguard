@@ -9,12 +9,14 @@ one or more NVIDIA OpenShell gateways. It communicates with gateways over gRPC
 ```mermaid
 graph TB
     Browser["Browser (:8888)"] --> API["ShoreGuard API<br/>FastAPI"]
-    API --> Services["Service Layer<br/>Gateway · Sandbox · Policy · Provider"]
+    API --> Services["Service Layer<br/>Gateway · Sandbox · Policy · Provider<br/>Audit · Webhooks · Operations"]
     Services --> DB["Persistence<br/>SQLAlchemy — SQLite / PostgreSQL"]
     Services --> Client["gRPC Client<br/>mTLS · Protobuf"]
     Client --> GW1["Gateway 1"]
     Client --> GW2["Gateway 2"]
     Client --> GW3["Gateway 3"]
+    API -.->|"OIDC"| IDP["Identity Provider<br/>Google · Entra · Okta"]
+    Services -.->|"Webhooks"| WH["External Services<br/>Slack · Discord · Email"]
     style Browser fill:#0969da,color:#fff,stroke:#0969da
     style API fill:#0969da,color:#fff,stroke:#0969da
     style GW1 fill:#1a7f37,color:#fff,stroke:#1a7f37
@@ -27,15 +29,17 @@ graph TB
 ### API layer — `shoreguard/api/`
 
 FastAPI routes, authentication middleware, WebSocket endpoints, error handlers,
-and Jinja2 page rendering. This layer handles HTTP/WS concerns and delegates
-business logic to the service layer.
+Jinja2 page rendering, OIDC login flow, rate limiting, and security headers.
+This layer handles HTTP/WS concerns and delegates business logic to the
+service layer.
 
 ### Service layer — `shoreguard/services/`
 
-Business logic for gateways, sandboxes, policies, providers, approvals, and
-operations. Services are the single source of truth for validation,
-orchestration, and state transitions. They call the client layer to talk to
-gateways and the persistence layer to store state.
+Business logic for gateways, sandboxes, policies, providers, approvals,
+operations, audit logging, and webhook delivery. Services are the single
+source of truth for validation, orchestration, and state transitions. They
+call the client layer to talk to gateways and the persistence layer to store
+state.
 
 ### Client layer — `shoreguard/client/`
 
@@ -47,7 +51,8 @@ ShoreGuard's domain model and the protobuf wire format.
 
 SQLAlchemy ORM models and async session management. Database migrations are
 handled by Alembic and applied automatically on startup. Supports both SQLite
-(default, single-node) and PostgreSQL (multi-instance).
+(default, single-node) and PostgreSQL (multi-instance). See
+[Configuration](../reference/configuration.md#database) for setup.
 
 ### Frontend — `frontend/`
 
@@ -65,13 +70,6 @@ configuration forms.
 
 ## Authentication
 
-ShoreGuard supports two authentication mechanisms:
-
-- **Session cookies** — HMAC-signed cookies for browser-based users. The
-  server is stateless; the cookie contains the user identity and the signature
-  is verified on every request.
-- **API keys** — SHA-256 hashed keys for service principals. Presented via the
-  `Authorization: Bearer` header or as a WebSocket query parameter.
-
-Both mechanisms resolve to the same role-based permission model (Admin,
-Operator, Viewer). See [RBAC & User Management](admin/rbac.md) for details.
+ShoreGuard supports multiple authentication mechanisms — session cookies,
+API keys, and OIDC/SSO. All resolve to the same role-based permission model.
+See the [Security Model](security.md) for details.

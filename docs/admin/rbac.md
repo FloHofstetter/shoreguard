@@ -53,13 +53,17 @@ shoreguard delete-user admin@example.com
 shoreguard list-users
 ```
 
+## OIDC / SSO
+
+ShoreGuard supports OpenID Connect for single sign-on with Google, Entra ID,
+Okta, and other providers. See the [OIDC / SSO guide](oidc.md).
+
+## Gateway-scoped roles
+
+Roles can be overridden per gateway to support multi-tenant setups and
+least-privilege access. See [Gateway-Scoped Roles](gateway-roles.md).
+
 ## Session security
 
-- Sessions use **HMAC-signed cookies** — the server never stores session state.
-- Cookies expire after **7 days**.
-- The user's role is verified from the database on **every request**, so role
-  changes take effect immediately.
-
-> [!WARNING]
-> Setting `SHOREGUARD_NO_AUTH=1` disables all authentication and authorization.
-> This is intended for local development only. Never use it in production.
+For details on session cookies, password hashing, rate limiting, and other
+security mechanisms, see the [Security Model](../concepts/security.md).

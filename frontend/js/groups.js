@@ -2,11 +2,6 @@
  * Shoreguard — Group Management (Alpine.js component)
  */
 
-const _GROUP_ROLE_BADGES = {
-    admin: 'text-bg-danger',
-    operator: 'text-bg-warning',
-    viewer: 'text-bg-secondary',
-};
 
 function groupsPage() {
     return {
@@ -35,7 +30,7 @@ function groupsPage() {
         membersLoading: false,
 
         roleBadge(role) {
-            return _GROUP_ROLE_BADGES[role] || 'text-bg-secondary';
+            return SG.badges.role[role] || 'text-bg-secondary';
         },
 
         formatDate(isoString) {

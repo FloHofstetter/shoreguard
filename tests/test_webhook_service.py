@@ -45,6 +45,7 @@ class TestCRUD:
         all_hooks = webhook_svc.list()
         assert len(all_hooks) == 1
         assert all_hooks[0]["id"] == wh["id"]
+        assert "secret" not in all_hooks[0]
 
     def test_get(self, webhook_svc):
         wh = webhook_svc.create(
@@ -55,6 +56,7 @@ class TestCRUD:
         result = webhook_svc.get(wh["id"])
         assert result is not None
         assert result["url"] == "https://example.com/hook"
+        assert "secret" not in result
 
     def test_get_not_found(self, webhook_svc):
         assert webhook_svc.get(999) is None

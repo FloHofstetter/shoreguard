@@ -25,6 +25,11 @@ const SG = {
             stopped: 'text-bg-secondary',
             offline: 'text-bg-danger',
         },
+        role: {
+            admin: 'text-bg-danger',
+            operator: 'text-bg-warning',
+            viewer: 'text-bg-secondary',
+        },
     },
 
     icons: {

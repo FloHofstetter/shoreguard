@@ -34,6 +34,16 @@ ShoreGuard supports two authentication methods:
 | `DELETE` | `/api/auth/service-principals/{id}` | Delete a service principal |
 | `POST` | `/api/auth/service-principals/{id}/rotate` | Rotate API key (generates new, invalidates old) |
 
+## OIDC endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/auth/oidc/providers` | List configured OIDC providers (public info only) |
+| `GET` | `/api/auth/oidc/login/{provider}` | Initiate OIDC login flow (redirects to provider) |
+| `GET` | `/api/auth/oidc/callback` | Handle provider callback (internal, not called directly) |
+
+See the [OIDC / SSO guide](../admin/oidc.md) for configuration and usage.
+
 ## Health probes
 
 These endpoints are **unauthenticated** and designed for container orchestration.
@@ -99,7 +109,7 @@ Pre-configured sandbox bundles (image, GPU, providers, presets, environment).
 
 Built-in templates: `data-science`, `web-dev`, `secure-coding`. Templates are
 YAML files shipped with ShoreGuard — see the
-[sandbox guide](../guide/sandboxes.md#sandbox-templates) for details.
+[sandbox guide](../guides/sandboxes.md#sandbox-templates) for details.
 
 ## Sandboxes
 
@@ -185,59 +195,8 @@ signed `POST` request whenever a subscribed event occurs.
 | `POST` | `/api/webhooks/{id}/test` | Send a test event |
 | `GET` | `/api/webhooks/{id}/deliveries` | List delivery attempts (newest first, `?limit=50`) |
 
-### Channel types
-
-Each webhook has a `channel_type` that controls payload formatting and delivery:
-
-| Type | Delivery | Payload format |
-|------|----------|---------------|
-| `generic` (default) | HTTP POST with HMAC-SHA256 signature | JSON envelope `{event, timestamp, data}` |
-| `slack` | HTTP POST to Slack incoming webhook URL | Slack Block Kit with mrkdwn and color coding |
-| `discord` | HTTP POST to Discord webhook URL | Discord embed with color-coded fields |
-| `email` | SMTP delivery via `extra_config` settings | Plain-text email |
-
-For email channels, `extra_config` must include SMTP settings:
-
-```json
-{
-  "smtp_host": "smtp.example.com",
-  "smtp_port": 587,
-  "smtp_user": "user",
-  "smtp_pass": "pass",
-  "from_addr": "shoreguard@example.com",
-  "to_addrs": ["ops@example.com"]
-}
-```
-
-### Delivery log and retry
-
-Every delivery attempt is recorded in the `webhook_deliveries` table. Query
-with `GET /api/webhooks/{id}/deliveries`. HTTP 5xx and network errors trigger
-up to 3 automatic retries with exponential backoff (5 s → 30 s → 120 s).
-Client errors (4xx) fail immediately without retry. Delivery records older
-than 7 days are purged automatically.
-
-### Event types
-
-Subscribe to specific events or use `*` for all:
-
-- `sandbox.created`, `sandbox.deleted`
-- `gateway.registered`, `gateway.unregistered`
-- `inference.updated`, `policy.updated`
-- `approval.pending`, `approval.approved`, `approval.rejected`
-- `webhook.test`
-
-### Signature verification
-
-Generic webhooks include an `X-Shoreguard-Signature` header with an
-HMAC-SHA256 signature (Slack and Discord channels do not use signing):
-
-```
-X-Shoreguard-Signature: sha256=<hex-digest>
-```
-
-Verify by computing `HMAC-SHA256(secret, request_body)` and comparing
-the hex digest.
+For channel types, event types, signature verification, and delivery retry
+logic, see the [Webhooks guide](../guides/webhooks.md).
 
 ## Metrics
 
@@ -245,17 +204,8 @@ the hex digest.
 |--------|------|-------------|
 | `GET` | `/metrics` | Prometheus metrics (unauthenticated) |
 
-Exposed metrics:
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `shoreguard_info` | Info | Build version |
-| `shoreguard_gateways_total` | Gauge | Registered gateways by status |
-| `shoreguard_operations_total` | Gauge | Tracked operations by status |
-| `shoreguard_webhook_deliveries_total` | Counter | Webhook deliveries by result |
-| `shoreguard_http_requests_total` | Counter | HTTP requests by method and status |
-
-Configure Prometheus to scrape `http://<shoreguard-host>:8888/metrics`.
+See the [Prometheus integration guide](../integrations/prometheus.md) for the
+full metric list and scrape configuration.
 
 ## Operations
 

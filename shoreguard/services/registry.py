@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
+from shoreguard.exceptions import ConflictError
 from shoreguard.models import Gateway
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ class GatewayRegistry:
             except IntegrityError as e:
                 session.rollback()
                 logger.warning("Duplicate gateway registration attempt: '%s'", name)
-                raise ValueError(f"Gateway '{name}' is already registered") from e
+                raise ConflictError(f"Gateway '{name}' is already registered") from e
             logger.info("Registered gateway '%s' (endpoint=%s, scheme=%s)", name, endpoint, scheme)
             return self._to_dict(gw)
 

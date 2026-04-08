@@ -7,11 +7,12 @@ import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.api.schemas import PolicyDiffResponse, PolicyResponse, PresetSummaryResponse
+from shoreguard.api.validation import check_write_rate_limit
 from shoreguard.client import ShoreGuardClient
 from shoreguard.presets import get_preset as _get_preset
 from shoreguard.presets import list_presets as _list_presets
@@ -44,7 +45,7 @@ class NetworkRuleRequest(BaseModel):
         rule: Rule definition as a dict.
     """
 
-    key: str
+    key: str = Field(min_length=1, max_length=253)
     rule: dict[str, Any]
 
 
@@ -56,7 +57,7 @@ class FilesystemPathRequest(BaseModel):
         access: Access mode, either read-only or read-write.
     """
 
-    path: str
+    path: str = Field(min_length=1, max_length=4096)
     access: Literal["ro", "rw"]
 
 
@@ -69,9 +70,9 @@ class ProcessPolicyRequest(BaseModel):
         landlock_compatibility: Landlock compatibility mode.
     """
 
-    run_as_user: str | None = None
-    run_as_group: str | None = None
-    landlock_compatibility: str | None = None
+    run_as_user: str | None = Field(default=None, max_length=253)
+    run_as_group: str | None = Field(default=None, max_length=253)
+    landlock_compatibility: str | None = Field(default=None, max_length=50)
 
 
 @router.get("/sandboxes/{name}/policy", response_model=PolicyResponse)
@@ -200,6 +201,7 @@ async def add_network_rule(
     Returns:
         dict[str, Any]: Updated policy after rule addition.
     """
+    check_write_rate_limit(request)
     result = await asyncio.to_thread(
         svc.add_network_rule,
         name,
@@ -287,6 +289,7 @@ async def add_filesystem_path(
     Returns:
         dict[str, Any]: Updated policy after path addition.
     """
+    check_write_rate_limit(request)
     result = await asyncio.to_thread(
         svc.add_filesystem_path,
         name,
@@ -373,6 +376,7 @@ async def update_process_policy(
     Returns:
         dict[str, Any]: Updated policy record.
     """
+    check_write_rate_limit(request)
     result = await asyncio.to_thread(
         svc.update_process_policy,
         name,

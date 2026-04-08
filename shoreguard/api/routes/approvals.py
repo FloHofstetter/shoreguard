@@ -7,7 +7,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
@@ -47,7 +47,7 @@ class RejectRequest(BaseModel):
         reason: Optional rejection reason.
     """
 
-    reason: str = ""
+    reason: str = Field(default="", max_length=1000)
 
 
 class ApproveAllRequest(BaseModel):

@@ -259,9 +259,11 @@ def test_register_creates_gateway(svc):
 
 
 def test_register_duplicate_raises(svc):
-    """Registering same name twice raises ValueError."""
+    """Registering same name twice raises ConflictError."""
+    from shoreguard.exceptions import ConflictError
+
     svc.register(GW, "10.0.0.1:8443", auth_mode="insecure")
-    with pytest.raises(ValueError, match="already registered"):
+    with pytest.raises(ConflictError, match="already registered"):
         svc.register(GW, "10.0.0.2:8443", auth_mode="insecure")
 
 

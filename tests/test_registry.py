@@ -49,8 +49,10 @@ class TestRegister:
         assert result["metadata"] == {"gpu": True, "labels": ["prod"]}
 
     def test_register_duplicate_raises(self, registry):
+        from shoreguard.exceptions import ConflictError
+
         registry.register("gw1", "10.0.0.1:8443")
-        with pytest.raises(ValueError, match="already registered"):
+        with pytest.raises(ConflictError, match="already registered"):
             registry.register("gw1", "10.0.0.2:8443")
 
     def test_register_without_certs(self, registry):

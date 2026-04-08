@@ -101,6 +101,13 @@ class TestListWebhooks:
         assert data["items"][0]["url"] == "https://example.com/hook"
         assert data["total"] == 1
 
+    async def test_list_does_not_leak_secret(self, admin_client):
+        await _create_webhook(admin_client)
+        resp = await admin_client.get("/api/webhooks")
+        assert resp.status_code == 200
+        for item in resp.json()["items"]:
+            assert "secret" not in item
+
 
 class TestCreateWebhook:
     async def test_create_generic(self, admin_client):
@@ -125,8 +132,7 @@ class TestCreateWebhook:
             "/api/webhooks",
             json={"url": "https://x.com", "event_types": ["*"], "channel_type": "invalid"},
         )
-        assert resp.status_code == 400
-        assert "channel_type" in resp.json()["detail"].lower()
+        assert resp.status_code == 422
 
     async def test_create_email_missing_config(self, admin_client):
         resp = await admin_client.post(
@@ -159,6 +165,12 @@ class TestGetWebhook:
         assert resp.status_code == 200
         assert resp.json()["id"] == created["id"]
 
+    async def test_get_does_not_leak_secret(self, admin_client):
+        created = await _create_webhook(admin_client)
+        resp = await admin_client.get(f"/api/webhooks/{created['id']}")
+        assert resp.status_code == 200
+        assert "secret" not in resp.json()
+
     async def test_get_nonexistent(self, admin_client):
         resp = await admin_client.get("/api/webhooks/99999")
         assert resp.status_code == 404
@@ -189,7 +201,7 @@ class TestUpdateWebhook:
             f"/api/webhooks/{created['id']}",
             json={"channel_type": "invalid"},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     async def test_update_nonexistent(self, admin_client):
         resp = await admin_client.put(

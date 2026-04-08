@@ -30,6 +30,8 @@ from shoreguard.api.auth import (
     set_group_gateway_role,
     update_group,
 )
+from shoreguard.exceptions import NotFoundError
+from shoreguard.exceptions import ValidationError as DomainValidationError
 from shoreguard.models import Base, Gateway
 
 ADMIN_EMAIL = "admin@test.com"
@@ -157,7 +159,7 @@ class TestCreateGroup:
             create_group("devs")
 
     def test_invalid_role_raises(self, db):
-        with pytest.raises(ValueError, match="Invalid role"):
+        with pytest.raises(DomainValidationError, match="Invalid role"):
             create_group("devs", "superadmin")
 
 
@@ -179,12 +181,12 @@ class TestUpdateGroup:
         assert result["description"] == "New desc"
 
     def test_update_nonexistent_raises(self, db):
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(NotFoundError, match="not found"):
             update_group(999, name="nope")
 
     def test_invalid_role_raises(self, db):
         g = create_group("devs")
-        with pytest.raises(ValueError, match="Invalid role"):
+        with pytest.raises(DomainValidationError, match="Invalid role"):
             update_group(g["id"], role="superadmin")
 
 
@@ -265,12 +267,12 @@ class TestGroupMembership:
 
     def test_add_to_nonexistent_group_raises(self, db):
         u = create_user("u@test.com", "password1", "viewer")
-        with pytest.raises(ValueError, match="Group 999 not found"):
+        with pytest.raises(NotFoundError, match="Group 999 not found"):
             add_group_member(999, u["id"])
 
     def test_add_nonexistent_user_raises(self, db):
         g = create_group("devs")
-        with pytest.raises(ValueError, match="User 999 not found"):
+        with pytest.raises(NotFoundError, match="User 999 not found"):
             add_group_member(g["id"], 999)
 
     def test_remove_member(self, db):
@@ -331,16 +333,16 @@ class TestGroupGatewayRoles:
 
     def test_invalid_role_raises(self, db, _with_gateway):
         g = create_group("devs")
-        with pytest.raises(ValueError, match="Invalid role"):
+        with pytest.raises(DomainValidationError, match="Invalid role"):
             set_group_gateway_role(g["id"], GW_NAME, "superadmin")
 
     def test_nonexistent_group_raises(self, db, _with_gateway):
-        with pytest.raises(ValueError, match="Group 999 not found"):
+        with pytest.raises(NotFoundError, match="Group 999 not found"):
             set_group_gateway_role(999, GW_NAME, "admin")
 
     def test_nonexistent_gateway_raises(self, db):
         g = create_group("devs")
-        with pytest.raises(ValueError, match="Gateway.*not found"):
+        with pytest.raises(NotFoundError, match="Gateway.*not found"):
             set_group_gateway_role(g["id"], "no-such-gw", "admin")
 
     def test_remove_role(self, db, _with_gateway):
@@ -552,9 +554,7 @@ class TestGroupMemberAPI:
             f"/api/auth/groups/{g['id']}/members",
             json={"user_id": users[0]["id"]},
         )
-        resp = await admin_client.delete(
-            f"/api/auth/groups/{g['id']}/members/{users[0]['id']}"
-        )
+        resp = await admin_client.delete(f"/api/auth/groups/{g['id']}/members/{users[0]['id']}")
         assert resp.status_code == 200
 
     async def test_remove_nonexistent_404(self, admin_client):
@@ -589,16 +589,12 @@ class TestGroupGatewayRoleAPI:
             f"/api/auth/groups/{g['id']}/gateway-roles/{GW_NAME}",
             json={"role": "operator"},
         )
-        resp = await admin_client.delete(
-            f"/api/auth/groups/{g['id']}/gateway-roles/{GW_NAME}"
-        )
+        resp = await admin_client.delete(f"/api/auth/groups/{g['id']}/gateway-roles/{GW_NAME}")
         assert resp.status_code == 200
 
     async def test_remove_nonexistent_404(self, admin_client, _with_gateway):
         g = (await admin_client.post("/api/auth/groups", json={"name": "devs"})).json()
-        resp = await admin_client.delete(
-            f"/api/auth/groups/{g['id']}/gateway-roles/{GW_NAME}"
-        )
+        resp = await admin_client.delete(f"/api/auth/groups/{g['id']}/gateway-roles/{GW_NAME}")
         assert resp.status_code == 404
 
     async def test_invalid_role_400(self, admin_client, _with_gateway):
@@ -617,9 +613,7 @@ class TestGroupRoleResolutionAPI:
     async def test_group_global_role_grants_access(self, admin_client, _with_viewer):
         """Viewer user in operator group can access operator endpoints."""
         g = (
-            await admin_client.post(
-                "/api/auth/groups", json={"name": "ops", "role": "operator"}
-            )
+            await admin_client.post("/api/auth/groups", json={"name": "ops", "role": "operator"})
         ).json()
         users = (await admin_client.get("/api/auth/users")).json()
         viewer_user = next(u for u in users if u["email"] == VIEWER_EMAIL)
@@ -630,9 +624,7 @@ class TestGroupRoleResolutionAPI:
 
         from shoreguard.api.main import app
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
                 "/api/auth/login",
                 json={"email": VIEWER_EMAIL, "password": VIEWER_PASS},

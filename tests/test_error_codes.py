@@ -28,6 +28,7 @@ from shoreguard.api.error_codes import (
 )
 from shoreguard.api.errors import register_error_handlers
 from shoreguard.exceptions import (
+    ConflictError,
     FeatureNotAvailableError,
     GatewayNotConnectedError,
     NotFoundError,
@@ -92,6 +93,9 @@ class TestCodeForStatus:
     def test_504(self):
         assert code_for_status(504) == TIMEOUT
 
+    def test_422(self):
+        assert code_for_status(422) == VALIDATION_ERROR
+
     def test_unknown_status_falls_back_to_internal(self):
         assert code_for_status(418) == INTERNAL_ERROR
 
@@ -137,6 +141,7 @@ class TestDomainExceptionCodes:
             (NotFoundError, NOT_FOUND),
             (PolicyError, POLICY_ERROR),
             (SandboxError, SANDBOX_CONFLICT),
+            (ConflictError, CONFLICT),
             (ValidationError, VALIDATION_ERROR),
             (FeatureNotAvailableError, FEATURE_NOT_AVAILABLE),
         ],
@@ -209,6 +214,26 @@ class TestGrpcExceptionCodes:
         body = await _get_error(err_client, exc)
         assert body["code"] == GATEWAY_UPGRADE_REQUIRED
         assert body["upgrade_required"] is True
+
+
+# ── RequestValidationError handler ──────────────────────────────────────────
+
+
+class TestRequestValidationError:
+    async def test_pydantic_validation_error_has_code(self, err_client):
+        """Pydantic 422 errors get our standard {detail, code, errors} shape."""
+        from pydantic import BaseModel
+
+        @_test_app.post("/validate")
+        async def _validate(body: BaseModel) -> dict:
+            return {}
+
+        resp = await err_client.post("/validate", content=b"not json")
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == VALIDATION_ERROR
+        assert body["detail"] == "Validation error"
+        assert "errors" in body
 
 
 # ── Integration: real app produces code field ────────────────────────────────

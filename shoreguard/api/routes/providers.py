@@ -7,7 +7,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
@@ -17,6 +17,7 @@ from shoreguard.api.schemas import (
     ProviderResponse,
     ProviderTypeResponse,
 )
+from shoreguard.api.validation import check_write_rate_limit
 from shoreguard.client import ShoreGuardClient
 from shoreguard.services.audit import audit_log
 from shoreguard.services.providers import ProviderService
@@ -49,11 +50,22 @@ class CreateProviderRequest(BaseModel):
         config: Additional configuration key-value pairs.
     """
 
-    name: str
-    type: str
-    api_key: str = ""
-    credentials: dict[str, str] = {}
-    config: dict[str, str] = {}
+    name: str = Field(min_length=1, max_length=253, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
+    type: str = Field(min_length=1, max_length=100)
+    api_key: str = Field(default="", max_length=512)
+    credentials: dict[str, str] = Field(default_factory=dict)
+    config: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("credentials", "config")
+    @classmethod
+    def check_dict_size(cls, v: dict[str, str]) -> dict[str, str]:
+        """Enforce entry count and key/value length limits."""
+        if len(v) > 50:
+            raise ValueError("too many entries (max 50)")
+        for k, val in v.items():
+            if len(k) > 256 or len(val) > 8192:
+                raise ValueError("key max 256 chars, value max 8192 chars")
+        return v
 
 
 class UpdateProviderRequest(BaseModel):
@@ -65,9 +77,20 @@ class UpdateProviderRequest(BaseModel):
         config: Configuration key-value pairs to update.
     """
 
-    type: str = ""
-    credentials: dict[str, str] = {}
-    config: dict[str, str] = {}
+    type: str = Field(default="", max_length=100)
+    credentials: dict[str, str] = Field(default_factory=dict)
+    config: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("credentials", "config")
+    @classmethod
+    def check_dict_size(cls, v: dict[str, str]) -> dict[str, str]:
+        """Enforce entry count and key/value length limits."""
+        if len(v) > 50:
+            raise ValueError("too many entries (max 50)")
+        for k, val in v.items():
+            if len(k) > 256 or len(val) > 8192:
+                raise ValueError("key max 256 chars, value max 8192 chars")
+        return v
 
 
 @router.get("/types", response_model=list[ProviderTypeResponse])
@@ -141,6 +164,7 @@ async def create_provider(
     Returns:
         dict[str, Any]: Created provider record.
     """
+    check_write_rate_limit(request)
     result = await asyncio.to_thread(
         svc.create,
         name=body.name,
@@ -204,6 +228,7 @@ async def update_provider(
     Returns:
         dict[str, Any]: Updated provider record.
     """
+    check_write_rate_limit(request)
     result = await asyncio.to_thread(
         svc.update,
         name=name,

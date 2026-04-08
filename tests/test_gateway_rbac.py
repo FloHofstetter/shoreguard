@@ -23,6 +23,7 @@ from shoreguard.api.auth import (
     set_gateway_role,
 )
 from shoreguard.api.deps import _current_gateway
+from shoreguard.exceptions import ValidationError as DomainValidationError
 from shoreguard.models import Base, Gateway
 
 ADMIN_EMAIL = "admin@test.com"
@@ -141,11 +142,11 @@ class TestSetGatewayRole:
 
     def test_invalid_role_raises(self, db, _with_gateway):
         user = create_user("u@test.com", "password1", "viewer")
-        with pytest.raises(ValueError, match="Invalid role"):
+        with pytest.raises(DomainValidationError, match="Invalid role"):
             set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="superadmin")
 
     def test_missing_both_ids_raises(self, db, _with_gateway):
-        with pytest.raises(ValueError, match="Either user_id or sp_id must be provided"):
+        with pytest.raises(DomainValidationError, match="Either user_id or sp_id must be provided"):
             set_gateway_role(gateway_name=GW_NAME, role="admin")
 
 

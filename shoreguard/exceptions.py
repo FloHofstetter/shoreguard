@@ -52,6 +52,10 @@ class SandboxError(ShoreGuardError):
     """A sandbox entered an unexpected state."""
 
 
+class ConflictError(ShoreGuardError):
+    """A write operation conflicts with existing state."""
+
+
 class ValidationError(ShoreGuardError):
     """Input validation failed (e.g. malformed command syntax)."""
 

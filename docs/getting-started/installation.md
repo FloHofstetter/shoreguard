@@ -44,14 +44,5 @@ the first visit and walks you through creating an admin account.
 
 ## Using PostgreSQL
 
-SQLite works well for single-node deployments. If you need a shared database
-(multiple replicas, external backups, etc.), point ShoreGuard at PostgreSQL
-with the `SHOREGUARD_DATABASE_URL` environment variable:
-
-```bash
-export SHOREGUARD_DATABASE_URL="postgresql+psycopg://user:pass@db-host:5432/shoreguard"
-shoreguard
-```
-
-The same variable is accepted as the `--database-url` CLI flag.
-See [Configuration](../reference/configuration.md) for the full list of options.
+For multi-instance deployments, ShoreGuard supports PostgreSQL. See
+[Configuration — Database](../reference/configuration.md#database) for setup.

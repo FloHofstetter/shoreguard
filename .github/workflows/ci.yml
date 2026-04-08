@@ -20,6 +20,16 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pydoclint shoreguard
 
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+      - run: uv sync --group dev
+      - run: uv run pip-audit
+
   typecheck:
     runs-on: ubuntu-latest
     steps:

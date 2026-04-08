@@ -7,7 +7,9 @@ from unittest.mock import patch
 import pytest
 
 from shoreguard.api.routes.gateway import _validate_endpoint_format
+from shoreguard.api.validation import validate_smtp_host, validate_webhook_url
 from shoreguard.config import is_private_ip as _is_private_ip
+from shoreguard.exceptions import ValidationError as DomainValidationError
 
 # ─── _is_private_ip ──────────────────────────────────────────────────────────
 
@@ -189,3 +191,84 @@ class TestCreateGatewayRequestPort:
 
         req = CreateGatewayRequest(name="gw", port=65535)
         assert req.port == 65535
+
+
+# ─── validate_webhook_url ────────────────────────────────────────────────────
+
+
+class TestValidateWebhookUrl:
+    def test_valid_https_url(self):
+        with patch("shoreguard.api.validation.is_private_ip", return_value=False):
+            result = validate_webhook_url("https://hooks.example.com/endpoint")
+        assert result == "https://hooks.example.com/endpoint"
+
+    def test_valid_http_url(self):
+        with patch("shoreguard.api.validation.is_private_ip", return_value=False):
+            result = validate_webhook_url("http://hooks.example.com/endpoint")
+        assert result == "http://hooks.example.com/endpoint"
+
+    def test_strips_whitespace(self):
+        with patch("shoreguard.api.validation.is_private_ip", return_value=False):
+            result = validate_webhook_url("  https://hooks.example.com  ")
+        assert result == "https://hooks.example.com"
+
+    def test_file_scheme_rejected(self):
+        with pytest.raises(DomainValidationError, match="http or https"):
+            validate_webhook_url("file:///etc/passwd")
+
+    def test_ftp_scheme_rejected(self):
+        with pytest.raises(DomainValidationError, match="http or https"):
+            validate_webhook_url("ftp://files.example.com/data")
+
+    def test_no_scheme_rejected(self):
+        with pytest.raises(DomainValidationError, match="http or https"):
+            validate_webhook_url("example.com/webhook")
+
+    def test_no_hostname_rejected(self):
+        with pytest.raises(DomainValidationError, match="hostname"):
+            validate_webhook_url("http://")
+
+    def test_credentials_in_url_rejected(self):
+        with pytest.raises(DomainValidationError, match="credentials"):
+            validate_webhook_url("https://user:pass@example.com/webhook")
+
+    def test_username_only_rejected(self):
+        with pytest.raises(DomainValidationError, match="credentials"):
+            validate_webhook_url("https://user@example.com/webhook")
+
+    def test_private_ip_rejected(self):
+        with pytest.raises(DomainValidationError, match="private"):
+            validate_webhook_url("https://192.168.1.1:8080/hook")
+
+    def test_loopback_rejected(self):
+        with pytest.raises(DomainValidationError, match="private"):
+            validate_webhook_url("https://127.0.0.1/hook")
+
+    def test_localhost_rejected(self):
+        with pytest.raises(DomainValidationError, match="private"):
+            validate_webhook_url("https://localhost/hook")
+
+    def test_private_ip_allowed_in_local_mode(self):
+        with patch("shoreguard.api.validation.get_settings") as mock_settings:
+            mock_settings.return_value.server.local_mode = True
+            result = validate_webhook_url("https://192.168.1.1/hook")
+        assert result == "https://192.168.1.1/hook"
+
+    def test_cloud_metadata_rejected(self):
+        """AWS/GCP metadata endpoint (link-local) must be blocked."""
+        with pytest.raises(DomainValidationError, match="private"):
+            validate_webhook_url("http://169.254.169.254/latest/meta-data/")
+
+
+class TestValidateSmtpHost:
+    def test_public_host_allowed(self):
+        with patch("shoreguard.api.validation.is_private_ip", return_value=False):
+            validate_smtp_host("smtp.gmail.com")  # should not raise
+
+    def test_private_host_rejected(self):
+        with pytest.raises(DomainValidationError, match="private"):
+            validate_smtp_host("192.168.1.1")
+
+    def test_localhost_rejected(self):
+        with pytest.raises(DomainValidationError, match="private"):
+            validate_smtp_host("localhost")

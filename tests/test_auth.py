@@ -126,7 +126,9 @@ class TestUserCRUD:
         assert authenticate_user("nobody@example.com", "pass") is None
 
     def test_invalid_role_raises(self):
-        with pytest.raises(ValueError, match="Invalid role"):
+        from shoreguard.exceptions import ValidationError as DomainValidationError
+
+        with pytest.raises(DomainValidationError, match="Invalid role"):
             create_user("test@example.com", "pass", "superadmin")
 
     def test_email_normalized_on_create(self):
@@ -151,7 +153,9 @@ class TestServicePrincipalCRUD:
         assert info["role"] == "operator"
 
     def test_invalid_role_raises(self):
-        with pytest.raises(ValueError, match="Invalid role"):
+        from shoreguard.exceptions import ValidationError as DomainValidationError
+
+        with pytest.raises(DomainValidationError, match="Invalid role"):
             create_service_principal("bad", "superadmin")
 
 

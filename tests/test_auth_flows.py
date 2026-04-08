@@ -311,8 +311,7 @@ class TestPasswordMaxLength:
             resp = await c.post(
                 "/api/auth/setup", json={"email": "admin@test.com", "password": long_pw}
             )
-            assert resp.status_code == 400
-            assert "128" in resp.json()["detail"]
+            assert resp.status_code == 422
 
     async def test_login_rejects_long_password(self, db):
         from shoreguard.api.main import app
@@ -323,8 +322,7 @@ class TestPasswordMaxLength:
             resp = await c.post(
                 "/api/auth/login", json={"email": "admin@test.com", "password": long_pw}
             )
-            assert resp.status_code == 400
-            assert "128" in resp.json()["detail"]
+            assert resp.status_code == 422
 
     async def test_accept_invite_rejects_long_password(self, db):
         from shoreguard.api.main import app
@@ -335,8 +333,7 @@ class TestPasswordMaxLength:
             resp = await c.post(
                 "/api/auth/accept-invite", json={"token": "any-token", "password": long_pw}
             )
-            assert resp.status_code == 400
-            assert "128" in resp.json()["detail"]
+            assert resp.status_code == 422
 
     async def test_register_rejects_long_password(self, db, monkeypatch):
         from shoreguard.api.main import app
@@ -348,8 +345,7 @@ class TestPasswordMaxLength:
             resp = await c.post(
                 "/api/auth/register", json={"email": "new@user.com", "password": long_pw}
             )
-            assert resp.status_code == 400
-            assert "128" in resp.json()["detail"]
+            assert resp.status_code == 422
 
 
 # ─── Invite token expiration ────────────────────────────────────────────────

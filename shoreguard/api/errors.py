@@ -4,9 +4,11 @@ import logging
 
 import grpc
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from shoreguard.exceptions import (
+    ConflictError,
     FeatureNotAvailableError,
     GatewayNotConnectedError,
     NotFoundError,
@@ -51,6 +53,7 @@ _DOMAIN_STATUS_MAP: dict[type, int] = {
     NotFoundError: 404,
     PolicyError: 400,
     SandboxError: 409,
+    ConflictError: 409,
     ValidationError: 400,
     FeatureNotAvailableError: 501,
 }
@@ -60,6 +63,7 @@ _DOMAIN_CODE_MAP: dict[type, str] = {
     NotFoundError: NOT_FOUND,
     PolicyError: POLICY_ERROR,
     SandboxError: SANDBOX_CONFLICT,
+    ConflictError: CONFLICT,
     ValidationError: VALIDATION_ERROR,
     FeatureNotAvailableError: FEATURE_NOT_AVAILABLE,
 }
@@ -196,6 +200,28 @@ def register_error_handlers(app: FastAPI) -> None:
         )
         return JSONResponse(
             status_code=http_status, content=_error_body(detail, request, code=error_code)
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        """Return structured 422 for Pydantic / query-param validation errors.
+
+        Args:
+            request: The incoming HTTP request.
+            exc: The validation exception raised by FastAPI/Pydantic.
+
+        Returns:
+            JSONResponse: 422 error response with detailed validation errors.
+        """
+        errors = []
+        for err in exc.errors():
+            clean = {k: v for k, v in err.items() if k != "ctx"}
+            errors.append(clean)
+        return JSONResponse(
+            status_code=422,
+            content=_error_body("Validation error", request, code=VALIDATION_ERROR, errors=errors),
         )
 
     @app.exception_handler(Exception)

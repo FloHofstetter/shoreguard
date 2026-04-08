@@ -24,7 +24,6 @@ from shoreguard.api.schemas import (
 )
 from shoreguard.api.validation import validate_description, validate_labels
 from shoreguard.config import ENDPOINT_RE, VALID_GATEWAY_NAME_RE, is_private_ip
-from shoreguard.exceptions import NotFoundError
 from shoreguard.services import operations as _ops_mod
 from shoreguard.services.audit import audit_log
 from shoreguard.services.webhooks import fire_webhook
@@ -308,22 +307,19 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
                 f"metadata exceeds maximum size of {limits.max_metadata_json_bytes} bytes",
             )
 
-    try:
-        result = await asyncio.to_thread(
-            _get_gateway_service().register,
-            name=body.name,
-            endpoint=body.endpoint,
-            scheme=body.scheme,
-            auth_mode=body.auth_mode,
-            ca_cert=ca_cert,
-            client_cert=client_cert,
-            client_key=client_key,
-            metadata=body.metadata,
-            description=body.description,
-            labels=body.labels,
-        )
-    except ValueError as e:
-        raise HTTPException(409, str(e)) from e
+    result = await asyncio.to_thread(
+        _get_gateway_service().register,
+        name=body.name,
+        endpoint=body.endpoint,
+        scheme=body.scheme,
+        auth_mode=body.auth_mode,
+        ca_cert=ca_cert,
+        client_cert=client_cert,
+        client_key=client_key,
+        metadata=body.metadata,
+        description=body.description,
+        labels=body.labels,
+    )
 
     await audit_log(
         request,
@@ -433,14 +429,11 @@ async def gateway_update_metadata(
     if "labels" in provided:
         kwargs["labels"] = body.labels
 
-    try:
-        result = await asyncio.to_thread(
-            _get_gateway_service().update_gateway_metadata,
-            name,
-            **kwargs,
-        )
-    except NotFoundError as e:
-        raise HTTPException(404, str(e)) from e
+    result = await asyncio.to_thread(
+        _get_gateway_service().update_gateway_metadata,
+        name,
+        **kwargs,
+    )
 
     await audit_log(
         request,
@@ -471,10 +464,7 @@ async def gateway_test_connection(name: str, request: Request) -> dict[str, Any]
         HTTPException: If the gateway is not found (404).
     """
     _validate_name_param(name)
-    try:
-        result = await asyncio.to_thread(_get_gateway_service().test_connection, name)
-    except NotFoundError as e:
-        raise HTTPException(404, str(e)) from e
+    result = await asyncio.to_thread(_get_gateway_service().test_connection, name)
     if result.get("success"):
         logger.info("Connection test passed for gateway '%s'", name)
     else:

@@ -1,7 +1,11 @@
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from shoreguard.api.ratelimit import SlidingWindowRateLimiter
+from shoreguard.api.ratelimit import (
+    SlidingWindowRateLimiter,
+    get_write_limiter,
+    reset_write_limiter,
+)
 
 
 class TestSlidingWindowRateLimiter:
@@ -69,3 +73,80 @@ class TestSlidingWindowRateLimiter:
         blocked_b, _ = limiter.is_limited("ip-b")
         assert blocked_a
         assert not blocked_b
+
+
+class TestWriteLimiter:
+    def setup_method(self):
+        reset_write_limiter()
+
+    def teardown_method(self):
+        reset_write_limiter()
+
+    def test_singleton_created_with_settings(self):
+        limiter = get_write_limiter()
+        assert isinstance(limiter, SlidingWindowRateLimiter)
+        assert limiter.max_attempts == 30  # default
+        assert limiter.window_seconds == 60
+        assert limiter.lockout_seconds == 120
+
+    def test_singleton_is_same_instance(self):
+        a = get_write_limiter()
+        b = get_write_limiter()
+        assert a is b
+
+    def test_reset_clears_singleton(self):
+        a = get_write_limiter()
+        reset_write_limiter()
+        b = get_write_limiter()
+        assert a is not b
+
+
+class TestCheckWriteRateLimit:
+    def setup_method(self):
+        reset_write_limiter()
+
+    def teardown_method(self):
+        reset_write_limiter()
+
+    def test_allows_under_limit(self):
+
+        from shoreguard.api.validation import check_write_rate_limit
+
+        request = MagicMock()
+        request.state.user_id = "user-1"
+        # Should not raise
+        check_write_rate_limit(request)
+
+    def test_blocks_over_limit(self):
+        import pytest
+        from fastapi import HTTPException
+
+        from shoreguard.api.validation import check_write_rate_limit
+
+        request = MagicMock()
+        request.state.user_id = "user-flood"
+        limiter = get_write_limiter()
+        for _ in range(limiter.max_attempts):
+            limiter.record("user-flood")
+        with pytest.raises(HTTPException) as exc_info:
+            check_write_rate_limit(request)
+        assert exc_info.value.status_code == 429
+
+    def test_uses_user_id_as_key(self):
+        from shoreguard.api.validation import check_write_rate_limit
+
+        request = MagicMock()
+        request.state.user_id = "user-a"
+        check_write_rate_limit(request)
+        limiter = get_write_limiter()
+        assert "user-a" in limiter._buckets
+
+    def test_falls_back_to_ip(self):
+        from shoreguard.api.validation import check_write_rate_limit
+
+        request = MagicMock(spec=["state", "client"])
+        request.state = MagicMock(spec=[])  # no user_id attribute
+        request.client.host = "10.0.0.1"
+        check_write_rate_limit(request)
+        limiter = get_write_limiter()
+        assert "10.0.0.1" in limiter._buckets

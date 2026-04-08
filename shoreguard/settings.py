@@ -34,8 +34,23 @@ class ServerSettings(BaseSettings):
     reload: bool = True
     database_url: str | None = None
     local_mode: bool = False
-    graceful_shutdown_timeout: int = 5
+    graceful_shutdown_timeout: int = 15
     gzip_minimum_size: int = 1000
+
+
+class DatabaseSettings(BaseSettings):
+    """PostgreSQL connection pool and timeout settings.
+
+    Only applied when the database URL is not SQLite.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_DB_")
+
+    pool_size: int = 5
+    max_overflow: int = 10
+    pool_timeout: int = 30
+    pool_recycle: int = 1800
+    statement_timeout_ms: int = 30000
 
 
 class AuthSettings(BaseSettings):
@@ -57,11 +72,17 @@ class AuthSettings(BaseSettings):
     login_rate_limit_lockout: int = 900  # 15 minutes
     account_lockout_attempts: int = 5
     account_lockout_duration: int = 900  # 15 minutes
+    write_rate_limit_attempts: int = 30
+    write_rate_limit_window: int = 60  # 1 minute
+    write_rate_limit_lockout: int = 120  # 2 minutes
     metrics_public: bool = False
     hsts_enabled: bool = False
     hsts_max_age: int = 63072000  # 2 years
     csp_policy: str = (
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "font-src 'self' https://cdn.jsdelivr.net; "
         "img-src 'self' data:; connect-src 'self' wss:"
     )
 
@@ -152,6 +173,21 @@ class SandboxSettings(BaseSettings):
     ready_timeout: float = 180.0
 
 
+class OIDCSettings(BaseSettings):
+    """OpenID Connect provider configuration.
+
+    Providers are configured via a JSON array in ``SHOREGUARD_OIDC_PROVIDERS_JSON``.
+    Each entry needs ``name``, ``issuer``, ``client_id``, ``client_secret``,
+    and optionally ``display_name``, ``scopes``, and ``role_mapping``.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_OIDC_")
+
+    providers_json: str = "[]"
+    default_role: str = "viewer"
+    state_max_age: int = 300
+
+
 class LimitSettings(BaseSettings):
     """Input size and validation limits."""
 
@@ -162,6 +198,21 @@ class LimitSettings(BaseSettings):
     max_description_len: int = 1000
     max_labels: int = 20
     max_label_value_len: int = 253
+    max_name_len: int = 253
+    max_url_len: int = 2048
+    max_api_key_len: int = 512
+    max_event_types: int = 50
+    max_event_type_len: int = 100
+    max_env_vars: int = 100
+    max_env_key_len: int = 256
+    max_env_value_len: int = 8192
+    max_config_entries: int = 50
+    max_config_value_len: int = 8192
+    max_command_len: int = 65_536
+    max_reason_len: int = 1000
+    max_timeout_secs: int = 3600
+    max_image_len: int = 512
+    max_password_len: int = 128
 
 
 # ─── Root settings ────────────────────────────────────────────────────────────
@@ -176,6 +227,7 @@ class Settings(BaseSettings):
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
+    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     gateway: GatewaySettings = Field(default_factory=GatewaySettings)
     ops: OperationsSettings = Field(default_factory=OperationsSettings)
@@ -186,6 +238,7 @@ class Settings(BaseSettings):
     websocket: WebSocketSettings = Field(default_factory=WebSocketSettings)
     sandbox: SandboxSettings = Field(default_factory=SandboxSettings)
     limits: LimitSettings = Field(default_factory=LimitSettings)
+    oidc: OIDCSettings = Field(default_factory=OIDCSettings)
 
 
 # ─── Singleton ────────────────────────────────────────────────────────────────

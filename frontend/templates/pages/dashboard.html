@@ -18,76 +18,167 @@
     <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
 
     <template x-if="!loading && !error">
-        <div>
+        <div class="sg-fade-in">
+            <!-- Stat Cards -->
             <div class="row g-3 mb-4">
                 <!-- Gateways -->
-                <div class="col-md-4">
-                    <div class="card sg-card-themed h-100">
-                        <div class="card-body">
-                            <div class="d-flex align-items-center mb-2">
-                                <i class="bi bi-hdd-network text-info me-2"></i>
-                                <h6 class="mb-0">Gateways</h6>
+                <div class="col-6 col-lg-3">
+                    <a href="/gateways" class="text-decoration-none">
+                        <div class="card sg-card-themed h-100">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-hdd-network text-info me-2"></i>
+                                    <span class="small text-muted">Gateways</span>
+                                </div>
+                                <div class="fs-2 fw-bold" x-text="gateways.length"></div>
+                                <span class="text-muted small" x-text="connectedCount + ' connected'"></span>
                             </div>
-                            <div class="fs-2 fw-bold mb-1" x-text="gateways.length"></div>
-                            <span class="text-muted small" x-text="connectedCount + ' connected'"></span>
                         </div>
-                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
-                            <a href="/gateways" class="text-decoration-none">Manage <i class="bi bi-arrow-right"></i></a>
-                        </div>
-                    </div>
+                    </a>
                 </div>
 
                 <!-- Sandboxes -->
-                <div class="col-md-4">
+                <div class="col-6 col-lg-3">
+                    <a :href="GW ? gwUrl('/sandboxes') : '/gateways'" class="text-decoration-none">
+                        <div class="card sg-card-themed h-100">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-grid text-success me-2"></i>
+                                    <span class="small text-muted">Sandboxes</span>
+                                </div>
+                                <div class="fs-2 fw-bold" x-text="sandboxCount"></div>
+                                <span class="text-muted small" x-text="GW ? 'on ' + GW : 'select a gateway'"></span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <!-- Pending Approvals -->
+                <div class="col-6 col-lg-3" x-show="GW" x-cloak>
+                    <a :href="GW ? gwUrl('/sandboxes') : '#'" class="text-decoration-none">
+                        <div class="card sg-card-themed h-100">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-check-circle text-warning me-2"></i>
+                                    <span class="small text-muted">Approvals</span>
+                                </div>
+                                <div class="fs-2 fw-bold" x-text="approvalCount"></div>
+                                <span class="text-muted small">pending</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <!-- Presets -->
+                <div class="col-6 col-lg-3">
+                    <a href="/policies" class="text-decoration-none">
+                        <div class="card sg-card-themed h-100">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-shield-plus text-warning me-2"></i>
+                                    <span class="small text-muted">Policy Presets</span>
+                                </div>
+                                <div class="fs-2 fw-bold" x-text="presetCount"></div>
+                                <span class="text-muted small">available</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Two-column: Activity + Gateway Status -->
+            <div class="row g-3 mb-4">
+                <!-- Recent Activity (admin only) -->
+                <div class="col-lg-7" x-show="$store.auth.hasRole('admin')" x-cloak>
                     <div class="card sg-card-themed h-100">
                         <div class="card-body">
-                            <div class="d-flex align-items-center mb-2">
-                                <i class="bi bi-grid text-success me-2"></i>
-                                <h6 class="mb-0">Sandboxes</h6>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0"><i class="bi bi-journal-text me-2"></i>Recent Activity</h6>
+                                <a href="/audit" class="small text-decoration-none text-muted">View all <i class="bi bi-arrow-right"></i></a>
                             </div>
-                            <div class="fs-2 fw-bold mb-1" x-text="sandboxCount"></div>
-                            <span class="text-muted small" x-text="sandboxCount === 1 ? '1 sandbox' : sandboxCount + ' sandboxes'"></span>
-                        </div>
-                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
-                            <a x-show="GW" :href="gwUrl('/sandboxes')" class="text-decoration-none">View <i class="bi bi-arrow-right"></i></a>
-                            <span x-show="!GW" class="text-muted">Select a gateway first</span>
+                            <template x-if="auditEntries.length > 0">
+                                <div class="list-group list-group-flush">
+                                    <template x-for="entry in auditEntries" :key="entry.id">
+                                        <div class="list-group-item bg-transparent border-secondary px-0 py-2">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div>
+                                                    <span class="badge text-bg-secondary me-1" x-text="entry.action" style="font-size:0.7rem"></span>
+                                                    <span class="small" x-text="entry.resource_type + (entry.resource_id ? ' / ' + entry.resource_id : '')"></span>
+                                                </div>
+                                                <small class="text-muted text-nowrap ms-2" x-text="formatTimeAgo(entry.timestamp)"></small>
+                                            </div>
+                                            <div class="text-muted small mt-1" x-text="entry.actor" style="font-size:0.75rem"></div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                            <template x-if="auditEntries.length === 0">
+                                <p class="text-muted small mb-0">No recent activity.</p>
+                            </template>
                         </div>
                     </div>
                 </div>
 
-                <!-- Presets -->
-                <div class="col-md-4">
+                <!-- Gateway Status -->
+                <div :class="$store.auth.hasRole('admin') ? 'col-lg-5' : 'col-12'">
                     <div class="card sg-card-themed h-100">
                         <div class="card-body">
-                            <div class="d-flex align-items-center mb-2">
-                                <i class="bi bi-shield-plus text-warning me-2"></i>
-                                <h6 class="mb-0">Policy Presets</h6>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0"><i class="bi bi-hdd-network me-2"></i>Gateway Status</h6>
+                                <a href="/gateways" class="small text-decoration-none text-muted">Manage <i class="bi bi-arrow-right"></i></a>
                             </div>
-                            <div class="fs-2 fw-bold mb-1" x-text="presetCount"></div>
-                            <span class="text-muted small" x-text="presetCount === 1 ? '1 preset' : presetCount + ' presets'"></span>
-                        </div>
-                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
-                            <a href="/policies" class="text-decoration-none">Browse <i class="bi bi-arrow-right"></i></a>
+                            <template x-if="gateways.length > 0">
+                                <div class="list-group list-group-flush">
+                                    <template x-for="gw in gateways" :key="gw.name">
+                                        <a :href="'/gateways/' + gw.name"
+                                           class="list-group-item list-group-item-action bg-transparent border-secondary px-0 py-2 d-flex justify-content-between align-items-center">
+                                            <span class="fw-medium" x-text="gw.name"></span>
+                                            <span class="badge"
+                                                  :class="SG.badges.gateway[gw.status] || 'text-bg-secondary'"
+                                                  x-text="gw.status"></span>
+                                        </a>
+                                    </template>
+                                </div>
+                            </template>
+                            <template x-if="gateways.length === 0">
+                                <div class="text-center text-muted py-3">
+                                    <i class="bi bi-hdd-network fs-3 d-block mb-2"></i>
+                                    <p class="small mb-2">No gateways registered.</p>
+                                    <a href="/gateways/new" class="btn btn-sm btn-outline-success"
+                                       x-show="$store.auth.hasRole('admin')">
+                                        <i class="bi bi-plus me-1"></i>Register Gateway
+                                    </a>
+                                </div>
+                            </template>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Quick actions -->
-            <template x-if="GW">
-                <div class="row g-3">
+            <!-- Quick Actions -->
+            <div class="row g-3">
+                <template x-if="GW">
                     <div class="col-md-6">
                         <a :href="gwUrl('/wizard')" class="btn btn-outline-success w-100 py-3">
                             <i class="bi bi-plus-circle me-2"></i>Create Sandbox
                         </a>
                     </div>
+                </template>
+                <template x-if="GW">
                     <div class="col-md-6">
                         <a :href="gwUrl('/sandboxes')" class="btn btn-outline-secondary w-100 py-3">
                             <i class="bi bi-grid me-2"></i>View Sandboxes
                         </a>
                     </div>
-                </div>
-            </template>
+                </template>
+                <template x-if="!GW && $store.auth.hasRole('admin')">
+                    <div class="col-md-6">
+                        <a href="/gateways/new" class="btn btn-outline-success w-100 py-3">
+                            <i class="bi bi-plus-circle me-2"></i>Register Gateway
+                        </a>
+                    </div>
+                </template>
+            </div>
         </div>
     </template>
 </div>
@@ -101,7 +192,9 @@ function dashboardPage() {
         error: '',
         gateways: [],
         sandboxCount: 0,
+        approvalCount: 0,
         presetCount: 0,
+        auditEntries: [],
 
         get connectedCount() {
             return this.gateways.filter(g => g.status === 'connected').length;
@@ -110,19 +203,26 @@ function dashboardPage() {
         async init() {
             this.loading = true;
             try {
-                const [gateways, presets] = await Promise.all([
-                    apiFetch(`${API_GLOBAL}/gateway/list`).catch(() => []),
-                    apiFetch(`${API_GLOBAL}/policies/presets`).catch(() => []),
+                const [gwData, presets] = await Promise.all([
+                    apiFetch(`${API_GLOBAL}/gateway/list`).catch(() => null),
+                    apiFetch(`${API_GLOBAL}/policies/presets`).catch(() => null),
                 ]);
-                this.gateways = gateways || [];
+                this.gateways = (gwData && gwData.items) || [];
                 this.presetCount = (presets || []).length;
 
+                // Sandbox count (gateway-scoped)
                 if (GW) {
                     try {
                         const sbs = await apiFetch(`${API}/sandboxes`);
                         this.sandboxCount = (sbs || []).length;
                     } catch { /* no gateway */ }
                 }
+
+                // Recent audit entries (admin only, fails silently for non-admin)
+                try {
+                    const audit = await apiFetch(`${API_GLOBAL}/audit?limit=10`);
+                    this.auditEntries = (audit && audit.entries) || [];
+                } catch { /* non-admin or audit unavailable */ }
             } catch (e) {
                 this.error = e.message;
             } finally {

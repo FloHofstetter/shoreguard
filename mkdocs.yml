@@ -90,33 +90,39 @@ nav:
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
-      - Migrating from v0.2: getting-started/migration.md
-  - User Guide:
-      - Overview: guide/overview.md
-      - Gateways: guide/gateways.md
-      - Sandboxes: guide/sandboxes.md
-      - Policies: guide/policies.md
-      - Approvals: guide/approvals.md
-      - Monitoring: guide/monitoring.md
-  - Admin Guide:
-      - RBAC & Users: admin/rbac.md
+  - Concepts:
+      - Architecture: concepts/architecture.md
+      - Security Model: concepts/security.md
+  - Guides:
+      - Gateways: guides/gateways.md
+      - Sandboxes: guides/sandboxes.md
+      - Policies: guides/policies.md
+      - Approvals: guides/approvals.md
+      - Webhooks: guides/webhooks.md
+      - Monitoring & Logs: guides/monitoring.md
+      - Audit Log: guides/audit.md
+  - Administration:
+      - Users & RBAC: admin/rbac.md
+      - OIDC / SSO: admin/oidc.md
       - Service Principals: admin/service-principals.md
+      - Gateway-Scoped Roles: admin/gateway-roles.md
       - Deployment: admin/deployment.md
       - Local Mode: admin/local-mode.md
-      - Migration Runbook: admin/migration-runbook.md
+      - Database Migrations: admin/database-migrations.md
+      - Troubleshooting: admin/troubleshooting.md
+  - Integrations:
+      - Terraform: integrations/terraform.md
+      - Prometheus Metrics: integrations/prometheus.md
+      - OIDC Provider Setup: integrations/oidc-providers.md
   - Reference:
       - CLI: reference/cli.md
       - REST API: reference/api.md
       - Configuration: reference/configuration.md
       - Policy Presets: reference/presets.md
-      - Terraform: reference/terraform.md
       - Python API:
-          - Client: reference/client.md
-          - Services: reference/services.md
-          - API Internals: reference/api-internals.md
-          - Models: reference/models.md
-          - Config & Exceptions: reference/config.md
-  - Architecture: architecture.md
+          - Client: reference/python/client.md
+          - Services: reference/python/services.md
+          - Models: reference/python/models.md
   - Development:
       - Contributing: development/contributing.md
       - Testing: development/testing.md

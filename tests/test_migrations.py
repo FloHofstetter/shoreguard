@@ -72,6 +72,8 @@ EXPECTED_USER_COLUMNS = {
     "is_active",
     "invite_token_hash",
     "created_at",
+    "oidc_provider",
+    "oidc_sub",
 }
 
 EXPECTED_USER_GATEWAY_ROLE_COLUMNS = {

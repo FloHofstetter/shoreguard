@@ -9,7 +9,7 @@ import shlex
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from starlette.responses import JSONResponse
 
 from shoreguard.api.auth import require_role
@@ -23,7 +23,7 @@ from shoreguard.api.schemas import (
     SshRevokeResponse,
     SshSessionResponse,
 )
-from shoreguard.api.validation import validate_description, validate_labels
+from shoreguard.api.validation import check_write_rate_limit, validate_description, validate_labels
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import ValidationError
 from shoreguard.services import operations as _ops_mod
@@ -66,15 +66,26 @@ class CreateSandboxRequest(BaseModel):
         labels: Optional key-value labels.
     """
 
-    name: str = ""
-    image: str = ""
-    providers: list[str] = []
+    name: str = Field(default="", max_length=253)
+    image: str = Field(default="", max_length=512)
+    providers: list[str] = Field(default_factory=list, max_length=20)
     gpu: bool = False
-    environment: dict[str, str] = {}
+    environment: dict[str, str] = Field(default_factory=dict)
     policy: dict | None = None
-    presets: list[str] = []
+    presets: list[str] = Field(default_factory=list, max_length=20)
     description: str | None = None
     labels: dict[str, str] | None = None
+
+    @field_validator("environment")
+    @classmethod
+    def check_env(cls, v: dict[str, str]) -> dict[str, str]:
+        """Enforce entry count and key/value length limits."""
+        if len(v) > 100:
+            raise ValueError("too many environment variables (max 100)")
+        for k, val in v.items():
+            if len(k) > 256 or len(val) > 8192:
+                raise ValueError("env key max 256 chars, value max 8192 chars")
+        return v
 
 
 class UpdateSandboxMetadataRequest(BaseModel):
@@ -100,9 +111,20 @@ class ExecRequest(BaseModel):
     """
 
     command: str | list[str]
-    workdir: str = ""
-    env: dict[str, str] = {}
-    timeout_seconds: int = 0
+    workdir: str = Field(default="", max_length=4096)
+    env: dict[str, str] = Field(default_factory=dict)
+    timeout_seconds: int = Field(default=0, ge=0, le=3600)
+
+    @field_validator("env")
+    @classmethod
+    def check_env(cls, v: dict[str, str]) -> dict[str, str]:
+        """Enforce entry count and key/value length limits."""
+        if len(v) > 100:
+            raise ValueError("too many environment variables (max 100)")
+        for k, val in v.items():
+            if len(k) > 256 or len(val) > 8192:
+                raise ValueError("env key max 256 chars, value max 8192 chars")
+        return v
 
 
 class RevokeSshRequest(BaseModel):
@@ -187,6 +209,7 @@ async def create_sandbox(
     Raises:
         HTTPException: If sandbox name is invalid or creation is already in progress.
     """
+    check_write_rate_limit(request)
     if body.name and not _VALID_NAME_RE.match(body.name):
         raise HTTPException(400, "Invalid sandbox name: must match [a-zA-Z0-9][a-zA-Z0-9._-]*")
     validate_description(body.description)
@@ -364,6 +387,7 @@ async def exec_in_sandbox(
     Raises:
         ValidationError: If the command string has invalid shell syntax.
     """
+    check_write_rate_limit(request)
     if isinstance(body.command, str):
         try:
             shlex.split(body.command)

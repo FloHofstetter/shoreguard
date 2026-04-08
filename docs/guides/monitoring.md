@@ -37,19 +37,8 @@ In addition to application logs, ShoreGuard surfaces platform events such as:
 
 ## Audit log
 
-ShoreGuard maintains a persistent audit log of all state-changing operations.
-Every sandbox creation, policy update, gateway action, and user management
-event is recorded with the actor, role, resource, and client IP.
-
-![Audit Log](../screenshots/audit-log.png)
-
-The **Audit Log** page (under Admin) lets you filter by actor, resource type,
-and action. You can export the full log as **CSV** or **JSON** for external
-analysis.
-
-```http
-GET /api/audit?resource=gateway&action=gateway.start&limit=50
-```
+For persistent audit logging of all state-changing operations, see the
+dedicated [Audit Log](audit.md) guide.
 
 ## REST API
 

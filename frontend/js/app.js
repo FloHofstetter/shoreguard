@@ -151,3 +151,40 @@ function formatTimestamp(ms) {
     if (!ms) return '';
     return new Date(ms).toLocaleString();
 }
+
+// ─── Keyboard Shortcuts ─────────────────────────────────────────────────────
+
+let _pendingKey = null;
+
+document.addEventListener('keydown', (e) => {
+    // Don't trigger when typing in inputs
+    if (e.target.matches('input, textarea, select, [contenteditable]')) return;
+
+    // "g" prefix for go-to navigation
+    if (_pendingKey === 'g') {
+        _pendingKey = null;
+        const routes = {
+            d: '/',
+            g: '/gateways',
+            a: '/audit',
+            u: '/users',
+            p: '/policies',
+            r: '/groups',
+        };
+        if (GW) routes.s = gwUrl('/sandboxes');
+        if (routes[e.key]) { e.preventDefault(); navigateTo(routes[e.key]); }
+        return;
+    }
+
+    if (e.key === 'g' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        _pendingKey = 'g';
+        setTimeout(() => { _pendingKey = null; }, 1000);
+        return;
+    }
+
+    if (e.key === '?' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        const modal = document.getElementById('shortcutsModal');
+        if (modal) new bootstrap.Modal(modal).show();
+    }
+});

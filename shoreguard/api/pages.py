@@ -9,10 +9,10 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from starlette.responses import HTMLResponse
 from starlette.templating import _TemplateResponse as TemplateResponse
@@ -38,6 +38,7 @@ from .auth import (
     delete_group,
     delete_service_principal,
     delete_user,
+    find_or_create_oidc_user,
     get_group,
     is_account_locked,
     is_registration_enabled,
@@ -61,6 +62,19 @@ from .auth import (
 )
 from .password import check_password
 from .ratelimit import get_login_limiter
+from .schemas import (
+    AuthCheckResponse,
+    GatewayRoleResponse,
+    GroupDetailResponse,
+    GroupMemberResponse,
+    GroupResponse,
+    OidcProviderInfo,
+    OkResponse,
+    ServicePrincipalCreateResponse,
+    ServicePrincipalResponse,
+    UserCreateResponse,
+    UserResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,26 +105,25 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _check_rate_limit(request: Request) -> JSONResponse | None:
-    """Return a 429 response if the client IP is rate-limited, else ``None``.
+def _check_rate_limit(request: Request) -> None:
+    """Raise 429 if the client IP is rate-limited.
 
     Args:
         request: Incoming HTTP request.
 
-    Returns:
-        A 429 ``JSONResponse`` with ``Retry-After`` header, or ``None``.
+    Raises:
+        HTTPException: 429 with ``Retry-After`` header when rate-limited.
     """
     limiter = get_login_limiter()
     ip = _client_ip(request)
     blocked, retry_after = limiter.is_limited(ip)
     if blocked:
-        return JSONResponse(
-            status_code=429,
-            content={"detail": "Too many requests. Try again later."},
+        raise HTTPException(
+            429,
+            "Too many requests. Try again later.",
             headers={"Retry-After": str(retry_after)},
         )
     limiter.record(ip)
-    return None
 
 
 def _get_actor(request: Request) -> str:
@@ -164,8 +177,8 @@ class LoginRequest(BaseModel):
         password: User password.
     """
 
-    email: str
-    password: str
+    email: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
 
 
 @router.post("/api/auth/login")
@@ -179,23 +192,14 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
     Returns:
         JSONResponse: Session cookie on success, or error details.
     """
-    rate_resp = _check_rate_limit(request)
-    if rate_resp:
-        return rate_resp
+    _check_rate_limit(request)
     if not is_setup_complete():
-        return JSONResponse(
-            status_code=400,
-            content={"detail": "Setup not complete — create an admin user first"},
-        )
-    if len(body.password) > 128:
-        return JSONResponse(
-            status_code=400, content={"detail": "Password must be at most 128 characters"}
-        )
+        raise HTTPException(400, "Setup not complete — create an admin user first")
     locked, lockout_retry = is_account_locked(body.email)
     if locked:
-        return JSONResponse(
-            status_code=429,
-            content={"detail": "Too many requests. Try again later."},
+        raise HTTPException(
+            429,
+            "Too many requests. Try again later.",
             headers={"Retry-After": str(lockout_retry)},
         )
     user = authenticate_user(body.email, body.password)
@@ -205,10 +209,7 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
         request.state.user_id = body.email
         request.state.role = "unknown"
         await audit_log(request, "user.login_failed", "user", body.email)
-        return JSONResponse(
-            status_code=401,
-            content={"detail": "Invalid email or password"},
-        )
+        raise HTTPException(401, "Invalid email or password")
     clear_lockout(body.email)
     client_ip = _client_ip(request)
     logger.info(
@@ -260,7 +261,7 @@ async def logout(request: Request) -> JSONResponse:
     return response
 
 
-@router.get("/api/auth/check")
+@router.get("/api/auth/check", response_model=AuthCheckResponse)
 async def auth_check(request: Request) -> dict[str, Any]:
     """Return auth status, role, and whether setup is needed.
 
@@ -299,6 +300,7 @@ async def auth_check(request: Request) -> dict[str, Any]:
                 finally:
                     session.close()
     import shoreguard.services.local_gateway as local_mod
+    from shoreguard.api.oidc import get_providers
 
     return {
         "authenticated": role is not None,
@@ -308,7 +310,213 @@ async def auth_check(request: Request) -> dict[str, Any]:
         "needs_setup": False,
         "registration_enabled": is_registration_enabled(),
         "local_mode": local_mod.local_gateway_manager is not None,
+        "oidc_providers": [
+            {"name": p.name, "display_name": p.display_name} for p in get_providers()
+        ],
     }
+
+
+# ─── OIDC / OpenID Connect ──────────────────────────────────────────────────
+
+
+@router.get("/api/auth/oidc/providers", response_model=list[OidcProviderInfo])
+async def oidc_providers_list() -> list[dict[str, str]]:
+    """Return configured OIDC providers (public info only).
+
+    Returns:
+        list: Provider name and display_name for each configured provider.
+    """
+    from shoreguard.api.oidc import get_providers
+
+    return [{"name": p.name, "display_name": p.display_name} for p in get_providers()]
+
+
+@router.get("/api/auth/oidc/login/{provider_name}")
+async def oidc_login(request: Request, provider_name: str) -> RedirectResponse:
+    """Initiate an OIDC authorization flow.
+
+    Generates PKCE verifier, state, nonce, and sets a signed state cookie
+    before redirecting to the provider's authorization endpoint.
+
+    Args:
+        request: Incoming HTTP request.
+        provider_name: Name of the configured OIDC provider.
+
+    Returns:
+        RedirectResponse: Redirect to the provider's authorization endpoint.
+    """
+    import secrets as _secrets
+
+    from shoreguard.api.oidc import (
+        OIDC_STATE_COOKIE,
+        build_authorize_url,
+        build_state_cookie,
+        generate_pkce,
+        get_provider,
+    )
+
+    provider = get_provider(provider_name)
+    if not provider:
+        raise HTTPException(404, "Unknown OIDC provider")
+
+    next_url = request.query_params.get("next", "/")
+    if not next_url.startswith("/") or next_url.startswith("//"):
+        next_url = "/"
+
+    state = _secrets.token_urlsafe(32)
+    nonce = _secrets.token_urlsafe(32)
+    code_verifier, code_challenge = generate_pkce()
+
+    callback_url = str(request.url_for("oidc_callback"))
+    authorize_url = await build_authorize_url(provider, callback_url, state, nonce, code_challenge)
+
+    cookie_value = build_state_cookie(provider_name, state, nonce, code_verifier, next_url)
+
+    response = RedirectResponse(url=authorize_url, status_code=307)
+    response.set_cookie(
+        OIDC_STATE_COOKIE,
+        cookie_value,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        max_age=300,
+        path="/api/auth/oidc",
+    )
+    return response
+
+
+@router.get("/api/auth/oidc/callback")
+async def oidc_callback(request: Request) -> RedirectResponse:
+    """Handle the OIDC provider callback.
+
+    Verifies the state cookie, exchanges the authorization code for tokens,
+    validates the ID token, and creates or links the user account.
+
+    Args:
+        request: Incoming HTTP request with ``code`` and ``state`` params.
+
+    Returns:
+        RedirectResponse: Redirect to the original ``next`` URL with
+        a session cookie set.
+    """
+    from shoreguard.api.oidc import (
+        OIDC_STATE_COOKIE,
+        exchange_code,
+        extract_email,
+        get_provider,
+        map_role,
+        verify_id_token,
+        verify_state_cookie,
+    )
+
+    # Provider error (user denied consent, etc.)
+    error = request.query_params.get("error")
+    if error:
+        logger.warning("OIDC provider returned error: %s", error)
+        return RedirectResponse(url="/login?error=oidc_denied", status_code=302)
+
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    if not code or not state:
+        return RedirectResponse(url="/login?error=oidc_failed", status_code=302)
+
+    # Verify state cookie
+    cookie_value = request.cookies.get(OIDC_STATE_COOKIE)
+    if not cookie_value:
+        logger.warning("OIDC callback: missing state cookie")
+        return RedirectResponse(url="/login?error=oidc_failed", status_code=302)
+
+    state_data = verify_state_cookie(cookie_value)
+    if not state_data:
+        logger.warning("OIDC callback: invalid or expired state cookie")
+        return RedirectResponse(url="/login?error=oidc_failed", status_code=302)
+
+    if state_data["s"] != state:
+        logger.warning("OIDC callback: state mismatch")
+        return RedirectResponse(url="/login?error=oidc_failed", status_code=302)
+
+    provider_name = state_data["p"]
+    nonce = state_data["n"]
+    code_verifier = state_data["v"]
+    next_url = state_data.get("x", "/")
+    if not next_url.startswith("/") or next_url.startswith("//"):
+        next_url = "/"
+
+    provider = get_provider(provider_name)
+    if not provider:
+        return RedirectResponse(url="/login?error=oidc_failed", status_code=302)
+
+    # Exchange code for tokens
+    try:
+        callback_url = str(request.url_for("oidc_callback"))
+        token_response = await exchange_code(provider, code, callback_url, code_verifier)
+    except Exception:
+        logger.exception("OIDC token exchange failed (provider=%s)", provider_name)
+        return RedirectResponse(url="/login?error=oidc_failed", status_code=302)
+
+    id_token = token_response.get("id_token")
+    if not id_token:
+        logger.error("OIDC token response missing id_token (provider=%s)", provider_name)
+        return RedirectResponse(url="/login?error=oidc_failed", status_code=302)
+
+    # Verify ID token
+    try:
+        claims = await verify_id_token(provider, id_token, nonce)
+    except Exception:
+        logger.exception("OIDC ID token verification failed (provider=%s)", provider_name)
+        return RedirectResponse(url="/login?error=oidc_failed", status_code=302)
+
+    email = extract_email(claims)
+    if not email:
+        logger.error("OIDC claims missing email (provider=%s)", provider_name)
+        return RedirectResponse(url="/login?error=oidc_failed", status_code=302)
+
+    sub = claims.get("sub", "")
+    role = map_role(provider, claims)
+
+    # Find or create user
+    try:
+        result = find_or_create_oidc_user(email, provider_name, sub, role)
+    except Exception:
+        logger.exception("OIDC user lookup/creation failed (email=%s)", email)
+        return RedirectResponse(url="/login?error=oidc_failed", status_code=302)
+
+    user = result["user"]
+    action = result["action"]
+
+    # Audit
+    request.state.user_id = user["email"]
+    request.state.role = user["role"]
+    detail = {"provider": provider_name}
+    await audit_log(request, "oidc.login", "user", user["email"], detail=detail)
+    if action == "link":
+        await audit_log(request, "oidc.link", "user", user["email"], detail=detail)
+    elif action == "create":
+        detail["role"] = role
+        await audit_log(request, "oidc.create", "user", user["email"], detail=detail)
+
+    # Create session
+    token = create_session_token(user_id=user["id"], role=user["role"])
+    response = RedirectResponse(url=next_url, status_code=302)
+    secure = request.url.scheme == "https"
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        max_age=86400 * 7,
+        path="/",
+    )
+    # Clear state cookie
+    response.delete_cookie(OIDC_STATE_COOKIE, path="/api/auth/oidc")
+    logger.info(
+        "OIDC login successful (email=%s, provider=%s, action=%s)",
+        user["email"],
+        provider_name,
+        action,
+    )
+    return response
 
 
 # ─── Setup wizard ───────────────────────────────────────────────────────────
@@ -322,8 +530,8 @@ class SetupRequest(BaseModel):
         password: Admin password.
     """
 
-    email: str
-    password: str
+    email: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
 
 
 @router.post("/api/auth/setup")
@@ -337,29 +545,24 @@ async def setup(request: Request, body: SetupRequest) -> JSONResponse:
     Returns:
         JSONResponse: Session cookie on success, or error details.
     """
-    rate_resp = _check_rate_limit(request)
-    if rate_resp:
-        return rate_resp
+    _check_rate_limit(request)
     if is_setup_complete():
-        return JSONResponse(status_code=400, content={"detail": "Setup already complete"})
+        raise HTTPException(400, "Setup already complete")
     if not body.email.strip() or not body.password:
-        return JSONResponse(status_code=400, content={"detail": "Email and password are required"})
+        raise HTTPException(400, "Email and password are required")
     if not _valid_email(body.email):
-        return JSONResponse(status_code=400, content={"detail": "Invalid email format"})
+        raise HTTPException(400, "Invalid email format")
     pwd_err = check_password(body.password)
     if pwd_err:
-        return JSONResponse(status_code=400, content={"detail": pwd_err})
+        raise HTTPException(400, pwd_err)
     try:
         info = create_user(body.email.strip(), body.password, "admin")
     except IntegrityError:
         logger.warning("Setup failed: duplicate admin email (email=%s)", body.email.strip())
-        return JSONResponse(
-            status_code=409,
-            content={"detail": f"A user with email '{body.email.strip()}' already exists"},
-        )
+        raise HTTPException(409, f"A user with email '{body.email.strip()}' already exists")
     except Exception:
         logger.exception("Setup failed")
-        return JSONResponse(status_code=500, content={"detail": "Setup failed"})
+        raise HTTPException(500, "Setup failed")
 
     logger.info(
         "Setup complete: admin user created (email=%s, client=%s)",
@@ -399,7 +602,11 @@ class CreateUserRequest(BaseModel):
     role: str = "viewer"
 
 
-@router.get("/api/auth/users", dependencies=[Depends(require_role("admin"))])
+@router.get(
+    "/api/auth/users",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=list[UserResponse],
+)
 async def get_users(request: Request) -> list[dict[str, Any]]:
     """List all users (admin only).
 
@@ -416,7 +623,7 @@ async def get_users(request: Request) -> list[dict[str, Any]]:
     "/api/auth/users",
     status_code=201,
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=UserCreateResponse,
 )
 async def create_user_endpoint(
     request: Request, body: CreateUserRequest
@@ -431,14 +638,11 @@ async def create_user_endpoint(
         dict[str, Any] | JSONResponse: Created user info including invite token.
     """
     if body.role not in ROLES:
-        return JSONResponse(
-            status_code=400,
-            content={"detail": f"Invalid role: {body.role!r} (must be one of {ROLES})"},
-        )
+        raise HTTPException(400, f"Invalid role: {body.role!r} (must be one of {ROLES})")
     if not body.email.strip():
-        return JSONResponse(status_code=400, content={"detail": "Email is required"})
+        raise HTTPException(400, "Email is required")
     if not _valid_email(body.email):
-        return JSONResponse(status_code=400, content={"detail": "Invalid email format"})
+        raise HTTPException(400, "Invalid email format")
     try:
         info = create_user(body.email.strip(), None, body.role)
     except IntegrityError:
@@ -447,13 +651,10 @@ async def create_user_endpoint(
             body.email.strip(),
             _get_actor(request),
         )
-        return JSONResponse(
-            status_code=409,
-            content={"detail": f"A user with email '{body.email.strip()}' already exists"},
-        )
+        raise HTTPException(409, f"A user with email '{body.email.strip()}' already exists")
     except Exception:
         logger.exception("Failed to create user")
-        return JSONResponse(status_code=500, content={"detail": "Failed to create user"})
+        raise HTTPException(500, "Failed to create user")
     logger.info(
         "User invited (email=%s, role=%s, actor=%s)", info["email"], body.role, _get_actor(request)
     )
@@ -462,7 +663,9 @@ async def create_user_endpoint(
 
 
 @router.delete(
-    "/api/auth/users/{user_id}", dependencies=[Depends(require_role("admin"))], response_model=None
+    "/api/auth/users/{user_id}",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=OkResponse,
 )
 async def delete_user_endpoint(request: Request, user_id: int) -> dict[str, Any] | JSONResponse:
     """Delete a user (admin only).
@@ -479,22 +682,18 @@ async def delete_user_endpoint(request: Request, user_id: int) -> dict[str, Any]
     if cookie:
         result = verify_session_token(cookie)
         if result and result[0] == user_id:
-            return JSONResponse(
-                status_code=400, content={"detail": "Cannot delete your own account"}
-            )
+            raise HTTPException(400, "Cannot delete your own account")
     # Prevent deleting the last admin
     users = list_users()
     active_admins = [u for u in users if u.get("role") == "admin" and u.get("is_active")]
     target_is_admin = any(u["id"] == user_id and u.get("role") == "admin" for u in users)
     if target_is_admin and len(active_admins) <= 1:
-        return JSONResponse(
-            status_code=400, content={"detail": "Cannot delete the last admin user"}
-        )
+        raise HTTPException(400, "Cannot delete the last admin user")
     if delete_user(user_id):
         logger.info("User deleted (user_id=%s, actor=%s)", user_id, _get_actor(request))
         await audit_log(request, "user.delete", "user", str(user_id))
         return {"ok": True}
-    return JSONResponse(status_code=404, content={"detail": "User not found"})
+    raise HTTPException(404, "User not found")
 
 
 # ─── Gateway-scoped role management (admin-only) ──────────────────────────
@@ -511,7 +710,9 @@ class SetGatewayRoleRequest(BaseModel):
 
 
 @router.get(
-    "/api/auth/users/{user_id}/gateway-roles", dependencies=[Depends(require_role("admin"))]
+    "/api/auth/users/{user_id}/gateway-roles",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=list[GatewayRoleResponse],
 )
 async def get_user_gateway_roles(user_id: int) -> list[dict[str, Any]]:
     """List all gateway-scoped role overrides for a user.
@@ -528,7 +729,7 @@ async def get_user_gateway_roles(user_id: int) -> list[dict[str, Any]]:
 @router.put(
     "/api/auth/users/{user_id}/gateway-roles/{gw}",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=GatewayRoleResponse,
 )
 async def set_user_gateway_role(
     request: Request, user_id: int, gw: str, body: SetGatewayRoleRequest
@@ -548,25 +749,14 @@ async def set_user_gateway_role(
         logger.warning(
             "Invalid gateway name rejected (gateway=%s, actor=%s)", gw, _get_actor(request)
         )
-        return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
+        raise HTTPException(400, "Invalid gateway name")
     if body.role not in ROLES:
         logger.warning("Invalid role rejected (role=%s, actor=%s)", body.role, _get_actor(request))
-        return JSONResponse(
-            status_code=400,
-            content={"detail": f"Invalid role: {body.role!r} (must be one of {ROLES})"},
-        )
+        raise HTTPException(400, f"Invalid role: {body.role!r} (must be one of {ROLES})")
     try:
         result = await asyncio.to_thread(
             set_gateway_role, user_id=user_id, gateway_name=gw, role=body.role
         )
-    except ValueError:
-        logger.warning(
-            "User or gateway not found (user_id=%s, gateway=%s, actor=%s)",
-            user_id,
-            gw,
-            _get_actor(request),
-        )
-        return JSONResponse(status_code=404, content={"detail": "User or gateway not found"})
     except IntegrityError:
         logger.warning(
             "Gateway role conflict (user_id=%s, gateway=%s, role=%s, actor=%s)",
@@ -575,7 +765,7 @@ async def set_user_gateway_role(
             body.role,
             _get_actor(request),
         )
-        return JSONResponse(status_code=409, content={"detail": "Gateway role conflict"})
+        raise HTTPException(409, "Gateway role conflict")
     logger.info(
         "User gateway role set (user_id=%s, gateway=%s, role=%s, actor=%s)",
         user_id,
@@ -596,7 +786,7 @@ async def set_user_gateway_role(
 @router.delete(
     "/api/auth/users/{user_id}/gateway-roles/{gw}",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=OkResponse,
 )
 async def delete_user_gateway_role(
     request: Request, user_id: int, gw: str
@@ -615,7 +805,7 @@ async def delete_user_gateway_role(
         logger.warning(
             "Invalid gateway name rejected (gateway=%s, actor=%s)", gw, _get_actor(request)
         )
-        return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
+        raise HTTPException(400, "Invalid gateway name")
     if await asyncio.to_thread(remove_gateway_role, user_id=user_id, gateway_name=gw):
         logger.info(
             "User gateway role removed (user_id=%s, gateway=%s, actor=%s)",
@@ -637,12 +827,13 @@ async def delete_user_gateway_role(
         gw,
         _get_actor(request),
     )
-    return JSONResponse(status_code=404, content={"detail": "Gateway role not found"})
+    raise HTTPException(404, "Gateway role not found")
 
 
 @router.get(
     "/api/auth/service-principals/{sp_id}/gateway-roles",
     dependencies=[Depends(require_role("admin"))],
+    response_model=list[GatewayRoleResponse],
 )
 async def get_sp_gateway_roles(sp_id: int) -> list[dict[str, Any]]:
     """List all gateway-scoped role overrides for a service principal.
@@ -659,7 +850,7 @@ async def get_sp_gateway_roles(sp_id: int) -> list[dict[str, Any]]:
 @router.put(
     "/api/auth/service-principals/{sp_id}/gateway-roles/{gw}",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=GatewayRoleResponse,
 )
 async def set_sp_gateway_role_endpoint(
     request: Request, sp_id: int, gw: str, body: SetGatewayRoleRequest
@@ -679,26 +870,13 @@ async def set_sp_gateway_role_endpoint(
         logger.warning(
             "Invalid gateway name rejected (gateway=%s, actor=%s)", gw, _get_actor(request)
         )
-        return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
+        raise HTTPException(400, "Invalid gateway name")
     if body.role not in ROLES:
         logger.warning("Invalid role rejected (role=%s, actor=%s)", body.role, _get_actor(request))
-        return JSONResponse(
-            status_code=400,
-            content={"detail": f"Invalid role: {body.role!r} (must be one of {ROLES})"},
-        )
+        raise HTTPException(400, f"Invalid role: {body.role!r} (must be one of {ROLES})")
     try:
         result = await asyncio.to_thread(
             set_gateway_role, sp_id=sp_id, gateway_name=gw, role=body.role
-        )
-    except ValueError:
-        logger.warning(
-            "Service principal or gateway not found (sp_id=%s, gateway=%s, actor=%s)",
-            sp_id,
-            gw,
-            _get_actor(request),
-        )
-        return JSONResponse(
-            status_code=404, content={"detail": "Service principal or gateway not found"}
         )
     except IntegrityError:
         logger.warning(
@@ -708,7 +886,7 @@ async def set_sp_gateway_role_endpoint(
             body.role,
             _get_actor(request),
         )
-        return JSONResponse(status_code=409, content={"detail": "Gateway role conflict"})
+        raise HTTPException(409, "Gateway role conflict")
     logger.info(
         "SP gateway role set (sp_id=%s, gateway=%s, role=%s, actor=%s)",
         sp_id,
@@ -729,7 +907,7 @@ async def set_sp_gateway_role_endpoint(
 @router.delete(
     "/api/auth/service-principals/{sp_id}/gateway-roles/{gw}",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=OkResponse,
 )
 async def delete_sp_gateway_role(
     request: Request, sp_id: int, gw: str
@@ -748,7 +926,7 @@ async def delete_sp_gateway_role(
         logger.warning(
             "Invalid gateway name rejected (gateway=%s, actor=%s)", gw, _get_actor(request)
         )
-        return JSONResponse(status_code=400, content={"detail": "Invalid gateway name"})
+        raise HTTPException(400, "Invalid gateway name")
     if await asyncio.to_thread(remove_gateway_role, sp_id=sp_id, gateway_name=gw):
         logger.info(
             "SP gateway role removed (sp_id=%s, gateway=%s, actor=%s)",
@@ -770,7 +948,7 @@ async def delete_sp_gateway_role(
         gw,
         _get_actor(request),
     )
-    return JSONResponse(status_code=404, content={"detail": "Gateway role not found"})
+    raise HTTPException(404, "Gateway role not found")
 
 
 # ─── Invite acceptance (public) ─────────────────────────────────────────────
@@ -784,8 +962,8 @@ class AcceptInviteRequest(BaseModel):
         password: Chosen password for the new account.
     """
 
-    token: str
-    password: str
+    token: str = Field(min_length=1, max_length=512)
+    password: str = Field(min_length=1, max_length=128)
 
 
 @router.post("/api/auth/accept-invite")
@@ -800,13 +978,13 @@ async def accept_invite_endpoint(request: Request, body: AcceptInviteRequest) ->
         JSONResponse: Session cookie on success, or error details.
     """
     if not body.password:
-        return JSONResponse(status_code=400, content={"detail": "Password is required"})
+        raise HTTPException(400, "Password is required")
     pwd_err = check_password(body.password)
     if pwd_err:
-        return JSONResponse(status_code=400, content={"detail": pwd_err})
+        raise HTTPException(400, pwd_err)
     user = accept_invite(body.token, body.password)
     if not user:
-        return JSONResponse(status_code=400, content={"detail": "Invalid or expired invite token"})
+        raise HTTPException(400, "Invalid or expired invite token")
 
     logger.info(
         "Invite accepted (email=%s, role=%s, client=%s)",
@@ -843,8 +1021,8 @@ class RegisterRequest(BaseModel):
         password: Chosen password.
     """
 
-    email: str
-    password: str
+    email: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
 
 
 @router.post("/api/auth/register")
@@ -858,22 +1036,18 @@ async def register_endpoint(request: Request, body: RegisterRequest) -> JSONResp
     Returns:
         JSONResponse: Session cookie on success, or error details.
     """
-    rate_resp = _check_rate_limit(request)
-    if rate_resp:
-        return rate_resp
+    _check_rate_limit(request)
     if not is_registration_enabled():
-        return JSONResponse(status_code=403, content={"detail": "Registration is disabled"})
+        raise HTTPException(403, "Registration is disabled")
     if not is_setup_complete():
-        return JSONResponse(
-            status_code=400, content={"detail": "Setup not complete — use /setup first"}
-        )
+        raise HTTPException(400, "Setup not complete — use /setup first")
     if not body.email.strip() or not body.password:
-        return JSONResponse(status_code=400, content={"detail": "Email and password are required"})
+        raise HTTPException(400, "Email and password are required")
     if not _valid_email(body.email):
-        return JSONResponse(status_code=400, content={"detail": "Invalid email format"})
+        raise HTTPException(400, "Invalid email format")
     pwd_err = check_password(body.password)
     if pwd_err:
-        return JSONResponse(status_code=400, content={"detail": pwd_err})
+        raise HTTPException(400, pwd_err)
     try:
         info = create_user(body.email.strip(), body.password, "viewer")
     except IntegrityError:
@@ -882,13 +1056,10 @@ async def register_endpoint(request: Request, body: RegisterRequest) -> JSONResp
             body.email.strip(),
             _client_ip(request),
         )
-        return JSONResponse(
-            status_code=409,
-            content={"detail": f"An account with email '{body.email.strip()}' already exists"},
-        )
+        raise HTTPException(409, f"An account with email '{body.email.strip()}' already exists")
     except Exception:
         logger.exception("Registration failed")
-        return JSONResponse(status_code=500, content={"detail": "Registration failed"})
+        raise HTTPException(500, "Registration failed")
 
     logger.info("Self-registration (email=%s, client=%s)", info["email"], _client_ip(request))
     request.state.user_id = info["email"]
@@ -928,7 +1099,11 @@ class CreateSPRequest(BaseModel):
     expires_at: datetime.datetime | None = None
 
 
-@router.get("/api/auth/service-principals", dependencies=[Depends(require_role("admin"))])
+@router.get(
+    "/api/auth/service-principals",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=list[ServicePrincipalResponse],
+)
 async def get_sps(request: Request) -> list[dict[str, Any]]:
     """List all service principals (admin only).
 
@@ -945,7 +1120,7 @@ async def get_sps(request: Request) -> list[dict[str, Any]]:
     "/api/auth/service-principals",
     status_code=201,
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=ServicePrincipalCreateResponse,
 )
 async def create_sp_endpoint(
     request: Request, body: CreateSPRequest
@@ -960,12 +1135,9 @@ async def create_sp_endpoint(
         dict[str, Any] | JSONResponse: Created service principal info including API key.
     """
     if body.role not in ROLES:
-        return JSONResponse(
-            status_code=400,
-            content={"detail": f"Invalid role: {body.role!r} (must be one of {ROLES})"},
-        )
+        raise HTTPException(400, f"Invalid role: {body.role!r} (must be one of {ROLES})")
     if not body.name.strip():
-        return JSONResponse(status_code=400, content={"detail": "Name is required"})
+        raise HTTPException(400, "Name is required")
     try:
         plaintext, info = create_service_principal(
             body.name.strip(), body.role, expires_at=body.expires_at
@@ -976,15 +1148,10 @@ async def create_sp_endpoint(
             body.name.strip(),
             _get_actor(request),
         )
-        return JSONResponse(
-            status_code=409,
-            content={"detail": f"A service principal named '{body.name.strip()}' already exists"},
-        )
+        raise HTTPException(409, f"A service principal named '{body.name.strip()}' already exists")
     except Exception:
         logger.exception("Failed to create service principal")
-        return JSONResponse(
-            status_code=500, content={"detail": "Failed to create service principal"}
-        )
+        raise HTTPException(500, "Failed to create service principal")
     logger.info(
         "Service principal created (name=%s, role=%s, actor=%s)",
         body.name.strip(),
@@ -1004,7 +1171,7 @@ async def create_sp_endpoint(
 @router.delete(
     "/api/auth/service-principals/{sp_id}",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=OkResponse,
 )
 async def delete_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | JSONResponse:
     """Delete a service principal (admin only).
@@ -1020,13 +1187,13 @@ async def delete_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | J
         logger.info("Service principal deleted (sp_id=%s, actor=%s)", sp_id, _get_actor(request))
         await audit_log(request, "sp.delete", "service_principal", str(sp_id))
         return {"ok": True}
-    return JSONResponse(status_code=404, content={"detail": "Service principal not found"})
+    raise HTTPException(404, "Service principal not found")
 
 
 @router.post(
     "/api/auth/service-principals/{sp_id}/rotate",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=ServicePrincipalCreateResponse,
 )
 async def rotate_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | JSONResponse:
     """Rotate the API key for a service principal (admin only).
@@ -1042,7 +1209,7 @@ async def rotate_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | J
     """
     result = rotate_service_principal(sp_id)
     if result is None:
-        return JSONResponse(status_code=404, content={"detail": "Service principal not found"})
+        raise HTTPException(404, "Service principal not found")
     plaintext, info = result
     logger.info("Service principal key rotated (sp_id=%s, actor=%s)", sp_id, _get_actor(request))
     await audit_log(request, "sp.rotate", "service_principal", str(sp_id))
@@ -1074,7 +1241,11 @@ class AddGroupMemberRequest(BaseModel):
     user_id: int
 
 
-@router.get("/api/auth/groups", dependencies=[Depends(require_role("admin"))])
+@router.get(
+    "/api/auth/groups",
+    dependencies=[Depends(require_role("admin"))],
+    response_model=list[GroupResponse],
+)
 async def get_groups(request: Request) -> list[dict[str, Any]]:
     """List all groups with member counts.
 
@@ -1091,7 +1262,7 @@ async def get_groups(request: Request) -> list[dict[str, Any]]:
     "/api/auth/groups",
     dependencies=[Depends(require_role("admin"))],
     status_code=201,
-    response_model=None,
+    response_model=GroupResponse,
 )
 async def create_group_endpoint(
     request: Request, body: CreateGroupRequest
@@ -1106,11 +1277,11 @@ async def create_group_endpoint(
         dict[str, Any] | JSONResponse: Created group or error response.
     """
     if body.role not in ROLES:
-        return JSONResponse(status_code=400, content={"detail": f"Invalid role: {body.role!r}"})
+        raise HTTPException(400, f"Invalid role: {body.role!r}")
     try:
         result = await asyncio.to_thread(create_group, body.name, body.role, body.description)
     except IntegrityError:
-        return JSONResponse(status_code=409, content={"detail": "Group name already exists"})
+        raise HTTPException(409, "Group name already exists")
     await audit_log(request, "group.create", "group", body.name, detail={"role": body.role})
     return result
 
@@ -1118,7 +1289,7 @@ async def create_group_endpoint(
 @router.get(
     "/api/auth/groups/{group_id}",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=GroupDetailResponse,
 )
 async def get_group_endpoint(request: Request, group_id: int) -> dict[str, Any] | JSONResponse:
     """Get a group with its member list.
@@ -1132,14 +1303,14 @@ async def get_group_endpoint(request: Request, group_id: int) -> dict[str, Any] 
     """
     result = await asyncio.to_thread(get_group, group_id)
     if result is None:
-        return JSONResponse(status_code=404, content={"detail": "Group not found"})
+        raise HTTPException(404, "Group not found")
     return result
 
 
 @router.put(
     "/api/auth/groups/{group_id}",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=GroupResponse,
 )
 async def update_group_endpoint(
     request: Request, group_id: int, body: UpdateGroupRequest
@@ -1155,15 +1326,13 @@ async def update_group_endpoint(
         dict[str, Any] | JSONResponse: Updated group or error.
     """
     if body.role is not None and body.role not in ROLES:
-        return JSONResponse(status_code=400, content={"detail": f"Invalid role: {body.role!r}"})
+        raise HTTPException(400, f"Invalid role: {body.role!r}")
     try:
         result = await asyncio.to_thread(
             update_group, group_id, name=body.name, role=body.role, description=body.description
         )
-    except ValueError as exc:
-        return JSONResponse(status_code=404, content={"detail": str(exc)})
     except IntegrityError:
-        return JSONResponse(status_code=409, content={"detail": "Group name already exists"})
+        raise HTTPException(409, "Group name already exists")
     changes = {k: v for k, v in body.model_dump().items() if v is not None}
     await audit_log(request, "group.update", "group", result["name"], detail=changes)
     return result
@@ -1172,7 +1341,7 @@ async def update_group_endpoint(
 @router.delete(
     "/api/auth/groups/{group_id}",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=OkResponse,
 )
 async def delete_group_endpoint(request: Request, group_id: int) -> dict[str, Any] | JSONResponse:
     """Delete a group.
@@ -1187,7 +1356,7 @@ async def delete_group_endpoint(request: Request, group_id: int) -> dict[str, An
     # Fetch group name for audit before deleting
     info = await asyncio.to_thread(get_group, group_id)
     if info is None:
-        return JSONResponse(status_code=404, content={"detail": "Group not found"})
+        raise HTTPException(404, "Group not found")
     await asyncio.to_thread(delete_group, group_id)
     await audit_log(request, "group.delete", "group", info["name"])
     return {"ok": True}
@@ -1200,7 +1369,7 @@ async def delete_group_endpoint(request: Request, group_id: int) -> dict[str, An
     "/api/auth/groups/{group_id}/members",
     dependencies=[Depends(require_role("admin"))],
     status_code=201,
-    response_model=None,
+    response_model=GroupMemberResponse,
 )
 async def add_group_member_endpoint(
     request: Request, group_id: int, body: AddGroupMemberRequest
@@ -1217,10 +1386,8 @@ async def add_group_member_endpoint(
     """
     try:
         result = await asyncio.to_thread(add_group_member, group_id, body.user_id)
-    except ValueError as exc:
-        return JSONResponse(status_code=404, content={"detail": str(exc)})
     except IntegrityError:
-        return JSONResponse(status_code=409, content={"detail": "User is already a member"})
+        raise HTTPException(409, "User is already a member")
     await audit_log(
         request,
         "group.member.add",
@@ -1234,7 +1401,7 @@ async def add_group_member_endpoint(
 @router.delete(
     "/api/auth/groups/{group_id}/members/{user_id}",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=OkResponse,
 )
 async def remove_group_member_endpoint(
     request: Request, group_id: int, user_id: int
@@ -1252,10 +1419,10 @@ async def remove_group_member_endpoint(
     # Fetch group name for audit
     info = await asyncio.to_thread(get_group, group_id)
     if info is None:
-        return JSONResponse(status_code=404, content={"detail": "Group not found"})
+        raise HTTPException(404, "Group not found")
     removed = await asyncio.to_thread(remove_group_member, group_id, user_id)
     if not removed:
-        return JSONResponse(status_code=404, content={"detail": "Membership not found"})
+        raise HTTPException(404, "Membership not found")
     await audit_log(
         request,
         "group.member.remove",
@@ -1272,6 +1439,7 @@ async def remove_group_member_endpoint(
 @router.get(
     "/api/auth/groups/{group_id}/gateway-roles",
     dependencies=[Depends(require_role("admin"))],
+    response_model=list[GatewayRoleResponse],
 )
 async def get_group_gateway_roles_endpoint(request: Request, group_id: int) -> list[dict[str, Any]]:
     """List gateway-scoped roles for a group.
@@ -1289,7 +1457,7 @@ async def get_group_gateway_roles_endpoint(request: Request, group_id: int) -> l
 @router.put(
     "/api/auth/groups/{group_id}/gateway-roles/{gw}",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=GatewayRoleResponse,
 )
 async def set_group_gateway_role_endpoint(
     request: Request, group_id: int, gw: str, body: SetGatewayRoleRequest
@@ -1306,11 +1474,8 @@ async def set_group_gateway_role_endpoint(
         dict[str, Any] | JSONResponse: Saved role or error.
     """
     if body.role not in ROLES:
-        return JSONResponse(status_code=400, content={"detail": f"Invalid role: {body.role!r}"})
-    try:
-        result = await asyncio.to_thread(set_group_gateway_role, group_id, gw, body.role)
-    except ValueError as exc:
-        return JSONResponse(status_code=404, content={"detail": str(exc)})
+        raise HTTPException(400, f"Invalid role: {body.role!r}")
+    result = await asyncio.to_thread(set_group_gateway_role, group_id, gw, body.role)
     await audit_log(
         request,
         "group.gateway_role.set",
@@ -1324,7 +1489,7 @@ async def set_group_gateway_role_endpoint(
 @router.delete(
     "/api/auth/groups/{group_id}/gateway-roles/{gw}",
     dependencies=[Depends(require_role("admin"))],
-    response_model=None,
+    response_model=OkResponse,
 )
 async def delete_group_gateway_role_endpoint(
     request: Request, group_id: int, gw: str
@@ -1341,7 +1506,7 @@ async def delete_group_gateway_role_endpoint(
     """
     removed = await asyncio.to_thread(remove_group_gateway_role, group_id, gw)
     if not removed:
-        return JSONResponse(status_code=404, content={"detail": "Gateway role not found"})
+        raise HTTPException(404, "Gateway role not found")
     await audit_log(
         request,
         "group.gateway_role.remove",
@@ -1495,19 +1660,23 @@ async def setup_page(request: Request) -> TemplateResponse | RedirectResponse:
 
 
 @router.get("/", response_model=None)
-async def dashboard_redirect(request: Request) -> RedirectResponse:
-    """Redirect root to gateways list.
+async def dashboard_page(request: Request) -> TemplateResponse | RedirectResponse:
+    """Dashboard overview page.
 
     Args:
         request: Incoming HTTP request.
 
     Returns:
-        RedirectResponse: Redirect to /gateways or login page.
+        TemplateResponse | RedirectResponse: Rendered dashboard page.
     """
     redirect = _require_page_auth(request)
     if redirect:
         return redirect
-    return RedirectResponse(url="/gateways", status_code=302)
+    return templates.TemplateResponse(
+        request,
+        "pages/dashboard.html",
+        {"active_page": "dashboard"},
+    )
 
 
 @router.get("/gateways", response_model=None)

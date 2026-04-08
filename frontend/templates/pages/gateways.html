@@ -8,11 +8,11 @@
 {% endblock %}
 
 {% block content %}
-<div x-data="gatewayList()" x-init="load()" @gateway-registered.window="load()">
+<div x-data="{ ...gatewayList(), ...sortableTable('name') }" x-init="load()" @gateway-registered.window="load()">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h5 class="mb-0">Gateways</h5>
         <div class="btn-group btn-group-sm">
-            <button class="btn btn-outline-secondary" @click="load()" title="Refresh">
+            <button class="btn btn-outline-secondary" @click="load()" title="Refresh" aria-label="Refresh">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
             <a class="btn btn-outline-success" href="/gateways/new"
@@ -40,22 +40,28 @@
         </a>
     </div>
 
+    <!-- Filter -->
+    <div x-show="!loading && !error && gateways.length > 0" x-cloak class="mb-2">
+        <input type="text" class="form-control form-control-sm" placeholder="Filter gateways..."
+               x-model="_filterText" style="max-width:300px">
+    </div>
+
     <!-- Gateway table -->
     <div x-show="!loading && !error && gateways.length > 0" x-cloak class="table-responsive mb-4">
         <table class="table table-striped table-hover table-sm align-middle table-clickable">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th class="d-none d-lg-table-cell">Description</th>
+                    <th :class="sortClass('name')" @click="sortBy('name')">Name</th>
+                    <th class="d-none d-lg-table-cell" :class="sortClass('description')" @click="sortBy('description')">Description</th>
                     <th>Endpoint</th>
                     <th>Auth</th>
-                    <th>Status</th>
-                    <th class="d-none d-md-table-cell">Last Seen</th>
+                    <th :class="sortClass('status')" @click="sortBy('status')">Status</th>
+                    <th class="d-none d-md-table-cell" :class="sortClass('last_seen')" @click="sortBy('last_seen')">Last Seen</th>
                     <th class="text-end" style="width:60px"></th>
                 </tr>
             </thead>
             <tbody>
-                <template x-for="gw in gateways" :key="gw.name">
+                <template x-for="gw in sorted(filtered(gateways, 'name', 'description', 'endpoint'))" :key="gw.name">
                     <tr @click="navigateTo('/gateways/' + gw.name)" style="cursor:pointer"
                         :class="gw.connected ? 'table-active' : ''">
                         <td><strong x-text="gw.name"></strong></td>

@@ -77,6 +77,29 @@ tr:hover .delete-btn {
     color: var(--sg-text-muted);
 }
 
+/* Sortable column headers */
+.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sortable::after {
+    content: '\2195';
+    opacity: 0.3;
+    margin-left: 0.25rem;
+    font-size: 0.7em;
+}
+
+.sortable.asc::after {
+    content: '\2191';
+    opacity: 1;
+}
+
+.sortable.desc::after {
+    content: '\2193';
+    opacity: 1;
+}
+
 /* Detail/expand row */
 .detail-row > td {
     background-color: var(--sg-overlay-dark) !important;

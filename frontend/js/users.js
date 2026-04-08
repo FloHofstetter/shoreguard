@@ -2,11 +2,6 @@
  * Shoreguard — User & Service Principal Management (Alpine.js components)
  */
 
-const _ROLE_BADGES = {
-    admin: 'text-bg-danger',
-    operator: 'text-bg-warning',
-    viewer: 'text-bg-secondary',
-};
 
 // ─── Users List Page ────────────────────────────────────────────────────────
 
@@ -18,7 +13,7 @@ function usersPage() {
         error: '',
 
         roleBadge(role) {
-            return _ROLE_BADGES[role] || 'text-bg-secondary';
+            return SG.badges.role[role] || 'text-bg-secondary';
         },
 
         formatDate(isoString) {
@@ -210,7 +205,7 @@ async function openGatewayRolesModal(entityType, entityId, entityLabel) {
                         <tbody>
                             ${roles.map(r => `<tr>
                                 <td><strong>${escapeHtml(r.gateway_name)}</strong></td>
-                                <td><span class="badge ${_ROLE_BADGES[r.role] || 'text-bg-secondary'}">${escapeHtml(r.role)}</span></td>
+                                <td><span class="badge ${SG.badges.role[r.role] || 'text-bg-secondary'}">${escapeHtml(r.role)}</span></td>
                                 <td class="text-end">
                                     <button class="btn btn-sm text-muted delete-btn" data-gw="${escapeHtml(r.gateway_name)}" title="Remove override">
                                         <i class="bi bi-trash3"></i>

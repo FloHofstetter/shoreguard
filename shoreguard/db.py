@@ -70,13 +70,25 @@ def init_db(url: str | None = None) -> Engine:
             os.chmod(db_path, 0o600)
 
     connect_args: dict[str, object] = {}
+    engine_kwargs: dict[str, object] = {"pool_pre_ping": True}
+
     if database_url.startswith("sqlite"):
         connect_args["check_same_thread"] = False
+    else:
+        from shoreguard.settings import get_settings
+
+        db_cfg = get_settings().database
+        engine_kwargs.update(
+            pool_size=db_cfg.pool_size,
+            max_overflow=db_cfg.max_overflow,
+            pool_timeout=db_cfg.pool_timeout,
+            pool_recycle=db_cfg.pool_recycle,
+        )
 
     _engine = sa_create_engine(
         database_url,
-        pool_pre_ping=True,
         connect_args=connect_args,
+        **engine_kwargs,
     )
 
     if database_url.startswith("sqlite"):
@@ -91,6 +103,17 @@ def init_db(url: str | None = None) -> Engine:
                 cursor.execute("PRAGMA foreign_keys=ON")
             except (OSError, RuntimeError) as e:
                 logger.warning("Failed to set SQLite pragmas: %s", e)
+            finally:
+                cursor.close()
+
+    else:
+        stmt_timeout = db_cfg.statement_timeout_ms
+
+        @event.listens_for(_engine, "connect")
+        def _set_pg_options(dbapi_conn, _connection_record):  # type: ignore[no-untyped-def]
+            cursor = dbapi_conn.cursor()
+            try:
+                cursor.execute(f"SET statement_timeout = {stmt_timeout}")
             finally:
                 cursor.close()
 
@@ -159,11 +182,32 @@ def init_async_db(sync_url: str) -> AsyncEngine:
     else:
         async_url = sync_url
 
-    _async_engine = create_async_engine(async_url, pool_pre_ping=True)
+    async_kwargs: dict[str, object] = {"pool_pre_ping": True}
+    if not sync_url.startswith("sqlite"):
+        from shoreguard.settings import get_settings
+
+        db_cfg = get_settings().database
+        async_kwargs.update(
+            pool_size=db_cfg.pool_size,
+            max_overflow=db_cfg.max_overflow,
+            pool_timeout=db_cfg.pool_timeout,
+            pool_recycle=db_cfg.pool_recycle,
+        )
+
+    _async_engine = create_async_engine(async_url, **async_kwargs)
     _async_session_factory = async_sessionmaker(bind=_async_engine, expire_on_commit=False)
 
     logger.info("Async database engine initialised (%s)", async_url.split("://")[0])
     return _async_engine
+
+
+async def dispose_async_engine() -> None:
+    """Dispose the async engine and clear the session factory."""
+    global _async_engine, _async_session_factory  # noqa: PLW0603
+    if _async_engine is not None:
+        await _async_engine.dispose()
+        _async_engine = None
+        _async_session_factory = None
 
 
 def get_async_session_factory() -> async_sessionmaker:

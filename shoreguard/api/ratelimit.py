@@ -1,4 +1,4 @@
-"""In-memory sliding-window rate limiter for login endpoints."""
+"""In-memory sliding-window rate limiter for login and write endpoints."""
 
 from __future__ import annotations
 
@@ -121,3 +121,33 @@ def reset_login_limiter() -> None:
     """Clear the singleton (for tests)."""
     global _limiter  # noqa: PLW0603
     _limiter = None
+
+
+# ── Write rate limiter (for authenticated mutation endpoints) ────────────
+
+_write_limiter: SlidingWindowRateLimiter | None = None
+
+
+def get_write_limiter() -> SlidingWindowRateLimiter:
+    """Return the global write rate limiter, creating it on first call.
+
+    Returns:
+        The singleton ``SlidingWindowRateLimiter`` instance.
+    """
+    global _write_limiter  # noqa: PLW0603
+    if _write_limiter is None:
+        from shoreguard.settings import get_settings
+
+        s = get_settings().auth
+        _write_limiter = SlidingWindowRateLimiter(
+            max_attempts=s.write_rate_limit_attempts,
+            window_seconds=s.write_rate_limit_window,
+            lockout_seconds=s.write_rate_limit_lockout,
+        )
+    return _write_limiter
+
+
+def reset_write_limiter() -> None:
+    """Clear the singleton (for tests)."""
+    global _write_limiter  # noqa: PLW0603
+    _write_limiter = None

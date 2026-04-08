@@ -104,7 +104,9 @@ async def test_gateway_register_invalid_name(gw_client, mock_gw_svc):
 
 
 async def test_gateway_register_duplicate_returns_409(gw_client, mock_gw_svc):
-    mock_gw_svc.register.side_effect = ValueError("Gateway 'dup' is already registered")
+    from shoreguard.exceptions import ConflictError
+
+    mock_gw_svc.register.side_effect = ConflictError("Gateway 'dup' is already registered")
     resp = await gw_client.post(
         "/api/gateway/register",
         json={"name": "dup", "endpoint": "8.8.8.8:8443"},

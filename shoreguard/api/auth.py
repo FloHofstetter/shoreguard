@@ -30,6 +30,9 @@ from pwdlib.hashers.bcrypt import BcryptHasher
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+from shoreguard.exceptions import NotFoundError
+from shoreguard.exceptions import ValidationError as DomainValidationError
+
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker as SessionMaker
 
@@ -809,7 +812,7 @@ def create_user(email: str, password: str | None, role: str) -> dict:
         Exception: On unexpected DB errors (re-raised after rollback).
     """
     if role not in ROLES:
-        raise ValueError(f"Invalid role: {role!r}")
+        raise DomainValidationError(f"Invalid role: {role!r}")
     if _session_factory is None:
         raise RuntimeError("Database not available")
     from shoreguard.models import User
@@ -946,12 +949,83 @@ def list_users() -> list[dict]:
                     "is_active": r.is_active,
                     "pending_invite": r.invite_token_hash is not None,
                     "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "oidc_provider": r.oidc_provider,
                 }
                 for r in rows
             ]
         except SQLAlchemyError:
             logger.exception("Failed to list users")
             return []
+
+
+def find_or_create_oidc_user(email: str, oidc_provider: str, oidc_sub: str, role: str) -> dict:
+    """Find an existing user or create one for an OIDC login.
+
+    Lookup order:
+    1. By ``(oidc_provider, oidc_sub)`` — returning OIDC user.
+    2. By ``email`` — existing local user, link OIDC identity.
+    3. No match — create a new user with OIDC identity, no password.
+
+    Args:
+        email: Email from the OIDC claims.
+        oidc_provider: Provider name (e.g. ``"google"``).
+        oidc_sub: The ``sub`` claim from the ID token.
+        role: Role for new users (from role mapping).
+
+    Returns:
+        dict with ``"user"`` (user info dict) and ``"action"``
+        (``"login"``, ``"link"``, or ``"create"``).
+    """
+    if _session_factory is None:
+        raise RuntimeError("Database not available")
+    from shoreguard.models import User
+
+    email = email.strip().lower()
+
+    with _session_factory() as session:
+        # 1. Lookup by OIDC identity
+        user = (
+            session.query(User)
+            .filter(User.oidc_provider == oidc_provider, User.oidc_sub == oidc_sub)
+            .first()
+        )
+        if user:
+            info = {"id": user.id, "email": user.email, "role": user.role}
+            return {"user": info, "action": "login"}
+
+        # 2. Lookup by email — link OIDC identity
+        user = session.query(User).filter(User.email == email).first()
+        if user:
+            user.oidc_provider = oidc_provider
+            user.oidc_sub = oidc_sub
+            session.commit()
+            logger.info("Linked OIDC identity (user=%s, provider=%s)", email, oidc_provider)
+            info = {"id": user.id, "email": user.email, "role": user.role}
+            return {"user": info, "action": "link"}
+
+        # 3. Create new user
+        now = datetime.datetime.now(datetime.UTC)
+        if role not in ROLES:
+            role = "viewer"
+        user = User(
+            email=email,
+            hashed_password=None,
+            role=role,
+            created_at=now,
+            oidc_provider=oidc_provider,
+            oidc_sub=oidc_sub,
+        )
+        session.add(user)
+        session.commit()
+        logger.info(
+            "Created OIDC user (id=%d, email=%s, provider=%s, role=%s)",
+            user.id,
+            email,
+            oidc_provider,
+            role,
+        )
+        info = {"id": user.id, "email": user.email, "role": user.role}
+        return {"user": info, "action": "create"}
 
 
 def delete_user(user_id: int) -> bool:
@@ -991,7 +1065,7 @@ def delete_user(user_id: int) -> bool:
                     .scalar()
                 )
                 if admin_count == 0:
-                    raise ValueError("Cannot delete the last active admin user")
+                    raise DomainValidationError("Cannot delete the last active admin user")
             email, role = row.email, row.role
             session.delete(row)
             session.commit()
@@ -1041,7 +1115,7 @@ def create_service_principal(
         Exception: On unexpected DB errors (re-raised after rollback).
     """
     if role not in ROLES:
-        raise ValueError(f"Invalid role: {role!r}")
+        raise DomainValidationError(f"Invalid role: {role!r}")
     if _session_factory is None:
         raise RuntimeError("Database not available")
     from shoreguard.models import ServicePrincipal
@@ -1222,7 +1296,7 @@ def set_gateway_role(
         Exception: On unexpected DB errors (re-raised after rollback).
     """
     if role not in ROLES:
-        raise ValueError(f"Invalid role: {role!r}")
+        raise DomainValidationError(f"Invalid role: {role!r}")
     if _session_factory is None:
         raise RuntimeError("Database not available")
     from shoreguard.models import Gateway, SPGatewayRole, UserGatewayRole
@@ -1231,7 +1305,7 @@ def set_gateway_role(
         try:
             gw = session.query(Gateway).filter(Gateway.name == gateway_name).first()
             if gw is None:
-                raise ValueError(f"Gateway '{gateway_name}' not found")
+                raise NotFoundError(f"Gateway '{gateway_name}' not found")
             if user_id is not None:
                 row = (
                     session.query(UserGatewayRole)
@@ -1265,7 +1339,7 @@ def set_gateway_role(
                 session.commit()
                 return {"sp_id": sp_id, "gateway_name": gateway_name, "role": role}
             else:
-                raise ValueError("Either user_id or sp_id must be provided")
+                raise DomainValidationError("Either user_id or sp_id must be provided")
         except IntegrityError:
             session.rollback()
             raise
@@ -1418,7 +1492,7 @@ def create_group(name: str, role: str = "viewer", description: str | None = None
         IntegrityError: If the name already exists.
     """
     if role not in ROLES:
-        raise ValueError(f"Invalid role: {role!r}")
+        raise DomainValidationError(f"Invalid role: {role!r}")
     if _session_factory is None:
         raise RuntimeError("Database not available")
     from shoreguard.models import Group
@@ -1470,7 +1544,7 @@ def update_group(
         RuntimeError: If the database is not available.
     """
     if role is not None and role not in ROLES:
-        raise ValueError(f"Invalid role: {role!r}")
+        raise DomainValidationError(f"Invalid role: {role!r}")
     if _session_factory is None:
         raise RuntimeError("Database not available")
     from shoreguard.models import Group
@@ -1479,7 +1553,7 @@ def update_group(
         try:
             group = session.query(Group).filter(Group.id == group_id).first()
             if group is None:
-                raise ValueError(f"Group {group_id} not found")
+                raise NotFoundError(f"Group {group_id} not found")
             if name is not None:
                 group.name = name.strip()
             if role is not None:
@@ -1639,10 +1713,10 @@ def add_group_member(group_id: int, user_id: int) -> dict:
         try:
             group = session.query(Group).filter(Group.id == group_id).first()
             if group is None:
-                raise ValueError(f"Group {group_id} not found")
+                raise NotFoundError(f"Group {group_id} not found")
             user = session.query(User).filter(User.id == user_id).first()
             if user is None:
-                raise ValueError(f"User {user_id} not found")
+                raise NotFoundError(f"User {user_id} not found")
             membership = GroupMember(group_id=group_id, user_id=user_id)
             session.add(membership)
             session.commit()
@@ -1771,7 +1845,7 @@ def set_group_gateway_role(group_id: int, gateway_name: str, role: str) -> dict:
         RuntimeError: If the database is not available.
     """
     if role not in ROLES:
-        raise ValueError(f"Invalid role: {role!r}")
+        raise DomainValidationError(f"Invalid role: {role!r}")
     if _session_factory is None:
         raise RuntimeError("Database not available")
     from shoreguard.models import Gateway, Group, GroupGatewayRole
@@ -1780,10 +1854,10 @@ def set_group_gateway_role(group_id: int, gateway_name: str, role: str) -> dict:
         try:
             group = session.query(Group).filter(Group.id == group_id).first()
             if group is None:
-                raise ValueError(f"Group {group_id} not found")
+                raise NotFoundError(f"Group {group_id} not found")
             gw = session.query(Gateway).filter(Gateway.name == gateway_name).first()
             if gw is None:
-                raise ValueError(f"Gateway '{gateway_name}' not found")
+                raise NotFoundError(f"Gateway '{gateway_name}' not found")
             row = (
                 session.query(GroupGatewayRole)
                 .filter(

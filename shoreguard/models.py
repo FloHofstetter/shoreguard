@@ -86,6 +86,8 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     invite_token_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    oidc_provider: Mapped[str | None] = mapped_column(String(100))
+    oidc_sub: Mapped[str | None] = mapped_column(String(255))
 
 
 class ServicePrincipal(Base):

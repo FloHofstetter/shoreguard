@@ -56,8 +56,10 @@ shoreguard list-service-principals
 
 ### Gateway import
 
-Import gateways from a legacy OpenShell config directory. See
-[Migrating from v0.2](../getting-started/migration.md) for details.
+Import gateways from a legacy OpenShell config directory
+(`~/.config/openshell/gateways/`). Validates each entry and skips
+gateways with invalid names, private IPs (unless in local mode), or
+oversized certificates. Skipped entries are logged with a reason.
 
 ```bash
 shoreguard import-gateways

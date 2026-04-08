@@ -1,8 +1,12 @@
-<aside class="sidebar" :class="{ 'open': $store.sidebar?.open }" x-data>
+<aside class="sidebar" role="navigation" aria-label="Main navigation" :class="{ 'open': $store.sidebar?.open }" x-data>
 
     <!-- Main -->
     <div class="sidebar-section">
         <div class="sidebar-label">Navigation</div>
+        <a class="sidebar-link {{ 'active' if active_page == 'dashboard' }}"
+           href="/">
+            <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
         <a class="sidebar-link {{ 'active' if active_page == 'gateways' }}"
            href="/gateways">
             <i class="bi bi-hdd-network"></i> Gateways

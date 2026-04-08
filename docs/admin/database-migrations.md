@@ -1,4 +1,4 @@
-# Database Migration Runbook
+# Database Migrations
 
 This document covers how to back up the database before running a migration and how to roll back
 when things go wrong.
