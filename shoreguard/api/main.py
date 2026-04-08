@@ -160,7 +160,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await asyncio.sleep(interval)
             try:
                 if ops_mod.operation_service:
-                    await ops_mod.operation_service.cleanup()
+                    await ops_mod.operation_service.cleanup()  # type: ignore[misc]
                 if audit_mod.audit_service:
                     await asyncio.to_thread(audit_mod.audit_service.cleanup)
                 if webhook_mod.webhook_service:

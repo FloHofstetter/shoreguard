@@ -121,7 +121,7 @@ async def discover(provider: OIDCProvider) -> dict:
         resp = await client.get(url)
         resp.raise_for_status()
     provider._discovery = resp.json()
-    return provider._discovery
+    return provider._discovery  # type: ignore[return-value]
 
 
 async def get_jwks(provider: OIDCProvider) -> list[dict]:

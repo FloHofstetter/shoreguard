@@ -622,7 +622,8 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> JSONRe
 
     async def work(op):
         logger.info("Starting gateway creation: '%s' (op=%s, actor=%s)", body.name, op.id, actor)
-        await _ops_mod.operation_service.update_progress(op.id, 10, "Starting gateway container")
+        assert _ops_mod.operation_service is not None
+        await _ops_mod.operation_service.update_progress(op.id, 10, "Starting gateway container")  # type: ignore[misc]
         result = await asyncio.to_thread(
             mgr.create,
             name=body.name,

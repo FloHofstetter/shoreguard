@@ -38,6 +38,7 @@ from starlette.responses import JSONResponse
 
 from shoreguard.models import OperationRecord
 from shoreguard.services import operations as _ops_mod
+from shoreguard.services.operations import AsyncOperationService
 from shoreguard.services.operations_types import ErrorCode, OpStatus
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ async def run_lro(
         HTTPException: 503 if the operation service is not initialised,
             409 if *unique* is set and a duplicate is detected.
     """
-    svc = _ops_mod.operation_service
+    svc: AsyncOperationService = _ops_mod.operation_service  # type: ignore[assignment]
     if svc is None:
         raise HTTPException(503, "Operation service not initialised")
 

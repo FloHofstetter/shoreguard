@@ -161,6 +161,6 @@ async def _collect_gauges() -> None:
     # Operation status counts
     operations_total._metrics.clear()
     if ops_mod.operation_service is not None:
-        op_counts = await ops_mod.operation_service.status_counts()
+        op_counts = await ops_mod.operation_service.status_counts()  # type: ignore[misc]
         for status, count in op_counts.items():
             operations_total.labels(status=status).set(count)

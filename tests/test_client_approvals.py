@@ -314,3 +314,311 @@ def test_get_history_timestamp_and_description(mgr):
     result = mgr.get_history("sb1")
     assert result[0]["timestamp_ms"] == 1000
     assert result[0]["description"] == "ok"
+
+
+# ─── Additional mutation-killing tests ──────────────────────────────────────
+
+
+class TestChunkToDictMutations:
+    """Kill mutations in _chunk_to_dict field mappings."""
+
+    def test_chunk_all_fields_exact(self):
+        chunk = openshell_pb2.PolicyChunk(
+            id="ID",
+            status="STATUS",
+            rule_name="RULE",
+            rationale="RAT",
+            security_notes="SEC",
+            confidence=0.5,
+            created_at_ms=1,
+            decided_at_ms=2,
+            stage="STAGE",
+            hit_count=3,
+            first_seen_ms=4,
+            last_seen_ms=5,
+            binary="BIN",
+        )
+        d = _chunk_to_dict(chunk)
+        assert d["id"] == "ID"
+        assert d["status"] == "STATUS"
+        assert d["rule_name"] == "RULE"
+        assert d["rationale"] == "RAT"
+        assert d["security_notes"] == "SEC"
+        assert d["confidence"] == pytest.approx(0.5)
+        assert d["created_at_ms"] == 1
+        assert d["decided_at_ms"] == 2
+        assert d["stage"] == "STAGE"
+        assert d["hit_count"] == 3
+        assert d["first_seen_ms"] == 4
+        assert d["last_seen_ms"] == 5
+        assert d["binary"] == "BIN"
+
+    def test_chunk_no_proposed_rule_key_absent(self):
+        chunk = openshell_pb2.PolicyChunk(id="c")
+        d = _chunk_to_dict(chunk)
+        assert "proposed_rule" not in d
+
+    def test_chunk_proposed_rule_name(self):
+        rule = sandbox_pb2.NetworkPolicyRule(name="r1")
+        chunk = openshell_pb2.PolicyChunk(id="c", proposed_rule=rule)
+        d = _chunk_to_dict(chunk)
+        assert d["proposed_rule"]["name"] == "r1"
+
+    def test_chunk_proposed_rule_binaries(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            name="r",
+            binaries=[sandbox_pb2.NetworkBinary(path="/a"), sandbox_pb2.NetworkBinary(path="/b")],
+        )
+        chunk = openshell_pb2.PolicyChunk(id="c", proposed_rule=rule)
+        d = _chunk_to_dict(chunk)
+        assert d["proposed_rule"]["binaries"] == [{"path": "/a"}, {"path": "/b"}]
+
+    def test_chunk_proposed_rule_empty_binaries(self):
+        rule = sandbox_pb2.NetworkPolicyRule(name="r")
+        chunk = openshell_pb2.PolicyChunk(id="c", proposed_rule=rule)
+        d = _chunk_to_dict(chunk)
+        assert d["proposed_rule"]["binaries"] == []
+
+    def test_chunk_proposed_rule_endpoint_optional_fields_omitted(self):
+        """Endpoint without protocol/tls/enforcement/access/rules/allowed_ips/ports omits them."""
+        rule = sandbox_pb2.NetworkPolicyRule(
+            name="r",
+            endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=80)],
+        )
+        chunk = openshell_pb2.PolicyChunk(id="c", proposed_rule=rule)
+        d = _chunk_to_dict(chunk)
+        ep = d["proposed_rule"]["endpoints"][0]
+        assert ep["host"] == "h"
+        assert ep["port"] == 80
+        for key in ("protocol", "tls", "enforcement", "access", "rules", "allowed_ips", "ports"):
+            assert key not in ep
+
+    def test_chunk_proposed_rule_endpoint_all_optional(self):
+        """Endpoint with all optional fields present includes them."""
+        rule = sandbox_pb2.NetworkPolicyRule(
+            name="r",
+            endpoints=[
+                sandbox_pb2.NetworkEndpoint(
+                    host="h",
+                    port=443,
+                    protocol="tcp",
+                    tls="required",
+                    enforcement="block",
+                    access="allow",
+                    allowed_ips=["1.1.1.1"],
+                    ports=[443],
+                    rules=[
+                        sandbox_pb2.L7Rule(
+                            allow=sandbox_pb2.L7Allow(method="GET", path="/x", command="curl")
+                        )
+                    ],
+                )
+            ],
+        )
+        chunk = openshell_pb2.PolicyChunk(id="c", proposed_rule=rule)
+        d = _chunk_to_dict(chunk)
+        ep = d["proposed_rule"]["endpoints"][0]
+        assert ep["protocol"] == "tcp"
+        assert ep["tls"] == "required"
+        assert ep["enforcement"] == "block"
+        assert ep["access"] == "allow"
+        assert ep["allowed_ips"] == ["1.1.1.1"]
+        assert ep["ports"] == [443]
+        assert ep["rules"][0]["allow"]["method"] == "GET"
+        assert ep["rules"][0]["allow"]["path"] == "/x"
+        assert ep["rules"][0]["allow"]["command"] == "curl"
+
+
+class TestApprovalManagerMutations:
+    """Kill mutations in ApprovalManager method argument passing."""
+
+    def test_get_draft_status_filter(self):
+        class _Stub(_FakeStub):
+            def GetDraftPolicy(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(
+                    chunks=[], rolling_summary="", draft_version=0, last_analyzed_at_ms=0
+                )
+
+        s = _Stub()
+        m = object.__new__(ApprovalManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.get_draft("sb", status_filter="approved")
+        assert s.request.status_filter == "approved"
+
+    def test_get_draft_default_status_filter_empty(self):
+        class _Stub(_FakeStub):
+            def GetDraftPolicy(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(
+                    chunks=[], rolling_summary="", draft_version=0, last_analyzed_at_ms=0
+                )
+
+        s = _Stub()
+        m = object.__new__(ApprovalManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.get_draft("sb")
+        assert s.request.status_filter == ""
+
+    def test_get_pending_uses_pending_filter(self):
+        class _Stub(_FakeStub):
+            def GetDraftPolicy(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(
+                    chunks=[openshell_pb2.PolicyChunk(id="c", status="pending")],
+                    rolling_summary="",
+                    draft_version=0,
+                    last_analyzed_at_ms=0,
+                )
+
+        s = _Stub()
+        m = object.__new__(ApprovalManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.get_pending("sb")
+        assert s.request.status_filter == "pending"
+        assert len(result) == 1
+
+    def test_reject_default_reason_empty(self, mgr, stub):
+        mgr.reject("sb1", "chunk-1")
+        assert stub.request.reason == ""
+
+    def test_approve_all_default_no_security_flagged(self, mgr, stub):
+        mgr.approve_all("sb1")
+        assert stub.request.include_security_flagged is False
+
+    def test_approve_all_with_security_flagged(self, mgr, stub):
+        mgr.approve_all("sb1", include_security_flagged=True)
+        assert stub.request.include_security_flagged is True
+
+    def test_edit_passes_rule_with_endpoints(self):
+        class _Stub(_FakeStub):
+            def EditDraftChunk(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace()
+
+        s = _Stub()
+        m = object.__new__(ApprovalManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.edit(
+            "sb",
+            "c",
+            {
+                "name": "rule",
+                "endpoints": [{"host": "h", "port": 80}],
+                "binaries": [{"path": "/bin/x"}],
+            },
+        )
+        assert s.request.proposed_rule.name == "rule"
+        assert s.request.proposed_rule.endpoints[0].host == "h"
+        assert s.request.proposed_rule.endpoints[0].port == 80
+        assert s.request.proposed_rule.binaries[0].path == "/bin/x"
+
+    def test_undo_sends_sandbox_name(self, mgr, stub):
+        mgr.undo("sb1", "chunk-1")
+        assert stub.request.name == "sb1"
+
+    def test_clear_sends_sandbox_name(self, mgr, stub):
+        mgr.clear("sb1")
+        assert stub.request.name == "sb1"
+
+    def test_get_history_entries_all_fields(self):
+        class _Stub(_FakeStub):
+            def GetDraftHistory(self, req, timeout=None):
+                return SimpleNamespace(
+                    entries=[
+                        SimpleNamespace(
+                            timestamp_ms=100,
+                            event_type="rejected",
+                            description="bad",
+                            chunk_id="c2",
+                        ),
+                        SimpleNamespace(
+                            timestamp_ms=200, event_type="approved", description="ok", chunk_id="c3"
+                        ),
+                    ]
+                )
+
+        s = _Stub()
+        m = object.__new__(ApprovalManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.get_history("sb")
+        assert len(result) == 2
+        assert result[0] == {
+            "timestamp_ms": 100,
+            "event_type": "rejected",
+            "description": "bad",
+            "chunk_id": "c2",
+        }
+        assert result[1] == {
+            "timestamp_ms": 200,
+            "event_type": "approved",
+            "description": "ok",
+            "chunk_id": "c3",
+        }
+
+    def test_get_draft_all_return_fields(self):
+        class _Stub(_FakeStub):
+            def GetDraftPolicy(self, req, timeout=None):
+                return SimpleNamespace(
+                    chunks=[], rolling_summary="RS", draft_version=9, last_analyzed_at_ms=555
+                )
+
+        s = _Stub()
+        m = object.__new__(ApprovalManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.get_draft("sb")
+        assert result == {
+            "chunks": [],
+            "rolling_summary": "RS",
+            "draft_version": 9,
+            "last_analyzed_at_ms": 555,
+        }
+
+    def test_approve_returns_exact_dict(self):
+        class _Stub(_FakeStub):
+            def ApproveDraftChunk(self, req, timeout=None):
+                return SimpleNamespace(policy_version=10, policy_hash="HASH")
+
+        s = _Stub()
+        m = object.__new__(ApprovalManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.approve("sb", "c")
+        assert result == {"policy_version": 10, "policy_hash": "HASH"}
+
+    def test_clear_returns_exact_dict(self):
+        class _Stub(_FakeStub):
+            def ClearDraftChunks(self, req, timeout=None):
+                return SimpleNamespace(chunks_cleared=0)
+
+        s = _Stub()
+        m = object.__new__(ApprovalManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.clear("sb")
+        assert result == {"chunks_cleared": 0}
+
+    def test_approve_all_returns_exact_dict(self):
+        class _Stub(_FakeStub):
+            def ApproveAllDraftChunks(self, req, timeout=None):
+                return SimpleNamespace(
+                    policy_version=7, policy_hash="H", chunks_approved=0, chunks_skipped=0
+                )
+
+        s = _Stub()
+        m = object.__new__(ApprovalManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.approve_all("sb")
+        assert result == {
+            "policy_version": 7,
+            "policy_hash": "H",
+            "chunks_approved": 0,
+            "chunks_skipped": 0,
+        }

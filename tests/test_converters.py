@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from shoreguard.client._converters import _dict_to_network_rule, _dict_to_policy
+from shoreguard.client._converters import _dict_to_l7_query, _dict_to_network_rule, _dict_to_policy
 
 # ---------- _dict_to_policy ----------
 
@@ -385,3 +385,231 @@ def test_dict_to_network_rule_l7_no_query():
     )
     allow = rule.endpoints[0].rules[0].allow
     assert len(allow.query) == 0
+
+
+# ─── Mutation-killing tests: _dict_to_policy ────────────────────────────────
+
+
+class TestDictToPolicyMutations:
+    """Kill mutations in _dict_to_policy edge cases."""
+
+    def test_filesystem_policy_key_fallback(self):
+        """When 'filesystem' key is falsy (empty dict), filesystem_policy is used."""
+        # 'filesystem' key present but falsy -> uses filesystem_policy
+        policy = _dict_to_policy(
+            {"filesystem_policy": {"include_workdir": True, "read_only": ["/x"]}}
+        )
+        assert policy.filesystem.include_workdir is True
+        assert list(policy.filesystem.read_only) == ["/x"]
+
+    def test_no_filesystem_no_filesystem_policy(self):
+        """Neither key present -> no filesystem field set."""
+        policy = _dict_to_policy({"version": 1})
+        assert not policy.HasField("filesystem")
+
+    def test_no_process_no_field(self):
+        policy = _dict_to_policy({"version": 1})
+        assert not policy.HasField("process")
+
+    def test_no_landlock_no_field(self):
+        policy = _dict_to_policy({"version": 1})
+        assert not policy.HasField("landlock")
+
+    def test_no_network_policies_empty_map(self):
+        policy = _dict_to_policy({"version": 1})
+        assert len(policy.network_policies) == 0
+
+    def test_version_zero_when_missing(self):
+        policy = _dict_to_policy({})
+        assert policy.version == 0
+
+    def test_filesystem_read_only_empty_list(self):
+        policy = _dict_to_policy({"filesystem": {"read_only": []}})
+        assert list(policy.filesystem.read_only) == []
+
+    def test_filesystem_read_write_empty_list(self):
+        policy = _dict_to_policy({"filesystem": {"read_write": []}})
+        assert list(policy.filesystem.read_write) == []
+
+    def test_process_run_as_user_empty_default(self):
+        policy = _dict_to_policy({"process": {}})
+        assert policy.process.run_as_user == ""
+
+    def test_process_run_as_group_empty_default(self):
+        policy = _dict_to_policy({"process": {}})
+        assert policy.process.run_as_group == ""
+
+    def test_landlock_compatibility_empty_default(self):
+        policy = _dict_to_policy({"landlock": {}})
+        assert policy.landlock.compatibility == ""
+
+    def test_multiple_network_rules(self):
+        policy = _dict_to_policy(
+            {
+                "network_policies": {
+                    "r1": {"name": "r1", "endpoints": [], "binaries": []},
+                    "r2": {"name": "r2", "endpoints": [], "binaries": []},
+                }
+            }
+        )
+        assert len(policy.network_policies) == 2
+        assert policy.network_policies["r1"].name == "r1"
+        assert policy.network_policies["r2"].name == "r2"
+
+
+class TestDictToNetworkRuleMutations:
+    """Kill mutations in _dict_to_network_rule edge cases."""
+
+    def test_endpoint_host_default(self):
+        rule = _dict_to_network_rule({"endpoints": [{}]})
+        assert rule.endpoints[0].host == ""
+
+    def test_endpoint_port_default(self):
+        rule = _dict_to_network_rule({"endpoints": [{}]})
+        assert rule.endpoints[0].port == 0
+
+    def test_endpoint_protocol_default(self):
+        rule = _dict_to_network_rule({"endpoints": [{}]})
+        assert rule.endpoints[0].protocol == ""
+
+    def test_endpoint_tls_default(self):
+        rule = _dict_to_network_rule({"endpoints": [{}]})
+        assert rule.endpoints[0].tls == ""
+
+    def test_endpoint_enforcement_default(self):
+        rule = _dict_to_network_rule({"endpoints": [{}]})
+        assert rule.endpoints[0].enforcement == ""
+
+    def test_endpoint_access_default(self):
+        rule = _dict_to_network_rule({"endpoints": [{}]})
+        assert rule.endpoints[0].access == ""
+
+    def test_endpoint_allowed_ips_default(self):
+        rule = _dict_to_network_rule({"endpoints": [{}]})
+        assert list(rule.endpoints[0].allowed_ips) == []
+
+    def test_endpoint_ports_default(self):
+        rule = _dict_to_network_rule({"endpoints": [{}]})
+        assert list(rule.endpoints[0].ports) == []
+
+    def test_rule_allow_missing_uses_empty(self):
+        """When rule dict has no 'allow' key, defaults to empty L7Allow."""
+        rule = _dict_to_network_rule({"endpoints": [{"rules": [{}]}]})
+        allow = rule.endpoints[0].rules[0].allow
+        assert allow.method == ""
+        assert allow.path == ""
+        assert allow.command == ""
+
+    def test_rule_allow_partial_fields(self):
+        rule = _dict_to_network_rule({"endpoints": [{"rules": [{"allow": {"method": "POST"}}]}]})
+        allow = rule.endpoints[0].rules[0].allow
+        assert allow.method == "POST"
+        assert allow.path == ""
+        assert allow.command == ""
+
+    def test_binary_path_preserved(self):
+        rule = _dict_to_network_rule({"binaries": [{"path": "/bin/sh"}, {"path": "/bin/bash"}]})
+        assert rule.binaries[0].path == "/bin/sh"
+        assert rule.binaries[1].path == "/bin/bash"
+
+    def test_name_default_empty(self):
+        rule = _dict_to_network_rule({"endpoints": []})
+        assert rule.name == ""
+
+    def test_no_endpoints_key(self):
+        rule = _dict_to_network_rule({"name": "test"})
+        assert len(rule.endpoints) == 0
+
+    def test_no_binaries_key(self):
+        rule = _dict_to_network_rule({"name": "test"})
+        assert len(rule.binaries) == 0
+
+
+class TestDictToL7QueryMutations:
+    """Kill mutations in _dict_to_l7_query."""
+
+    def test_empty_dict(self):
+        result = _dict_to_l7_query({})
+        assert result == {}
+
+    def test_glob_only(self):
+        result = _dict_to_l7_query({"param": {"glob": "*.json"}})
+        assert result["param"].glob == "*.json"
+        assert list(result["param"].any) == []
+
+    def test_any_only(self):
+        result = _dict_to_l7_query({"param": {"any": ["a", "b"]}})
+        assert result["param"].glob == ""
+        assert list(result["param"].any) == ["a", "b"]
+
+    def test_both_glob_and_any(self):
+        result = _dict_to_l7_query({"p": {"glob": "g*", "any": ["x"]}})
+        assert result["p"].glob == "g*"
+        assert list(result["p"].any) == ["x"]
+
+    def test_multiple_keys(self):
+        result = _dict_to_l7_query(
+            {
+                "a": {"glob": "a*"},
+                "b": {"any": ["1", "2"]},
+            }
+        )
+        assert "a" in result
+        assert "b" in result
+        assert result["a"].glob == "a*"
+        assert list(result["b"].any) == ["1", "2"]
+
+    def test_missing_glob_key_defaults_empty(self):
+        result = _dict_to_l7_query({"p": {"any": ["x"]}})
+        assert result["p"].glob == ""
+
+    def test_missing_any_key_defaults_empty(self):
+        result = _dict_to_l7_query({"p": {"glob": "g"}})
+        assert list(result["p"].any) == []
+
+    def test_empty_matcher(self):
+        result = _dict_to_l7_query({"p": {}})
+        assert result["p"].glob == ""
+        assert list(result["p"].any) == []
+
+
+class TestDictToNetworkRuleL7WithQuery:
+    """Test L7 rules with query through _dict_to_network_rule."""
+
+    def test_query_preserved_in_endpoint_rule(self):
+        rule = _dict_to_network_rule(
+            {
+                "endpoints": [
+                    {
+                        "host": "example.com",
+                        "rules": [
+                            {
+                                "allow": {
+                                    "method": "GET",
+                                    "path": "/api",
+                                    "query": {
+                                        "token": {"glob": "tk-*"},
+                                    },
+                                }
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        allow = rule.endpoints[0].rules[0].allow
+        assert "token" in allow.query
+        assert allow.query["token"].glob == "tk-*"
+
+    def test_no_query_key_in_allow(self):
+        rule = _dict_to_network_rule(
+            {
+                "endpoints": [
+                    {
+                        "rules": [{"allow": {"method": "GET"}}],
+                    }
+                ],
+            }
+        )
+        allow = rule.endpoints[0].rules[0].allow
+        assert len(allow.query) == 0

@@ -107,7 +107,7 @@ def init_db(url: str | None = None) -> Engine:
                 cursor.close()
 
     else:
-        stmt_timeout = db_cfg.statement_timeout_ms
+        stmt_timeout = db_cfg.statement_timeout_ms  # type: ignore[possibly-undefined]
 
         @event.listens_for(_engine, "connect")
         def _set_pg_options(dbapi_conn, _connection_record):  # type: ignore[no-untyped-def]

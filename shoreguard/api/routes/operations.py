@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse, StreamingResponse
 from shoreguard.api.auth import require_role
 from shoreguard.api.schemas import OperationListResponse, OperationResponse
 from shoreguard.services import operations as _ops_mod
+from shoreguard.services.operations import AsyncOperationService
 from shoreguard.services.operations_types import ACTIVE_STATES, TERMINAL_STATES
 
 logger = logging.getLogger(__name__)
@@ -20,10 +21,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _get_svc():
+def _get_svc() -> AsyncOperationService:
     if _ops_mod.operation_service is None:
         raise HTTPException(503, "Operation service not initialised")
-    return _ops_mod.operation_service
+    return _ops_mod.operation_service  # type: ignore[return-value]
 
 
 @router.get("", response_model=OperationListResponse)

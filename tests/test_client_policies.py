@@ -411,3 +411,381 @@ def test_network_rule_to_dict_l7_command():
     )
     result = _network_rule_to_dict(rule)
     assert result["endpoints"][0]["rules"][0]["allow"]["command"] == "GET"
+
+
+# ─── Additional mutation-killing tests ──────────────────────────────────────
+
+
+class TestPolicyStatusNamesMutations:
+    """Kill mutations in POLICY_STATUS_NAMES dict."""
+
+    @pytest.mark.parametrize(
+        "code,expected",
+        [
+            (0, "unspecified"),
+            (1, "pending"),
+            (2, "loaded"),
+            (3, "failed"),
+            (4, "superseded"),
+            (99, "unknown"),
+        ],
+    )
+    def test_status_code_mapping(self, code, expected):
+        from shoreguard.client.policies import POLICY_STATUS_NAMES
+
+        assert POLICY_STATUS_NAMES.get(code, "unknown") == expected
+
+
+class TestPolicyToDictMutations:
+    """Kill mutations in _policy_to_dict."""
+
+    def test_no_filesystem_no_key(self):
+        policy = sandbox_pb2.SandboxPolicy(version=1)
+        result = _policy_to_dict(policy)
+        assert "filesystem" not in result
+
+    def test_no_process_no_key(self):
+        policy = sandbox_pb2.SandboxPolicy(version=1)
+        result = _policy_to_dict(policy)
+        assert "process" not in result
+
+    def test_no_landlock_no_key(self):
+        policy = sandbox_pb2.SandboxPolicy(version=1)
+        result = _policy_to_dict(policy)
+        assert "landlock" not in result
+
+    def test_filesystem_include_workdir_true(self):
+        policy = sandbox_pb2.SandboxPolicy(
+            filesystem=sandbox_pb2.FilesystemPolicy(include_workdir=True)
+        )
+        result = _policy_to_dict(policy)
+        assert result["filesystem"]["include_workdir"] is True
+
+    def test_filesystem_include_workdir_false(self):
+        policy = sandbox_pb2.SandboxPolicy(
+            filesystem=sandbox_pb2.FilesystemPolicy(include_workdir=False)
+        )
+        result = _policy_to_dict(policy)
+        assert result["filesystem"]["include_workdir"] is False
+
+    def test_filesystem_read_only_list(self):
+        policy = sandbox_pb2.SandboxPolicy(
+            filesystem=sandbox_pb2.FilesystemPolicy(read_only=["/a", "/b"])
+        )
+        result = _policy_to_dict(policy)
+        assert result["filesystem"]["read_only"] == ["/a", "/b"]
+
+    def test_filesystem_read_write_list(self):
+        policy = sandbox_pb2.SandboxPolicy(
+            filesystem=sandbox_pb2.FilesystemPolicy(read_write=["/c"])
+        )
+        result = _policy_to_dict(policy)
+        assert result["filesystem"]["read_write"] == ["/c"]
+
+
+class TestNetworkRuleToDictMutations:
+    """Kill mutations in _network_rule_to_dict."""
+
+    def test_multiple_binaries(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            name="r",
+            binaries=[
+                sandbox_pb2.NetworkBinary(path="/a"),
+                sandbox_pb2.NetworkBinary(path="/b"),
+            ],
+        )
+        result = _network_rule_to_dict(rule)
+        assert result["binaries"] == [{"path": "/a"}, {"path": "/b"}]
+
+    def test_endpoint_protocol_included_when_set(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=80, protocol="udp")]
+        )
+        result = _network_rule_to_dict(rule)
+        assert result["endpoints"][0]["protocol"] == "udp"
+
+    def test_endpoint_tls_included_when_set(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=443, tls="terminate")]
+        )
+        result = _network_rule_to_dict(rule)
+        assert result["endpoints"][0]["tls"] == "terminate"
+
+    def test_endpoint_enforcement_included_when_set(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=80, enforcement="block")]
+        )
+        result = _network_rule_to_dict(rule)
+        assert result["endpoints"][0]["enforcement"] == "block"
+
+    def test_endpoint_access_included_when_set(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=80, access="allow")]
+        )
+        result = _network_rule_to_dict(rule)
+        assert result["endpoints"][0]["access"] == "allow"
+
+    def test_endpoint_allowed_ips_included_when_set(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=80, allowed_ips=["10.0.0.1"])]
+        )
+        result = _network_rule_to_dict(rule)
+        assert result["endpoints"][0]["allowed_ips"] == ["10.0.0.1"]
+
+    def test_endpoint_ports_included_when_set(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=80, ports=[80, 8080])]
+        )
+        result = _network_rule_to_dict(rule)
+        assert result["endpoints"][0]["ports"] == [80, 8080]
+
+    def test_multiple_endpoints(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            name="r",
+            endpoints=[
+                sandbox_pb2.NetworkEndpoint(host="a", port=80),
+                sandbox_pb2.NetworkEndpoint(host="b", port=443),
+            ],
+        )
+        result = _network_rule_to_dict(rule)
+        assert len(result["endpoints"]) == 2
+        assert result["endpoints"][0]["host"] == "a"
+        assert result["endpoints"][1]["host"] == "b"
+
+    def test_l7_allow_method_path_command(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            endpoints=[
+                sandbox_pb2.NetworkEndpoint(
+                    host="h",
+                    port=80,
+                    rules=[
+                        sandbox_pb2.L7Rule(
+                            allow=sandbox_pb2.L7Allow(method="M", path="P", command="C")
+                        )
+                    ],
+                )
+            ],
+        )
+        result = _network_rule_to_dict(rule)
+        allow = result["endpoints"][0]["rules"][0]["allow"]
+        assert allow["method"] == "M"
+        assert allow["path"] == "P"
+        assert allow["command"] == "C"
+
+    def test_l7_query_glob_in_result(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            endpoints=[
+                sandbox_pb2.NetworkEndpoint(
+                    host="h",
+                    port=80,
+                    rules=[sandbox_pb2.L7Rule(allow=sandbox_pb2.L7Allow(method="GET", path="/"))],
+                )
+            ],
+        )
+        # Add query matcher
+        rule.endpoints[0].rules[0].allow.query["param"].CopyFrom(
+            sandbox_pb2.L7QueryMatcher(glob="val*")
+        )
+        result = _network_rule_to_dict(rule)
+        allow = result["endpoints"][0]["rules"][0]["allow"]
+        assert "query" in allow
+        assert allow["query"]["param"]["glob"] == "val*"
+
+    def test_l7_query_any_in_result(self):
+        rule = sandbox_pb2.NetworkPolicyRule(
+            endpoints=[
+                sandbox_pb2.NetworkEndpoint(
+                    host="h",
+                    port=80,
+                    rules=[sandbox_pb2.L7Rule(allow=sandbox_pb2.L7Allow(method="GET", path="/"))],
+                )
+            ],
+        )
+        rule.endpoints[0].rules[0].allow.query["p"].CopyFrom(
+            sandbox_pb2.L7QueryMatcher(**{"any": ["a", "b"]})
+        )
+        result = _network_rule_to_dict(rule)
+        assert result["endpoints"][0]["rules"][0]["allow"]["query"]["p"]["any"] == ["a", "b"]
+
+    def test_l7_query_glob_empty_not_included(self):
+        """When glob is empty string, it should not appear in query dict."""
+        rule = sandbox_pb2.NetworkPolicyRule(
+            endpoints=[
+                sandbox_pb2.NetworkEndpoint(
+                    host="h",
+                    port=80,
+                    rules=[sandbox_pb2.L7Rule(allow=sandbox_pb2.L7Allow(method="GET", path="/"))],
+                )
+            ],
+        )
+        rule.endpoints[0].rules[0].allow.query["p"].CopyFrom(
+            sandbox_pb2.L7QueryMatcher(glob="", **{"any": ["x"]})
+        )
+        result = _network_rule_to_dict(rule)
+        q = result["endpoints"][0]["rules"][0]["allow"]["query"]["p"]
+        assert "glob" not in q
+        assert q["any"] == ["x"]
+
+    def test_l7_query_any_empty_not_included(self):
+        """When any is empty list, it should not appear in query dict."""
+        rule = sandbox_pb2.NetworkPolicyRule(
+            endpoints=[
+                sandbox_pb2.NetworkEndpoint(
+                    host="h",
+                    port=80,
+                    rules=[sandbox_pb2.L7Rule(allow=sandbox_pb2.L7Allow(method="GET", path="/"))],
+                )
+            ],
+        )
+        rule.endpoints[0].rules[0].allow.query["p"].CopyFrom(sandbox_pb2.L7QueryMatcher(glob="g"))
+        result = _network_rule_to_dict(rule)
+        q = result["endpoints"][0]["rules"][0]["allow"]["query"]["p"]
+        assert q["glob"] == "g"
+        assert "any" not in q
+
+
+class TestPolicyManagerMutations:
+    """Kill mutations in PolicyManager method arg passing."""
+
+    def test_get_uses_timeout(self):
+        class _Stub(_FakeStub):
+            def GetSandboxPolicyStatus(self, req, timeout=None):
+                self.timeout = timeout
+                rev = openshell_pb2.SandboxPolicyRevision(version=1, status=2, policy_hash="h")
+                return SimpleNamespace(active_version=1, revision=rev)
+
+        s = _Stub()
+        m = object.__new__(PolicyManager)
+        m._stub = s
+        m._timeout = 55.0
+        m.get("sb")
+        assert s.timeout == 55.0
+
+    def test_get_version_sends_version(self):
+        class _Stub(_FakeStub):
+            def GetSandboxPolicyStatus(self, req, timeout=None):
+                self.request = req
+                rev = openshell_pb2.SandboxPolicyRevision(version=3, status=2, policy_hash="h")
+                return SimpleNamespace(active_version=3, revision=rev)
+
+        s = _Stub()
+        m = object.__new__(PolicyManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.get_version("sb", 3)
+        assert s.request.name == "sb"
+        assert s.request.version == 3
+
+    def test_get_version_returns_correct_structure(self):
+        class _Stub(_FakeStub):
+            def GetSandboxPolicyStatus(self, req, timeout=None):
+                rev = openshell_pb2.SandboxPolicyRevision(
+                    version=5,
+                    status=1,
+                    policy_hash="hash5",
+                    created_at_ms=100,
+                    loaded_at_ms=200,
+                )
+                return SimpleNamespace(active_version=5, revision=rev)
+
+        s = _Stub()
+        m = object.__new__(PolicyManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.get_version("sb", 5)
+        assert result["active_version"] == 5
+        assert result["revision"]["version"] == 5
+        assert result["revision"]["status"] == "pending"
+        assert result["revision"]["policy_hash"] == "hash5"
+        assert result["revision"]["created_at_ms"] == 100
+        assert result["revision"]["loaded_at_ms"] == 200
+
+    def test_list_revisions_default_params(self):
+        class _Stub(_FakeStub):
+            def ListSandboxPolicies(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(revisions=[])
+
+        s = _Stub()
+        m = object.__new__(PolicyManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.list_revisions("sb")
+        assert s.request.limit == 20
+        assert s.request.offset == 0
+
+    def test_list_revisions_all_fields(self):
+        class _Stub(_FakeStub):
+            def ListSandboxPolicies(self, req, timeout=None):
+                return SimpleNamespace(
+                    revisions=[
+                        openshell_pb2.SandboxPolicyRevision(
+                            version=1,
+                            status=2,
+                            policy_hash="h1",
+                            created_at_ms=10,
+                            loaded_at_ms=20,
+                            load_error="",
+                        ),
+                    ]
+                )
+
+        s = _Stub()
+        m = object.__new__(PolicyManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.list_revisions("sb")
+        assert result[0] == {
+            "version": 1,
+            "status": "loaded",
+            "policy_hash": "h1",
+            "created_at_ms": 10,
+            "loaded_at_ms": 20,
+            "load_error": "",
+        }
+
+    def test_update_returns_exact_dict(self):
+        class _Stub(_FakeStub):
+            def UpdateConfig(self, req, timeout=None):
+                return SimpleNamespace(version=99, policy_hash="H99")
+
+        s = _Stub()
+        m = object.__new__(PolicyManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.update("sb", sandbox_pb2.SandboxPolicy(version=1))
+        assert result == {"version": 99, "policy_hash": "H99"}
+
+    def test_update_default_global_scope_false(self):
+        class _Stub(_FakeStub):
+            def UpdateConfig(self, req, timeout=None):
+                self.request = req
+                self.global_value = getattr(req, "global")
+                return SimpleNamespace(version=1, policy_hash="h")
+
+        s = _Stub()
+        m = object.__new__(PolicyManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.update("sb", sandbox_pb2.SandboxPolicy(version=1))
+        assert s.global_value is False
+
+    def test_get_version_with_embedded_policy(self):
+        policy = sandbox_pb2.SandboxPolicy(version=2)
+        policy.network_policies["r"].CopyFrom(sandbox_pb2.NetworkPolicyRule(name="r"))
+
+        class _Stub(_FakeStub):
+            def GetSandboxPolicyStatus(self, req, timeout=None):
+                rev = openshell_pb2.SandboxPolicyRevision(
+                    version=2, status=2, policy_hash="h", policy=policy
+                )
+                return SimpleNamespace(active_version=2, revision=rev)
+
+        s = _Stub()
+        m = object.__new__(PolicyManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.get_version("sb", 2)
+        assert "policy" in result
+        assert result["policy"]["version"] == 2
+        assert "r" in result["policy"]["network_policies"]

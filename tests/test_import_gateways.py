@@ -377,3 +377,337 @@ class TestImportCertLimits:
 
         assert imported == 0
         assert skipped == 1
+
+
+# ─── Additional mutation-killing tests ──────────────────────────────────────
+
+
+class TestImportSchemeDetection:
+    def test_https_in_endpoint_gives_https_scheme(self, registry, tmp_path, monkeypatch):
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "secure-gw", "https://8.8.8.8:8443")
+        _import_filesystem_gateways(registry)
+        gw = registry.get("secure-gw")
+        assert gw["scheme"] == "https"
+
+    def test_http_endpoint_gives_http_scheme(self, registry, tmp_path, monkeypatch):
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "plain-gw", "http://8.8.4.4:8080")
+        _import_filesystem_gateways(registry)
+        gw = registry.get("plain-gw")
+        assert gw["scheme"] == "http"
+
+    def test_no_scheme_endpoint_skipped(self, registry, tmp_path, monkeypatch):
+        """Endpoint without scheme has no parseable hostname => skipped."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "noscheme-gw", "8.8.8.8:8443")
+        imported, skipped = _import_filesystem_gateways(registry)
+        # urlparse can't extract hostname without scheme
+        assert imported == 0
+        assert skipped == 1
+
+
+class TestImportDefaultPort:
+    def test_https_default_port_443(self, registry, tmp_path, monkeypatch):
+        """HTTPS endpoint without explicit port uses 443."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "default-port-gw", "https://8.8.8.8")
+        _import_filesystem_gateways(registry)
+        gw = registry.get("default-port-gw")
+        assert gw is not None
+        assert gw["endpoint"] == "8.8.8.8:443"
+
+    def test_http_default_port_80(self, registry, tmp_path, monkeypatch):
+        """HTTP endpoint without explicit port uses 80."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "http-default-gw", "http://8.8.8.8")
+        _import_filesystem_gateways(registry)
+        gw = registry.get("http-default-gw")
+        assert gw is not None
+        assert gw["endpoint"] == "8.8.8.8:80"
+
+
+class TestImportEndpointFormat:
+    def test_clean_endpoint_format(self, registry, tmp_path, monkeypatch):
+        """Imported endpoint should be host:port format."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "fmt-gw", "https://8.8.8.8:9999")
+        _import_filesystem_gateways(registry)
+        gw = registry.get("fmt-gw")
+        assert gw["endpoint"] == "8.8.8.8:9999"
+
+    def test_endpoint_strips_path(self, registry, tmp_path, monkeypatch):
+        """Endpoint with path should only keep host:port."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "path-gw", "https://8.8.8.8:8443/some/path")
+        _import_filesystem_gateways(registry)
+        gw = registry.get("path-gw")
+        assert gw["endpoint"] == "8.8.8.8:8443"
+
+
+class TestImportInvalidName:
+    def test_invalid_name_skipped(self, registry, tmp_path, monkeypatch):
+        """Gateway with invalid name format is skipped."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "-invalid-start", "https://8.8.8.8:8443")
+        messages = []
+        imported, skipped = _import_filesystem_gateways(registry, log_fn=messages.append)
+        assert imported == 0
+        assert skipped == 1
+        assert any("invalid name" in m for m in messages)
+
+    def test_invalid_name_special_chars(self, registry, tmp_path, monkeypatch):
+        """Gateway name with special chars is skipped."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "bad@name!", "https://8.8.8.8:8443")
+        imported, skipped = _import_filesystem_gateways(registry)
+        assert imported == 0
+        assert skipped == 1
+
+
+class TestImportMetadataFields:
+    def test_auth_mode_preserved(self, registry, tmp_path, monkeypatch):
+        """auth_mode from metadata.json is passed through."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "auth-gw", "https://8.8.8.8:8443", auth_mode="token")
+        _import_filesystem_gateways(registry)
+        gw = registry.get("auth-gw")
+        assert gw is not None
+
+    def test_default_metadata_values(self, registry, tmp_path, monkeypatch):
+        """Default metadata values when not specified in metadata.json."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "default-meta-gw", "https://8.8.8.8:8443")
+        _import_filesystem_gateways(registry)
+        gw = registry.get("default-meta-gw")
+        assert gw["metadata"]["gpu"] is False
+        assert gw["metadata"]["is_remote"] is False
+        assert gw["metadata"]["remote_host"] is None
+
+    def test_gpu_true_metadata(self, registry, tmp_path, monkeypatch):
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "gpu-gw", "https://8.8.8.8:8443", gpu=True)
+        _import_filesystem_gateways(registry)
+        gw = registry.get("gpu-gw")
+        assert gw["metadata"]["gpu"] is True
+
+    def test_is_remote_true_metadata(self, registry, tmp_path, monkeypatch):
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(
+            gateways_dir,
+            "remote-gw",
+            "https://8.8.8.8:8443",
+            is_remote=True,
+            remote_host="10.0.0.1",
+        )
+        _import_filesystem_gateways(registry)
+        gw = registry.get("remote-gw")
+        assert gw["metadata"]["is_remote"] is True
+        assert gw["metadata"]["remote_host"] == "10.0.0.1"
+
+
+class TestImportMtlsPartial:
+    def test_only_ca_cert(self, registry, tmp_path, monkeypatch):
+        """Import with only ca.crt file."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        gw_dir = _make_gateway(gateways_dir, "ca-only-gw", "https://8.8.8.8:8443")
+        mtls_dir = gw_dir / "mtls"
+        mtls_dir.mkdir()
+        (mtls_dir / "ca.crt").write_bytes(b"ca-data-only")
+        _import_filesystem_gateways(registry)
+        creds = registry.get_credentials("ca-only-gw")
+        assert creds["ca_cert"] == b"ca-data-only"
+        assert creds["client_cert"] is None
+        assert creds["client_key"] is None
+
+    def test_empty_mtls_dir(self, registry, tmp_path, monkeypatch):
+        """Import with empty mtls directory (no cert files)."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        gw_dir = _make_gateway(gateways_dir, "empty-mtls-gw", "https://8.8.8.8:8443")
+        mtls_dir = gw_dir / "mtls"
+        mtls_dir.mkdir()
+        imported, skipped = _import_filesystem_gateways(registry)
+        assert imported == 1
+        assert skipped == 0
+
+    def test_oversized_client_cert_skipped(self, registry, tmp_path, monkeypatch):
+        """Import skips gateways with oversized client_cert."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        gw_dir = _make_gateway(gateways_dir, "big-client-gw", "https://8.8.8.8:8443")
+        mtls_dir = gw_dir / "mtls"
+        mtls_dir.mkdir()
+        (mtls_dir / "ca.crt").write_bytes(b"small")
+        (mtls_dir / "tls.crt").write_bytes(b"x" * 70_000)
+        (mtls_dir / "tls.key").write_bytes(b"key")
+        imported, skipped = _import_filesystem_gateways(registry)
+        assert imported == 0
+        assert skipped == 1
+
+    def test_oversized_client_key_skipped(self, registry, tmp_path, monkeypatch):
+        """Import skips gateways with oversized client_key."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        gw_dir = _make_gateway(gateways_dir, "big-key-gw", "https://8.8.8.8:8443")
+        mtls_dir = gw_dir / "mtls"
+        mtls_dir.mkdir()
+        (mtls_dir / "ca.crt").write_bytes(b"small")
+        (mtls_dir / "tls.crt").write_bytes(b"cert")
+        (mtls_dir / "tls.key").write_bytes(b"x" * 70_000)
+        imported, skipped = _import_filesystem_gateways(registry)
+        assert imported == 0
+        assert skipped == 1
+
+    def test_oversized_cert_log_message(self, registry, tmp_path, monkeypatch):
+        """Oversized cert produces a log message with the label name."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        gw_dir = _make_gateway(gateways_dir, "big-log-gw", "https://8.8.8.8:8443")
+        mtls_dir = gw_dir / "mtls"
+        mtls_dir.mkdir()
+        (mtls_dir / "ca.crt").write_bytes(b"x" * 70_000)
+        messages = []
+        _import_filesystem_gateways(registry, log_fn=messages.append)
+        assert any("ca_cert" in m and "exceeds" in m for m in messages)
+
+
+class TestImportNoHostname:
+    def test_empty_endpoint_string(self, registry, tmp_path, monkeypatch):
+        """Empty endpoint gives no hostname => skipped."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "empty-ep-gw", "")
+        messages = []
+        imported, skipped = _import_filesystem_gateways(registry, log_fn=messages.append)
+        assert imported == 0
+        assert skipped == 1
+        assert any("no hostname" in m for m in messages)
+
+    def test_missing_gateway_endpoint_key(self, registry, tmp_path, monkeypatch):
+        """Missing gateway_endpoint key defaults to empty string => no hostname."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        gw_dir = gateways_dir / "no-key-gw"
+        gw_dir.mkdir(parents=True)
+        (gw_dir / "metadata.json").write_text(json.dumps({"other": "data"}))
+        imported, skipped = _import_filesystem_gateways(registry)
+        assert imported == 0
+        assert skipped == 1
+
+
+class TestImportReturnValues:
+    def test_return_type_is_tuple(self, registry, tmp_path, monkeypatch):
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        result = _import_filesystem_gateways(registry)
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+
+    def test_return_zeros_for_no_gateways_dir(self, registry, tmp_path, monkeypatch):
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        imported, skipped = _import_filesystem_gateways(registry)
+        assert imported == 0
+        assert skipped == 0
+
+    def test_return_exact_counts(self, registry, tmp_path, monkeypatch):
+        """Verify exact imported/skipped counts with mixed gateways."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "good1", "https://8.8.8.8:8443")
+        _make_gateway(gateways_dir, "good2", "https://8.8.4.4:8443")
+        _make_gateway(gateways_dir, "-bad-name", "https://8.8.8.8:8443")
+        imported, skipped = _import_filesystem_gateways(registry)
+        assert imported == 2
+        assert skipped == 1
+
+
+class TestImportLogFnVsLogger:
+    def test_log_fn_called_for_missing_dir(self, registry, tmp_path, monkeypatch):
+        """log_fn is called with a message about missing gateways dir."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        messages = []
+        _import_filesystem_gateways(registry, log_fn=messages.append)
+        assert len(messages) == 1
+        assert "No filesystem gateways" in messages[0]
+
+    def test_log_fn_none_uses_module_logger_for_missing_dir(
+        self, registry, tmp_path, monkeypatch, caplog
+    ):
+        """When log_fn is None, missing dir message goes to module logger."""
+        import logging
+
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        with caplog.at_level(logging.INFO, logger="shoreguard"):
+            _import_filesystem_gateways(registry, log_fn=None)
+        assert any("No filesystem gateways" in r.message for r in caplog.records)
+
+    def test_log_fn_error_level_for_json_error(self, registry, tmp_path, monkeypatch):
+        """JSON parse error log message includes the gateway name."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        gw_dir = gateways_dir / "badjson"
+        gw_dir.mkdir(parents=True)
+        (gw_dir / "metadata.json").write_text("{{{invalid")
+        messages = []
+        _import_filesystem_gateways(registry, log_fn=messages.append)
+        assert any("error" in m and "badjson" in m for m in messages)
+
+
+class TestImportPortValidation:
+    def test_valid_port_passes(self, registry, tmp_path, monkeypatch):
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "port-gw", "https://8.8.8.8:443")
+        imported, skipped = _import_filesystem_gateways(registry)
+        assert imported == 1
+
+    def test_port_65535_passes(self, registry, tmp_path, monkeypatch):
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "highport-gw", "https://8.8.8.8:65535")
+        imported, skipped = _import_filesystem_gateways(registry)
+        assert imported == 1
+
+    def test_port_1_passes(self, registry, tmp_path, monkeypatch):
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "lowport-gw", "https://8.8.8.8:1")
+        imported, skipped = _import_filesystem_gateways(registry)
+        assert imported == 1
+
+
+class TestImportPrivateIpMessages:
+    def test_private_ip_log_message(self, registry, tmp_path, monkeypatch):
+        """Private IP skip produces log message with the IP."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        monkeypatch.delenv("SHOREGUARD_LOCAL_MODE", raising=False)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "priv-gw", "https://127.0.0.1:8443")
+        messages = []
+        _import_filesystem_gateways(registry, log_fn=messages.append)
+        assert any("private" in m.lower() or "loopback" in m.lower() for m in messages)
+        assert any("127.0.0.1" in m for m in messages)
+
+    def test_ten_network_skipped(self, registry, tmp_path, monkeypatch):
+        """10.x.x.x addresses are private and should be skipped."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        monkeypatch.delenv("SHOREGUARD_LOCAL_MODE", raising=False)
+        gateways_dir = tmp_path / "gateways"
+        _make_gateway(gateways_dir, "ten-gw", "https://10.0.0.1:8443")
+        imported, skipped = _import_filesystem_gateways(registry)
+        assert imported == 0
+        assert skipped == 1

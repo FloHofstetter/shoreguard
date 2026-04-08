@@ -1526,7 +1526,7 @@ def update_group(
     *,
     name: str | None = None,
     role: str | None = None,
-    description: str | None = _SENTINEL,
+    description: str | None | object = _SENTINEL,
 ) -> dict:
     """Update a group's name, role, or description.
 

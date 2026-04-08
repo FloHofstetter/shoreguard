@@ -233,7 +233,8 @@ async def create_sandbox(
             labels=body.labels,
         )
         sb_name = result.get("name", body.name)
-        await _ops_mod.operation_service.update_progress(op.id, 30, "Waiting for ready state")
+        assert _ops_mod.operation_service is not None
+        await _ops_mod.operation_service.update_progress(op.id, 30, "Waiting for ready state")  # type: ignore[misc]
         if sb_name:
             try:
                 from shoreguard.settings import get_settings

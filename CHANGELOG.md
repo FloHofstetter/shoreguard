@@ -5,6 +5,34 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.24.0] — 2026-04-08
+
+### Added
+
+- **1,193 mutation-killing tests** — targeted tests designed to eliminate
+  survived mutants identified by mutmut v3.5. Test count: 1,175 → 2,368.
+  - New `test_openshell_meta.py` — first-ever coverage for OpenShell metadata
+    loader (27 mutants, previously 100% survival).
+  - New `test_auth_mutations.py` (194 tests) — exhaustive auth CRUD, RBAC
+    role resolution, service principal lifecycle, group management, session
+    tokens, gateway-scoped roles.
+  - Extended 20 existing test files across all major modules: formatters,
+    sandbox templates, routes, OIDC, local gateway, webhooks, gateway service,
+    operations, registry, policy, all client modules, DB, presets, CLI import,
+    and audit service.
+
+### Fixed
+
+- **Pyright strict mode** — resolved all 30 type-check errors (0 remaining):
+  - `operation_service` union type corrected for async/sync variants.
+  - `_get_svc()` return type narrowed to `AsyncOperationService` in route
+    handlers (`routes/operations.py`, `lro.py`).
+  - `db_cfg` possibly-unbound variable in `db.py` PostgreSQL branch.
+  - `discover()` return type in `api/oidc.py`.
+  - `update_group` sentinel parameter type in `api/auth.py`.
+  - Async/sync union narrowing in `main.py`, `metrics.py`,
+    `routes/gateway.py`, `routes/sandboxes.py`.
+
 ## [0.23.0] — 2026-04-08
 
 ### Added

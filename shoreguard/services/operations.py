@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Module-level singleton — set during app lifespan (see shoreguard.api.main).
 # Can be either the sync OperationService or async AsyncOperationService.
-operation_service: OperationService | None = None
+operation_service: AsyncOperationService | OperationService | None = None
 
 
 def _truncate_result(result: dict[str, Any], max_bytes: int | None = None) -> str:
@@ -837,7 +837,7 @@ class AsyncOperationService:
                     OperationRecord.completed_at < retention_cutoff,
                 )
             )
-            removed = del_result.rowcount
+            removed = del_result.rowcount  # type: ignore[attr-defined]
             await session.commit()
         if removed > 0:
             logger.debug("Operation cleanup: removed %d expired operations", removed)

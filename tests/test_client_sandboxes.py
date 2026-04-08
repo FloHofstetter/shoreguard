@@ -737,3 +737,453 @@ def test_wait_ready_checks_phase_exactly():
         finally:
             time.time = original_time
             time.sleep = _time.sleep
+
+
+# ─── Mutation-killing tests ──────────────────────────────────────────────────
+
+
+class TestSandboxToDictMutations:
+    """Kill mutations in _sandbox_to_dict field mappings."""
+
+    def test_each_field_is_from_correct_proto_field(self):
+        """Each dict key maps to the correct proto field, not swapped."""
+        sb = datamodel_pb2.Sandbox(
+            id="ID",
+            name="NAME",
+            namespace="NS",
+            phase=2,
+            created_at_ms=42,
+            current_policy_version=7,
+            spec=datamodel_pb2.SandboxSpec(
+                template=datamodel_pb2.SandboxTemplate(image="IMG"),
+                gpu=True,
+            ),
+        )
+        d = _sandbox_to_dict(sb)
+        assert d["id"] == "ID"
+        assert d["name"] == "NAME"
+        assert d["namespace"] == "NS"
+        assert d["phase"] == "ready"
+        assert d["phase_code"] == 2
+        assert d["created_at_ms"] == 42
+        assert d["current_policy_version"] == 7
+        assert d["image"] == "IMG"
+        assert d["gpu"] is True
+
+    def test_gpu_false_when_no_spec(self):
+        """When sb.HasField('spec') is false, gpu should be False."""
+        sb = datamodel_pb2.Sandbox(id="x", name="y")
+        d = _sandbox_to_dict(sb)
+        assert d["gpu"] is False
+
+    def test_image_none_when_empty(self):
+        sb = datamodel_pb2.Sandbox(
+            id="x",
+            name="y",
+            spec=datamodel_pb2.SandboxSpec(template=datamodel_pb2.SandboxTemplate(image="")),
+        )
+        d = _sandbox_to_dict(sb)
+        assert d["image"] is None
+
+    def test_image_value_when_set(self):
+        sb = datamodel_pb2.Sandbox(
+            id="x",
+            name="y",
+            spec=datamodel_pb2.SandboxSpec(template=datamodel_pb2.SandboxTemplate(image="ubuntu")),
+        )
+        d = _sandbox_to_dict(sb)
+        assert d["image"] == "ubuntu"
+
+
+class TestListMutations:
+    """Kill mutations in list() default params and return structure."""
+
+    def test_list_default_params(self):
+        class _Stub(_FakeStub):
+            def ListSandboxes(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(sandboxes=[])
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.list()
+        assert s.request.limit == 100
+        assert s.request.offset == 0
+
+    def test_list_empty_returns_empty(self):
+        class _Stub(_FakeStub):
+            def ListSandboxes(self, req, timeout=None):
+                return SimpleNamespace(sandboxes=[])
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        assert m.list() == []
+
+    def test_list_uses_timeout(self):
+        class _Stub(_FakeStub):
+            def ListSandboxes(self, req, timeout=None):
+                self.timeout = timeout
+                return SimpleNamespace(sandboxes=[])
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 42.0
+        m.list()
+        assert s.timeout == 42.0
+
+
+class TestCreateMutations:
+    """Kill mutations in create() spec building."""
+
+    def test_create_no_policy_no_field(self):
+        class _Stub(_FakeStub):
+            def CreateSandbox(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.create(name="y")
+        assert not s.request.spec.HasField("policy")
+
+    def test_create_no_environment_empty(self):
+        class _Stub(_FakeStub):
+            def CreateSandbox(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.create(name="y")
+        assert dict(s.request.spec.environment) == {}
+
+    def test_create_gpu_false_default(self):
+        class _Stub(_FakeStub):
+            def CreateSandbox(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.create(name="y")
+        assert s.request.spec.gpu is False
+
+    def test_create_gpu_true(self):
+        class _Stub(_FakeStub):
+            def CreateSandbox(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.create(name="y", gpu=True)
+        assert s.request.spec.gpu is True
+
+
+class TestDeleteMutations:
+    """Kill mutations in delete() bool conversion."""
+
+    def test_delete_false(self):
+        class _Stub(_FakeStub):
+            def DeleteSandbox(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(deleted=False)
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        assert m.delete("sb1") is False
+
+    def test_delete_zero_is_false(self):
+        class _Stub(_FakeStub):
+            def DeleteSandbox(self, req, timeout=None):
+                return SimpleNamespace(deleted=0)
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        assert m.delete("sb1") is False
+
+    def test_delete_uses_timeout(self):
+        class _Stub(_FakeStub):
+            def DeleteSandbox(self, req, timeout=None):
+                self.timeout = timeout
+                return SimpleNamespace(deleted=True)
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 55.0
+        m.delete("sb1")
+        assert s.timeout == 55.0
+
+
+class TestExecMutations:
+    """Kill mutations in exec() stream parsing and timeout calculation."""
+
+    def test_exec_no_exit_event(self):
+        """When no exit event, exit_code should be None."""
+
+        class _Stub(_FakeStub):
+            def ExecSandbox(self, req, timeout=None):
+                yield openshell_pb2.ExecSandboxEvent(
+                    stdout=openshell_pb2.ExecSandboxStdout(data=b"data")
+                )
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.exec("sb1", ["cmd"])
+        assert result["exit_code"] is None
+        assert result["stdout"] == "data"
+
+    def test_exec_multiple_stdout_concatenated(self):
+        class _Stub(_FakeStub):
+            def ExecSandbox(self, req, timeout=None):
+                yield openshell_pb2.ExecSandboxEvent(
+                    stdout=openshell_pb2.ExecSandboxStdout(data=b"a")
+                )
+                yield openshell_pb2.ExecSandboxEvent(
+                    stdout=openshell_pb2.ExecSandboxStdout(data=b"b")
+                )
+                yield openshell_pb2.ExecSandboxEvent(
+                    exit=openshell_pb2.ExecSandboxExit(exit_code=0)
+                )
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.exec("sb1", ["cmd"])
+        assert result["stdout"] == "ab"
+
+    def test_exec_default_timeout_0_uses_600(self):
+        """timeout_seconds=0 -> grpc_timeout = max(_timeout, 600+10)."""
+
+        class _Stub(_FakeStub):
+            def ExecSandbox(self, req, timeout=None):
+                self.grpc_timeout = timeout
+                return iter([])
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.exec("sb1", ["cmd"])
+        assert s.grpc_timeout == 610  # max(30, 600+10)
+
+    def test_exec_env_none_becomes_empty(self):
+        class _Stub(_FakeStub):
+            def ExecSandbox(self, req, timeout=None):
+                self.request = req
+                return iter([])
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.exec("sb1", ["cmd"])
+        assert dict(s.request.environment) == {}
+
+
+class TestSshSessionMutations:
+    """Kill mutations in create_ssh_session / revoke_ssh_session."""
+
+    def test_ssh_session_all_fields_exact(self, mgr, stub):
+        result = mgr.create_ssh_session("abc")
+        assert set(result.keys()) == {
+            "sandbox_id",
+            "token",
+            "gateway_host",
+            "gateway_port",
+            "gateway_scheme",
+            "connect_path",
+            "host_key_fingerprint",
+            "expires_at_ms",
+        }
+
+    def test_revoke_false(self):
+        class _Stub(_FakeStub):
+            def RevokeSshSession(self, req, timeout=None):
+                return SimpleNamespace(revoked=False)
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        assert m.revoke_ssh_session("tok") is False
+
+
+class TestGetLogsMutations:
+    """Kill mutations in get_logs field extraction."""
+
+    def test_get_logs_defaults(self):
+        class _Stub(_FakeStub):
+            def GetSandboxLogs(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(logs=[])
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.get_logs("sb1")
+        assert s.request.lines == 200
+        assert s.request.since_ms == 0
+        assert s.request.min_level == ""
+
+    def test_get_logs_multiple_entries(self):
+        class _Stub(_FakeStub):
+            def GetSandboxLogs(self, req, timeout=None):
+                return SimpleNamespace(
+                    logs=[
+                        openshell_pb2.SandboxLogLine(
+                            timestamp_ms=1, level="info", message="a", source="s1", target="t1"
+                        ),
+                        openshell_pb2.SandboxLogLine(
+                            timestamp_ms=2, level="error", message="b", source="s2", target="t2"
+                        ),
+                    ]
+                )
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        result = m.get_logs("sb1")
+        assert len(result) == 2
+        assert result[0]["timestamp_ms"] == 1
+        assert result[0]["level"] == "info"
+        assert result[0]["message"] == "a"
+        assert result[0]["source"] == "s1"
+        assert result[0]["target"] == "t1"
+        assert result[1]["timestamp_ms"] == 2
+        assert result[1]["level"] == "error"
+        assert result[1]["message"] == "b"
+
+
+class TestWatchMutations:
+    """Kill mutations in watch() event type handling."""
+
+    def test_watch_log_all_fields(self):
+        event = openshell_pb2.SandboxStreamEvent(
+            log=openshell_pb2.SandboxLogLine(
+                timestamp_ms=999, level="warn", message="msg", source="src"
+            ),
+        )
+        mgr = _make_watch_mgr([event])
+        results = list(mgr.watch("sb1"))
+        assert results[0]["data"]["timestamp_ms"] == 999
+        assert results[0]["data"]["level"] == "warn"
+        assert results[0]["data"]["message"] == "msg"
+        assert results[0]["data"]["source"] == "src"
+
+    def test_watch_event_all_fields(self):
+        event = openshell_pb2.SandboxStreamEvent(
+            event=openshell_pb2.PlatformEvent(
+                timestamp_ms=100, source="s", type="t", reason="r", message="m"
+            ),
+        )
+        mgr = _make_watch_mgr([event])
+        results = list(mgr.watch("sb1"))
+        assert results[0]["data"] == {
+            "timestamp_ms": 100,
+            "source": "s",
+            "type": "t",
+            "reason": "r",
+            "message": "m",
+        }
+
+    def test_watch_draft_update_all_fields(self):
+        event = openshell_pb2.SandboxStreamEvent(
+            draft_policy_update=openshell_pb2.DraftPolicyUpdate(
+                draft_version=1, new_chunks=2, total_pending=3, summary="s"
+            ),
+        )
+        mgr = _make_watch_mgr([event])
+        results = list(mgr.watch("sb1"))
+        assert results[0]["data"] == {
+            "draft_version": 1,
+            "new_chunks": 2,
+            "total_pending": 3,
+            "summary": "s",
+        }
+
+    def test_watch_warning_exact(self):
+        event = openshell_pb2.SandboxStreamEvent(
+            warning=openshell_pb2.SandboxStreamWarning(message="w"),
+        )
+        mgr = _make_watch_mgr([event])
+        results = list(mgr.watch("sb1"))
+        assert results[0] == {"type": "warning", "data": {"message": "w"}}
+
+    def test_watch_multiple_events_order(self):
+        events = [
+            openshell_pb2.SandboxStreamEvent(
+                sandbox=datamodel_pb2.Sandbox(id="a", name="s", phase=1)
+            ),
+            openshell_pb2.SandboxStreamEvent(
+                log=openshell_pb2.SandboxLogLine(
+                    timestamp_ms=1, level="info", message="m", source="s"
+                )
+            ),
+        ]
+        mgr = _make_watch_mgr(events)
+        results = list(mgr.watch("sb1"))
+        assert results[0]["type"] == "status"
+        assert results[1]["type"] == "log"
+
+    def test_watch_empty_stream(self):
+        mgr = _make_watch_mgr([])
+        results = list(mgr.watch("sb1"))
+        assert results == []
+
+
+class TestWaitReadyMutations:
+    """Kill mutations in wait_ready conditions."""
+
+    def test_wait_ready_error_message_contains_name(self, monkeypatch):
+        monkeypatch.setattr("time.sleep", lambda _: None)
+
+        class _Stub(_FakeStub):
+            def GetSandbox(self, req, timeout=None):
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="a", name="my-sb", phase=3))
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        with pytest.raises(SandboxError, match="my-sb"):
+            m.wait_ready("my-sb")
+
+    def test_wait_ready_timeout_message_contains_seconds(self, monkeypatch):
+        monkeypatch.setattr("time.sleep", lambda _: None)
+        times = iter([0, 1, 999])
+        monkeypatch.setattr("time.time", lambda: next(times))
+
+        class _Stub(_FakeStub):
+            def GetSandbox(self, req, timeout=None):
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="a", name="sb", phase=1))
+
+        s = _Stub()
+        m = object.__new__(SandboxManager)
+        m._stub = s
+        m._timeout = 30.0
+        with pytest.raises(TimeoutError, match="10"):
+            m.wait_ready("sb", timeout_seconds=10)

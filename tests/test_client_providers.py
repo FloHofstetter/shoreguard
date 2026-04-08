@@ -176,3 +176,174 @@ def test_delete_returns_false():
 
     result = m.delete("prov-1")
     assert result is False
+
+
+# ─── Additional mutation-killing tests ──────────────────────────────────────
+
+
+class TestProviderToDictMutations:
+    """Kill mutations in _provider_to_dict field mappings."""
+
+    def test_empty_credentials_and_config(self):
+        provider = datamodel_pb2.Provider(id="i", name="n", type="t")
+        result = _provider_to_dict(provider)
+        assert result["credentials"] == {}
+        assert result["config"] == {}
+
+    def test_each_field_maps_correctly(self):
+        provider = datamodel_pb2.Provider(
+            id="ID",
+            name="NAME",
+            type="TYPE",
+            credentials={"k1": "v1"},
+            config={"k2": "v2"},
+        )
+        result = _provider_to_dict(provider)
+        assert result["id"] == "ID"
+        assert result["name"] == "NAME"
+        assert result["type"] == "TYPE"
+        assert result["credentials"] == {"k1": "v1"}
+        assert result["config"] == {"k2": "v2"}
+
+    def test_dict_keys_exact(self):
+        provider = datamodel_pb2.Provider(id="i", name="n", type="t")
+        result = _provider_to_dict(provider)
+        assert set(result.keys()) == {"id", "name", "type", "credentials", "config"}
+
+
+class TestProviderManagerMutations:
+    """Kill mutations in ProviderManager method argument passing."""
+
+    def test_list_default_params(self):
+        class _Stub(_FakeStub):
+            def ListProviders(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(providers=[])
+
+        s = _Stub()
+        m = object.__new__(ProviderManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.list()
+        assert s.request.limit == 100
+        assert s.request.offset == 0
+
+    def test_list_uses_timeout(self):
+        class _Stub(_FakeStub):
+            def ListProviders(self, req, timeout=None):
+                self.timeout = timeout
+                return SimpleNamespace(providers=[])
+
+        s = _Stub()
+        m = object.__new__(ProviderManager)
+        m._stub = s
+        m._timeout = 77.0
+        m.list()
+        assert s.timeout == 77.0
+
+    def test_get_uses_timeout(self):
+        class _Stub(_FakeStub):
+            def GetProvider(self, req, timeout=None):
+                self.timeout = timeout
+                return SimpleNamespace(provider=_make_provider())
+
+        s = _Stub()
+        m = object.__new__(ProviderManager)
+        m._stub = s
+        m._timeout = 42.0
+        m.get("p")
+        assert s.timeout == 42.0
+
+    def test_create_no_credentials_empty(self):
+        class _Stub(_FakeStub):
+            def CreateProvider(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(provider=_make_provider("p"))
+
+        s = _Stub()
+        m = object.__new__(ProviderManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.create(name="p", provider_type="t")
+        assert dict(s.request.provider.credentials) == {}
+        assert dict(s.request.provider.config) == {}
+
+    def test_create_uses_timeout(self):
+        class _Stub(_FakeStub):
+            def CreateProvider(self, req, timeout=None):
+                self.timeout = timeout
+                return SimpleNamespace(provider=_make_provider("p"))
+
+        s = _Stub()
+        m = object.__new__(ProviderManager)
+        m._stub = s
+        m._timeout = 99.0
+        m.create(name="p", provider_type="t")
+        assert s.timeout == 99.0
+
+    def test_update_no_credentials_empty(self):
+        class _Stub(_FakeStub):
+            def UpdateProvider(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(provider=_make_provider("p"))
+
+        s = _Stub()
+        m = object.__new__(ProviderManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.update(name="p")
+        assert dict(s.request.provider.credentials) == {}
+        assert dict(s.request.provider.config) == {}
+
+    def test_update_default_type_empty(self):
+        class _Stub(_FakeStub):
+            def UpdateProvider(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(provider=_make_provider("p"))
+
+        s = _Stub()
+        m = object.__new__(ProviderManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.update(name="p")
+        assert s.request.provider.type == ""
+
+    def test_delete_uses_timeout(self):
+        class _Stub(_FakeStub):
+            def DeleteProvider(self, req, timeout=None):
+                self.timeout = timeout
+                return SimpleNamespace(deleted=True)
+
+        s = _Stub()
+        m = object.__new__(ProviderManager)
+        m._stub = s
+        m._timeout = 88.0
+        m.delete("p")
+        assert s.timeout == 88.0
+
+    def test_delete_sends_name_in_request(self):
+        class _Stub(_FakeStub):
+            def DeleteProvider(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(deleted=True)
+
+        s = _Stub()
+        m = object.__new__(ProviderManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.delete("my-prov")
+        assert s.request.name == "my-prov"
+
+    def test_create_provider_type_set(self):
+        class _Stub(_FakeStub):
+            def CreateProvider(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(provider=_make_provider("p"))
+
+        s = _Stub()
+        m = object.__new__(ProviderManager)
+        m._stub = s
+        m._timeout = 30.0
+        m.create(name="p", provider_type="openai")
+        assert s.request.provider.type == "openai"
+        assert s.request.provider.name == "p"

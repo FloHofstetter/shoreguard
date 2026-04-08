@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import time
 
+import pytest
+
+from shoreguard.api.routes.sandboxes import _parse_label_filters
 from shoreguard.exceptions import GatewayNotConnectedError, NotFoundError
 
 GW = "test"  # gateway name used in all gateway-scoped URLs
@@ -419,3 +422,84 @@ async def test_get_sandbox_logs_with_params(api_client, mock_client):
         sources=["app", "system"],
         min_level="ERROR",
     )
+
+
+# ── _parse_label_filters ────────────────────────────────────────────────────
+
+
+class TestParseLabelFilters:
+    def test_none_returns_none(self):
+        assert _parse_label_filters(None) is None
+
+    def test_empty_list_returns_none(self):
+        assert _parse_label_filters([]) is None
+
+    def test_single_label(self):
+        result = _parse_label_filters(["env:prod"])
+        assert result == {"env": "prod"}
+
+    def test_multiple_labels(self):
+        result = _parse_label_filters(["env:prod", "team:backend"])
+        assert result == {"env": "prod", "team": "backend"}
+
+    def test_value_with_colon(self):
+        result = _parse_label_filters(["url:https://example.com:8080"])
+        assert result == {"url": "https://example.com:8080"}
+
+    def test_invalid_no_colon_raises(self):
+        with pytest.raises(Exception) as exc_info:
+            _parse_label_filters(["invalid"])
+        assert exc_info.value.status_code == 400
+
+    def test_invalid_starts_with_colon_raises(self):
+        with pytest.raises(Exception) as exc_info:
+            _parse_label_filters([":value"])
+        assert exc_info.value.status_code == 400
+
+    def test_error_message_includes_filter(self):
+        with pytest.raises(Exception) as exc_info:
+            _parse_label_filters(["badfilter"])
+        assert "badfilter" in str(exc_info.value.detail)
+
+    def test_valid_key_empty_value(self):
+        result = _parse_label_filters(["key:"])
+        assert result == {"key": ""}
+
+    def test_key_value_split_on_first_colon(self):
+        result = _parse_label_filters(["a:b:c"])
+        assert result == {"a": "b:c"}
+
+
+# ── operations _get_svc ─────────────────────────────────────────────────────
+
+
+async def test_operations_503_when_service_none(api_client):
+    """GET /api/operations returns 503 when operation_service is None."""
+    import shoreguard.services.operations as ops_mod
+
+    original = ops_mod.operation_service
+    ops_mod.operation_service = None
+    try:
+        resp = await api_client.get("/api/operations")
+        assert resp.status_code == 503
+        assert (
+            "not initialised" in resp.json()["detail"].lower()
+            or "not initialised" in resp.json()["detail"]
+        )
+    finally:
+        ops_mod.operation_service = original
+
+
+async def test_operations_get_404_detail(api_client):
+    """GET /api/operations/{id} returns 404 with descriptive detail."""
+    resp = await api_client.get("/api/operations/nonexistent-id")
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Operation not found"
+
+
+async def test_operations_cancel_400_detail(api_client):
+    """POST /api/operations/{id}/cancel returns 400 for unknown operation."""
+    resp = await api_client.post("/api/operations/nonexistent-id/cancel")
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "not found" in detail.lower() or "not running" in detail.lower()
