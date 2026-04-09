@@ -236,7 +236,7 @@ function updateWizardUI() {
     for (let i = 1; i <= 4; i++) {
         const content = document.getElementById(`wizard-step-${i}`);
         const step = document.querySelector(`.wizard-step[data-step="${i}"]`);
-        if (content) content.style.display = i === wizardState.step ? '' : 'none';
+        if (content) content.classList.toggle('d-none', i !== wizardState.step);
         if (step) {
             step.classList.toggle('active', i === wizardState.step);
             step.classList.toggle('completed', i < wizardState.step);
@@ -353,7 +353,7 @@ async function launchSandbox() {
     const description = document.getElementById('wizard-description')?.value?.trim() || '';
     const labels = Object.keys(_wizardLabels).length > 0 ? { ..._wizardLabels } : undefined;
 
-    document.getElementById('wizard-progress').style.display = '';
+    document.getElementById('wizard-progress').classList.remove('d-none');
     document.getElementById('wizard-launch-btn').disabled = true;
     document.getElementById('wizard-back-btn').disabled = true;
 

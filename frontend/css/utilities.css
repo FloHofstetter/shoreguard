@@ -1,0 +1,64 @@
+/**
+ * Shoreguard — M3 CSP utility classes
+ * Replace inline style="..." attributes that Bootstrap 5 utilities don't cover.
+ * All classes are sg-prefixed to avoid collisions.
+ */
+
+/* ─── Fixed column widths (tables, form controls) ───────────────────────── */
+.sg-w-40  { width: 40px; }
+.sg-w-60  { width: 60px; }
+.sg-w-100 { width: 100px; }
+.sg-w-120 { width: 120px; }
+.sg-w-180 { width: 180px; }
+
+/* ─── Max widths (Bootstrap only ships mw-100) ──────────────────────────── */
+.sg-mw-200 { max-width: 200px; }
+.sg-mw-250 { max-width: 250px; }
+.sg-mw-300 { max-width: 300px; }
+.sg-mw-400 { max-width: 400px; }
+
+/* ─── Misc sizing ───────────────────────────────────────────────────────── */
+.sg-min-h-300 { min-height: 300px; }
+.sg-w-0       { width: 0%; }  /* progress bar initial state */
+
+/* ─── Extra-small font sizes (BS fs-6 is ~1rem; we need smaller) ────────── */
+.sg-fs-xxs { font-size: 0.55rem; }
+.sg-fs-xs  { font-size: 0.6rem; }
+.sg-fs-sm  { font-size: 0.65rem; }
+.sg-fs-sm2 { font-size: 0.7rem; }
+.sg-fs-sm3 { font-size: 0.75rem; }
+
+/* ─── Interaction ───────────────────────────────────────────────────────── */
+.sg-cursor-pointer { cursor: pointer; }
+
+/* Bare button — reset native styling (sidebar link, filter dropdowns, etc.) */
+.sg-btn-bare {
+    border: none;
+    background: none;
+    width: 100%;
+    cursor: pointer;
+}
+
+/* ─── Theme-aware surfaces ──────────────────────────────────────────────── */
+.sg-text-accent { color: var(--sg-accent); }
+.sg-border-sg   { border-color: var(--sg-border) !important; }
+
+.sg-surface-card {
+    background: var(--sg-card);
+    border-color: var(--sg-border);
+    color: var(--sg-accent);
+}
+.sg-surface-card-wide {
+    background: var(--sg-card);
+    border-color: var(--sg-border);
+    color: var(--sg-accent);
+    min-width: 170px;
+}
+.sg-surface-log {
+    background: var(--sg-log-bg);
+    border-color: var(--sg-border);
+    color: var(--sg-log-text);
+}
+
+/* Utility: ensure hidden-by-default banners stay hidden until Alpine/JS shows them */
+.sg-hidden-important { display: none !important; }

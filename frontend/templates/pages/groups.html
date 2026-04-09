@@ -68,8 +68,8 @@
             <!-- Filter -->
             <template x-if="groups.length > 0">
                 <div class="mb-2">
-                    <input type="text" class="form-control form-control-sm" placeholder="Filter groups..."
-                           x-model="_filterText" style="max-width:300px">
+                    <input type="text" class="form-control form-control-sm sg-mw-300" placeholder="Filter groups..."
+                           x-model="_filterText">
                 </div>
             </template>
 
@@ -84,7 +84,7 @@
                                 <th :class="sortClass('member_count')" @click="sortBy('member_count')">Members</th>
                                 <th class="d-none d-md-table-cell">Description</th>
                                 <th class="d-none d-md-table-cell" :class="sortClass('created_at')" @click="sortBy('created_at')">Created</th>
-                                <th class="text-end" style="width:120px">Actions</th>
+                                <th class="text-end sg-w-120">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -196,7 +196,7 @@
                                             <tr>
                                                 <th>Email</th>
                                                 <th>Global Role</th>
-                                                <th class="text-end" style="width:60px"></th>
+                                                <th class="text-end sg-w-60"></th>
                                             </tr>
                                         </thead>
                                         <tbody>

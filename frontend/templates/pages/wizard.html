@@ -66,7 +66,7 @@
         </div>
 
         <!-- Step 2: Configuration -->
-        <div id="wizard-step-2" class="wizard-content" style="display:none">
+        <div id="wizard-step-2" class="wizard-content d-none">
             <div class="card">
                 <div class="card-body">
                     <div class="mb-3">
@@ -103,7 +103,7 @@
                     <div class="mb-3">
                         <label class="form-label">Labels <span class="text-muted small">(optional)</span></label>
                         <div id="wizard-labels" class="mb-1"></div>
-                        <div class="input-group input-group-sm" style="max-width:400px" id="wizard-label-input">
+                        <div class="input-group input-group-sm sg-mw-400" id="wizard-label-input">
                             <input type="text" class="form-control font-monospace" id="wizard-label-key"
                                    placeholder="key" onkeydown="if(event.key==='Enter'){event.preventDefault();addWizardLabel()}">
                             <span class="input-group-text">=</span>
@@ -123,7 +123,7 @@
         </div>
 
         <!-- Step 3: Policy Presets -->
-        <div id="wizard-step-3" class="wizard-content" style="display:none">
+        <div id="wizard-step-3" class="wizard-content d-none">
             <p class="text-muted mb-3">Select policy presets to enable:</p>
             <div id="wizard-presets" class="mb-3"></div>
             <div class="d-flex justify-content-between">
@@ -133,14 +133,14 @@
         </div>
 
         <!-- Step 4: Launch -->
-        <div id="wizard-step-4" class="wizard-content" style="display:none">
+        <div id="wizard-step-4" class="wizard-content d-none">
             <div class="card">
                 <div class="card-body">
                     <h5>Summary</h5>
                     <div id="wizard-summary" class="mb-3"></div>
-                    <div id="wizard-progress" style="display:none">
+                    <div id="wizard-progress" class="d-none">
                         <div class="progress mb-2">
-                            <div class="progress-bar progress-bar-striped progress-bar-animated" id="wizard-progress-bar" style="width: 0%"></div>
+                            <div class="progress-bar progress-bar-striped progress-bar-animated sg-w-0" id="wizard-progress-bar"></div>
                         </div>
                         <div id="wizard-log" class="log-output small"></div>
                     </div>

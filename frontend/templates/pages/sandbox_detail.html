@@ -48,7 +48,7 @@
                             <div class="fs-2 fw-bold mb-1" x-text="networkCount"></div>
                             <span class="text-muted small" x-text="networkLabel() + ' \u00b7 v' + (sandbox.current_policy_version || '?')"></span>
                         </div>
-                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                        <div class="card-footer border-0 pt-0 small bg-transparent">
                             Manage <i class="bi bi-arrow-right"></i>
                         </div>
                     </a>
@@ -63,7 +63,7 @@
                             <div class="fs-2 fw-bold mb-1" :class="pendingCount > 0 ? 'text-warning' : ''" x-text="pendingCount"></div>
                             <span class="text-muted small" x-text="pendingLabel()"></span>
                         </div>
-                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                        <div class="card-footer border-0 pt-0 small bg-transparent">
                             <span x-text="pendingCount > 0 ? 'Review' : 'View history'"></span> <i class="bi bi-arrow-right"></i>
                         </div>
                     </a>
@@ -77,7 +77,7 @@
                             </div>
                             <span class="text-muted small">Live log stream and history</span>
                         </div>
-                        <div class="card-footer border-0 pt-0 small" style="background:transparent">
+                        <div class="card-footer border-0 pt-0 small bg-transparent">
                             View <i class="bi bi-arrow-right"></i>
                         </div>
                     </a>
@@ -107,13 +107,13 @@
                                     <span class="text-muted">=</span>
                                     <span x-text="lbl.val"></span>
                                     <button x-show="$store.auth.hasRole('operator')" type="button"
-                                            class="btn-close btn-close-sm ms-1" style="font-size:.55rem"
+                                            class="btn-close btn-close-sm ms-1 sg-fs-xxs"
                                             @click="removeMetaLabel(lbl.key)"></button>
                                 </span>
                             </template>
                         </div>
                         <div x-show="$store.auth.hasRole('operator') && metaLabels.length < 20"
-                             class="input-group input-group-sm" style="max-width:400px">
+                             class="input-group input-group-sm sg-mw-400">
                             <input type="text" class="form-control font-monospace" x-model="newMetaKey"
                                    placeholder="key" @keydown.enter.prevent="addMetaLabel()">
                             <span class="input-group-text">=</span>

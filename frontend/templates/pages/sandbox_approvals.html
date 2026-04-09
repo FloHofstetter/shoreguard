@@ -69,7 +69,7 @@
                                 <td>
                                     <span class="badge" :class="SG.badges.approval[chunk.status] || 'text-bg-secondary'" x-text="chunk.status"></span>
                                 </td>
-                                <td @click="hasDetail(chunk) && toggleDetail(chunk.id)" :class="hasDetail(chunk) ? 'table-clickable' : ''" style="cursor:pointer">
+                                <td @click="hasDetail(chunk) && toggleDetail(chunk.id)" class="sg-cursor-pointer" :class="hasDetail(chunk) ? 'table-clickable' : ''">
                                     <strong x-text="chunk.rule_name"></strong>
                                     <i x-show="hasDetail(chunk)" class="bi ms-1 small"
                                        :class="isExpanded(chunk.id) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>

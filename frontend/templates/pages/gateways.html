@@ -42,8 +42,8 @@
 
     <!-- Filter -->
     <div x-show="!loading && !error && gateways.length > 0" x-cloak class="mb-2">
-        <input type="text" class="form-control form-control-sm" placeholder="Filter gateways..."
-               x-model="_filterText" style="max-width:300px">
+        <input type="text" class="form-control form-control-sm sg-mw-300" placeholder="Filter gateways..."
+               x-model="_filterText">
     </div>
 
     <!-- Gateway table -->
@@ -57,15 +57,15 @@
                     <th>Auth</th>
                     <th :class="sortClass('status')" @click="sortBy('status')">Status</th>
                     <th class="d-none d-md-table-cell" :class="sortClass('last_seen')" @click="sortBy('last_seen')">Last Seen</th>
-                    <th class="text-end" style="width:60px"></th>
+                    <th class="text-end sg-w-60"></th>
                 </tr>
             </thead>
             <tbody>
                 <template x-for="gw in sorted(filtered(gateways, 'name', 'description', 'endpoint'))" :key="gw.name">
-                    <tr @click="navigateTo('/gateways/' + gw.name)" style="cursor:pointer"
+                    <tr @click="navigateTo('/gateways/' + gw.name)" class="sg-cursor-pointer"
                         :class="gw.connected ? 'table-active' : ''">
                         <td><strong x-text="gw.name"></strong></td>
-                        <td class="d-none d-lg-table-cell small text-muted text-truncate" style="max-width:200px"
+                        <td class="d-none d-lg-table-cell small text-muted text-truncate sg-mw-200"
                             x-text="gw.description || '\u2014'"></td>
                         <td class="font-monospace small" x-text="gw.endpoint || '\u2014'"></td>
                         <td class="small" x-text="gw.auth_mode || '\u2014'"></td>

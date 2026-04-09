@@ -1,0 +1,36 @@
+/**
+ * Shoreguard — Auth pages (login / register / setup / invite)
+ * Centered card layout + login gradient + glow effect.
+ * Loaded via {% block extra_css %} on each auth template.
+ */
+
+/* Shared centered-card layout for all auth pages. Body styling works only
+ * when the auth template's <body> carries class="sg-auth-body". */
+body.sg-auth-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+}
+
+/* Login page gets an extra gradient background */
+body.sg-auth-body.sg-auth-login {
+    background: linear-gradient(135deg, var(--sg-bg) 0%, #1a1a1a 100%);
+}
+
+/* Card widths (login is slightly narrower than the rest) */
+.login-card    { max-width: 380px; width: 100%; }
+.register-card { max-width: 400px; width: 100%; }
+.setup-card    { max-width: 420px; width: 100%; }
+.invite-card   { max-width: 420px; width: 100%; }
+
+/* Login: glow + focus states */
+.login-glow { filter: drop-shadow(0 0 20px rgba(118, 185, 0, 0.3)); }
+
+.login-card .form-control {
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.login-card .form-control:focus {
+    border-color: var(--sg-accent);
+    box-shadow: 0 0 0 0.2rem rgba(118, 185, 0, 0.15);
+}

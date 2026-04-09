@@ -34,7 +34,7 @@
                 <div class="card-body py-2">
                     <div class="d-flex align-items-center gap-2">
                         <span class="text-muted small">Apply to:</span>
-                        <select x-model="selectedSandbox" class="form-select form-select-sm" style="max-width:250px">
+                        <select x-model="selectedSandbox" class="form-select form-select-sm sg-mw-250">
                             <option value="">Select a sandbox...</option>
                             <template x-for="sb in sandboxes" :key="sb.name">
                                 <option :value="sb.name" x-text="sb.name"></option>

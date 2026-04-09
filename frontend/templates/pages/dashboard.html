@@ -102,12 +102,12 @@
                                         <div class="list-group-item bg-transparent border-secondary px-0 py-2">
                                             <div class="d-flex justify-content-between align-items-start">
                                                 <div>
-                                                    <span class="badge text-bg-secondary me-1" x-text="entry.action" style="font-size:0.7rem"></span>
+                                                    <span class="badge text-bg-secondary me-1 sg-fs-sm2" x-text="entry.action"></span>
                                                     <span class="small" x-text="entry.resource_type + (entry.resource_id ? ' / ' + entry.resource_id : '')"></span>
                                                 </div>
                                                 <small class="text-muted text-nowrap ms-2" x-text="formatTimeAgo(entry.timestamp)"></small>
                                             </div>
-                                            <div class="text-muted small mt-1" x-text="entry.actor" style="font-size:0.75rem"></div>
+                                            <div class="text-muted small mt-1 sg-fs-sm3" x-text="entry.actor"></div>
                                         </div>
                                     </template>
                                 </div>

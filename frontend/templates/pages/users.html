@@ -36,8 +36,8 @@
             <!-- Filter -->
             <template x-if="users.length > 0">
                 <div class="mb-2">
-                    <input type="text" class="form-control form-control-sm" placeholder="Filter users..."
-                           x-model="_filterText" style="max-width:300px">
+                    <input type="text" class="form-control form-control-sm sg-mw-300" placeholder="Filter users..."
+                           x-model="_filterText">
                 </div>
             </template>
 
@@ -51,7 +51,7 @@
                                 <th :class="sortClass('role')" @click="sortBy('role')">Role</th>
                                 <th>Status</th>
                                 <th class="d-none d-md-table-cell" :class="sortClass('created_at')" @click="sortBy('created_at')">Created</th>
-                                <th class="text-end" style="width:60px">Actions</th>
+                                <th class="text-end sg-w-60">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -114,7 +114,7 @@
                                 <th>Role</th>
                                 <th class="d-none d-md-table-cell">Expires</th>
                                 <th class="d-none d-md-table-cell">Last Used</th>
-                                <th class="text-end" style="width:100px">Actions</th>
+                                <th class="text-end sg-w-100">Actions</th>
                             </tr>
                         </thead>
                         <tbody>

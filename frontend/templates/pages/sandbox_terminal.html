@@ -9,10 +9,9 @@
 <div x-data='terminalPage({{ sandbox_name|tojson }})'>
     <div class="d-flex gap-2 mb-2">
         <div class="input-group input-group-sm flex-grow-1">
-            <span class="input-group-text font-monospace" style="background:var(--sg-card);border-color:var(--sg-border);color:var(--sg-accent)">$</span>
-            <input type="text" class="form-control font-monospace" x-ref="termInput"
+            <span class="input-group-text font-monospace sg-surface-card">$</span>
+            <input type="text" class="form-control font-monospace sg-surface-log" x-ref="termInput"
                    placeholder="ls -la" autocomplete="off"
-                   style="background:var(--sg-log-bg);border-color:var(--sg-border);color:var(--sg-log-text)"
                    x-model="commandInput"
                    @keydown="handleKey($event)"
                    :disabled="running">
@@ -24,7 +23,7 @@
             <i class="bi bi-trash"></i>
         </button>
     </div>
-    <div class="log-output font-monospace" x-ref="termOutput" style="min-height:300px">
+    <div class="log-output font-monospace sg-min-h-300" x-ref="termOutput">
         <template x-for="(line, i) in outputLines" :key="i">
             <div class="log-line" :class="line.cls || ''" :style="line.css || ''" x-text="line.text"></div>
         </template>

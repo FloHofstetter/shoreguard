@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `SHOREGUARD_CSP_STRICT=true`, strict CSP no longer reports inline-script
   violations — only inline-style (M3) and Alpine `x-data` (M4) violations
   remain.
+- **CSP hardening M3** — All inline `style="..."` attributes and `<style>`
+  blocks removed from Jinja templates. Shared patterns moved to the new
+  `frontend/css/utilities.css` (sg-prefixed width/max-width/font-size/cursor
+  utilities) and auth pages share `frontend/css/auth.css`. Wizard step
+  toggling now uses `classList.toggle('d-none', ...)` instead of
+  `element.style.display`. With `SHOREGUARD_CSP_STRICT=true`, strict CSP no
+  longer reports `style-src` violations — only Alpine `x-data` (M4) remains.
 
 ## [0.25.0] — 2026-04-09
 

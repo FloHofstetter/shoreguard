@@ -154,3 +154,28 @@ async def test_no_inline_scripts_on_login():
     # Match any <script> tag without src= that has non-whitespace content inside.
     inline = re.findall(r"<script(?![^>]*\bsrc=)[^>]*>\s*\S", resp.text)
     assert inline == [], f"Unexpected inline <script> blocks on /login: {inline}"
+
+
+async def test_no_inline_styles_on_login():
+    """M3: no inline <style> blocks or style="..." attributes on /login."""
+    import re
+
+    from shoreguard.settings import reset_settings
+
+    reset_settings()
+
+    from shoreguard.api.main import app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get("/login")
+
+    assert resp.status_code == 200
+    assert "<style" not in resp.text, "unexpected inline <style> block on /login"
+    # Static style="..." attributes — Alpine :style= bindings are allowed.
+    inline_attr = re.search(r'(?<![:@x-])\sstyle\s*=\s*["\']', resp.text)
+    assert inline_attr is None, (
+        f"unexpected inline style attribute on /login: {inline_attr.group(0)!r}"
+    )

@@ -36,7 +36,7 @@
 
     <!-- Theme toggle + Gateway health (bottom) -->
     <div class="sidebar-section mt-auto">
-        <button class="sidebar-link" style="border: none; background: none; width: 100%; cursor: pointer;"
+        <button class="sidebar-link sg-btn-bare"
                 @click="$store.theme.toggle()">
             <i class="bi" :class="$store.theme.mode === 'dark' ? 'bi-sun' : 'bi-moon'"></i>
             <span x-text="$store.theme.mode === 'dark' ? 'Light Mode' : 'Dark Mode'"></span>
