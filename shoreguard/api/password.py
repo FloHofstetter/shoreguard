@@ -14,7 +14,7 @@ def validate_password(
         require_complexity: When True, require uppercase, lowercase, and digit.
 
     Returns:
-        An error message string if invalid, or ``None`` if the password is acceptable.
+        str | None: An error message string if invalid, or ``None`` if the password is acceptable.
     """
     if len(password) < min_length:
         return f"Password must be at least {min_length} characters"
@@ -45,7 +45,7 @@ def check_password(password: str) -> str | None:
         password: The password to validate.
 
     Returns:
-        An error message string if invalid, or ``None`` if acceptable.
+        str | None: An error message string if invalid, or ``None`` if acceptable.
     """
     from shoreguard.settings import get_settings
 

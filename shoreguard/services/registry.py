@@ -60,7 +60,7 @@ class GatewayRegistry:
             dict[str, Any]: The registered gateway record.
 
         Raises:
-            ValueError: If a gateway with the given name already exists.
+            ConflictError: If a gateway with the given name already exists.
         """
         with self._session_factory() as session:
             gw = Gateway(

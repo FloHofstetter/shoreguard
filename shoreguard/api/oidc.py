@@ -62,7 +62,17 @@ def _check_oidc_url(url: str, *, field: str) -> None:
 
 @dataclass
 class OIDCProvider:
-    """A configured OIDC identity provider."""
+    """A configured OIDC identity provider.
+
+    Attributes:
+        name (str): Unique machine name used to look up the provider.
+        display_name (str): Human-readable label shown in the UI.
+        issuer (str): OIDC issuer URL (no trailing slash).
+        client_id (str): OAuth2 client identifier registered with the provider.
+        client_secret (str): OAuth2 client secret used for token exchange.
+        scopes (list[str]): OAuth2 scopes requested at the authorize endpoint.
+        role_mapping (dict | None): Optional mapping from claim values to ShoreGuard roles.
+    """
 
     name: str
     display_name: str
@@ -126,12 +136,23 @@ def reset_oidc() -> None:
 
 
 def get_providers() -> list[OIDCProvider]:
-    """Return all configured OIDC providers."""
+    """Return all configured OIDC providers.
+
+    Returns:
+        list[OIDCProvider]: All providers currently registered in the module.
+    """
     return list(_providers.values())
 
 
 def get_provider(name: str) -> OIDCProvider | None:
-    """Look up a provider by name."""
+    """Look up a provider by name.
+
+    Args:
+        name: Machine name of the provider to look up.
+
+    Returns:
+        OIDCProvider | None: The matching provider or ``None`` if not found.
+    """
     return _providers.get(name)
 
 
@@ -139,7 +160,14 @@ def get_provider(name: str) -> OIDCProvider | None:
 
 
 async def discover(provider: OIDCProvider) -> dict:
-    """Fetch and cache the provider's OpenID Connect discovery document."""
+    """Fetch and cache the provider's OpenID Connect discovery document.
+
+    Args:
+        provider: The provider whose discovery document to fetch.
+
+    Returns:
+        dict: The parsed OpenID discovery JSON document.
+    """
     if provider._discovery is not None:
         return provider._discovery
     url = f"{provider.issuer}/.well-known/openid-configuration"
@@ -152,7 +180,14 @@ async def discover(provider: OIDCProvider) -> dict:
 
 
 async def get_jwks(provider: OIDCProvider) -> list[dict]:
-    """Fetch and cache the provider's JSON Web Key Set (1-hour TTL)."""
+    """Fetch and cache the provider's JSON Web Key Set (1-hour TTL).
+
+    Args:
+        provider: The provider whose JWKS to fetch.
+
+    Returns:
+        list[dict]: The list of JWK dicts advertised by the provider.
+    """
     now = time.time()
     if provider._jwks and (now - provider._jwks[1]) < JWKS_CACHE_TTL:
         return provider._jwks[0]
@@ -174,7 +209,7 @@ def generate_pkce() -> tuple[str, str]:
     """Generate a PKCE code verifier and S256 challenge.
 
     Returns:
-        (code_verifier, code_challenge)
+        tuple[str, str]: ``(code_verifier, code_challenge)`` pair.
     """
     verifier = secrets.token_urlsafe(64)
     digest = hashlib.sha256(verifier.encode()).digest()
@@ -192,7 +227,18 @@ async def build_authorize_url(
     nonce: str,
     code_challenge: str,
 ) -> str:
-    """Build the authorization endpoint URL with PKCE."""
+    """Build the authorization endpoint URL with PKCE.
+
+    Args:
+        provider: The provider to authorize against.
+        redirect_uri: Callback URL registered with the provider.
+        state: Opaque CSRF state value.
+        nonce: Nonce to embed in the ID token for replay protection.
+        code_challenge: PKCE S256 code challenge.
+
+    Returns:
+        str: Fully formed authorization URL with query parameters.
+    """
     disco = await discover(provider)
     params = {
         "response_type": "code",
@@ -216,7 +262,17 @@ async def exchange_code(
     redirect_uri: str,
     code_verifier: str,
 ) -> dict:
-    """Exchange an authorization code for tokens at the provider's token endpoint."""
+    """Exchange an authorization code for tokens at the provider's token endpoint.
+
+    Args:
+        provider: The provider to exchange the code with.
+        code: Authorization code returned from the authorize step.
+        redirect_uri: Same redirect URI used in the authorize request.
+        code_verifier: PKCE verifier that matches the original challenge.
+
+    Returns:
+        dict: Parsed JSON token response from the provider.
+    """
     disco = await discover(provider)
     data = {
         "grant_type": "authorization_code",
@@ -246,8 +302,13 @@ async def verify_id_token(provider: OIDCProvider, id_token: str, nonce: str) -> 
 
     Checks: signature, issuer, audience, expiry, nonce.
 
+    Args:
+        provider: Provider whose JWKS and issuer/audience to check against.
+        id_token: The JWT ID token received from the token endpoint.
+        nonce: Expected nonce value embedded in the token.
+
     Returns:
-        Decoded claims dict.
+        dict: Decoded claims dict.
 
     Raises:
         jwt.PyJWTError: On any verification failure.
@@ -298,6 +359,12 @@ def extract_email(claims: dict) -> str | None:
 
     Prefers ``email``, falls back to ``preferred_username`` if it looks
     like an email address.
+
+    Args:
+        claims: Decoded ID token claims.
+
+    Returns:
+        str | None: The normalized email address, or ``None`` if not present.
     """
     email = claims.get("email")
     if email:
@@ -312,6 +379,13 @@ def map_role(provider: OIDCProvider, claims: dict) -> str:
     """Map OIDC claims to a ShoreGuard role using the provider's role_mapping.
 
     Falls back to the configured ``default_role`` if no mapping matches.
+
+    Args:
+        provider: Provider whose ``role_mapping`` is applied.
+        claims: Decoded ID token claims.
+
+    Returns:
+        str: The resolved ShoreGuard role name.
     """
     from shoreguard.settings import get_settings
 
@@ -350,7 +424,11 @@ OIDC_STATE_COOKIE = "sg_oidc_state"
 
 
 def _get_hmac_secret() -> bytes:
-    """Get the HMAC secret from the auth module."""
+    """Get the HMAC secret from the auth module.
+
+    Returns:
+        bytes: The shared HMAC secret used to sign OIDC state cookies.
+    """
     from shoreguard.api.auth import _hmac_secret
 
     return _hmac_secret
@@ -367,6 +445,16 @@ def build_state_cookie(
 
     Contains all values needed to verify the callback: provider name,
     state, nonce, PKCE verifier, redirect target, and expiry.
+
+    Args:
+        provider_name: Machine name of the provider handling the flow.
+        state: Opaque CSRF state value.
+        nonce: Nonce to match against the ID token.
+        code_verifier: PKCE code verifier.
+        next_url: URL to redirect the user to after successful login.
+
+    Returns:
+        str: The encoded ``payload.signature`` cookie value.
     """
     from shoreguard.settings import get_settings
 
@@ -388,8 +476,11 @@ def build_state_cookie(
 def verify_state_cookie(cookie_value: str) -> dict | None:
     """Verify an HMAC-signed state cookie and return its payload.
 
+    Args:
+        cookie_value: The raw ``payload.signature`` cookie string.
+
     Returns:
-        Parsed payload dict with keys ``p``, ``s``, ``n``, ``v``, ``x``,
+        dict | None: Parsed payload dict with keys ``p``, ``s``, ``n``, ``v``, ``x``,
         or ``None`` if verification fails.
     """
     parts = cookie_value.split(".", 1)

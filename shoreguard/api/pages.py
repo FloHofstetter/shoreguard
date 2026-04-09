@@ -226,6 +226,10 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
 
     Returns:
         JSONResponse: Session cookie on success, or error details.
+
+    Raises:
+        HTTPException: If setup is not complete, the account is locked, or
+            the credentials are invalid.
     """
     _check_rate_limit(request)
     if not is_setup_complete():
@@ -359,7 +363,7 @@ async def oidc_providers_list() -> list[dict[str, str]]:
     """Return configured OIDC providers (public info only).
 
     Returns:
-        list: Provider name and display_name for each configured provider.
+        list[dict[str, str]]: Provider name and display_name for each configured provider.
     """
     from shoreguard.api.oidc import get_providers
 
@@ -379,6 +383,9 @@ async def oidc_login(request: Request, provider_name: str) -> RedirectResponse:
 
     Returns:
         RedirectResponse: Redirect to the provider's authorization endpoint.
+
+    Raises:
+        HTTPException: If the provider name is unknown.
     """
     import secrets as _secrets
 
@@ -579,6 +586,10 @@ async def setup(request: Request, body: SetupRequest) -> JSONResponse:
 
     Returns:
         JSONResponse: Session cookie on success, or error details.
+
+    Raises:
+        HTTPException: If setup is already complete, inputs are invalid, or
+            the user creation fails.
     """
     _check_rate_limit(request)
     if is_setup_complete():
@@ -671,6 +682,10 @@ async def create_user_endpoint(
 
     Returns:
         dict[str, Any] | JSONResponse: Created user info including invite token.
+
+    Raises:
+        HTTPException: If the role or email is invalid, the email already
+            exists, or user creation fails.
     """
     if body.role not in ROLES:
         raise HTTPException(400, f"Invalid role: {body.role!r} (must be one of {ROLES})")
@@ -711,6 +726,10 @@ async def delete_user_endpoint(request: Request, user_id: int) -> dict[str, Any]
 
     Returns:
         dict[str, Any] | JSONResponse: Confirmation or error response.
+
+    Raises:
+        HTTPException: If attempting self-deletion, deleting the last admin,
+            or the user does not exist.
     """
     # Prevent self-deletion
     cookie = request.cookies.get(COOKIE_NAME)
@@ -779,6 +798,10 @@ async def set_user_gateway_role(
 
     Returns:
         dict[str, Any] | JSONResponse: Updated gateway role mapping.
+
+    Raises:
+        HTTPException: If the gateway name or role is invalid, or a gateway
+            role conflict occurs.
     """
     if not VALID_GATEWAY_NAME_RE.match(gw):
         logger.warning(
@@ -835,6 +858,10 @@ async def delete_user_gateway_role(
 
     Returns:
         dict[str, Any] | JSONResponse: Confirmation or error response.
+
+    Raises:
+        HTTPException: If the gateway name is invalid or the override does
+            not exist.
     """
     if not VALID_GATEWAY_NAME_RE.match(gw):
         logger.warning(
@@ -900,6 +927,10 @@ async def set_sp_gateway_role_endpoint(
 
     Returns:
         dict[str, Any] | JSONResponse: Updated gateway role mapping.
+
+    Raises:
+        HTTPException: If the gateway name or role is invalid, or a gateway
+            role conflict occurs.
     """
     if not VALID_GATEWAY_NAME_RE.match(gw):
         logger.warning(
@@ -956,6 +987,10 @@ async def delete_sp_gateway_role(
 
     Returns:
         dict[str, Any] | JSONResponse: Confirmation or error response.
+
+    Raises:
+        HTTPException: If the gateway name is invalid or the override does
+            not exist.
     """
     if not VALID_GATEWAY_NAME_RE.match(gw):
         logger.warning(
@@ -1011,6 +1046,10 @@ async def accept_invite_endpoint(request: Request, body: AcceptInviteRequest) ->
 
     Returns:
         JSONResponse: Session cookie on success, or error details.
+
+    Raises:
+        HTTPException: If the password is missing/invalid or the invite
+            token is invalid or expired.
     """
     if not body.password:
         raise HTTPException(400, "Password is required")
@@ -1070,6 +1109,10 @@ async def register_endpoint(request: Request, body: RegisterRequest) -> JSONResp
 
     Returns:
         JSONResponse: Session cookie on success, or error details.
+
+    Raises:
+        HTTPException: If registration is disabled, setup is incomplete,
+            inputs are invalid, the email already exists, or creation fails.
     """
     _check_rate_limit(request)
     if not is_registration_enabled():
@@ -1168,6 +1211,10 @@ async def create_sp_endpoint(
 
     Returns:
         dict[str, Any] | JSONResponse: Created service principal info including API key.
+
+    Raises:
+        HTTPException: If the role or name is invalid, the name already
+            exists, or creation fails.
     """
     if body.role not in ROLES:
         raise HTTPException(400, f"Invalid role: {body.role!r} (must be one of {ROLES})")
@@ -1217,6 +1264,9 @@ async def delete_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | J
 
     Returns:
         dict[str, Any] | JSONResponse: Confirmation or error response.
+
+    Raises:
+        HTTPException: If the service principal does not exist.
     """
     if delete_service_principal(sp_id):
         logger.info("Service principal deleted (sp_id=%s, actor=%s)", sp_id, _get_actor(request))
@@ -1241,6 +1291,9 @@ async def rotate_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | J
 
     Returns:
         dict[str, Any] | JSONResponse: New key info or error response.
+
+    Raises:
+        HTTPException: If the service principal does not exist.
     """
     result = rotate_service_principal(sp_id)
     if result is None:
@@ -1255,7 +1308,13 @@ async def rotate_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | J
 
 
 class CreateGroupRequest(BaseModel):
-    """Request body for creating a group."""
+    """Request body for creating a group.
+
+    Attributes:
+        name: Group name.
+        role: Default role for members of the group.
+        description: Optional free-form description.
+    """
 
     name: str
     role: str = "viewer"
@@ -1263,7 +1322,13 @@ class CreateGroupRequest(BaseModel):
 
 
 class UpdateGroupRequest(BaseModel):
-    """Request body for updating a group."""
+    """Request body for updating a group.
+
+    Attributes:
+        name: New group name, if changing.
+        role: New default role, if changing.
+        description: New description, if changing.
+    """
 
     name: str | None = None
     role: str | None = None
@@ -1271,7 +1336,11 @@ class UpdateGroupRequest(BaseModel):
 
 
 class AddGroupMemberRequest(BaseModel):
-    """Request body for adding a member to a group."""
+    """Request body for adding a member to a group.
+
+    Attributes:
+        user_id: Database ID of the user to add.
+    """
 
     user_id: int
 
@@ -1310,6 +1379,9 @@ async def create_group_endpoint(
 
     Returns:
         dict[str, Any] | JSONResponse: Created group or error response.
+
+    Raises:
+        HTTPException: If the role is invalid or the group name conflicts.
     """
     if body.role not in ROLES:
         raise HTTPException(400, f"Invalid role: {body.role!r}")
@@ -1335,6 +1407,9 @@ async def get_group_endpoint(request: Request, group_id: int) -> dict[str, Any] 
 
     Returns:
         dict[str, Any] | JSONResponse: Group info or 404.
+
+    Raises:
+        HTTPException: If the group does not exist.
     """
     result = await asyncio.to_thread(get_group, group_id)
     if result is None:
@@ -1359,6 +1434,9 @@ async def update_group_endpoint(
 
     Returns:
         dict[str, Any] | JSONResponse: Updated group or error.
+
+    Raises:
+        HTTPException: If the role is invalid or the new name conflicts.
     """
     if body.role is not None and body.role not in ROLES:
         raise HTTPException(400, f"Invalid role: {body.role!r}")
@@ -1387,6 +1465,9 @@ async def delete_group_endpoint(request: Request, group_id: int) -> dict[str, An
 
     Returns:
         dict[str, Any] | JSONResponse: Success or 404.
+
+    Raises:
+        HTTPException: If the group does not exist.
     """
     # Fetch group name for audit before deleting
     info = await asyncio.to_thread(get_group, group_id)
@@ -1418,6 +1499,9 @@ async def add_group_member_endpoint(
 
     Returns:
         dict[str, Any] | JSONResponse: Membership info or error.
+
+    Raises:
+        HTTPException: If the user is already a member of the group.
     """
     try:
         result = await asyncio.to_thread(add_group_member, group_id, body.user_id)
@@ -1450,6 +1534,9 @@ async def remove_group_member_endpoint(
 
     Returns:
         dict[str, Any] | JSONResponse: Success or 404.
+
+    Raises:
+        HTTPException: If the group or membership does not exist.
     """
     # Fetch group name for audit
     info = await asyncio.to_thread(get_group, group_id)
@@ -1507,6 +1594,9 @@ async def set_group_gateway_role_endpoint(
 
     Returns:
         dict[str, Any] | JSONResponse: Saved role or error.
+
+    Raises:
+        HTTPException: If the role is invalid.
     """
     if body.role not in ROLES:
         raise HTTPException(400, f"Invalid role: {body.role!r}")
@@ -1538,6 +1628,9 @@ async def delete_group_gateway_role_endpoint(
 
     Returns:
         dict[str, Any] | JSONResponse: Success or 404.
+
+    Raises:
+        HTTPException: If the gateway role does not exist.
     """
     removed = await asyncio.to_thread(remove_group_gateway_role, group_id, gw)
     if not removed:

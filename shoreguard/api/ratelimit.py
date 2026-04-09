@@ -22,14 +22,7 @@ class SlidingWindowRateLimiter:
 
     _CLEANUP_INTERVAL = 100  # run cleanup every N calls to ``is_limited``
 
-    def __init__(self, max_attempts: int, window_seconds: int, lockout_seconds: int) -> None:
-        """Initialise the limiter.
-
-        Args:
-            max_attempts: Maximum allowed attempts within the window.
-            window_seconds: Sliding window duration in seconds.
-            lockout_seconds: How long a blocked key must wait.
-        """
+    def __init__(self, max_attempts: int, window_seconds: int, lockout_seconds: int) -> None:  # noqa: D107
         self.max_attempts = max_attempts
         self.window_seconds = window_seconds
         self.lockout_seconds = lockout_seconds
@@ -43,8 +36,8 @@ class SlidingWindowRateLimiter:
             key: The rate-limit key (e.g. client IP address).
 
         Returns:
-            A ``(blocked, retry_after)`` tuple.  When *blocked* is ``True``,
-            *retry_after* is the number of seconds the caller should wait.
+            tuple[bool, int]: A ``(blocked, retry_after)`` tuple.  When *blocked* is
+                ``True``, *retry_after* is the number of seconds the caller should wait.
         """
         self._call_count += 1
         if self._call_count % self._CLEANUP_INTERVAL == 0:
@@ -102,7 +95,7 @@ def get_login_limiter() -> SlidingWindowRateLimiter:
     """Return the global login rate limiter, creating it on first call.
 
     Returns:
-        The singleton ``SlidingWindowRateLimiter`` instance.
+        SlidingWindowRateLimiter: The singleton instance.
     """
     global _limiter  # noqa: PLW0603
     if _limiter is None:
@@ -132,7 +125,7 @@ def get_write_limiter() -> SlidingWindowRateLimiter:
     """Return the global write rate limiter, creating it on first call.
 
     Returns:
-        The singleton ``SlidingWindowRateLimiter`` instance.
+        SlidingWindowRateLimiter: The singleton instance.
     """
     global _write_limiter  # noqa: PLW0603
     if _write_limiter is None:
@@ -166,7 +159,7 @@ def get_global_limiter() -> SlidingWindowRateLimiter:
     not fine-grained abuse protection.
 
     Returns:
-        The singleton ``SlidingWindowRateLimiter`` instance.
+        SlidingWindowRateLimiter: The singleton instance.
     """
     global _global_limiter  # noqa: PLW0603
     if _global_limiter is None:

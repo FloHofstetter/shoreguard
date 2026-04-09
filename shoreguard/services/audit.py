@@ -9,6 +9,7 @@ import datetime
 import io
 import json
 import logging
+from collections.abc import Iterator
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
@@ -50,10 +51,13 @@ class AuditIntegrityError(RuntimeError):
 
 
 @contextlib.contextmanager
-def _allow_audit_mutation():
+def _allow_audit_mutation() -> Iterator[None]:
     """Context manager that permits AuditEntry deletes for its duration.
 
     Only :meth:`AuditService.cleanup` should enter this context.
+
+    Yields:
+        None: Control is yielded with mutation temporarily permitted.
     """
     token = _audit_mutation_allowed.set(True)
     try:
@@ -63,14 +67,32 @@ def _allow_audit_mutation():
 
 
 @event.listens_for(AuditEntry, "before_update", propagate=True)
-def _block_audit_update(_mapper, _conn, _target) -> None:  # type: ignore[no-untyped-def]
-    """ORM-level guard: AuditEntry rows are never updatable."""
+def _block_audit_update(_mapper: Any, _conn: Any, _target: Any) -> None:
+    """ORM-level guard: AuditEntry rows are never updatable.
+
+    Args:
+        _mapper: SQLAlchemy mapper (unused).
+        _conn: SQLAlchemy connection (unused).
+        _target: The AuditEntry instance being updated (unused).
+
+    Raises:
+        AuditIntegrityError: Always, because AuditEntry is append-only.
+    """
     raise AuditIntegrityError("AuditEntry is append-only — UPDATE is not allowed")
 
 
 @event.listens_for(AuditEntry, "before_delete", propagate=True)
-def _block_audit_delete(_mapper, _conn, _target) -> None:  # type: ignore[no-untyped-def]
-    """ORM-level guard: AuditEntry deletion is only permitted from cleanup()."""
+def _block_audit_delete(_mapper: Any, _conn: Any, _target: Any) -> None:
+    """ORM-level guard: AuditEntry deletion is only permitted from cleanup().
+
+    Args:
+        _mapper: SQLAlchemy mapper (unused).
+        _conn: SQLAlchemy connection (unused).
+        _target: The AuditEntry instance being deleted (unused).
+
+    Raises:
+        AuditIntegrityError: If called outside the ``_allow_audit_mutation`` context.
+    """
     if not _audit_mutation_allowed.get():
         raise AuditIntegrityError(
             "AuditEntry is append-only — DELETE only allowed via AuditService.cleanup()"

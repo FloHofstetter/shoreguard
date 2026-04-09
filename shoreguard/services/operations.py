@@ -36,6 +36,14 @@ def _truncate_result(result: dict[str, Any], max_bytes: int | None = None) -> st
     Always returns valid JSON.  Tries to shorten well-known large fields
     (stdout, stderr, output, logs) first, then falls back to a minimal
     placeholder if the payload is still too big.
+
+    Args:
+        result: Result payload to serialize.
+        max_bytes: Maximum serialized size in bytes. Defaults to
+            the configured ``ops.max_result_bytes`` setting when ``None``.
+
+    Returns:
+        str: JSON string representation of the (possibly truncated) result.
     """
     from shoreguard.settings import get_settings
 
@@ -67,13 +75,12 @@ class OperationService:
         retention_days: Days to keep completed operations before cleanup.
     """
 
-    def __init__(
+    def __init__(  # noqa: D107
         self,
         session_factory: sessionmaker[Session],
         running_ttl: float = 600.0,
         retention_days: int = 30,
     ) -> None:
-        """Initialise the operation service."""
         self._session_factory = session_factory
         self._running_ttl = running_ttl
         self._retention_days = retention_days
@@ -100,10 +107,7 @@ class OperationService:
             idempotency_key: Optional client-provided idempotency key.
 
         Returns:
-            The newly created operation record.
-
-        Raises:
-            IntegrityError: If the idempotency_key already exists.
+            OperationRecord: The newly created operation record.
         """
         now = datetime.now(UTC)
         op = OperationRecord(
@@ -146,7 +150,7 @@ class OperationService:
             idempotency_key: Optional client-provided idempotency key.
 
         Returns:
-            The new operation, or None if one is already active.
+            OperationRecord | None: The new operation, or None if one is already active.
         """
         now = datetime.now(UTC)
         with self._session_factory() as session:
@@ -283,7 +287,7 @@ class OperationService:
             op_id: The operation ID to look up.
 
         Returns:
-            The operation record, or None if not found.
+            OperationRecord | None: The operation record, or None if not found.
         """
         with self._session_factory() as session:
             op = session.get(OperationRecord, op_id)
@@ -298,7 +302,7 @@ class OperationService:
             key: The idempotency key to search for.
 
         Returns:
-            The matching operation record, or None.
+            OperationRecord | None: The matching operation record, or None.
         """
         with self._session_factory() as session:
             op = (
@@ -327,7 +331,7 @@ class OperationService:
             offset: Number of results to skip.
 
         Returns:
-            Tuple of (operations, total_count).
+            tuple[list[OperationRecord], int]: Tuple of (operations, total_count).
         """
         from shoreguard.settings import get_settings
 
@@ -357,7 +361,7 @@ class OperationService:
             resource_key: Name of the resource to check.
 
         Returns:
-            True if an active (pending/running) operation exists.
+            bool: True if an active (pending/running) operation exists.
         """
         with self._session_factory() as session:
             return (
@@ -375,7 +379,7 @@ class OperationService:
         """Return counts of operations grouped by status.
 
         Returns:
-            Mapping of status to count.
+            dict[str, int]: Mapping of status to count.
         """
         with self._session_factory() as session:
             rows = (
@@ -409,7 +413,8 @@ class OperationService:
             op_id: The operation ID to cancel.
 
         Returns:
-            The updated operation record, or None if not found or not active.
+            OperationRecord | None: The updated operation record, or None if
+            not found or not active.
         """
         with self._session_factory() as session:
             op = session.get(OperationRecord, op_id)
@@ -438,7 +443,7 @@ class OperationService:
         when the server was shut down or crashed.
 
         Returns:
-            Number of orphaned operations recovered.
+            int: Number of orphaned operations recovered.
         """
         now = datetime.now(UTC)
         with self._session_factory() as session:
@@ -463,7 +468,7 @@ class OperationService:
         """Expire stuck active operations and remove old completed ones.
 
         Returns:
-            Number of operations cleaned up.
+            int: Number of operations cleaned up.
         """
         now = datetime.now(UTC)
         removed = 0
@@ -509,7 +514,7 @@ class OperationService:
             op: The operation record to convert.
 
         Returns:
-            JSON-serializable representation for the API.
+            dict[str, Any]: JSON-serializable representation for the API.
         """
         d: dict[str, Any] = {
             "id": op.id,
@@ -543,6 +548,9 @@ class AsyncOperationService:
     Shares :meth:`to_dict` and :meth:`register_task` behaviour with the sync
     version.  All DB-accessing methods are async.
 
+    Attributes:
+        to_dict: Static serialisation helper re-used from :class:`OperationService`.
+
     Args:
         session_factory: Async SQLAlchemy session factory.
         running_ttl: Seconds before a stuck running operation is timed out.
@@ -552,13 +560,12 @@ class AsyncOperationService:
     # Re-use the static serialisation helper.
     to_dict = staticmethod(OperationService.to_dict)
 
-    def __init__(
+    def __init__(  # noqa: D107
         self,
         session_factory: async_sessionmaker[AsyncSession],
         running_ttl: float = 600.0,
         retention_days: int = 30,
     ) -> None:
-        """Initialise the async operation service."""
         self._session_factory = session_factory
         self._running_ttl = running_ttl
         self._retention_days = retention_days
@@ -575,7 +582,18 @@ class AsyncOperationService:
         gateway_name: str | None = None,
         idempotency_key: str | None = None,
     ) -> OperationRecord:
-        """Create a new operation in *pending* state."""
+        """Create a new operation in *pending* state.
+
+        Args:
+            resource_type: Type of resource being operated on.
+            resource_key: Name of the resource.
+            actor: Identity of the user starting the operation.
+            gateway_name: Gateway the operation targets.
+            idempotency_key: Optional client-provided idempotency key.
+
+        Returns:
+            OperationRecord: The newly created operation record.
+        """
         now = datetime.now(UTC)
         op = OperationRecord(
             id=str(uuid.uuid4()),
@@ -603,7 +621,18 @@ class AsyncOperationService:
         gateway_name: str | None = None,
         idempotency_key: str | None = None,
     ) -> OperationRecord | None:
-        """Create a new operation if none is active for this resource."""
+        """Create a new operation if none is active for this resource.
+
+        Args:
+            resource_type: Type of resource being operated on.
+            resource_key: Name of the resource.
+            actor: Identity of the user starting the operation.
+            gateway_name: Gateway the operation targets.
+            idempotency_key: Optional client-provided idempotency key.
+
+        Returns:
+            OperationRecord | None: The new operation, or None if one is already active.
+        """
         now = datetime.now(UTC)
         async with self._session_factory() as session:
             result = await session.execute(
@@ -641,7 +670,11 @@ class AsyncOperationService:
     # ── State transitions ─────────────────────────────────────────────────
 
     async def start(self, op_id: str) -> None:
-        """Transition pending → running."""
+        """Transition pending → running.
+
+        Args:
+            op_id: The operation ID to start.
+        """
         async with self._session_factory() as session:
             op = await session.get(OperationRecord, op_id)
             if op is None or op.status != OpStatus.pending:
@@ -651,7 +684,12 @@ class AsyncOperationService:
             await session.commit()
 
     async def complete(self, op_id: str, result: dict[str, Any]) -> None:
-        """Mark an operation as succeeded."""
+        """Mark an operation as succeeded.
+
+        Args:
+            op_id: The operation ID to complete.
+            result: Result payload to store.
+        """
         result_str = _truncate_result(result)
         now = datetime.now(UTC)
         async with self._session_factory() as session:
@@ -668,7 +706,13 @@ class AsyncOperationService:
         logger.info("Operation %s succeeded", op_id)
 
     async def fail(self, op_id: str, error: str, error_code: str = ErrorCode.internal) -> None:
-        """Mark an operation as failed."""
+        """Mark an operation as failed.
+
+        Args:
+            op_id: The operation ID to mark as failed.
+            error: Human-readable error message.
+            error_code: Machine-readable error code.
+        """
         now = datetime.now(UTC)
         async with self._session_factory() as session:
             op = await session.get(OperationRecord, op_id)
@@ -684,7 +728,13 @@ class AsyncOperationService:
         logger.warning("Operation %s failed (%s): %s", op_id, error_code, error)
 
     async def update_progress(self, op_id: str, pct: int, message: str | None = None) -> None:
-        """Update progress for an active operation."""
+        """Update progress for an active operation.
+
+        Args:
+            op_id: The operation ID to update.
+            pct: Progress percentage (0-100).
+            message: Optional progress message.
+        """
         pct = max(0, min(100, pct))
         async with self._session_factory() as session:
             op = await session.get(OperationRecord, op_id)
@@ -698,7 +748,14 @@ class AsyncOperationService:
     # ── Queries ────────────────────────────────────────────────────────────
 
     async def get(self, op_id: str) -> OperationRecord | None:
-        """Get an operation by ID."""
+        """Get an operation by ID.
+
+        Args:
+            op_id: The operation ID to look up.
+
+        Returns:
+            OperationRecord | None: The operation record, or None if not found.
+        """
         async with self._session_factory() as session:
             op = await session.get(OperationRecord, op_id)
             if op is not None:
@@ -706,7 +763,14 @@ class AsyncOperationService:
             return op
 
     async def get_by_idempotency_key(self, key: str) -> OperationRecord | None:
-        """Look up an operation by its idempotency key."""
+        """Look up an operation by its idempotency key.
+
+        Args:
+            key: The idempotency key to search for.
+
+        Returns:
+            OperationRecord | None: The matching operation record, or None.
+        """
         async with self._session_factory() as session:
             result = await session.execute(
                 select(OperationRecord).filter(OperationRecord.idempotency_key == key)
@@ -721,7 +785,17 @@ class AsyncOperationService:
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[OperationRecord], int]:
-        """List operations with optional filtering."""
+        """List operations with optional filtering.
+
+        Args:
+            status: Filter by status.
+            resource_type: Filter by resource type.
+            limit: Maximum number of results (max 200).
+            offset: Number of results to skip.
+
+        Returns:
+            tuple[list[OperationRecord], int]: Tuple of (operations, total_count).
+        """
         from shoreguard.settings import get_settings
 
         limit = min(limit, get_settings().ops.max_list_limit)
@@ -742,7 +816,15 @@ class AsyncOperationService:
             return ops, total
 
     async def is_running(self, resource_type: str, resource_key: str) -> bool:
-        """Check if there is an active operation for the given resource."""
+        """Check if there is an active operation for the given resource.
+
+        Args:
+            resource_type: Type of resource to check.
+            resource_key: Name of the resource to check.
+
+        Returns:
+            bool: True if an active (pending/running) operation exists.
+        """
         async with self._session_factory() as session:
             result = await session.execute(
                 select(OperationRecord.id).filter(
@@ -754,7 +836,11 @@ class AsyncOperationService:
             return result.first() is not None
 
     async def status_counts(self) -> dict[str, int]:
-        """Return counts of operations grouped by status."""
+        """Return counts of operations grouped by status.
+
+        Returns:
+            dict[str, int]: Mapping of status to count.
+        """
         async with self._session_factory() as session:
             result = await session.execute(
                 select(OperationRecord.status, func.count(OperationRecord.id)).group_by(
@@ -766,12 +852,25 @@ class AsyncOperationService:
     # ── Cancel ─────────────────────────────────────────────────────────────
 
     def register_task(self, op_id: str, task: asyncio.Task[None]) -> None:
-        """Register an asyncio task for cancellation support."""
+        """Register an asyncio task for cancellation support.
+
+        Args:
+            op_id: The operation ID.
+            task: The asyncio task running the operation.
+        """
         self._tasks[op_id] = task
         task.add_done_callback(lambda _: self._tasks.pop(op_id, None))
 
     async def cancel(self, op_id: str) -> OperationRecord | None:
-        """Cancel an active operation."""
+        """Cancel an active operation.
+
+        Args:
+            op_id: The operation ID to cancel.
+
+        Returns:
+            OperationRecord | None: The updated operation record, or None if
+            not found or not active.
+        """
         async with self._session_factory() as session:
             op = await session.get(OperationRecord, op_id)
             if op is None or op.status not in (OpStatus.pending, OpStatus.running):
@@ -791,7 +890,11 @@ class AsyncOperationService:
     # ── Cleanup ────────────────────────────────────────────────────────────
 
     async def recover_orphans(self) -> int:
-        """Mark all active operations as failed (startup recovery)."""
+        """Mark all active operations as failed (startup recovery).
+
+        Returns:
+            int: Number of orphaned operations recovered.
+        """
         now = datetime.now(UTC)
         async with self._session_factory() as session:
             result = await session.execute(
@@ -811,7 +914,11 @@ class AsyncOperationService:
         return count
 
     async def cleanup(self) -> int:
-        """Expire stuck active operations and remove old completed ones."""
+        """Expire stuck active operations and remove old completed ones.
+
+        Returns:
+            int: Number of operations cleaned up.
+        """
         now = datetime.now(UTC)
         removed = 0
         async with self._session_factory() as session:

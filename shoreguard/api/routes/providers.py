@@ -59,7 +59,17 @@ class CreateProviderRequest(BaseModel):
     @field_validator("credentials", "config")
     @classmethod
     def check_dict_size(cls, v: dict[str, str]) -> dict[str, str]:
-        """Enforce entry count and key/value length limits."""
+        """Enforce entry count and key/value length limits.
+
+        Args:
+            v: Dictionary value to validate.
+
+        Returns:
+            dict[str, str]: The validated dictionary, unchanged.
+
+        Raises:
+            ValueError: If there are too many entries or keys/values exceed length limits.
+        """
         if len(v) > 50:
             raise ValueError("too many entries (max 50)")
         for k, val in v.items():
@@ -84,7 +94,17 @@ class UpdateProviderRequest(BaseModel):
     @field_validator("credentials", "config")
     @classmethod
     def check_dict_size(cls, v: dict[str, str]) -> dict[str, str]:
-        """Enforce entry count and key/value length limits."""
+        """Enforce entry count and key/value length limits.
+
+        Args:
+            v: Dictionary value to validate.
+
+        Returns:
+            dict[str, str]: The validated dictionary, unchanged.
+
+        Raises:
+            ValueError: If there are too many entries or keys/values exceed length limits.
+        """
         if len(v) > 50:
             raise ValueError("too many entries (max 50)")
         for k, val in v.items():

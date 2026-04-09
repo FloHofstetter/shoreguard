@@ -459,9 +459,6 @@ async def gateway_test_connection(name: str, request: Request) -> dict[str, Any]
 
     Returns:
         dict[str, Any]: Connection test result.
-
-    Raises:
-        HTTPException: If the gateway is not found (404).
     """
     _validate_name_param(name)
     result = await asyncio.to_thread(_get_gateway_service().test_connection, name)
@@ -610,6 +607,7 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> JSONRe
     Raises:
         HTTPException: If not in local mode, name is invalid, or creation is
             already in progress.
+        AssertionError: If the operation service is not initialized.
     """
     mgr = _get_local_manager()
     if mgr is None:

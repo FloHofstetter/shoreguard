@@ -88,7 +88,7 @@ _no_auth: bool = False
 
 
 def _get_auth_settings():  # noqa: ANN202
-    """Return auth settings from the central Settings singleton."""
+    """Return auth settings from the central Settings singleton."""  # noqa: DOC201
     from shoreguard.settings import get_settings
 
     return get_settings().auth
@@ -340,8 +340,8 @@ def is_account_locked(email: str) -> tuple[bool, int]:
         email: The email to check.
 
     Returns:
-        ``(locked, retry_after_seconds)``.  When *locked* is ``True``,
-        *retry_after* indicates how long the caller should wait.
+        tuple[bool, int]: ``(locked, retry_after_seconds)``. When *locked* is
+        ``True``, *retry_after* indicates how long the caller should wait.
     """
     import time
 
@@ -806,7 +806,7 @@ def create_user(email: str, password: str | None, role: str) -> dict:
         dict: User info dict (includes ``invite_token`` when applicable).
 
     Raises:
-        ValueError: If the role is invalid.
+        DomainValidationError: If the role is invalid.
         RuntimeError: If the database is not available.
         IntegrityError: If the email already exists.
         Exception: On unexpected DB errors (re-raised after rollback).
@@ -973,8 +973,11 @@ def find_or_create_oidc_user(email: str, oidc_provider: str, oidc_sub: str, role
         role: Role for new users (from role mapping).
 
     Returns:
-        dict with ``"user"`` (user info dict) and ``"action"``
+        dict: Mapping with ``"user"`` (user info dict) and ``"action"``
         (``"login"``, ``"link"``, or ``"create"``).
+
+    Raises:
+        RuntimeError: If the database is not available.
     """
     if _session_factory is None:
         raise RuntimeError("Database not available")
@@ -1040,7 +1043,8 @@ def delete_user(user_id: int) -> bool:
         bool: ``True`` if the user was found and deleted.
 
     Raises:
-        ValueError: If the user is the last active admin.
+        DomainValidationError: If the user is the last active admin.
+        ValueError: Re-raised after rollback on generic value errors.
         RuntimeError: If the database is not available.
         IntegrityError: On constraint violation.
         Exception: On unexpected DB errors (re-raised after rollback).
@@ -1109,7 +1113,7 @@ def create_service_principal(
         tuple[str, dict]: ``(plaintext_key, info_dict)``.
 
     Raises:
-        ValueError: If the role is invalid.
+        DomainValidationError: If the role is invalid.
         RuntimeError: If the database is not available.
         IntegrityError: If the name already exists.
         Exception: On unexpected DB errors (re-raised after rollback).
@@ -1290,7 +1294,8 @@ def set_gateway_role(
         dict: The saved role record.
 
     Raises:
-        ValueError: If the role is invalid or gateway not found.
+        DomainValidationError: If the role is invalid.
+        NotFoundError: If the gateway is not found.
         RuntimeError: If the database is not available.
         IntegrityError: On constraint violation.
         Exception: On unexpected DB errors (re-raised after rollback).
@@ -1487,9 +1492,10 @@ def create_group(name: str, role: str = "viewer", description: str | None = None
         dict: The created group info.
 
     Raises:
-        ValueError: If the role is invalid.
+        DomainValidationError: If the role is invalid.
         RuntimeError: If the database is not available.
         IntegrityError: If the name already exists.
+        Exception: On unexpected DB errors (re-raised after rollback).
     """
     if role not in ROLES:
         raise DomainValidationError(f"Invalid role: {role!r}")
@@ -1540,8 +1546,11 @@ def update_group(
         dict: The updated group info.
 
     Raises:
-        ValueError: If the role is invalid or group not found.
+        DomainValidationError: If the role is invalid.
+        NotFoundError: If the group is not found.
         RuntimeError: If the database is not available.
+        IntegrityError: On constraint violation.
+        Exception: On unexpected DB errors (re-raised after rollback).
     """
     if role is not None and role not in ROLES:
         raise DomainValidationError(f"Invalid role: {role!r}")
@@ -1587,6 +1596,7 @@ def delete_group(group_id: int) -> bool:
 
     Raises:
         RuntimeError: If the database is not available.
+        Exception: On unexpected DB errors (re-raised after rollback).
     """
     if _session_factory is None:
         raise RuntimeError("Database not available")
@@ -1701,9 +1711,10 @@ def add_group_member(group_id: int, user_id: int) -> dict:
         dict: Membership info.
 
     Raises:
-        ValueError: If the group or user is not found.
+        NotFoundError: If the group or user is not found.
         RuntimeError: If the database is not available.
         IntegrityError: If the membership already exists.
+        Exception: On unexpected DB errors (re-raised after rollback).
     """
     if _session_factory is None:
         raise RuntimeError("Database not available")
@@ -1747,6 +1758,7 @@ def remove_group_member(group_id: int, user_id: int) -> bool:
 
     Raises:
         RuntimeError: If the database is not available.
+        Exception: On unexpected DB errors (re-raised after rollback).
     """
     if _session_factory is None:
         raise RuntimeError("Database not available")
@@ -1841,8 +1853,11 @@ def set_group_gateway_role(group_id: int, gateway_name: str, role: str) -> dict:
         dict: The saved role record.
 
     Raises:
-        ValueError: If the role is invalid, group or gateway not found.
+        DomainValidationError: If the role is invalid.
+        NotFoundError: If the group or gateway is not found.
         RuntimeError: If the database is not available.
+        IntegrityError: On constraint violation.
+        Exception: On unexpected DB errors (re-raised after rollback).
     """
     if role not in ROLES:
         raise DomainValidationError(f"Invalid role: {role!r}")
@@ -1893,6 +1908,7 @@ def remove_group_gateway_role(group_id: int, gateway_name: str) -> bool:
 
     Raises:
         RuntimeError: If the database is not available.
+        Exception: On unexpected DB errors (re-raised after rollback).
     """
     if _session_factory is None:
         raise RuntimeError("Database not available")

@@ -49,7 +49,17 @@ class WebhookCreateRequest(BaseModel):
     @field_validator("event_types")
     @classmethod
     def check_event_types(cls, v: list[str]) -> list[str]:
-        """Enforce non-empty event types with max length."""
+        """Enforce non-empty event types with max length.
+
+        Args:
+            v: Candidate event type strings.
+
+        Returns:
+            list[str]: The validated event types unchanged.
+
+        Raises:
+            ValueError: If any event type is empty or longer than 100 chars.
+        """
         for et in v:
             if not et.strip() or len(et) > 100:
                 raise ValueError("each event_type must be non-empty and at most 100 chars")
@@ -58,7 +68,17 @@ class WebhookCreateRequest(BaseModel):
     @field_validator("channel_type")
     @classmethod
     def check_channel_type(cls, v: str) -> str:
-        """Restrict to known channel types."""
+        """Restrict to known channel types.
+
+        Args:
+            v: Candidate channel type.
+
+        Returns:
+            str: The validated channel type unchanged.
+
+        Raises:
+            ValueError: If the channel type is not in VALID_CHANNEL_TYPES.
+        """
         if v not in VALID_CHANNEL_TYPES:
             raise ValueError(f"must be one of: {', '.join(VALID_CHANNEL_TYPES)}")
         return v
@@ -84,7 +104,17 @@ class WebhookUpdateRequest(BaseModel):
     @field_validator("event_types")
     @classmethod
     def check_event_types(cls, v: list[str] | None) -> list[str] | None:
-        """Enforce non-empty event types with max length."""
+        """Enforce non-empty event types with max length.
+
+        Args:
+            v: Candidate event type strings, or None.
+
+        Returns:
+            list[str] | None: The validated event types unchanged.
+
+        Raises:
+            ValueError: If any event type is empty or longer than 100 chars.
+        """
         if v is None:
             return v
         for et in v:
@@ -95,7 +125,17 @@ class WebhookUpdateRequest(BaseModel):
     @field_validator("channel_type")
     @classmethod
     def check_channel_type(cls, v: str | None) -> str | None:
-        """Restrict to known channel types."""
+        """Restrict to known channel types.
+
+        Args:
+            v: Candidate channel type, or None.
+
+        Returns:
+            str | None: The validated channel type unchanged.
+
+        Raises:
+            ValueError: If the channel type is not in VALID_CHANNEL_TYPES.
+        """
         if v is not None and v not in VALID_CHANNEL_TYPES:
             raise ValueError(f"must be one of: {', '.join(VALID_CHANNEL_TYPES)}")
         return v

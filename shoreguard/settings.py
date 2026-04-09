@@ -28,7 +28,22 @@ logger = logging.getLogger(__name__)
 
 
 class ServerSettings(BaseSettings):
-    """Server bind address, logging, and runtime flags."""
+    """Server bind address, logging, and runtime flags.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        host (str): Bind address for the HTTP server.
+        port (int): TCP port for the HTTP server.
+        log_level (str): Log level: critical|error|warning|info|debug|trace.
+        log_format (str): Log output format — 'text' for humans, 'json' for aggregators.
+        reload (bool): Auto-reload on code changes (dev only).
+        database_url (str | None): SQLAlchemy database URL (sqlite:/// or postgresql://).
+            Unset falls back to sqlite in the XDG config dir.
+        local_mode (bool): Allow private-IP targets in SSRF checks (local gateway dev).
+        graceful_shutdown_timeout (int): Seconds uvicorn waits for in-flight requests on SIGTERM.
+        gzip_minimum_size (int): Minimum response body size in bytes before gzip kicks in.
+        readyz_timeout (float): Timeout in seconds for /readyz dependency probes.
+    """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_")
 
@@ -73,6 +88,17 @@ class DatabaseSettings(BaseSettings):
     """PostgreSQL connection pool and timeout settings.
 
     Only applied when the database URL is not SQLite.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        pool_size (int): SQLAlchemy connection pool size.
+        max_overflow (int): Additional pool connections allowed above pool_size.
+        pool_timeout (int): Seconds to wait for a pool connection before failing.
+        pool_recycle (int): Seconds after which connections are recycled.
+        statement_timeout_ms (int): PostgreSQL statement_timeout in ms (per connection).
+        startup_retry_attempts (int): Retries init_db() does on OperationalError.
+        startup_retry_delay (float): Initial backoff in seconds between DB retry attempts.
+        startup_retry_max_delay (float): Maximum backoff cap in seconds between DB retries.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_DB_")
@@ -109,7 +135,42 @@ class DatabaseSettings(BaseSettings):
 
 
 class AuthSettings(BaseSettings):
-    """Authentication, sessions, and registration."""
+    """Authentication, sessions, and registration.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        no_auth (bool): Disable authentication entirely (development only).
+        secret_key (str | None): HMAC secret for sessions and signed cookies. Unset falls back
+            to on-disk .secret_key — set explicitly for multi-replica.
+        allow_registration (bool): Allow unauthenticated self-signup via /register.
+        admin_password (str | None): Bootstrap admin password used on first startup if no
+            users exist.
+        cookie_name (str): Session cookie name.
+        session_max_age (int): Session cookie lifetime in seconds (default: 7 days).
+        invite_max_age (int): Invite token validity in seconds (default: 7 days).
+        password_min_length (int): Minimum password length for user registration.
+        password_require_complexity (bool): Require mixed-case, digit, and symbol in passwords.
+        login_rate_limit_attempts (int): Max failed logins per IP before rate limit.
+        login_rate_limit_window (int): Login rate-limit sliding window in seconds.
+        login_rate_limit_lockout (int): Login rate-limit lockout duration in seconds.
+        account_lockout_attempts (int): Max failed logins per account before lockout.
+        account_lockout_duration (int): Account lockout duration in seconds after threshold.
+        write_rate_limit_attempts (int): Max write requests per IP before rate limit.
+        write_rate_limit_window (int): Write rate-limit sliding window in seconds.
+        write_rate_limit_lockout (int): Write rate-limit lockout duration in seconds.
+        global_rate_limit_attempts (int): Global per-IP rate limit (DDoS guardrail).
+        global_rate_limit_window (int): Global rate-limit sliding window in seconds.
+        global_rate_limit_lockout (int): Global rate-limit lockout duration in seconds.
+        metrics_public (bool): Expose /metrics without authentication (default: admin-only).
+        hsts_enabled (bool): Emit Strict-Transport-Security header (enable behind HTTPS).
+        hsts_max_age (int): HSTS max-age in seconds (default: 2 years).
+        csp_policy (str): Content-Security-Policy header value (used when csp_strict=False).
+        csp_strict (bool): Enforce strict CSP with per-request nonce and no 'unsafe-*'.
+            Requires all inline scripts to be nonce-gated and the Alpine.js CSP build.
+            Default off until the frontend refactor (M2–M4) is complete.
+        csp_policy_strict (str): CSP template used when csp_strict=True. Must contain a
+            '{nonce}' placeholder that is replaced per-request.
+    """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_")
 
@@ -238,7 +299,15 @@ class AuthSettings(BaseSettings):
 
 
 class GatewaySettings(BaseSettings):
-    """Gateway connection backoff and gRPC defaults."""
+    """Gateway connection backoff and gRPC defaults.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        backoff_min (float): Initial reconnect backoff in seconds.
+        backoff_max (float): Maximum reconnect backoff in seconds.
+        backoff_factor (float): Exponential backoff multiplier between attempts.
+        grpc_timeout (float): Default timeout for gRPC calls to gateways.
+    """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_GATEWAY_")
 
@@ -253,7 +322,18 @@ class GatewaySettings(BaseSettings):
 
 
 class OperationsSettings(BaseSettings):
-    """Long-running operation tracking tuning."""
+    """Long-running operation tracking tuning.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        max_result_bytes (int): Max bytes of operation result stored in DB (larger truncated).
+        running_ttl (float): Seconds a running operation can go without heartbeat before
+            timeout.
+        retention_days (int): Days to retain completed operations before cleanup.
+        field_truncation_chars (int): Max characters per text field before truncation in
+            operation records.
+        max_list_limit (int): Maximum page size for /operations list queries.
+    """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_OPS_")
 
@@ -280,7 +360,13 @@ class OperationsSettings(BaseSettings):
 
 
 class AuditSettings(BaseSettings):
-    """Audit log retention and export."""
+    """Audit log retention and export.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        retention_days (int): Days to retain audit log entries before cleanup.
+        export_limit (int): Maximum rows returned by /audit/export in a single call.
+    """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_AUDIT_")
 
@@ -294,7 +380,14 @@ class AuditSettings(BaseSettings):
 
 
 class WebhookSettings(BaseSettings):
-    """Webhook delivery tuning."""
+    """Webhook delivery tuning.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        delivery_timeout (float): HTTP request timeout for webhook delivery in seconds.
+        retry_delays (list[int]): Retry delays in seconds between failed delivery attempts.
+        delivery_max_age_days (int): Days to retain webhook delivery records before cleanup.
+    """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_WEBHOOK_")
 
@@ -312,7 +405,17 @@ class WebhookSettings(BaseSettings):
 
 
 class BackgroundSettings(BaseSettings):
-    """Background task intervals (seconds) and backoff."""
+    """Background task intervals (seconds) and backoff.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        cleanup_interval (int): Seconds between operation/audit cleanup passes.
+        cleanup_max_interval (int): Maximum backoff cap for cleanup task after failures.
+        cleanup_backoff_threshold (int): Consecutive cleanup failures before backoff mode.
+        health_interval (int): Seconds between gateway health probe cycles.
+        health_max_interval (int): Maximum backoff cap for health monitor after failures.
+        health_backoff_threshold (int): Consecutive health probe failures before backoff.
+    """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_BG_")
 
@@ -343,7 +446,16 @@ class BackgroundSettings(BaseSettings):
 
 
 class LocalGatewaySettings(BaseSettings):
-    """Local gateway Docker lifecycle management."""
+    """Local gateway Docker lifecycle management.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        startup_retries (int): Times to retry probing a local gateway container at startup.
+        startup_sleep (float): Seconds to sleep between startup probe retries.
+        openshell_timeout (float): Timeout in seconds for openshell subprocess calls.
+        docker_timeout (float): Timeout in seconds for docker subprocess calls.
+        starting_port (int): First port assigned to locally-spawned gateways.
+    """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_LOCAL_GW_")
 
@@ -368,7 +480,15 @@ class LocalGatewaySettings(BaseSettings):
 
 
 class WebSocketSettings(BaseSettings):
-    """WebSocket event streaming."""
+    """WebSocket event streaming.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        queue_maxsize (int): Maximum number of buffered events per WebSocket client.
+        queue_get_timeout (float): Seconds to wait for an event before sending a heartbeat.
+        heartbeat_interval (float): Seconds between WebSocket heartbeat frames.
+        backpressure_drop_limit (int): Events dropped before a slow client is disconnected.
+    """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_WS_")
 
@@ -391,7 +511,12 @@ class WebSocketSettings(BaseSettings):
 
 
 class SandboxSettings(BaseSettings):
-    """Sandbox route defaults."""
+    """Sandbox route defaults.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        ready_timeout (float): Seconds to wait for a sandbox to become ready before failing.
+    """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_SANDBOX_")
 
@@ -407,6 +532,12 @@ class OIDCSettings(BaseSettings):
     Providers are configured via a JSON array in ``SHOREGUARD_OIDC_PROVIDERS_JSON``.
     Each entry needs ``name``, ``issuer``, ``client_id``, ``client_secret``,
     and optionally ``display_name``, ``scopes``, and ``role_mapping``.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        providers_json (str): JSON array of OIDC provider configs.
+        default_role (str): Role assigned to OIDC users whose claims do not match any mapping.
+        state_max_age (int): Seconds an OIDC state cookie remains valid after authorize.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_OIDC_")
@@ -432,6 +563,14 @@ class CORSSettings(BaseSettings):
     ``SHOREGUARD_CORS_ALLOW_ORIGINS`` to a comma-separated list of exact
     origins (e.g. ``https://app.example.com,https://admin.example.com``)
     to enable CORS for a browser-based frontend on a different origin.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        allow_origins (list[str]): Exact origins permitted by CORS.
+        allow_credentials (bool): Allow cookies/authorization headers in CORS requests.
+        allow_methods (list[str]): HTTP methods allowed by CORS (default: all).
+        allow_headers (list[str]): Request headers allowed by CORS (default: all).
+        max_age (int): CORS preflight cache duration in seconds.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_CORS_")
@@ -459,7 +598,32 @@ class CORSSettings(BaseSettings):
 
 
 class LimitSettings(BaseSettings):
-    """Input size and validation limits."""
+    """Input size and validation limits.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        max_cert_bytes (int): Maximum PEM certificate size in bytes.
+        max_metadata_json_bytes (int): Maximum metadata JSON payload size in bytes.
+        max_description_len (int): Maximum free-text description length.
+        max_labels (int): Maximum label entries per resource.
+        max_label_value_len (int): Maximum label value length (DNS-style).
+        max_name_len (int): Maximum resource name length (DNS-style).
+        max_url_len (int): Maximum URL length in any field.
+        max_api_key_len (int): Maximum API key token length.
+        max_event_types (int): Maximum event types per webhook subscription.
+        max_event_type_len (int): Maximum event type string length.
+        max_env_vars (int): Maximum environment variables per sandbox/command.
+        max_env_key_len (int): Maximum env var key length.
+        max_env_value_len (int): Maximum env var value length.
+        max_config_entries (int): Maximum config map entries per resource.
+        max_config_value_len (int): Maximum config map value length.
+        max_command_len (int): Maximum command-line string length.
+        max_reason_len (int): Maximum audit reason text length.
+        max_timeout_secs (int): Maximum per-operation timeout requestable by API.
+        max_image_len (int): Maximum container image reference length.
+        max_password_len (int): Maximum password length accepted (bcrypt 72-byte limit).
+        max_request_body_bytes (int): Maximum HTTP request body size in bytes (default 10 MiB).
+    """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_LIMIT_")
 
@@ -514,6 +678,22 @@ class Settings(BaseSettings):
     Each nested model is constructed via ``default_factory`` so that
     environment variables are read at instantiation time, not at class
     definition / import time.
+
+    Attributes:
+        server (ServerSettings): HTTP server bind/logging/runtime flags.
+        database (DatabaseSettings): PostgreSQL connection pool and timeout settings.
+        auth (AuthSettings): Authentication, sessions, rate limits, CSP, HSTS.
+        gateway (GatewaySettings): Gateway reconnect backoff and gRPC defaults.
+        ops (OperationsSettings): Long-running operation tracking tuning.
+        audit (AuditSettings): Audit log retention and export limits.
+        webhooks (WebhookSettings): Webhook delivery tuning.
+        background (BackgroundSettings): Background task intervals and backoff.
+        local_gw (LocalGatewaySettings): Local gateway Docker lifecycle management.
+        websocket (WebSocketSettings): WebSocket event streaming tuning.
+        sandbox (SandboxSettings): Sandbox route defaults.
+        limits (LimitSettings): Input size and validation limits.
+        oidc (OIDCSettings): OpenID Connect provider configuration.
+        cors (CORSSettings): Cross-Origin Resource Sharing policy.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -541,6 +721,9 @@ class Settings(BaseSettings):
         * ``local_mode`` is off (SSRF allow-list for private IPs disabled)
         * ``no_auth`` is off (auth is actually required)
         * ``host`` is not bound to the loopback interface
+
+        Returns:
+            bool: True if the deployment looks production-like, False otherwise.
         """
         return (
             not self.server.local_mode
@@ -664,6 +847,9 @@ def get_settings() -> Settings:
 
     On first call, reads all ``SHOREGUARD_*`` environment variables.
     Subsequent calls return the cached instance.
+
+    Returns:
+        Settings: The cached singleton Settings instance.
     """
     global _settings  # noqa: PLW0603
     if _settings is None:
@@ -672,7 +858,11 @@ def get_settings() -> Settings:
 
 
 def override_settings(settings: Settings) -> None:
-    """Replace the settings singleton (for CLI overrides and tests)."""
+    """Replace the settings singleton (for CLI overrides and tests).
+
+    Args:
+        settings: The replacement Settings instance to cache as the singleton.
+    """
     global _settings  # noqa: PLW0603
     _settings = settings
 

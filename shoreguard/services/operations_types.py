@@ -6,7 +6,15 @@ from enum import StrEnum
 
 
 class OpStatus(StrEnum):
-    """Operation lifecycle states."""
+    """Operation lifecycle states.
+
+    Attributes:
+        pending: Operation accepted but not yet started.
+        running: Operation currently executing.
+        cancelling: Operation is being cancelled.
+        succeeded: Operation completed successfully.
+        failed: Operation failed with an error.
+    """
 
     pending = "pending"
     running = "running"
@@ -23,7 +31,13 @@ ACTIVE_STATES = frozenset({OpStatus.pending, OpStatus.running, OpStatus.cancelli
 
 
 class ResourceType(StrEnum):
-    """Types of resources that can have long-running operations."""
+    """Types of resources that can have long-running operations.
+
+    Attributes:
+        sandbox: Sandbox resource operations.
+        exec: Exec (command execution) resource operations.
+        gateway: Gateway resource operations.
+    """
 
     sandbox = "sandbox"
     exec = "exec"
@@ -31,7 +45,15 @@ class ResourceType(StrEnum):
 
 
 class ErrorCode(StrEnum):
-    """Machine-readable error codes for failed operations."""
+    """Machine-readable error codes for failed operations.
+
+    Attributes:
+        internal: Unexpected internal error.
+        timeout: Operation exceeded its allotted time.
+        cancelled: Operation was cancelled by the user or system.
+        orphaned: Operation was orphaned (e.g. worker died) and reconciled.
+        grpc_unavailable: Underlying gRPC service was unavailable.
+    """
 
     internal = "internal"
     timeout = "timeout"

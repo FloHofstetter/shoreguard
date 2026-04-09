@@ -70,6 +70,17 @@ def audit_export(
     - ``<out>.sha256`` — sha256sum-compatible digest line
     - ``<out>.manifest.json`` — structured metadata (entries, filters,
       generation time, tool version)
+
+    Args:
+        out: Output file path (will be created with 0600 permissions).
+        fmt: Export format, ``json`` or ``csv``.
+        since: ISO-8601 start timestamp filter.
+        until: ISO-8601 end timestamp filter.
+        actor: Filter to a single actor.
+        action: Filter to a single action type.
+
+    Raises:
+        typer.Exit: If ``fmt`` is not one of the supported formats.
     """
     # Lazy imports so `shoreguard audit --help` doesn't boot the DB.
     from sqlalchemy.orm import sessionmaker

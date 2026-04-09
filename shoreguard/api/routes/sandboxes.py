@@ -79,7 +79,17 @@ class CreateSandboxRequest(BaseModel):
     @field_validator("environment")
     @classmethod
     def check_env(cls, v: dict[str, str]) -> dict[str, str]:
-        """Enforce entry count and key/value length limits."""
+        """Enforce entry count and key/value length limits.
+
+        Args:
+            v: Environment variables to validate.
+
+        Returns:
+            dict[str, str]: The validated environment mapping.
+
+        Raises:
+            ValueError: If too many entries or key/value exceed length limits.
+        """
         if len(v) > 100:
             raise ValueError("too many environment variables (max 100)")
         for k, val in v.items():
@@ -118,7 +128,17 @@ class ExecRequest(BaseModel):
     @field_validator("env")
     @classmethod
     def check_env(cls, v: dict[str, str]) -> dict[str, str]:
-        """Enforce entry count and key/value length limits."""
+        """Enforce entry count and key/value length limits.
+
+        Args:
+            v: Environment variables to validate.
+
+        Returns:
+            dict[str, str]: The validated environment mapping.
+
+        Raises:
+            ValueError: If too many entries or key/value exceed length limits.
+        """
         if len(v) > 100:
             raise ValueError("too many environment variables (max 100)")
         for k, val in v.items():
@@ -204,10 +224,11 @@ async def create_sandbox(
         client: gRPC client for the active gateway.
 
     Returns:
-        dict[str, Any]: Operation tracking object with id and status.
+        JSONResponse: Operation tracking object with id and status.
 
     Raises:
         HTTPException: If sandbox name is invalid or creation is already in progress.
+        AssertionError: If the operation service is not initialized.
     """
     check_write_rate_limit(request)
     if body.name and not _VALID_NAME_RE.match(body.name):

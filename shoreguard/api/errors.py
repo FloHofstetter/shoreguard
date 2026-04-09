@@ -99,12 +99,29 @@ def _detect_feature_from_path(path: str) -> str:
 
 
 def _get_request_id(request: Request) -> str | None:
-    """Extract the request ID set by metrics middleware."""
+    """Extract the request ID set by metrics middleware.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        str | None: The request ID if set, otherwise None.
+    """
     return getattr(request.state, "request_id", None)
 
 
 def _error_body(detail: str, request: Request, *, code: str | None = None, **extra: object) -> dict:
-    """Build a consistent error response body with optional request_id."""
+    """Build a consistent error response body with optional request_id.
+
+    Args:
+        detail: Human-readable error detail message.
+        request: The incoming HTTP request.
+        code: Optional machine-readable error code.
+        **extra: Additional fields to merge into the response body.
+
+    Returns:
+        dict: The assembled error response body.
+    """
     body: dict = {"detail": detail}
     if code:
         body["code"] = code

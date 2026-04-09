@@ -34,7 +34,14 @@ REDACTED = "***REDACTED***"
 
 
 def _env_prefix(model: type[BaseSettings]) -> str:
-    """Return the ``env_prefix`` configured on a settings sub-model."""
+    """Return the ``env_prefix`` configured on a settings sub-model.
+
+    Args:
+        model: The settings sub-model class to inspect.
+
+    Returns:
+        str: The configured ``env_prefix`` string, or an empty string if none.
+    """
     mc = getattr(model, "model_config", None)
     if mc is None:
         return ""
@@ -44,7 +51,15 @@ def _env_prefix(model: type[BaseSettings]) -> str:
 
 
 def _is_default(field_info: FieldInfo, current: Any) -> bool:
-    """Check whether *current* equals the Field default (handling factories)."""
+    """Check whether *current* equals the Field default (handling factories).
+
+    Args:
+        field_info: The Pydantic field metadata describing the default.
+        current: The current effective value to compare against the default.
+
+    Returns:
+        bool: ``True`` if *current* equals the field default, ``False`` otherwise.
+    """
     if field_info.default_factory is not None:
         try:
             return field_info.default_factory() == current  # type: ignore[call-arg]
@@ -54,7 +69,14 @@ def _is_default(field_info: FieldInfo, current: Any) -> bool:
 
 
 def _format_value(value: Any) -> str:
-    """Render a scalar/list value for the table and env formats."""
+    """Render a scalar/list value for the table and env formats.
+
+    Args:
+        value: The value to render.
+
+    Returns:
+        str: The rendered string representation of *value*.
+    """
     if value is None:
         return ""
     if isinstance(value, bool):
@@ -73,6 +95,13 @@ def _iter_fields(
 
     Each row contains: ``section``, ``field``, ``env_var``, ``value``,
     ``default``, ``is_default``, ``description``, ``type``, ``sensitive``.
+
+    Args:
+        settings: The root settings instance to walk.
+        section_filter: If given, only include fields from this section.
+
+    Returns:
+        list[dict[str, Any]]: One dict per leaf field, as described above.
     """
     rows: list[dict[str, Any]] = []
     # Access model_fields on the class, not the instance (Pydantic v2 deprecation).
@@ -115,7 +144,12 @@ def _iter_fields(
 
 
 def _redact_rows(rows: list[dict[str, Any]], *, show_sensitive: bool) -> None:
-    """Mutate rows in-place to redact sensitive values unless allowed."""
+    """Mutate rows in-place to redact sensitive values unless allowed.
+
+    Args:
+        rows: The rows to redact in-place.
+        show_sensitive: If ``True``, leave sensitive values untouched.
+    """
     if show_sensitive:
         return
     for row in rows:
@@ -124,7 +158,11 @@ def _redact_rows(rows: list[dict[str, Any]], *, show_sensitive: bool) -> None:
 
 
 def _print_table(rows: list[dict[str, Any]]) -> None:
-    """Emit rows as a plain-text table (no Rich dependency)."""
+    """Emit rows as a plain-text table (no Rich dependency).
+
+    Args:
+        rows: The rows to render.
+    """
     headers = ["ENV_VAR", "VALUE", "DEFAULT?", "DESCRIPTION"]
     data = [
         [
@@ -154,7 +192,11 @@ def _print_table(rows: list[dict[str, Any]]) -> None:
 
 
 def _print_json(rows: list[dict[str, Any]]) -> None:
-    """Emit rows as a JSON object keyed by env var name."""
+    """Emit rows as a JSON object keyed by env var name.
+
+    Args:
+        rows: The rows to render.
+    """
     out = {
         row["env_var"]: {
             "value": row["value"],
@@ -170,7 +212,11 @@ def _print_json(rows: list[dict[str, Any]]) -> None:
 
 
 def _print_env(rows: list[dict[str, Any]]) -> None:
-    """Emit rows as .env-style lines with descriptions as comments."""
+    """Emit rows as .env-style lines with descriptions as comments.
+
+    Args:
+        rows: The rows to render.
+    """
     for row in rows:
         if row["description"]:
             typer.echo(f"# {row['description']}")
@@ -179,7 +225,11 @@ def _print_env(rows: list[dict[str, Any]]) -> None:
 
 
 def _print_markdown(rows: list[dict[str, Any]]) -> None:
-    """Emit rows as a Markdown reference document grouped by section."""
+    """Emit rows as a Markdown reference document grouped by section.
+
+    Args:
+        rows: The rows to render.
+    """
     typer.echo("# ShoreGuard Settings Reference")
     typer.echo("")
     typer.echo(
@@ -245,7 +295,16 @@ def config_show(
         ),
     ] = False,
 ) -> None:
-    """Print the current effective configuration."""
+    """Print the current effective configuration.
+
+    Args:
+        section: Optional settings section to filter by.
+        fmt: Output format: ``table``, ``json``, ``env``, or ``markdown``.
+        show_sensitive: If ``True``, print secret values in plain text.
+
+    Raises:
+        typer.Exit: If no rows match the requested section.
+    """
     rows = _collect_rows(section, show_sensitive=show_sensitive, schema_only=False)
     if not rows:
         typer.echo(f"No settings section named {section!r}", err=True)
@@ -264,7 +323,15 @@ def config_schema(
         typer.Option("--format", "-f", help=_FORMAT_HELP),
     ] = "markdown",
 ) -> None:
-    """Print the schema (defaults + descriptions) without effective values."""
+    """Print the schema (defaults + descriptions) without effective values.
+
+    Args:
+        section: Optional settings section to filter by.
+        fmt: Output format: ``table``, ``json``, ``env``, or ``markdown``.
+
+    Raises:
+        typer.Exit: If no rows match the requested section.
+    """
     rows = _collect_rows(section, show_sensitive=False, schema_only=True)
     if not rows:
         typer.echo(f"No settings section named {section!r}", err=True)

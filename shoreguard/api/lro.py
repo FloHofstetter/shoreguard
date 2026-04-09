@@ -92,8 +92,8 @@ async def run_lro(
         idempotency_key: Client-provided idempotency key.
 
     Returns:
-        A 202 ``JSONResponse`` with ``operation_id``, ``status``, and
-        ``resource_type``, plus ``Location`` and ``Retry-After`` headers.
+        JSONResponse: A 202 response with ``operation_id``, ``status``, and
+            ``resource_type``, plus ``Location`` and ``Retry-After`` headers.
 
     Raises:
         HTTPException: 503 if the operation service is not initialised,

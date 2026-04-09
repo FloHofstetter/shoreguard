@@ -15,7 +15,13 @@ from pydantic import BaseModel, ConfigDict
 
 
 class ErrorResponse(BaseModel):
-    """Standard error response returned by all error handlers."""
+    """Standard error response returned by all error handlers.
+
+    Attributes:
+        detail (str): Human-readable error message.
+        code (str | None): Optional machine-readable error code.
+        request_id (str | None): Correlation ID for tracing the failing request.
+    """
 
     detail: str
     code: str | None = None
@@ -23,7 +29,12 @@ class ErrorResponse(BaseModel):
 
 
 class StatusResponse(BaseModel):
-    """Simple boolean-status response (delete, revoke, etc.)."""
+    """Simple boolean-status response (delete, revoke, etc.).
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config.
+        ok (bool | None): Whether the operation succeeded.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -31,19 +42,33 @@ class StatusResponse(BaseModel):
 
 
 class MessageResponse(BaseModel):
-    """Response with a status message string."""
+    """Response with a status message string.
+
+    Attributes:
+        status (str): Status message text.
+    """
 
     status: str
 
 
 class OkResponse(BaseModel):
-    """Simple ok confirmation response."""
+    """Simple ok confirmation response.
+
+    Attributes:
+        ok (bool): Always ``True`` when the operation succeeded.
+    """
 
     ok: bool = True
 
 
 class PaginatedResponse(BaseModel):
-    """Generic paginated list envelope for consistent API responses."""
+    """Generic paginated list envelope for consistent API responses.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+        items (list[Any]): Page of items — structure varies by service.
+        total (int | None): Total number of items across all pages, if known.
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": items contain dynamic structures from various services
@@ -53,7 +78,13 @@ class PaginatedResponse(BaseModel):
 
 
 class LROAcceptedResponse(BaseModel):
-    """202 Accepted — long-running operation created."""
+    """202 Accepted — long-running operation created.
+
+    Attributes:
+        operation_id (str): Unique ID of the created LRO.
+        status (str): Initial operation status.
+        resource_type (str): Type of resource the operation targets.
+    """
 
     operation_id: str
     status: str
@@ -64,13 +95,23 @@ class LROAcceptedResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Liveness probe response."""
+    """Liveness probe response.
+
+    Attributes:
+        status (str): Liveness status string.
+    """
 
     status: str
 
 
 class ReadinessCheck(BaseModel):
-    """Individual readiness check results."""
+    """Individual readiness check results.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config.
+        database (str): Database connectivity status.
+        gateway_service (str): Gateway service connectivity status.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -79,7 +120,12 @@ class ReadinessCheck(BaseModel):
 
 
 class ReadinessResponse(BaseModel):
-    """Readiness probe response with dependency checks."""
+    """Readiness probe response with dependency checks.
+
+    Attributes:
+        status (str): Overall readiness status.
+        checks (ReadinessCheck): Per-dependency readiness results.
+    """
 
     status: str
     checks: ReadinessCheck
@@ -89,7 +135,23 @@ class ReadinessResponse(BaseModel):
 
 
 class OperationResponse(BaseModel):
-    """Single operation record."""
+    """Single operation record.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config.
+        id (str): Operation ID.
+        status (str): Current operation status.
+        resource_type (str): Type of resource the operation targets.
+        progress (int | None): Progress percentage (0–100), if known.
+        created_at (str | None): ISO timestamp when the operation was created.
+        updated_at (str | None): ISO timestamp of the last update.
+        progress_message (str | None): Human-readable progress message.
+        result (dict[str, Any] | None): Result payload once the operation finishes.
+        error (str | None): Error message if the operation failed.
+        error_code (str | None): Machine-readable error code if the operation failed.
+        completed_at (str | None): ISO timestamp when the operation completed.
+        gateway_name (str | None): Name of the gateway that ran the operation.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -108,7 +170,12 @@ class OperationResponse(BaseModel):
 
 
 class OperationListResponse(BaseModel):
-    """Paginated operation list."""
+    """Paginated operation list.
+
+    Attributes:
+        operations (list[OperationResponse]): Page of operation records.
+        total (int): Total number of operations matching the query.
+    """
 
     operations: list[OperationResponse]
     total: int
@@ -118,7 +185,21 @@ class OperationListResponse(BaseModel):
 
 
 class AuditEntryResponse(BaseModel):
-    """Single audit log entry."""
+    """Single audit log entry.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config.
+        id (int | None): Audit entry ID.
+        timestamp (str | None): ISO timestamp when the event was recorded.
+        actor (str | None): Identifier of the actor who performed the action.
+        actor_role (str | None): Role of the actor at the time of the action.
+        action (str | None): Action name (e.g. ``sandbox.create``).
+        resource_type (str | None): Type of resource the action targeted.
+        resource_id (str | None): ID of the targeted resource.
+        gateway (str | None): Name of the gateway involved, if any.
+        detail (dict[str, Any] | None): Additional structured context.
+        client_ip (str | None): Remote client IP address.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -135,7 +216,12 @@ class AuditEntryResponse(BaseModel):
 
 
 class AuditListResponse(BaseModel):
-    """Paginated audit log response."""
+    """Paginated audit log response.
+
+    Attributes:
+        entries (list[AuditEntryResponse]): Page of audit entries.
+        total (int): Total number of entries matching the query.
+    """
 
     entries: list[AuditEntryResponse]
     total: int
@@ -145,7 +231,19 @@ class AuditListResponse(BaseModel):
 
 
 class WebhookResponse(BaseModel):
-    """Webhook subscription record (without secret)."""
+    """Webhook subscription record (without secret).
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config.
+        id (int): Webhook ID.
+        url (str): Target URL invoked on delivery.
+        event_types (list[str] | Any): Event type filter for this subscription.
+        is_active (bool): Whether the webhook is currently active.
+        channel_type (str): Delivery channel type (e.g. ``generic``, ``slack``).
+        created_at (str | None): ISO timestamp when the webhook was created.
+        created_by (str | None): Identifier of the user who created the webhook.
+        extra_config (dict[str, Any] | None): Channel-specific extra configuration.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -160,13 +258,30 @@ class WebhookResponse(BaseModel):
 
 
 class WebhookCreateResponse(WebhookResponse):
-    """Webhook creation response — includes the HMAC secret (shown only once)."""
+    """Webhook creation response — includes the HMAC secret (shown only once).
+
+    Attributes:
+        secret (str): HMAC signing secret — returned only at creation time.
+    """
 
     secret: str
 
 
 class WebhookDeliveryResponse(BaseModel):
-    """Webhook delivery attempt record."""
+    """Webhook delivery attempt record.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config.
+        id (int | None): Delivery attempt ID.
+        webhook_id (int | None): ID of the webhook that was delivered.
+        event_type (str | None): Event type of the delivered payload.
+        status (str | None): Delivery status (e.g. ``success``, ``failed``).
+        response_code (int | None): HTTP response code from the target.
+        error_message (str | None): Error message if delivery failed.
+        attempt (int | None): Attempt number (starting at 1).
+        created_at (str | None): ISO timestamp when the attempt was created.
+        delivered_at (str | None): ISO timestamp when the delivery completed.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -185,7 +300,26 @@ class WebhookDeliveryResponse(BaseModel):
 
 
 class GatewayResponse(BaseModel):
-    """Gateway record (registration info + status)."""
+    """Gateway record (registration info + status).
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config.
+        name (str): Gateway name (unique identifier).
+        endpoint (str | None): Gateway endpoint URL.
+        scheme (str | None): Connection scheme (e.g. ``https``, ``grpc``).
+        auth_mode (str | None): Authentication mode used to reach the gateway.
+        has_ca_cert (bool | None): Whether a CA certificate is configured.
+        has_client_cert (bool | None): Whether a client certificate is configured.
+        has_client_key (bool | None): Whether a client key is configured.
+        metadata (dict[str, Any] | None): Arbitrary gateway metadata.
+        status (str | None): Current gateway status.
+        last_status (str | None): Previous known status.
+        connected (bool | None): Whether the gateway is currently connected.
+        description (str | None): Human-readable gateway description.
+        labels (dict[str, str] | None): Label key/value pairs for filtering.
+        registered_at (str | None): ISO timestamp of initial registration.
+        last_seen (str | None): ISO timestamp of the last successful contact.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -207,14 +341,29 @@ class GatewayResponse(BaseModel):
 
 
 class GatewayUnregisterResponse(BaseModel):
-    """Gateway unregistration confirmation."""
+    """Gateway unregistration confirmation.
+
+    Attributes:
+        success (bool): Whether unregistration succeeded.
+        name (str): Name of the unregistered gateway.
+    """
 
     success: bool
     name: str
 
 
 class ConnectionTestResponse(BaseModel):
-    """Gateway connection test result."""
+    """Gateway connection test result.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config.
+        success (bool | None): Whether the test completed without error.
+        connected (bool | None): Whether a connection was established.
+        version (str | None): Remote gateway version string.
+        health_status (str | None): Reported gateway health status.
+        error (str | None): Error message if the test failed.
+        latency_ms (float | None): Measured round-trip latency in milliseconds.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -230,7 +379,17 @@ class ConnectionTestResponse(BaseModel):
 
 
 class SandboxResponse(BaseModel):
-    """Sandbox record (CRUD + metadata)."""
+    """Sandbox record (CRUD + metadata).
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+        name (str | None): Sandbox name.
+        status (str | None): Current sandbox status.
+        image (str | None): Container image backing the sandbox.
+        gpu (bool | None): Whether the sandbox has GPU access.
+        description (str | None): Human-readable sandbox description.
+        labels (dict[str, str] | None): Label key/value pairs.
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
@@ -244,13 +403,25 @@ class SandboxResponse(BaseModel):
 
 
 class SandboxDeleteResponse(BaseModel):
-    """Sandbox deletion confirmation."""
+    """Sandbox deletion confirmation.
+
+    Attributes:
+        deleted (bool): Whether the sandbox was deleted.
+    """
 
     deleted: bool
 
 
 class SshSessionResponse(BaseModel):
-    """SSH session details."""
+    """SSH session details.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+        token (str | None): Session token used to authenticate the SSH connection.
+        host (str | None): SSH host to connect to.
+        port (int | None): SSH port to connect to.
+        username (str | None): SSH username to use.
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
@@ -262,13 +433,24 @@ class SshSessionResponse(BaseModel):
 
 
 class SshRevokeResponse(BaseModel):
-    """SSH session revocation confirmation."""
+    """SSH session revocation confirmation.
+
+    Attributes:
+        revoked (bool): Whether the SSH session was revoked.
+    """
 
     revoked: bool
 
 
 class ExecResultResponse(BaseModel):
-    """Command execution result."""
+    """Command execution result.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+        exit_code (int | None): Process exit code.
+        stdout (str | None): Captured standard output.
+        stderr (str | None): Captured standard error.
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
@@ -279,7 +461,11 @@ class ExecResultResponse(BaseModel):
 
 
 class LogEntryResponse(BaseModel):
-    """Single sandbox log entry."""
+    """Single sandbox log entry.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
@@ -289,7 +475,13 @@ class LogEntryResponse(BaseModel):
 
 
 class ProviderResponse(BaseModel):
-    """Provider record."""
+    """Provider record.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+        name (str | None): Provider name.
+        type (str | None): Provider type identifier.
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
@@ -299,13 +491,23 @@ class ProviderResponse(BaseModel):
 
 
 class ProviderDeleteResponse(BaseModel):
-    """Provider deletion confirmation."""
+    """Provider deletion confirmation.
+
+    Attributes:
+        deleted (bool): Whether the provider was deleted.
+    """
 
     deleted: bool
 
 
 class ProviderTypeResponse(BaseModel):
-    """Provider type metadata."""
+    """Provider type metadata.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+        type (str | None): Provider type identifier.
+        label (str | None): Human-readable label for the provider type.
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
@@ -318,21 +520,35 @@ class ProviderTypeResponse(BaseModel):
 
 
 class PolicyResponse(BaseModel):
-    """Policy document (dynamic structure from gateway)."""
+    """Policy document (dynamic structure from gateway).
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
 
 
 class PolicyDiffResponse(BaseModel):
-    """Diff between two policy revisions."""
+    """Diff between two policy revisions.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
 
 
 class PresetSummaryResponse(BaseModel):
-    """Policy preset list entry."""
+    """Policy preset list entry.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+        name (str | None): Preset name.
+        description (str | None): Human-readable preset description.
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
@@ -345,28 +561,45 @@ class PresetSummaryResponse(BaseModel):
 
 
 class ApprovalDraftResponse(BaseModel):
-    """Draft policy with approval metadata."""
+    """Draft policy with approval metadata.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
 
 
 class ApprovalChunkResponse(BaseModel):
-    """Single approval chunk status."""
+    """Single approval chunk status.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
 
 
 class ApprovalBulkResponse(BaseModel):
-    """Bulk approval result with counts."""
+    """Bulk approval result with counts.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
 
 
 class ApprovalClearResponse(BaseModel):
-    """Approval clear result."""
+    """Approval clear result.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+        cleared (int | None): Number of approvals cleared.
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
@@ -378,7 +611,13 @@ class ApprovalClearResponse(BaseModel):
 
 
 class TemplateSummaryResponse(BaseModel):
-    """Sandbox template list entry."""
+    """Sandbox template list entry.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+        name (str | None): Template name.
+        description (str | None): Human-readable template description.
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
@@ -388,7 +627,13 @@ class TemplateSummaryResponse(BaseModel):
 
 
 class TemplateDetailResponse(BaseModel):
-    """Full sandbox template with configuration."""
+    """Full sandbox template with configuration.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+        name (str | None): Template name.
+        description (str | None): Human-readable template description.
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
@@ -401,7 +646,11 @@ class TemplateDetailResponse(BaseModel):
 
 
 class InferenceConfigResponse(BaseModel):
-    """Cluster inference configuration."""
+    """Cluster inference configuration.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+    """
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
@@ -411,7 +660,18 @@ class InferenceConfigResponse(BaseModel):
 
 
 class AuthCheckResponse(BaseModel):
-    """Authentication status response."""
+    """Authentication status response.
+
+    Attributes:
+        authenticated (bool): Whether the caller is authenticated.
+        auth_enabled (bool): Whether authentication is enabled on the server.
+        role (str | None): Role of the authenticated caller, if any.
+        email (str | None): Email of the authenticated caller, if any.
+        needs_setup (bool): Whether initial admin setup is still required.
+        registration_enabled (bool): Whether self-registration is permitted.
+        local_mode (bool | None): Whether the server runs in local (single-user) mode.
+        oidc_providers (list[dict[str, str]] | None): Public OIDC providers available for login.
+    """
 
     authenticated: bool
     auth_enabled: bool
@@ -424,14 +684,29 @@ class AuthCheckResponse(BaseModel):
 
 
 class OidcProviderInfo(BaseModel):
-    """Public OIDC provider info."""
+    """Public OIDC provider info.
+
+    Attributes:
+        name (str): Provider identifier used in URLs.
+        display_name (str): Human-readable provider name.
+    """
 
     name: str
     display_name: str
 
 
 class UserResponse(BaseModel):
-    """User record (safe fields only)."""
+    """User record (safe fields only).
+
+    Attributes:
+        id (int): User ID.
+        email (str): User email address.
+        role (str): Global role assigned to the user.
+        is_active (bool): Whether the account is active.
+        pending_invite (bool): Whether the user has a pending invite.
+        created_at (str | None): ISO timestamp when the user was created.
+        oidc_provider (str | None): Name of the OIDC provider, if federated.
+    """
 
     id: int
     email: str
@@ -443,7 +718,15 @@ class UserResponse(BaseModel):
 
 
 class UserCreateResponse(BaseModel):
-    """User creation response — includes the invite token."""
+    """User creation response — includes the invite token.
+
+    Attributes:
+        id (int): User ID.
+        email (str): User email address.
+        role (str): Global role assigned to the user.
+        created_at (str | None): ISO timestamp when the user was created.
+        invite_token (str | None): One-time invite token for account activation.
+    """
 
     id: int
     email: str
@@ -453,7 +736,15 @@ class UserCreateResponse(BaseModel):
 
 
 class GatewayRoleResponse(BaseModel):
-    """Per-gateway role override."""
+    """Per-gateway role override.
+
+    Attributes:
+        gateway_name (str): Name of the gateway the override applies to.
+        role (str): Overridden role.
+        user_id (int | None): User ID the override applies to, if any.
+        sp_id (int | None): Service principal ID the override applies to, if any.
+        group_id (int | None): Group ID the override applies to, if any.
+    """
 
     gateway_name: str
     role: str
@@ -463,7 +754,18 @@ class GatewayRoleResponse(BaseModel):
 
 
 class ServicePrincipalResponse(BaseModel):
-    """Service principal record (without key hash)."""
+    """Service principal record (without key hash).
+
+    Attributes:
+        id (int): Service principal ID.
+        name (str): Service principal name.
+        role (str): Global role assigned to the service principal.
+        key_prefix (str): Short prefix of the API key for identification.
+        created_at (str | None): ISO timestamp when the principal was created.
+        created_by (int | None): ID of the user who created the principal.
+        last_used (str | None): ISO timestamp of the last successful auth.
+        expires_at (str | None): ISO timestamp when the key expires, if any.
+    """
 
     id: int
     name: str
@@ -476,13 +778,26 @@ class ServicePrincipalResponse(BaseModel):
 
 
 class ServicePrincipalCreateResponse(ServicePrincipalResponse):
-    """Service principal creation/rotation response — includes the plaintext key."""
+    """Service principal creation/rotation response — includes the plaintext key.
+
+    Attributes:
+        key (str): Plaintext API key — returned only at creation/rotation time.
+    """
 
     key: str
 
 
 class GroupResponse(BaseModel):
-    """User group record."""
+    """User group record.
+
+    Attributes:
+        id (int): Group ID.
+        name (str): Group name.
+        role (str): Default role granted to members.
+        description (str | None): Human-readable group description.
+        created_at (str | None): ISO timestamp when the group was created.
+        member_count (int | None): Number of members in the group.
+    """
 
     id: int
     name: str
@@ -493,13 +808,24 @@ class GroupResponse(BaseModel):
 
 
 class GroupDetailResponse(GroupResponse):
-    """Group with member list."""
+    """Group with member list.
+
+    Attributes:
+        members (list[dict[str, Any]] | None): List of member records.
+    """
 
     members: list[dict[str, Any]] | None = None
 
 
 class GroupMemberResponse(BaseModel):
-    """Group membership record."""
+    """Group membership record.
+
+    Attributes:
+        group_id (int): ID of the group.
+        group_name (str): Name of the group.
+        user_id (int): ID of the member user.
+        user_email (str): Email of the member user.
+    """
 
     group_id: int
     group_name: str

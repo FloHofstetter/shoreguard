@@ -438,11 +438,18 @@ _RATE_LIMIT_SKIP_PATHS = frozenset({"/healthz", "/readyz", "/metrics"})
 
 
 @app.middleware("http")
-async def global_rate_limit_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+async def global_rate_limit_middleware(request: Request, call_next: Any) -> Any:
     """Coarse per-IP rate limit applied to every HTTP request.
 
     Health and metrics endpoints are exempt so that probes and scrapers
     can never be blocked.  Applied in addition to login/write limiters.
+
+    Args:
+        request: The incoming HTTP request.
+        call_next: The next ASGI handler in the middleware chain.
+
+    Returns:
+        Any: A 429 response when rate-limited, otherwise the downstream response.
     """
     path = request.url.path
     if path in _RATE_LIMIT_SKIP_PATHS:
@@ -465,12 +472,20 @@ async def global_rate_limit_middleware(request: Request, call_next):  # type: ig
 
 # ─── Request body size limit middleware ─────────────────────────────────────
 @app.middleware("http")
-async def body_size_limit_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+async def body_size_limit_middleware(request: Request, call_next: Any) -> Any:
     """Reject requests whose Content-Length exceeds the configured limit.
 
     Note: only honours the ``Content-Length`` header — chunked uploads
     without a length header are forwarded unchanged and bounded by the
     individual endpoint's Pydantic field limits.
+
+    Args:
+        request: The incoming HTTP request.
+        call_next: The next ASGI handler in the middleware chain.
+
+    Returns:
+        Any: A 400/413 response when the body is invalid or too large, otherwise the
+            downstream response.
     """
     from shoreguard.settings import get_settings as _gs
 

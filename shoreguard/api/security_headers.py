@@ -21,7 +21,7 @@ async def security_headers_middleware(request: Request, call_next: object) -> Re
         call_next: ASGI call-next callable.
 
     Returns:
-        The response with security headers injected.
+        Response: The response with security headers injected.
     """
     nonce = secrets.token_urlsafe(16)
     request.state.csp_nonce = nonce

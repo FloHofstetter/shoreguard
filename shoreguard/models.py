@@ -75,6 +75,8 @@ class User(Base):
         is_active: Whether the account is enabled.
         invite_token_hash: SHA-256 hash of the invite token, if pending.
         created_at: Timestamp when the user was created.
+        oidc_provider: Name of the OIDC provider, or ``None`` for local accounts.
+        oidc_sub: OIDC subject identifier, or ``None`` for local accounts.
     """
 
     __tablename__ = "users"
