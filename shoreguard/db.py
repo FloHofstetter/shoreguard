@@ -6,6 +6,7 @@ import logging
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 from alembic import command
 from alembic.config import Config as AlembicConfig
@@ -72,13 +73,16 @@ def init_db(url: str | None = None) -> Engine:
 
     connect_args: dict[str, object] = {}
     engine_kwargs: dict[str, object] = {"pool_pre_ping": True}
+    is_sqlite = database_url.startswith("sqlite")
+    stmt_timeout_ms: int | None = None
 
-    if database_url.startswith("sqlite"):
+    if is_sqlite:
         connect_args["check_same_thread"] = False
     else:
         from shoreguard.settings import get_settings
 
         db_cfg = get_settings().database
+        stmt_timeout_ms = db_cfg.statement_timeout_ms
         engine_kwargs.update(
             pool_size=db_cfg.pool_size,
             max_overflow=db_cfg.max_overflow,
@@ -92,10 +96,10 @@ def init_db(url: str | None = None) -> Engine:
         **engine_kwargs,
     )
 
-    if database_url.startswith("sqlite"):
+    if is_sqlite:
 
         @event.listens_for(_engine, "connect")
-        def _set_sqlite_pragma(dbapi_conn, _connection_record):  # type: ignore[no-untyped-def]
+        def _set_sqlite_pragma(dbapi_conn: Any, _connection_record: Any) -> None:
             cursor = dbapi_conn.cursor()
             try:
                 cursor.execute("PRAGMA journal_mode=WAL")
@@ -108,10 +112,10 @@ def init_db(url: str | None = None) -> Engine:
                 cursor.close()
 
     else:
-        stmt_timeout = db_cfg.statement_timeout_ms  # type: ignore[possibly-undefined]
+        stmt_timeout = stmt_timeout_ms
 
         @event.listens_for(_engine, "connect")
-        def _set_pg_options(dbapi_conn, _connection_record):  # type: ignore[no-untyped-def]
+        def _set_pg_options(dbapi_conn: Any, _connection_record: Any) -> None:
             cursor = dbapi_conn.cursor()
             try:
                 cursor.execute(f"SET statement_timeout = {stmt_timeout}")

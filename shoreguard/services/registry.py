@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -240,9 +240,11 @@ class GatewayRegistry:
             if gw is None:
                 return None
             if description is not _UNSET:
-                gw.description = description  # type: ignore[assignment]
+                gw.description = cast("str | None", description)
             if labels is not _UNSET:
-                gw.labels_json = json.dumps(labels) if labels else None  # type: ignore[arg-type]
+                gw.labels_json = (
+                    json.dumps(cast("dict[str, str] | None", labels)) if labels else None
+                )
             try:
                 session.commit()
             except SQLAlchemyError:

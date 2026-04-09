@@ -26,8 +26,10 @@ from shoreguard.services.operations_types import (
 logger = logging.getLogger(__name__)
 
 # Module-level singleton — set during app lifespan (see shoreguard.api.main).
-# Can be either the sync OperationService or async AsyncOperationService.
-operation_service: AsyncOperationService | OperationService | None = None
+# Always an async-compatible service at runtime. Tests may inject an
+# ``_AsyncOperationAdapter`` duck-compatible with ``AsyncOperationService``
+# via a ``# type: ignore[assignment]`` at the assignment site.
+operation_service: AsyncOperationService | None = None
 
 
 def _truncate_result(result: dict[str, Any], max_bytes: int | None = None) -> str:

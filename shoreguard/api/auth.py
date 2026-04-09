@@ -36,6 +36,8 @@ from shoreguard.exceptions import ValidationError as DomainValidationError
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker as SessionMaker
 
+    from shoreguard.settings import AuthSettings
+
 logger = logging.getLogger(__name__)
 
 # ─── Roles ──────────────────────────────────────────────────────────────────
@@ -87,8 +89,12 @@ _hmac_secret: bytes = b""
 _no_auth: bool = False
 
 
-def _get_auth_settings():  # noqa: ANN202
-    """Return auth settings from the central Settings singleton."""  # noqa: DOC201
+def _get_auth_settings() -> AuthSettings:
+    """Return auth settings from the central Settings singleton.
+
+    Returns:
+        AuthSettings: The auth subsection of the central Settings singleton.
+    """
     from shoreguard.settings import get_settings
 
     return get_settings().auth

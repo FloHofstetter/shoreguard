@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -170,8 +170,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(interval)
             try:
-                if ops_mod.operation_service:
-                    await ops_mod.operation_service.cleanup()  # type: ignore[misc]
+                op_svc = ops_mod.operation_service
+                if op_svc is not None:
+                    await op_svc.cleanup()
                 if audit_mod.audit_service:
                     await asyncio.to_thread(audit_mod.audit_service.cleanup)
                 if webhook_mod.webhook_service:
@@ -208,7 +209,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(interval)
             try:
-                await asyncio.to_thread(gw_mod.gateway_service.check_all_health)  # type: ignore[union-attr]
+                gw_svc = gw_mod.gateway_service
+                if gw_svc is None:
+                    continue
+                await asyncio.to_thread(gw_svc.check_all_health)
                 consecutive_failures = 0
                 interval = base_interval
                 _task_health["health_monitor"]["last_success"] = time.time()
@@ -229,8 +233,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                         interval,
                     )
 
-    def _make_done_cb(name: str):  # type: ignore[no-untyped-def]
-        def _cb(t: asyncio.Task) -> None:
+    def _make_done_cb(name: str) -> Callable[[asyncio.Task[Any]], None]:
+        def _cb(t: asyncio.Task[Any]) -> None:
             _task_health[name]["alive"] = False
             if t.cancelled():
                 logger.info("Background task %s cancelled", name)

@@ -24,7 +24,7 @@ router = APIRouter()
 def _get_svc() -> AsyncOperationService:
     if _ops_mod.operation_service is None:
         raise HTTPException(503, "Operation service not initialised")
-    return _ops_mod.operation_service  # type: ignore[return-value]
+    return _ops_mod.operation_service
 
 
 @router.get("", response_model=OperationListResponse)

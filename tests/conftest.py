@@ -130,7 +130,7 @@ def _init_gateway_service():
     audit_mod.audit_service = audit_mod.AuditService(factory)
     sandbox_meta_mod.sandbox_meta_store = sandbox_meta_mod.SandboxMetaStore(factory)
     sync_ops = ops_mod.OperationService(factory)
-    ops_mod.operation_service = _AsyncOperationAdapter(sync_ops)
+    ops_mod.operation_service = _AsyncOperationAdapter(sync_ops)  # type: ignore[assignment]
     yield
     _reset_clients()
     audit_mod.audit_service = None

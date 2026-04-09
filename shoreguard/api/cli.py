@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 
 if TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
+
     from shoreguard.services.registry import GatewayRegistry
 
 logger = logging.getLogger(__name__)
@@ -399,12 +401,16 @@ def _import_filesystem_gateways(
     return imported, skipped
 
 
-def _cli_init_db(database_url: str | None):  # type: ignore[no-untyped-def]
+def _cli_init_db(database_url: str | None) -> Engine:
     """Init DB + auth for CLI commands.
 
     Args:
         database_url: Optional database URL override.
-    """  # noqa: DOC201
+
+    Returns:
+        Engine: The initialised SQLAlchemy engine.  Callers must ``dispose()``
+        it when done.
+    """
     from sqlalchemy.orm import sessionmaker as sa_sessionmaker
 
     from shoreguard.api.auth import init_auth

@@ -175,8 +175,9 @@ async def discover(provider: OIDCProvider) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(url)
         resp.raise_for_status()
-    provider._discovery = resp.json()
-    return provider._discovery  # type: ignore[return-value]
+    discovery: dict = resp.json()
+    provider._discovery = discovery
+    return discovery
 
 
 async def get_jwks(provider: OIDCProvider) -> list[dict]:

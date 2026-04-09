@@ -487,7 +487,7 @@ _ROLE_ENDPOINTS = [
         f"/api/gateways/{GW}/sandboxes/sb/approvals/c1/edit",
         "operator",
         {"proposed_rule": {}},
-    ),  # noqa: E501
+    ),
     ("POST", f"/api/gateways/{GW}/sandboxes/sb/approvals/c1/undo", "operator", None),
     ("POST", f"/api/gateways/{GW}/sandboxes/sb/approvals/clear", "operator", None),
     ("POST", f"/api/gateways/{GW}/providers", "operator", {"name": "p", "type": "t"}),

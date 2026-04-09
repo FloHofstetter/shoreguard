@@ -19,6 +19,8 @@ from shoreguard.config import is_private_ip
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker as SessionMaker
 
+    from shoreguard.settings import WebhookSettings
+
 from shoreguard.models import Webhook, WebhookDelivery
 from shoreguard.services.formatters import FORMATTERS
 
@@ -28,7 +30,7 @@ logger = logging.getLogger(__name__)
 webhook_service: WebhookService | None = None
 
 
-def _webhook_settings():  # noqa: ANN202
+def _webhook_settings() -> WebhookSettings:
     from shoreguard.settings import get_settings
 
     return get_settings().webhooks

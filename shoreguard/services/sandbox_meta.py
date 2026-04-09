@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -68,7 +68,7 @@ class SandboxMetaStore:
                 session.add(meta)
             else:
                 if description is not _UNSET:
-                    meta.description = description  # type: ignore[assignment]
+                    meta.description = cast("str | None", description)
                 if labels is not _UNSET:
                     meta.labels_json = json.dumps(labels) if labels else None
                 meta.updated_at = now
