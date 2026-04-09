@@ -16,7 +16,7 @@ def policy_svc(mock_client):
 
 def _make_policy(network_policies: dict | None = None) -> dict:
     """Helper to build a policy response dict."""
-    policy = {"status": "loaded"}
+    policy: dict[str, object] = {"status": "loaded"}
     if network_policies is not None:
         policy["network_policies"] = network_policies
     return {"policy": policy}

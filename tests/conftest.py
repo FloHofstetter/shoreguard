@@ -169,17 +169,19 @@ def _reset_operations():
     """Clean operation records between tests."""
     from shoreguard.services.operations import operation_service
 
-    if operation_service is not None:
+    svc: Any = operation_service
+    if svc is not None:
         from shoreguard.models import OperationRecord
 
-        with operation_service._session_factory() as session:
+        with svc._session_factory() as session:
             session.query(OperationRecord).delete()
             session.commit()
     yield
-    if operation_service is not None:
+    svc2: Any = operation_service
+    if svc2 is not None:
         from shoreguard.models import OperationRecord
 
-        with operation_service._session_factory() as session:
+        with svc2._session_factory() as session:
             session.query(OperationRecord).delete()
             session.commit()
 

@@ -49,6 +49,7 @@ dev = [
     "pytest>=9.0",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
+    "pytest-xdist>=3.8",
     "httpx>=0.28",
     "ruff>=0.15",
     "pyright>=1.1",
@@ -94,7 +95,7 @@ pydocstyle.convention = "google"
 [tool.pyright]
 pythonVersion = "3.14"
 typeCheckingMode = "standard"
-include = ["shoreguard"]
+include = ["shoreguard", "tests"]
 exclude = ["shoreguard/client/_proto"]
 
 [tool.pytest.ini_options]

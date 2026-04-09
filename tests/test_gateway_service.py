@@ -529,7 +529,7 @@ def test_check_all_health_db_error_does_not_stop_loop(svc, registry):
         nonlocal call_count
         call_count += 1
         if name == "gw1":
-            raise OperationalError("db locked", None, None)
+            raise OperationalError("db locked", None, Exception("db locked"))
         original_update_health(name, status, ts)
 
     with (
@@ -1575,7 +1575,7 @@ class TestClientEntry:
     def test_slots(self):
         entry = gw_module._ClientEntry()
         with pytest.raises(AttributeError):
-            entry.nonexistent = "x"
+            entry.nonexistent = "x"  # type: ignore[attr-defined]
 
 
 # ─── _reset_clients ─────────────────────────────────────────────────────────

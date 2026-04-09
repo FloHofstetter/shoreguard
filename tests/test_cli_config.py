@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Generator
 
 import pytest
 from typer.testing import CliRunner
@@ -14,7 +15,7 @@ runner = CliRunner()
 
 
 @pytest.fixture(autouse=True)
-def _reset_settings_around_test() -> None:
+def _reset_settings_around_test() -> Generator[None]:
     reset_settings()
     yield
     reset_settings()

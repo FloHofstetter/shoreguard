@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Any
 
 import pytest
+from fastapi import HTTPException
 
 from shoreguard.api.routes.sandboxes import _parse_label_filters
 from shoreguard.exceptions import GatewayNotConnectedError, NotFoundError
@@ -267,9 +269,11 @@ async def test_get_operation_found(api_client):
     """GET /api/operations/{id} returns 200 for an existing operation."""
     from shoreguard.services.operations import operation_service
 
-    op = operation_service._svc.create("sandbox", "test-sb")
-    operation_service._svc.start(op.id)
-    operation_service._svc.complete(op.id, {"name": "test-sb"})
+    svc: Any = operation_service
+    assert svc is not None
+    op = svc._svc.create("sandbox", "test-sb")
+    svc._svc.start(op.id)
+    svc._svc.complete(op.id, {"name": "test-sb"})
     resp = await api_client.get(f"/api/operations/{op.id}")
     assert resp.status_code == 200
     data = resp.json()
@@ -340,7 +344,9 @@ async def test_create_sandbox_empty_name(api_client, mock_client):
     op_id = resp.json()["operation_id"]
     from shoreguard.services.operations import operation_service
 
-    op = operation_service._svc.get(op_id)
+    svc: Any = operation_service
+    assert svc is not None
+    op = svc._svc.get(op_id)
     assert op.resource_key == "unnamed"
 
 
@@ -447,17 +453,17 @@ class TestParseLabelFilters:
         assert result == {"url": "https://example.com:8080"}
 
     def test_invalid_no_colon_raises(self):
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             _parse_label_filters(["invalid"])
         assert exc_info.value.status_code == 400
 
     def test_invalid_starts_with_colon_raises(self):
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             _parse_label_filters([":value"])
         assert exc_info.value.status_code == 400
 
     def test_error_message_includes_filter(self):
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
             _parse_label_filters(["badfilter"])
         assert "badfilter" in str(exc_info.value.detail)
 

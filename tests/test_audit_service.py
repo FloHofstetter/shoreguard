@@ -1,6 +1,7 @@
 """Tests for the AuditService."""
 
 import datetime
+from typing import Any
 
 import pytest
 from sqlalchemy import create_engine
@@ -959,18 +960,23 @@ class TestListDbError:
         assert entries == []
 
 
-def _make_mock_request(user_id=None, role=None, client_host="127.0.0.1"):
+def _make_mock_request(
+    user_id: str | None = None,
+    role: str | None = None,
+    client_host: str | None = "127.0.0.1",
+) -> Any:
     """Create a minimal mock Request for audit_log() tests."""
 
     class _State:
-        pass
+        user_id: str
+        role: str
 
     class _Client:
-        def __init__(self, host):
+        def __init__(self, host: str) -> None:
             self.host = host
 
     class _MockRequest:
-        def __init__(self):
+        def __init__(self) -> None:
             self.state = _State()
             if user_id is not None:
                 self.state.user_id = user_id

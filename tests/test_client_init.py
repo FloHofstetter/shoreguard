@@ -76,8 +76,8 @@ def client():
     c._endpoint = "localhost:8080"
     c._timeout = 30.0
     c._channel = MagicMock()
-    c._stub = _FakeOpenShellStub()
-    c._inference_stub = _FakeInferenceStub()
+    c._stub = _FakeOpenShellStub()  # type: ignore[assignment]
+    c._inference_stub = _FakeInferenceStub()  # type: ignore[assignment]
     c.sandboxes = MagicMock()
     c.policies = MagicMock()
     c.approvals = MagicMock()

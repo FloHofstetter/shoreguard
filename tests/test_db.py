@@ -155,7 +155,9 @@ class TestAlembicHelpers:
 
         cfg = _alembic_config("sqlite:///test.db")
         assert cfg.get_main_option("sqlalchemy.url") == "sqlite:///test.db"
-        assert cfg.get_main_option("script_location").endswith("alembic")
+        script_location = cfg.get_main_option("script_location")
+        assert script_location is not None
+        assert script_location.endswith("alembic")
 
     def test_alembic_config_different_urls(self):
         from shoreguard.db import _alembic_config

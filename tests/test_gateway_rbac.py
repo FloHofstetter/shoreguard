@@ -254,8 +254,10 @@ class TestLookupGatewayRole:
         user = create_user("u@test.com", "password1", "viewer")
 
         original_factory = auth._session_factory
+        assert original_factory is not None
 
         def broken_factory():
+            assert original_factory is not None
             session = original_factory()
 
             def patched_query(*args, **kwargs):

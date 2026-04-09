@@ -171,7 +171,7 @@ def test_delete_returns_false():
 
     s = _StubDeleteFalse()
     m = object.__new__(ProviderManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     result = m.delete("prov-1")
@@ -222,7 +222,7 @@ class TestProviderManagerMutations:
 
         s = _Stub()
         m = object.__new__(ProviderManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.list()
         assert s.request.limit == 100
@@ -236,7 +236,7 @@ class TestProviderManagerMutations:
 
         s = _Stub()
         m = object.__new__(ProviderManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 77.0
         m.list()
         assert s.timeout == 77.0
@@ -249,7 +249,7 @@ class TestProviderManagerMutations:
 
         s = _Stub()
         m = object.__new__(ProviderManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 42.0
         m.get("p")
         assert s.timeout == 42.0
@@ -262,7 +262,7 @@ class TestProviderManagerMutations:
 
         s = _Stub()
         m = object.__new__(ProviderManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.create(name="p", provider_type="t")
         assert dict(s.request.provider.credentials) == {}
@@ -276,7 +276,7 @@ class TestProviderManagerMutations:
 
         s = _Stub()
         m = object.__new__(ProviderManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 99.0
         m.create(name="p", provider_type="t")
         assert s.timeout == 99.0
@@ -289,7 +289,7 @@ class TestProviderManagerMutations:
 
         s = _Stub()
         m = object.__new__(ProviderManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.update(name="p")
         assert dict(s.request.provider.credentials) == {}
@@ -303,7 +303,7 @@ class TestProviderManagerMutations:
 
         s = _Stub()
         m = object.__new__(ProviderManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.update(name="p")
         assert s.request.provider.type == ""
@@ -316,7 +316,7 @@ class TestProviderManagerMutations:
 
         s = _Stub()
         m = object.__new__(ProviderManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 88.0
         m.delete("p")
         assert s.timeout == 88.0
@@ -329,7 +329,7 @@ class TestProviderManagerMutations:
 
         s = _Stub()
         m = object.__new__(ProviderManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.delete("my-prov")
         assert s.request.name == "my-prov"
@@ -342,7 +342,7 @@ class TestProviderManagerMutations:
 
         s = _Stub()
         m = object.__new__(ProviderManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.create(name="p", provider_type="openai")
         assert s.request.provider.type == "openai"

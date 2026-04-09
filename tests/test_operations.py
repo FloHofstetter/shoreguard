@@ -60,6 +60,7 @@ def test_start_transitions_pending_to_running():
 
     svc.start(op.id)
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.running
 
 
@@ -68,7 +69,9 @@ def test_start_non_pending_is_noop():
     op = svc.create("sandbox", "sb1")
     svc.start(op.id)
     svc.start(op.id)  # already running — should be no-op
-    assert svc.get(op.id).status == OpStatus.running
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.status == OpStatus.running
 
 
 # ── Complete ──────────────────────────────────────────────────────────────
@@ -81,8 +84,10 @@ def test_complete_operation():
     svc.complete(op.id, {"name": "my-sb", "phase": "ready"})
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.succeeded
     assert fetched.progress_pct == 100
+    assert fetched.result_json is not None
     assert json.loads(fetched.result_json) == {"name": "my-sb", "phase": "ready"}
     assert fetched.completed_at is not None
 
@@ -92,7 +97,9 @@ def test_complete_from_pending():
     svc = _make_service()
     op = svc.create("exec", "cmd")
     svc.complete(op.id, {"exit_code": 0})
-    assert svc.get(op.id).status == OpStatus.succeeded
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.status == OpStatus.succeeded
 
 
 def test_complete_non_running_is_noop():
@@ -102,6 +109,7 @@ def test_complete_non_running_is_noop():
     svc.fail(op.id, "error")
     svc.complete(op.id, {"should": "not update"})
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.result_json is None
 
@@ -116,6 +124,7 @@ def test_fail_operation():
     svc.fail(op.id, "Docker not running", error_code=ErrorCode.internal)
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_message == "Docker not running"
     assert fetched.error_code == ErrorCode.internal
@@ -129,6 +138,7 @@ def test_fail_non_running_is_noop():
     svc.complete(op.id, {"ok": True})
     svc.fail(op.id, "too late")
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.succeeded
 
 
@@ -140,11 +150,13 @@ def test_fail_from_cancelling():
     # Simulate cancel setting cancelling state directly
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.status = OpStatus.cancelling
         session.commit()
 
     svc.fail(op.id, "Cancelled", error_code=ErrorCode.cancelled)
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_code == ErrorCode.cancelled
 
@@ -181,6 +193,7 @@ def test_update_progress():
     svc.update_progress(op.id, 50, "Halfway there")
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.progress_pct == 50
     assert fetched.progress_msg == "Halfway there"
 
@@ -190,9 +203,13 @@ def test_update_progress_clamps():
     op = svc.create("sandbox", "sb1")
     svc.start(op.id)
     svc.update_progress(op.id, 150)
-    assert svc.get(op.id).progress_pct == 100
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.progress_pct == 100
     svc.update_progress(op.id, -10)
-    assert svc.get(op.id).progress_pct == 0
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.progress_pct == 0
 
 
 # ── Idempotency key ──────────────────────────────────────────────────────
@@ -235,6 +252,7 @@ def test_create_if_not_running_blocked_by_running():
     """Also blocked when existing op is in running state."""
     svc = _make_service()
     op1 = svc.create_if_not_running("gateway", "gw1")
+    assert op1 is not None
     svc.start(op1.id)
 
     op2 = svc.create_if_not_running("gateway", "gw1")
@@ -253,6 +271,7 @@ def test_create_if_not_running_different_resource():
 def test_create_if_not_running_after_complete():
     svc = _make_service()
     op1 = svc.create_if_not_running("gateway", "gw1")
+    assert op1 is not None
     svc.start(op1.id)
     svc.complete(op1.id, {})
 
@@ -350,8 +369,9 @@ def test_cancel_sets_cancelling_state():
     states_seen = []
     original_fail = svc.fail
 
-    def tracking_fail(op_id, error, error_code=ErrorCode.internal):
+    def tracking_fail(op_id: str, error: str, error_code: str = ErrorCode.internal) -> None:
         fetched = svc.get(op_id)
+        assert fetched is not None
         states_seen.append(fetched.status)
         original_fail(op_id, error, error_code=error_code)
 
@@ -391,10 +411,12 @@ def test_recover_orphans():
     assert count == 1
 
     fetched = svc.get(op1.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_code == ErrorCode.orphaned
 
     fetched2 = svc.get(op2.id)
+    assert fetched2 is not None
     assert fetched2.status == OpStatus.succeeded
 
 
@@ -406,7 +428,9 @@ def test_recover_orphans_includes_pending():
 
     count = svc.recover_orphans()
     assert count == 1
-    assert svc.get(op.id).status == OpStatus.failed
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.status == OpStatus.failed
 
 
 def test_cleanup_expires_stuck_running():
@@ -417,6 +441,7 @@ def test_cleanup_expires_stuck_running():
     svc.cleanup()
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_code == ErrorCode.timeout
 
@@ -428,6 +453,7 @@ def test_cleanup_expires_stuck_pending():
     svc.cleanup()
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_code == ErrorCode.timeout
 
@@ -440,6 +466,7 @@ def test_cleanup_keeps_recent_running():
     svc.cleanup()
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.running
 
 
@@ -451,6 +478,7 @@ def test_cleanup_removes_old_completed():
 
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.completed_at = datetime.now(UTC) - timedelta(days=1)
         session.commit()
 
@@ -468,7 +496,9 @@ def test_to_dict_succeeded():
     svc.start(op.id)
     svc.complete(op.id, {"name": "sb1", "id": "abc"})
 
-    d = svc.to_dict(svc.get(op.id))
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    d = svc.to_dict(fetched)
     assert d["id"] == op.id
     assert d["status"] == OpStatus.succeeded
     assert d["resource_type"] == "sandbox"
@@ -497,7 +527,9 @@ def test_to_dict_running():
     op = svc.create("gateway", "gw1")
     svc.start(op.id)
 
-    d = svc.to_dict(svc.get(op.id))
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    d = svc.to_dict(fetched)
     assert d["status"] == OpStatus.running
     assert d["progress"] == 0
 
@@ -508,7 +540,9 @@ def test_to_dict_failed():
     svc.start(op.id)
     svc.fail(op.id, "boom", error_code=ErrorCode.grpc_unavailable)
 
-    d = svc.to_dict(svc.get(op.id))
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    d = svc.to_dict(fetched)
     assert d["status"] == OpStatus.failed
     assert d["error"] == "boom"
     assert d["error_code"] == ErrorCode.grpc_unavailable
@@ -525,6 +559,8 @@ def test_result_truncation():
     svc.complete(op.id, {"stdout": big_stdout, "exit_code": 0})
 
     fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.result_json is not None
     result = json.loads(fetched.result_json)
     assert result["truncated"] is True
     assert len(result["stdout"]) == 8000
@@ -539,6 +575,8 @@ def test_result_truncation_no_stdout_produces_valid_json():
     svc.complete(op.id, big_result)
 
     fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.result_json is not None
     result = json.loads(fetched.result_json)
     assert result["truncated"] is True
     assert "error" in result
@@ -731,6 +769,7 @@ def test_cleanup_stuck_ops_get_exact_fields():
     svc.cleanup()
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_message == "Operation timed out"
     assert fetched.error_code == ErrorCode.timeout
@@ -747,11 +786,13 @@ def test_cleanup_boundary_running_ttl_recent():
     # Set created_at to 30 seconds ago — well within the 60s TTL
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.created_at = datetime.now(UTC) - timedelta(seconds=30)
         session.commit()
 
     svc.cleanup()
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.running
 
 
@@ -763,11 +804,13 @@ def test_cleanup_boundary_running_ttl_one_second_over():
 
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.created_at = datetime.now(UTC) - timedelta(seconds=61)
         session.commit()
 
     svc.cleanup()
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_code == ErrorCode.timeout
 
@@ -781,6 +824,7 @@ def test_cleanup_retention_boundary_recent():
 
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.completed_at = datetime.now(UTC) - timedelta(days=15)
         session.commit()
 
@@ -798,6 +842,7 @@ def test_cleanup_retention_boundary_one_day_over():
 
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.completed_at = datetime.now(UTC) - timedelta(days=31)
         session.commit()
 
@@ -814,8 +859,9 @@ def test_cleanup_does_not_remove_active_ops():
 
     removed = svc.cleanup()
     assert removed == 0
-    assert svc.get(op.id) is not None
-    assert svc.get(op.id).status == OpStatus.running
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.status == OpStatus.running
 
 
 def test_cleanup_does_not_remove_recent_completed():
@@ -837,11 +883,13 @@ def test_cleanup_handles_stuck_pending():
 
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.created_at = datetime.now(UTC) - timedelta(seconds=120)
         session.commit()
 
     svc.cleanup()
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_message == "Operation timed out"
 
@@ -854,12 +902,14 @@ def test_cleanup_handles_stuck_cancelling():
 
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.status = OpStatus.cancelling
         rec.created_at = datetime.now(UTC) - timedelta(seconds=120)
         session.commit()
 
     svc.cleanup()
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_code == ErrorCode.timeout
 
@@ -878,13 +928,16 @@ def test_cleanup_mixed_stuck_and_old():
     svc.complete(op2.id, {})
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op2.id)
+        assert rec is not None
         rec.completed_at = datetime.now(UTC) - timedelta(days=1)
         session.commit()
 
     removed = svc.cleanup()
     # The stuck op gets failed (not removed), the old completed gets removed
     assert removed >= 1
-    assert svc.get(op1.id).status == OpStatus.failed
+    fetched1 = svc.get(op1.id)
+    assert fetched1 is not None
+    assert fetched1.status == OpStatus.failed
     assert svc.get(op2.id) is None
 
 
@@ -896,7 +949,9 @@ def test_cleanup_stuck_op_not_counted_in_removed():
 
     removed = svc.cleanup()
     assert removed == 0  # No completed ops were deleted
-    assert svc.get(op.id).status == OpStatus.failed
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.status == OpStatus.failed
 
 
 # ── complete (13 survivors) ──────────────────────────────────────────────
@@ -911,6 +966,8 @@ def test_complete_sets_exact_fields():
     svc.complete(op.id, {"key": "val"})
 
     fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.result_json is not None
     assert fetched.status == OpStatus.succeeded
     assert fetched.progress_pct == 100
     assert json.loads(fetched.result_json) == {"key": "val"}
@@ -933,6 +990,8 @@ def test_complete_ignores_already_succeeded():
     svc.complete(op.id, {"second": True})
 
     fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.result_json is not None
     assert json.loads(fetched.result_json) == {"first": True}
 
 
@@ -945,6 +1004,7 @@ def test_complete_ignores_already_failed():
     svc.complete(op.id, {"should_not": "appear"})
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.result_json is None
 
@@ -956,11 +1016,13 @@ def test_complete_from_cancelling():
     svc.start(op.id)
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.status = OpStatus.cancelling
         session.commit()
 
     svc.complete(op.id, {"done": True})
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.succeeded
     assert fetched.progress_pct == 100
 
@@ -972,6 +1034,7 @@ def test_complete_stores_result_json_string():
     svc.complete(op.id, {"exit_code": 0, "stdout": "ok"})
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert isinstance(fetched.result_json, str)
     parsed = json.loads(fetched.result_json)
     assert parsed["exit_code"] == 0
@@ -990,6 +1053,7 @@ def test_fail_sets_exact_fields():
     svc.fail(op.id, "Connection refused", error_code=ErrorCode.grpc_unavailable)
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_message == "Connection refused"
     assert fetched.error_code == ErrorCode.grpc_unavailable
@@ -1005,6 +1069,7 @@ def test_fail_default_error_code():
     svc.fail(op.id, "something broke")
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.error_code == ErrorCode.internal
 
 
@@ -1023,6 +1088,7 @@ def test_fail_ignores_already_failed():
     svc.fail(op.id, "second error", error_code=ErrorCode.timeout)
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.error_message == "first error"
     assert fetched.error_code == ErrorCode.internal
 
@@ -1036,6 +1102,7 @@ def test_fail_ignores_already_succeeded():
     svc.fail(op.id, "too late")
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.succeeded
 
 
@@ -1046,6 +1113,7 @@ def test_fail_from_pending():
     svc.fail(op.id, "Aborted before start")
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_message == "Aborted before start"
     assert fetched.completed_at is not None
@@ -1058,11 +1126,13 @@ def test_fail_from_cancelling_state():
     svc.start(op.id)
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.status = OpStatus.cancelling
         session.commit()
 
     svc.fail(op.id, "Cancelled by user", error_code=ErrorCode.cancelled)
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_code == ErrorCode.cancelled
     assert fetched.error_message == "Cancelled by user"
@@ -1080,6 +1150,7 @@ def test_recover_orphans_sets_exact_fields():
     svc.recover_orphans()
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.status == OpStatus.failed
     assert fetched.error_message == "Server restarted while operation was in progress"
     assert fetched.error_code == ErrorCode.orphaned
@@ -1104,6 +1175,7 @@ def test_recover_orphans_handles_all_active_states():
     svc.start(op_cancelling.id)
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op_cancelling.id)
+        assert rec is not None
         rec.status = OpStatus.cancelling
         session.commit()
 
@@ -1112,6 +1184,7 @@ def test_recover_orphans_handles_all_active_states():
 
     for op_id in [op_pending.id, op_running.id, op_cancelling.id]:
         fetched = svc.get(op_id)
+        assert fetched is not None
         assert fetched.status == OpStatus.failed
         assert fetched.error_code == ErrorCode.orphaned
 
@@ -1130,9 +1203,13 @@ def test_recover_orphans_does_not_touch_terminal():
     count = svc.recover_orphans()
     assert count == 0
 
-    assert svc.get(op_ok.id).status == OpStatus.succeeded
-    assert svc.get(op_fail.id).status == OpStatus.failed
-    assert svc.get(op_fail.id).error_code == ErrorCode.internal  # not orphaned
+    fetched_ok = svc.get(op_ok.id)
+    assert fetched_ok is not None
+    assert fetched_ok.status == OpStatus.succeeded
+    fetched_fail = svc.get(op_fail.id)
+    assert fetched_fail is not None
+    assert fetched_fail.status == OpStatus.failed
+    assert fetched_fail.error_code == ErrorCode.internal  # not orphaned
 
 
 def test_recover_orphans_multiple_returns_exact_count():
@@ -1157,7 +1234,9 @@ def test_cancel_returns_none_for_succeeded():
     svc.complete(op.id, {})
     result = svc.cancel(op.id)
     assert result is None
-    assert svc.get(op.id).status == OpStatus.succeeded
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.status == OpStatus.succeeded
 
 
 def test_cancel_returns_none_for_failed():
@@ -1177,6 +1256,7 @@ def test_cancel_returns_none_for_cancelling():
     svc.start(op.id)
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.status = OpStatus.cancelling
         session.commit()
 
@@ -1237,7 +1317,9 @@ def test_cancel_updates_updated_at():
     svc = _make_service()
     op = svc.create("sandbox", "sb")
     svc.start(op.id)
-    original_updated = svc.get(op.id).updated_at
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    original_updated = fetched.updated_at
 
     result = svc.cancel(op.id)
     assert result is not None
@@ -1339,6 +1421,7 @@ def test_create_with_idempotency_key():
     assert op.idempotency_key == "my-key-123"
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.idempotency_key == "my-key-123"
 
 
@@ -1353,6 +1436,7 @@ def test_update_progress_message_stored():
     svc.update_progress(op.id, 25, "Loading config")
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.progress_pct == 25
     assert fetched.progress_msg == "Loading config"
 
@@ -1365,6 +1449,7 @@ def test_update_progress_none_message():
     svc.update_progress(op.id, 75)
 
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.progress_pct == 75
     assert fetched.progress_msg is None
 
@@ -1374,10 +1459,13 @@ def test_update_progress_updates_timestamp():
     svc = _make_service()
     op = svc.create("sandbox", "sb")
     svc.start(op.id)
-    original = svc.get(op.id).updated_at
+    before = svc.get(op.id)
+    assert before is not None
+    original = before.updated_at
 
     svc.update_progress(op.id, 50, "halfway")
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.updated_at >= original
 
 
@@ -1390,6 +1478,7 @@ def test_update_progress_noop_on_terminal():
 
     svc.update_progress(op.id, 50, "should not work")
     fetched = svc.get(op.id)
+    assert fetched is not None
     assert fetched.progress_pct == 100  # unchanged from complete
 
 
@@ -1406,10 +1495,14 @@ def test_update_progress_clamp_exact_boundaries():
     svc.start(op.id)
 
     svc.update_progress(op.id, 0)
-    assert svc.get(op.id).progress_pct == 0
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.progress_pct == 0
 
     svc.update_progress(op.id, 100)
-    assert svc.get(op.id).progress_pct == 100
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    assert fetched.progress_pct == 100
 
 
 # ── is_running (1 survivor) ────────────────────────────────────────────
@@ -1434,6 +1527,7 @@ def test_is_running_cancelling_not_active():
 
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.status = OpStatus.cancelling
         session.commit()
 
@@ -1500,7 +1594,9 @@ def test_to_dict_with_progress_message():
     svc.start(op.id)
     svc.update_progress(op.id, 50, "half done")
 
-    d = svc.to_dict(svc.get(op.id))
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    d = svc.to_dict(fetched)
     assert d["progress_message"] == "half done"
     assert d["progress"] == 50
 
@@ -1515,10 +1611,13 @@ def test_to_dict_invalid_result_json():
     # Corrupt the result_json
     with svc._session_factory() as session:
         rec = session.get(OperationRecord, op.id)
+        assert rec is not None
         rec.result_json = "not valid json {{"
         session.commit()
 
-    d = svc.to_dict(svc.get(op.id))
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    d = svc.to_dict(fetched)
     assert d["result"] is None
 
 
@@ -1536,6 +1635,8 @@ def test_to_dict_no_error_fields():
     op = svc.create("sandbox", "sb")
     svc.start(op.id)
     svc.complete(op.id, {})
-    d = svc.to_dict(svc.get(op.id))
+    fetched = svc.get(op.id)
+    assert fetched is not None
+    d = svc.to_dict(fetched)
     assert "error" not in d
     assert "error_code" not in d

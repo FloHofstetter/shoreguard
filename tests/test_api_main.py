@@ -67,11 +67,11 @@ class _FakeRpcError(grpc.RpcError, grpc.Call):
         return self._details
 
     # grpc.Call requires these methods
-    def initial_metadata(self):
-        return {}
+    def initial_metadata(self):  # type: ignore[override]
+        return ()
 
-    def trailing_metadata(self):
-        return {}
+    def trailing_metadata(self):  # type: ignore[override]
+        return ()
 
     def is_active(self):
         return False
@@ -79,11 +79,14 @@ class _FakeRpcError(grpc.RpcError, grpc.Call):
     def cancelled(self):
         return False
 
-    def time_remaining(self):
-        return None
+    def time_remaining(self):  # type: ignore[override]
+        return 0.0
 
-    def add_callback(self, callback):
-        pass
+    def add_callback(self, callback):  # type: ignore[override]
+        return False
+
+    def cancel(self):
+        return False
 
 
 async def test_gateway_not_connected_returns_503(api_client, mock_client):

@@ -1054,8 +1054,12 @@ class TestInitOIDCMutationKillers:
         reset_settings()
         init_oidc()
         assert len(get_providers()) == 2
-        assert get_provider("a").issuer == "https://a.com"
-        assert get_provider("b").issuer == "https://b.com"
+        pa = get_provider("a")
+        pb = get_provider("b")
+        assert pa is not None
+        assert pb is not None
+        assert pa.issuer == "https://a.com"
+        assert pb.issuer == "https://b.com"
         reset_oidc()
         reset_settings()
 
@@ -1106,6 +1110,7 @@ class TestInitOIDCMutationKillers:
         reset_settings()
         init_oidc()
         p = get_provider("acme")
+        assert p is not None
         assert p.name == "acme"
         assert p.display_name == "Acme Corp IdP"
         assert p.issuer == "https://acme.example.com"  # trailing slash stripped

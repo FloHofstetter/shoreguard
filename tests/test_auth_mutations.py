@@ -276,6 +276,7 @@ class TestRotateServicePrincipalExact:
     def test_rotate_old_key_stops_working(self):
         old_key, info = create_service_principal("test-sp", "operator")
         result = rotate_service_principal(info["id"])
+        assert result is not None
         new_key, _ = result
         # Old key should no longer authenticate
         assert _lookup_sp_identity(old_key) is None
@@ -300,6 +301,7 @@ class TestRotateServicePrincipalExact:
     def test_rotate_info_has_correct_keys(self):
         _, info = create_service_principal("test-sp", "admin")
         result = rotate_service_principal(info["id"])
+        assert result is not None
         _, new_info = result
         assert set(new_info.keys()) == {"id", "name", "role", "key_prefix", "expires_at"}
 
@@ -307,6 +309,7 @@ class TestRotateServicePrincipalExact:
         future = datetime.datetime(2030, 6, 15, tzinfo=datetime.UTC)
         _, info = create_service_principal("test-sp", "viewer", expires_at=future)
         result = rotate_service_principal(info["id"])
+        assert result is not None
         _, new_info = result
         assert new_info["expires_at"] is not None
         assert "2030-06-15" in new_info["expires_at"]
@@ -314,6 +317,7 @@ class TestRotateServicePrincipalExact:
     def test_rotate_none_expires_at(self):
         _, info = create_service_principal("test-sp", "viewer")
         result = rotate_service_principal(info["id"])
+        assert result is not None
         _, new_info = result
         assert new_info["expires_at"] is None
 
@@ -371,8 +375,10 @@ class TestDeleteUserExact:
         admin1 = create_user("admin1@test.com", "password1", "admin")
         admin2 = create_user("admin2@test.com", "password1", "admin")
         # Deactivate admin2
+        assert auth._session_factory is not None
         session = auth._session_factory()
         user = session.query(User).filter(User.id == admin2["id"]).first()
+        assert user is not None
         user.is_active = False
         session.commit()
         session.close()
@@ -766,8 +772,10 @@ class TestAcceptInviteExact:
         from shoreguard.models import User
 
         info = create_user("u@test.com", None, "viewer")
+        assert auth._session_factory is not None
         session = auth._session_factory()
         user = session.query(User).filter(User.id == info["id"]).first()
+        assert user is not None
         user.created_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=8)
         session.commit()
         session.close()
@@ -807,8 +815,10 @@ class TestAuthenticateUserExact:
         from shoreguard.models import User
 
         create_user("u@test.com", "password1", "viewer")
+        assert auth._session_factory is not None
         session = auth._session_factory()
         user = session.query(User).filter(User.email == "u@test.com").first()
+        assert user is not None
         user.is_active = False
         session.commit()
         session.close()
@@ -846,6 +856,7 @@ class TestSessionTokenExact:
         token = create_session_token(user_id=42, role="operator")
         result = verify_session_token(token)
         assert result == (42, "operator")
+        assert result is not None
         assert result[0] == 42
         assert result[1] == "operator"
 
@@ -1093,6 +1104,7 @@ class TestGetGroupExact:
         add_group_member(g["id"], u2["id"])
         add_group_member(g["id"], u1["id"])
         result = get_group(g["id"])
+        assert result is not None
         assert result["members"][0]["email"] == "a@test.com"
         assert result["members"][1]["email"] == "z@test.com"
 

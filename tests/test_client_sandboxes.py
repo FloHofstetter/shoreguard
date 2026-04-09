@@ -21,17 +21,17 @@ class _FakeStub:
         self.request = req
         return SimpleNamespace(
             sandboxes=[
-                datamodel_pb2.Sandbox(id="abc", name="sb1", phase=2),
+                datamodel_pb2.Sandbox(id="abc", name="sb1", phase=2),  # type: ignore[arg-type]
             ]
         )
 
     def GetSandbox(self, req, timeout=None):
         self.request = req
-        return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=2))
+        return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=2))  # type: ignore[arg-type]
 
     def CreateSandbox(self, req, timeout=None):
         self.request = req
-        return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="new", name="new-sb", phase=1))
+        return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="new", name="new-sb", phase=1))  # type: ignore[arg-type]
 
     def DeleteSandbox(self, req, timeout=None):
         self.request = req
@@ -169,11 +169,11 @@ def test_wait_ready_immediate(monkeypatch):
 
     class _ReadyStub(_FakeStub):
         def GetSandbox(self, req, timeout=None):
-            return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=2))
+            return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=2))  # type: ignore[arg-type]
 
     s = _ReadyStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     result = m.wait_ready("sb1")
@@ -186,11 +186,11 @@ def test_wait_ready_error_phase(monkeypatch):
 
     class _ErrorStub(_FakeStub):
         def GetSandbox(self, req, timeout=None):
-            return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=3))
+            return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=3))  # type: ignore[arg-type]
 
     s = _ErrorStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     with pytest.raises(SandboxError, match="error phase"):
@@ -206,11 +206,11 @@ def test_wait_ready_timeout(monkeypatch):
 
     class _ProvisioningStub(_FakeStub):
         def GetSandbox(self, req, timeout=None):
-            return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=1))
+            return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=1))  # type: ignore[arg-type]
 
     s = _ProvisioningStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     with pytest.raises(TimeoutError, match="not ready"):
@@ -229,7 +229,7 @@ def _make_watch_mgr(events):
 
     s = _WatchStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
     return m
 
@@ -237,7 +237,7 @@ def _make_watch_mgr(events):
 def test_watch_status_event():
     """Watch yields status dict for sandbox payload."""
     event = openshell_pb2.SandboxStreamEvent(
-        sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=2),
+        sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=2),  # type: ignore[arg-type]
     )
     mgr = _make_watch_mgr([event])
     results = list(mgr.watch("abc"))
@@ -347,7 +347,7 @@ def test_sandbox_to_dict_all_phase_codes(phase_code, phase_name):
 
 def test_sandbox_to_dict_unknown_phase_code():
     """Unknown phase code (e.g. 99) returns 'unknown'."""
-    sb = datamodel_pb2.Sandbox(id="id1", name="sb1", phase=99)
+    sb = datamodel_pb2.Sandbox(id="id1", name="sb1", phase=99)  # type: ignore[arg-type]
     d = _sandbox_to_dict(sb)
     assert d["phase"] == "unknown"
     assert d["phase_code"] == 99
@@ -359,7 +359,7 @@ def test_sandbox_to_dict_all_fields():
         id="id42",
         name="my-sb",
         namespace="default",
-        phase=2,
+        phase=2,  # type: ignore[arg-type]
         created_at_ms=9999,
         current_policy_version=3,
         spec=datamodel_pb2.SandboxSpec(
@@ -430,12 +430,12 @@ def test_create_no_image_no_providers():
         def CreateSandbox(self, req, timeout=None):
             self.request = req
             return SimpleNamespace(
-                sandbox=datamodel_pb2.Sandbox(id="bare", name="bare-sb", phase=1)
+                sandbox=datamodel_pb2.Sandbox(id="bare", name="bare-sb", phase=1)  # type: ignore[arg-type]
             )
 
     s = _CreateStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     m.create(name="bare-sb")
@@ -463,7 +463,7 @@ def test_exec_stderr_stream():
 
     s = _StderrStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     result = m.exec("sb1", ["false"])
@@ -483,7 +483,7 @@ def test_exec_workdir_env_timeout():
 
     s = _ExecStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     m.exec("sb1", ["ls"], workdir="/tmp", env={"A": "B"}, timeout_seconds=60)
@@ -504,7 +504,7 @@ def test_exec_grpc_timeout_uses_max_of_timeout_and_command_timeout():
     # Case 1: timeout_seconds + 10 > _timeout
     s = _ExecStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
     m.exec("sb1", ["sleep", "100"], timeout_seconds=100)
     assert s.grpc_timeout == 110  # 100 + 10 > 30
@@ -512,7 +512,7 @@ def test_exec_grpc_timeout_uses_max_of_timeout_and_command_timeout():
     # Case 2: _timeout > timeout_seconds + 10
     s2 = _ExecStub()
     m2 = object.__new__(SandboxManager)
-    m2._stub = s2
+    m2._stub = s2  # type: ignore[assignment]
     m2._timeout = 200.0
     m2.exec("sb1", ["ls"], timeout_seconds=5)
     assert s2.grpc_timeout == 200.0  # 200 > 5 + 10
@@ -522,13 +522,13 @@ def test_exec_empty_stream():
     """exec() handles empty stream (no events) gracefully."""
 
     class _EmptyStub(_FakeStub):
-        def ExecSandbox(self, req, timeout=None):
+        def ExecSandbox(self, req, timeout=None):  # type: ignore[override]
             self.request = req
             return iter([])  # empty stream
 
     s = _EmptyStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     result = m.exec("sb1", ["noop"])
@@ -561,7 +561,7 @@ def test_get_logs_all_fields():
 
     s = _LogsStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     result = m.get_logs("sb1")
@@ -585,7 +585,7 @@ def test_get_logs_sources_forwarded():
 
     s = _LogsStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     m.get_logs("sb1", sources=["agent", "runtime"])
@@ -602,7 +602,7 @@ def test_get_logs_no_sources_sends_empty():
 
     s = _LogsStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     m.get_logs("sb1")
@@ -622,7 +622,7 @@ def test_watch_request_params():
 
     s = _WatchStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     list(
@@ -652,7 +652,7 @@ def test_watch_default_params():
 
     s = _WatchStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     list(m.watch("sb1"))
@@ -698,11 +698,11 @@ def test_wait_ready_provisioning_then_ready(monkeypatch):
             call_count += 1
             # First 2 calls: provisioning; then ready
             phase = 1 if call_count <= 2 else 2
-            return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=phase))
+            return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=phase))  # type: ignore[arg-type]
 
     s = _TransitionStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     result = m.wait_ready("sb1", timeout_seconds=300)
@@ -716,11 +716,11 @@ def test_wait_ready_checks_phase_exactly():
 
     class _DeletingStub(_FakeStub):
         def GetSandbox(self, req, timeout=None):
-            return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=4))
+            return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="abc", name="sb1", phase=4))  # type: ignore[arg-type]
 
     s = _DeletingStub()
     m = object.__new__(SandboxManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     # Use a tight deadline so it times out fast
@@ -751,7 +751,7 @@ class TestSandboxToDictMutations:
             id="ID",
             name="NAME",
             namespace="NS",
-            phase=2,
+            phase=2,  # type: ignore[arg-type]
             created_at_ms=42,
             current_policy_version=7,
             spec=datamodel_pb2.SandboxSpec(
@@ -806,7 +806,7 @@ class TestListMutations:
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.list()
         assert s.request.limit == 100
@@ -819,7 +819,7 @@ class TestListMutations:
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         assert m.list() == []
 
@@ -831,7 +831,7 @@ class TestListMutations:
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 42.0
         m.list()
         assert s.timeout == 42.0
@@ -844,11 +844,11 @@ class TestCreateMutations:
         class _Stub(_FakeStub):
             def CreateSandbox(self, req, timeout=None):
                 self.request = req
-                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.create(name="y")
         assert not s.request.spec.HasField("policy")
@@ -857,11 +857,11 @@ class TestCreateMutations:
         class _Stub(_FakeStub):
             def CreateSandbox(self, req, timeout=None):
                 self.request = req
-                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.create(name="y")
         assert dict(s.request.spec.environment) == {}
@@ -870,11 +870,11 @@ class TestCreateMutations:
         class _Stub(_FakeStub):
             def CreateSandbox(self, req, timeout=None):
                 self.request = req
-                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.create(name="y")
         assert s.request.spec.gpu is False
@@ -883,11 +883,11 @@ class TestCreateMutations:
         class _Stub(_FakeStub):
             def CreateSandbox(self, req, timeout=None):
                 self.request = req
-                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="x", name="y", phase=1))  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.create(name="y", gpu=True)
         assert s.request.spec.gpu is True
@@ -904,7 +904,7 @@ class TestDeleteMutations:
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         assert m.delete("sb1") is False
 
@@ -915,7 +915,7 @@ class TestDeleteMutations:
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         assert m.delete("sb1") is False
 
@@ -927,7 +927,7 @@ class TestDeleteMutations:
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 55.0
         m.delete("sb1")
         assert s.timeout == 55.0
@@ -947,7 +947,7 @@ class TestExecMutations:
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.exec("sb1", ["cmd"])
         assert result["exit_code"] is None
@@ -968,7 +968,7 @@ class TestExecMutations:
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.exec("sb1", ["cmd"])
         assert result["stdout"] == "ab"
@@ -977,26 +977,26 @@ class TestExecMutations:
         """timeout_seconds=0 -> grpc_timeout = max(_timeout, 600+10)."""
 
         class _Stub(_FakeStub):
-            def ExecSandbox(self, req, timeout=None):
+            def ExecSandbox(self, req, timeout=None):  # type: ignore[override]
                 self.grpc_timeout = timeout
                 return iter([])
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.exec("sb1", ["cmd"])
         assert s.grpc_timeout == 610  # max(30, 600+10)
 
     def test_exec_env_none_becomes_empty(self):
         class _Stub(_FakeStub):
-            def ExecSandbox(self, req, timeout=None):
+            def ExecSandbox(self, req, timeout=None):  # type: ignore[override]
                 self.request = req
                 return iter([])
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.exec("sb1", ["cmd"])
         assert dict(s.request.environment) == {}
@@ -1025,7 +1025,7 @@ class TestSshSessionMutations:
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         assert m.revoke_ssh_session("tok") is False
 
@@ -1041,7 +1041,7 @@ class TestGetLogsMutations:
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.get_logs("sb1")
         assert s.request.lines == 200
@@ -1064,7 +1064,7 @@ class TestGetLogsMutations:
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.get_logs("sb1")
         assert len(result) == 2
@@ -1136,7 +1136,7 @@ class TestWatchMutations:
     def test_watch_multiple_events_order(self):
         events = [
             openshell_pb2.SandboxStreamEvent(
-                sandbox=datamodel_pb2.Sandbox(id="a", name="s", phase=1)
+                sandbox=datamodel_pb2.Sandbox(id="a", name="s", phase=1)  # type: ignore[arg-type]
             ),
             openshell_pb2.SandboxStreamEvent(
                 log=openshell_pb2.SandboxLogLine(
@@ -1163,11 +1163,11 @@ class TestWaitReadyMutations:
 
         class _Stub(_FakeStub):
             def GetSandbox(self, req, timeout=None):
-                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="a", name="my-sb", phase=3))
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="a", name="my-sb", phase=3))  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         with pytest.raises(SandboxError, match="my-sb"):
             m.wait_ready("my-sb")
@@ -1179,11 +1179,11 @@ class TestWaitReadyMutations:
 
         class _Stub(_FakeStub):
             def GetSandbox(self, req, timeout=None):
-                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="a", name="sb", phase=1))
+                return SimpleNamespace(sandbox=datamodel_pb2.Sandbox(id="a", name="sb", phase=1))  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         with pytest.raises(TimeoutError, match="10"):
             m.wait_ready("sb", timeout_seconds=10)

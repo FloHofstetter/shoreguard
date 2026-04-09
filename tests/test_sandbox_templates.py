@@ -137,6 +137,7 @@ class TestGetTemplate:
 
     def test_result_has_sandbox_dict(self):
         result = get_template("web-dev")
+        assert result is not None
         assert isinstance(result["sandbox"], dict)
 
     def test_returns_none_for_invalid_yaml(self, tmp_path):
@@ -156,6 +157,7 @@ class TestGetTemplate:
         f.write_text("template:\n  description: foo\nsandbox:\n  image: img\n")
         with patch("shoreguard.sandbox_templates._TEMPLATES_DIR", tmp_path):
             result = get_template("myname")
+            assert result is not None
             assert result["name"] == "myname"
 
     def test_defaults_description_to_empty(self, tmp_path):
@@ -163,6 +165,7 @@ class TestGetTemplate:
         f.write_text("template:\n  name: t\nsandbox: {}\n")
         with patch("shoreguard.sandbox_templates._TEMPLATES_DIR", tmp_path):
             result = get_template("t")
+            assert result is not None
             assert result["description"] == ""
 
     def test_defaults_category_to_empty(self, tmp_path):
@@ -170,6 +173,7 @@ class TestGetTemplate:
         f.write_text("template:\n  name: t\nsandbox: {}\n")
         with patch("shoreguard.sandbox_templates._TEMPLATES_DIR", tmp_path):
             result = get_template("t")
+            assert result is not None
             assert result["category"] == ""
 
     def test_missing_sandbox_key_defaults_to_empty_dict(self, tmp_path):
@@ -177,6 +181,7 @@ class TestGetTemplate:
         f.write_text("template:\n  name: nosb\n")
         with patch("shoreguard.sandbox_templates._TEMPLATES_DIR", tmp_path):
             result = get_template("nosb")
+            assert result is not None
             assert result["sandbox"] == {}
 
     def test_missing_template_key_uses_defaults(self, tmp_path):
@@ -184,6 +189,7 @@ class TestGetTemplate:
         f.write_text("sandbox:\n  image: test\n")
         with patch("shoreguard.sandbox_templates._TEMPLATES_DIR", tmp_path):
             result = get_template("bare")
+            assert result is not None
             assert result["name"] == "bare"
             assert result["description"] == ""
             assert result["category"] == ""

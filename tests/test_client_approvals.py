@@ -442,7 +442,7 @@ class TestApprovalManagerMutations:
 
         s = _Stub()
         m = object.__new__(ApprovalManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.get_draft("sb", status_filter="approved")
         assert s.request.status_filter == "approved"
@@ -457,7 +457,7 @@ class TestApprovalManagerMutations:
 
         s = _Stub()
         m = object.__new__(ApprovalManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.get_draft("sb")
         assert s.request.status_filter == ""
@@ -475,7 +475,7 @@ class TestApprovalManagerMutations:
 
         s = _Stub()
         m = object.__new__(ApprovalManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.get_pending("sb")
         assert s.request.status_filter == "pending"
@@ -501,7 +501,7 @@ class TestApprovalManagerMutations:
 
         s = _Stub()
         m = object.__new__(ApprovalManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.edit(
             "sb",
@@ -544,7 +544,7 @@ class TestApprovalManagerMutations:
 
         s = _Stub()
         m = object.__new__(ApprovalManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.get_history("sb")
         assert len(result) == 2
@@ -570,7 +570,7 @@ class TestApprovalManagerMutations:
 
         s = _Stub()
         m = object.__new__(ApprovalManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.get_draft("sb")
         assert result == {
@@ -587,7 +587,7 @@ class TestApprovalManagerMutations:
 
         s = _Stub()
         m = object.__new__(ApprovalManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.approve("sb", "c")
         assert result == {"policy_version": 10, "policy_hash": "HASH"}
@@ -599,7 +599,7 @@ class TestApprovalManagerMutations:
 
         s = _Stub()
         m = object.__new__(ApprovalManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.clear("sb")
         assert result == {"chunks_cleared": 0}
@@ -613,7 +613,7 @@ class TestApprovalManagerMutations:
 
         s = _Stub()
         m = object.__new__(ApprovalManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.approve_all("sb")
         assert result == {

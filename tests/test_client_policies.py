@@ -16,15 +16,15 @@ class _FakeStub:
 
     def GetSandboxPolicyStatus(self, req, timeout=None):
         self.request = req
-        rev = openshell_pb2.SandboxPolicyRevision(version=3, status=2, policy_hash="abc123")
+        rev = openshell_pb2.SandboxPolicyRevision(version=3, status=2, policy_hash="abc123")  # type: ignore[arg-type]
         return SimpleNamespace(active_version=3, revision=rev)
 
     def ListSandboxPolicies(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(
             revisions=[
-                openshell_pb2.SandboxPolicyRevision(version=1, status=2, policy_hash="old"),
-                openshell_pb2.SandboxPolicyRevision(version=2, status=4, policy_hash="new"),
+                openshell_pb2.SandboxPolicyRevision(version=1, status=2, policy_hash="old"),  # type: ignore[arg-type]
+                openshell_pb2.SandboxPolicyRevision(version=2, status=4, policy_hash="new"),  # type: ignore[arg-type]
             ]
         )
 
@@ -209,13 +209,16 @@ def test_get_with_embedded_policy(stub):
         def GetSandboxPolicyStatus(self, req, timeout=None):
             self.request = req
             rev = openshell_pb2.SandboxPolicyRevision(
-                version=3, status=2, policy_hash="abc", policy=policy
+                version=3,
+                status=2,  # type: ignore[arg-type]
+                policy_hash="abc",
+                policy=policy,
             )
             return SimpleNamespace(active_version=3, revision=rev)
 
     s = _StubWithPolicy()
     m = object.__new__(PolicyManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     result = m.get("sb1")
@@ -235,7 +238,7 @@ def test_get_revision_timestamp_fields(stub):
             self.request = req
             rev = openshell_pb2.SandboxPolicyRevision(
                 version=1,
-                status=2,
+                status=2,  # type: ignore[arg-type]
                 policy_hash="h",
                 created_at_ms=111,
                 loaded_at_ms=222,
@@ -244,7 +247,7 @@ def test_get_revision_timestamp_fields(stub):
 
     s = _StubWithTimestamps()
     m = object.__new__(PolicyManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     result = m.get("sb1")
@@ -276,7 +279,7 @@ def test_get_revision_status_codes(status_code, status_name):
 
     s = _StubStatus()
     m = object.__new__(PolicyManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     result = m.get("sb1")
@@ -293,7 +296,7 @@ def test_list_revisions_load_error():
                 revisions=[
                     openshell_pb2.SandboxPolicyRevision(
                         version=1,
-                        status=3,
+                        status=3,  # type: ignore[arg-type]
                         policy_hash="h",
                         created_at_ms=100,
                         loaded_at_ms=200,
@@ -304,7 +307,7 @@ def test_list_revisions_load_error():
 
     s = _StubWithError()
     m = object.__new__(PolicyManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     result = m.list_revisions("sb1")
@@ -325,7 +328,7 @@ def test_update_global_scope():
 
     s = _StubGlobal()
     m = object.__new__(PolicyManager)
-    m._stub = s
+    m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
     policy = sandbox_pb2.SandboxPolicy(version=1)
@@ -602,7 +605,7 @@ class TestNetworkRuleToDictMutations:
             ],
         )
         rule.endpoints[0].rules[0].allow.query["p"].CopyFrom(
-            sandbox_pb2.L7QueryMatcher(**{"any": ["a", "b"]})
+            sandbox_pb2.L7QueryMatcher(**{"any": ["a", "b"]})  # type: ignore[arg-type]
         )
         result = _network_rule_to_dict(rule)
         assert result["endpoints"][0]["rules"][0]["allow"]["query"]["p"]["any"] == ["a", "b"]
@@ -651,12 +654,12 @@ class TestPolicyManagerMutations:
         class _Stub(_FakeStub):
             def GetSandboxPolicyStatus(self, req, timeout=None):
                 self.timeout = timeout
-                rev = openshell_pb2.SandboxPolicyRevision(version=1, status=2, policy_hash="h")
+                rev = openshell_pb2.SandboxPolicyRevision(version=1, status=2, policy_hash="h")  # type: ignore[arg-type]
                 return SimpleNamespace(active_version=1, revision=rev)
 
         s = _Stub()
         m = object.__new__(PolicyManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 55.0
         m.get("sb")
         assert s.timeout == 55.0
@@ -665,12 +668,12 @@ class TestPolicyManagerMutations:
         class _Stub(_FakeStub):
             def GetSandboxPolicyStatus(self, req, timeout=None):
                 self.request = req
-                rev = openshell_pb2.SandboxPolicyRevision(version=3, status=2, policy_hash="h")
+                rev = openshell_pb2.SandboxPolicyRevision(version=3, status=2, policy_hash="h")  # type: ignore[arg-type]
                 return SimpleNamespace(active_version=3, revision=rev)
 
         s = _Stub()
         m = object.__new__(PolicyManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.get_version("sb", 3)
         assert s.request.name == "sb"
@@ -681,7 +684,7 @@ class TestPolicyManagerMutations:
             def GetSandboxPolicyStatus(self, req, timeout=None):
                 rev = openshell_pb2.SandboxPolicyRevision(
                     version=5,
-                    status=1,
+                    status=1,  # type: ignore[arg-type]
                     policy_hash="hash5",
                     created_at_ms=100,
                     loaded_at_ms=200,
@@ -690,7 +693,7 @@ class TestPolicyManagerMutations:
 
         s = _Stub()
         m = object.__new__(PolicyManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.get_version("sb", 5)
         assert result["active_version"] == 5
@@ -708,7 +711,7 @@ class TestPolicyManagerMutations:
 
         s = _Stub()
         m = object.__new__(PolicyManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.list_revisions("sb")
         assert s.request.limit == 20
@@ -721,7 +724,7 @@ class TestPolicyManagerMutations:
                     revisions=[
                         openshell_pb2.SandboxPolicyRevision(
                             version=1,
-                            status=2,
+                            status=2,  # type: ignore[arg-type]
                             policy_hash="h1",
                             created_at_ms=10,
                             loaded_at_ms=20,
@@ -732,7 +735,7 @@ class TestPolicyManagerMutations:
 
         s = _Stub()
         m = object.__new__(PolicyManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.list_revisions("sb")
         assert result[0] == {
@@ -751,7 +754,7 @@ class TestPolicyManagerMutations:
 
         s = _Stub()
         m = object.__new__(PolicyManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.update("sb", sandbox_pb2.SandboxPolicy(version=1))
         assert result == {"version": 99, "policy_hash": "H99"}
@@ -765,7 +768,7 @@ class TestPolicyManagerMutations:
 
         s = _Stub()
         m = object.__new__(PolicyManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         m.update("sb", sandbox_pb2.SandboxPolicy(version=1))
         assert s.global_value is False
@@ -777,13 +780,16 @@ class TestPolicyManagerMutations:
         class _Stub(_FakeStub):
             def GetSandboxPolicyStatus(self, req, timeout=None):
                 rev = openshell_pb2.SandboxPolicyRevision(
-                    version=2, status=2, policy_hash="h", policy=policy
+                    version=2,
+                    status=2,  # type: ignore[arg-type]
+                    policy_hash="h",
+                    policy=policy,
                 )
                 return SimpleNamespace(active_version=2, revision=rev)
 
         s = _Stub()
         m = object.__new__(PolicyManager)
-        m._stub = s
+        m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         result = m.get_version("sb", 2)
         assert "policy" in result
