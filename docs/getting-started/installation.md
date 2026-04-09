@@ -46,3 +46,36 @@ the first visit and walks you through creating an admin account.
 
 For multi-instance deployments, ShoreGuard supports PostgreSQL. See
 [Configuration — Database](../reference/configuration.md#database) for setup.
+
+## Verifying release integrity
+
+Starting with v0.27.0, ShoreGuard releases are signed via
+[sigstore](https://sigstore.dev/) using keyless GitHub OIDC — no public
+keys to distribute, every signature is logged in the public
+[Rekor](https://docs.sigstore.dev/logging/overview/) transparency log.
+
+### Docker images (GHCR)
+
+Verify any image before running it:
+
+```bash
+cosign verify ghcr.io/flohofstetter/shoreguard:0.27.0 \
+  --certificate-identity-regexp 'https://github.com/FloHofstetter/shoreguard/.*' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
+```
+
+Install `cosign` via Homebrew (`brew install cosign`) or from
+[sigstore/cosign releases](https://github.com/sigstore/cosign/releases).
+
+### PyPI wheels (PEP 740 attestations)
+
+PyPI wheels are published with
+[PEP 740 attestations](https://peps.python.org/pep-0740/). Modern `pip`
+and `uv` verify these automatically on install. For an explicit check:
+
+```bash
+python -m pip install pypi-attestations
+pypi-attestations verify-pypi \
+  --repository https://pypi.org/simple/ \
+  pypi:shoreguard==0.27.0
+```

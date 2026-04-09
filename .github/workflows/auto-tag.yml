@@ -1,0 +1,72 @@
+name: Auto-Tag on Release Commit
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  auto-tag:
+    runs-on: ubuntu-latest
+    if: "startsWith(github.event.head_commit.message, 'release: ShoreGuard v')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so we can push a tag
+
+      - name: Extract version from commit message
+        id: parse
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          # Match first line only: "release: ShoreGuard vX.Y.Z[-suffix]"
+          version="$(printf '%s\n' "$COMMIT_MSG" | head -1 | sed -nE 's/^release: ShoreGuard v(.+)$/\1/p')"
+          if [ -z "$version" ]; then
+            echo "::error::Could not parse version from commit message first line"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Parsed version: $version"
+
+      - name: Verify version matches pyproject.toml
+        env:
+          EXPECTED: ${{ steps.parse.outputs.version }}
+        run: |
+          set -euo pipefail
+          actual="$(grep -E '^version = ' pyproject.toml | head -1 | sed -E 's/version = "(.+)"/\1/')"
+          if [ "$EXPECTED" != "$actual" ]; then
+            echo "::error::Version mismatch: commit says v$EXPECTED, pyproject.toml says $actual"
+            exit 1
+          fi
+          echo "Version v$EXPECTED matches pyproject.toml"
+
+      - name: Check if tag already exists
+        id: check
+        env:
+          VERSION: ${{ steps.parse.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "::warning::Tag $tag already exists — skipping"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push tag
+        if: steps.check.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.parse.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+          echo "Pushed $tag — release.yml will now take over"

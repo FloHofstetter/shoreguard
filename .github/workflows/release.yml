@@ -50,6 +50,7 @@ jobs:
             type=raw,value=latest
 
       - uses: docker/build-push-action@v7
+        id: build
         with:
           context: .
           push: true
@@ -58,6 +59,21 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             SHOREGUARD_VERSION=${{ steps.version.outputs.version }}
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image (keyless via GitHub OIDC)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          # Sign each tag by digest. One signature per tag, but all point
+          # to the same multi-arch manifest — Fulcio issues an ephemeral
+          # cert via GitHub OIDC, Rekor logs the signature publicly.
+          for tag in $TAGS; do
+            cosign sign --yes "${tag}@${DIGEST}"
+          done
 
   # ── Build & publish Python package to PyPI ──────────────────────────
   pypi:
@@ -76,3 +92,63 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
+
+  # ── Create GitHub Release with CHANGELOG section as body ────────────
+  github-release:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to create releases
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract CHANGELOG section for this version
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          # Extract the block between "## [X.Y.Z]" and the next "## [".
+          # Skip the heading itself (the Release UI already shows the title
+          # as H1, so a duplicate heading would be noise).
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" {found=1; next}
+            found && /^## \[/ {exit}
+            found {print}
+          ' CHANGELOG.md > release_body.md
+          if [ ! -s release_body.md ]; then
+            echo "::error::No CHANGELOG section found for version $version"
+            echo "Expected heading: ## [$version] — YYYY-MM-DD"
+            exit 1
+          fi
+          # Append pull + verify hints so users see them on the Release page.
+          cat >> release_body.md <<EOF
+
+          ---
+
+          ### Pull & Verify
+
+          \`\`\`bash
+          # Pull the image
+          docker pull ghcr.io/flohofstetter/shoreguard:${version}
+
+          # Verify signature (sigstore keyless)
+          cosign verify ghcr.io/flohofstetter/shoreguard:${version} \\
+            --certificate-identity-regexp 'https://github.com/FloHofstetter/shoreguard/.*' \\
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
+          \`\`\`
+          EOF
+          echo "Extracted $(wc -l < release_body.md) lines for v${version}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ShoreGuard ${{ github.ref_name }}
+          body_path: release_body.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          draft: false
