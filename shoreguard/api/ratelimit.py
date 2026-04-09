@@ -151,3 +151,37 @@ def reset_write_limiter() -> None:
     """Clear the singleton (for tests)."""
     global _write_limiter  # noqa: PLW0603
     _write_limiter = None
+
+
+# ── Global API rate limiter (coarse DDoS guardrail, per client IP) ────────
+
+_global_limiter: SlidingWindowRateLimiter | None = None
+
+
+def get_global_limiter() -> SlidingWindowRateLimiter:
+    """Return the global API rate limiter, creating it on first call.
+
+    Applied by ``global_rate_limit_middleware`` to every HTTP request
+    except health/metrics endpoints. Intended as a coarse DDoS guardrail,
+    not fine-grained abuse protection.
+
+    Returns:
+        The singleton ``SlidingWindowRateLimiter`` instance.
+    """
+    global _global_limiter  # noqa: PLW0603
+    if _global_limiter is None:
+        from shoreguard.settings import get_settings
+
+        s = get_settings().auth
+        _global_limiter = SlidingWindowRateLimiter(
+            max_attempts=s.global_rate_limit_attempts,
+            window_seconds=s.global_rate_limit_window,
+            lockout_seconds=s.global_rate_limit_lockout,
+        )
+    return _global_limiter
+
+
+def reset_global_limiter() -> None:
+    """Clear the singleton (for tests)."""
+    global _global_limiter  # noqa: PLW0603
+    _global_limiter = None

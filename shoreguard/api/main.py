@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -12,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
+from shoreguard import __version__
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import GatewayNotConnectedError
 
@@ -46,6 +48,14 @@ from .websocket import router as ws_router
 
 logger = logging.getLogger(__name__)
 
+# Supervision state for long-running background tasks. Keys match the
+# ``_cleanup_operations`` / ``_health_monitor`` task names.  Read by
+# ``/readyz`` to surface dead or stalled workers.
+_task_health: dict[str, dict[str, Any]] = {
+    "cleanup": {"last_success": None, "consecutive_failures": 0, "alive": False},
+    "health_monitor": {"last_success": None, "consecutive_failures": 0, "alive": False},
+}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -65,6 +75,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from shoreguard.settings import get_settings
 
     settings = get_settings()
+    settings.check_production_readiness()
 
     # Install request-ID log filter so %(request_id)s is available in all loggers.
     logging.getLogger().addFilter(RequestIdFilter())
@@ -130,8 +141,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Webhook service initialised")
 
     # ── Metrics ─────────────────────────────────────────────────────────
-    from shoreguard import __version__
-
     shoreguard_info.info({"version": __version__})
 
     # ── Auth ─────────────────────────────────────────────────────────────
@@ -156,6 +165,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         backoff_threshold = settings.background.cleanup_backoff_threshold
         consecutive_failures = 0
         interval = base_interval
+        _task_health["cleanup"]["alive"] = True
+        _task_health["cleanup"]["last_success"] = time.time()
         while True:
             await asyncio.sleep(interval)
             try:
@@ -167,8 +178,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     await asyncio.to_thread(webhook_mod.webhook_service.cleanup_old_deliveries)
                 consecutive_failures = 0
                 interval = base_interval
+                _task_health["cleanup"]["last_success"] = time.time()
+                _task_health["cleanup"]["consecutive_failures"] = 0
             except Exception:
                 consecutive_failures += 1
+                _task_health["cleanup"]["consecutive_failures"] = consecutive_failures
                 logger.exception(
                     "Operation cleanup failed (consecutive failures: %d)",
                     consecutive_failures,
@@ -189,14 +203,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         backoff_threshold = settings.background.health_backoff_threshold
         consecutive_failures = 0
         interval = base_interval
+        _task_health["health_monitor"]["alive"] = True
+        _task_health["health_monitor"]["last_success"] = time.time()
         while True:
             await asyncio.sleep(interval)
             try:
                 await asyncio.to_thread(gw_mod.gateway_service.check_all_health)  # type: ignore[union-attr]
                 consecutive_failures = 0
                 interval = base_interval
+                _task_health["health_monitor"]["last_success"] = time.time()
+                _task_health["health_monitor"]["consecutive_failures"] = 0
             except Exception:
                 consecutive_failures += 1
+                _task_health["health_monitor"]["consecutive_failures"] = consecutive_failures
                 logger.exception(
                     "Health monitor error (consecutive failures: %d)",
                     consecutive_failures,
@@ -210,8 +229,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                         interval,
                     )
 
+    def _make_done_cb(name: str):  # type: ignore[no-untyped-def]
+        def _cb(t: asyncio.Task) -> None:
+            _task_health[name]["alive"] = False
+            if t.cancelled():
+                logger.info("Background task %s cancelled", name)
+                return
+            exc = t.exception()
+            if exc is not None:
+                logger.error(
+                    "Background task %s exited with exception: %s",
+                    name,
+                    exc,
+                    exc_info=exc,
+                )
+            else:
+                logger.warning("Background task %s exited unexpectedly", name)
+
+        return _cb
+
     cleanup_task = asyncio.create_task(_cleanup_operations())
+    cleanup_task.add_done_callback(_make_done_cb("cleanup"))
     health_task = asyncio.create_task(_health_monitor())
+    health_task.add_done_callback(_make_done_cb("health_monitor"))
     yield
 
     # ── Graceful shutdown ──────────────────────────────────────────
@@ -234,12 +274,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if wh_count:
             logger.info("Cancelled %d webhook delivery task(s)", wh_count)
 
-    # 4. Await background task cancellation
-    for task in (cleanup_task, health_task):
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+    # 4. Await background task cancellation with a hard deadline so a
+    #    task that swallows CancelledError cannot block shutdown forever.
+    bg_tasks = (cleanup_task, health_task)
+    shutdown_timeout = float(settings.server.graceful_shutdown_timeout)
+    _, pending = await asyncio.wait(bg_tasks, timeout=shutdown_timeout)
+    if pending:
+        logger.warning(
+            "Background tasks did not exit within %.1fs: %d still pending",
+            shutdown_timeout,
+            len(pending),
+        )
 
     # 5. Dispose DB engines
     engine.dispose()
@@ -252,7 +297,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Shoreguard",
     description="Open source control plane for NVIDIA OpenShell",
-    version="0.20.0",
+    version=__version__,
     lifespan=lifespan,
     openapi_tags=[
         {"name": "health", "description": "Liveness and readiness probes"},
@@ -300,11 +345,11 @@ async def readyz(verbose: bool = False) -> JSONResponse:
     Returns:
         JSONResponse: 200 with check details when ready, 503 otherwise.
     """
-    import time
-
     import shoreguard.services.gateway as gw_mod
     from shoreguard.db import get_engine
+    from shoreguard.settings import get_settings
 
+    readyz_timeout = get_settings().server.readyz_timeout
     checks: dict[str, Any] = {}
     healthy = True
 
@@ -326,7 +371,10 @@ async def readyz(verbose: bool = False) -> JSONResponse:
     if gw_mod.gateway_service is not None:
         checks["gateway_service"] = "ok"
         try:
-            gateways = await asyncio.to_thread(gw_mod.gateway_service._registry.list_all)
+            gateways = await asyncio.wait_for(
+                asyncio.to_thread(gw_mod.gateway_service._registry.list_all),
+                timeout=readyz_timeout,
+            )
             total = len(gateways)
             connected = sum(1 for g in gateways if g.get("connected"))
             checks["gateways_total"] = total
@@ -343,11 +391,36 @@ async def readyz(verbose: bool = False) -> JSONResponse:
                     }
                     for g in gateways
                 ]
+        except TimeoutError:
+            logger.warning("Health check: gateway registry timed out after %.1fs", readyz_timeout)
+            checks["gateway_registry"] = f"timeout after {readyz_timeout}s"
+            healthy = False
         except Exception:
             logger.debug("Health check: failed to query gateway list", exc_info=True)
     else:
         checks["gateway_service"] = "not initialised"
         healthy = False
+
+    # ── Background task supervision ───────────────────────────────
+    now = time.time()
+    for name, state in _task_health.items():
+        if not state["alive"]:
+            checks[f"background_{name}"] = "dead"
+            healthy = False
+            continue
+        last = state["last_success"]
+        checks[f"background_{name}"] = "ok"
+        if last is not None:
+            age = now - last
+            checks[f"background_{name}_age_s"] = round(age, 1)
+            stall_threshold: float
+            if name == "cleanup":
+                stall_threshold = 2.0 * float(get_settings().background.cleanup_max_interval)
+            else:
+                stall_threshold = 2.0 * float(get_settings().background.health_max_interval)
+            if age > stall_threshold:
+                checks[f"background_{name}"] = "stalled"
+                checks[f"background_{name}_stalled"] = True
 
     status_code = 200 if healthy else 503
     payload = {"status": "ready" if healthy else "not ready", "checks": checks}
@@ -359,10 +432,87 @@ app.include_router(metrics_router)
 app.middleware("http")(metrics_middleware)
 app.middleware("http")(security_headers_middleware)
 
+
+# ─── Global rate limit middleware ───────────────────────────────────────────
+_RATE_LIMIT_SKIP_PATHS = frozenset({"/healthz", "/readyz", "/metrics"})
+
+
+@app.middleware("http")
+async def global_rate_limit_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Coarse per-IP rate limit applied to every HTTP request.
+
+    Health and metrics endpoints are exempt so that probes and scrapers
+    can never be blocked.  Applied in addition to login/write limiters.
+    """
+    path = request.url.path
+    if path in _RATE_LIMIT_SKIP_PATHS:
+        return await call_next(request)
+
+    from shoreguard.api.ratelimit import get_global_limiter
+
+    client_ip = request.client.host if request.client else "unknown"
+    limiter = get_global_limiter()
+    blocked, retry_after = limiter.is_limited(client_ip)
+    if blocked:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests"},
+            headers={"Retry-After": str(retry_after)},
+        )
+    limiter.record(client_ip)
+    return await call_next(request)
+
+
+# ─── Request body size limit middleware ─────────────────────────────────────
+@app.middleware("http")
+async def body_size_limit_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Reject requests whose Content-Length exceeds the configured limit.
+
+    Note: only honours the ``Content-Length`` header — chunked uploads
+    without a length header are forwarded unchanged and bounded by the
+    individual endpoint's Pydantic field limits.
+    """
+    from shoreguard.settings import get_settings as _gs
+
+    max_bytes = _gs().limits.max_request_body_bytes
+    cl = request.headers.get("content-length")
+    if cl is not None:
+        try:
+            length = int(cl)
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid Content-Length header"},
+            )
+        if length > max_bytes:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": f"Request body too large (limit {max_bytes} bytes)"},
+                headers={"Connection": "close"},
+            )
+    return await call_next(request)
+
+
 # GZip compression for responses >= 1 KB (SSE streams and WebSockets unaffected).
 from starlette.middleware.gzip import GZipMiddleware  # noqa: E402
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# CORS — off by default. Enable by setting SHOREGUARD_CORS_ALLOW_ORIGINS.
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+
+from shoreguard.settings import get_settings as _get_settings_for_cors  # noqa: E402
+
+_cors_cfg = _get_settings_for_cors().cors
+if _cors_cfg.allow_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_cfg.allow_origins,
+        allow_credentials=_cors_cfg.allow_credentials,
+        allow_methods=_cors_cfg.allow_methods,
+        allow_headers=_cors_cfg.allow_headers,
+        max_age=_cors_cfg.max_age,
+    )
 
 
 # ─── Gateway-scoped API routes ──────────────────────────────────────────────

@@ -3,6 +3,22 @@
 ShoreGuard is configured via **environment variables**. CLI flags override
 environment variables, which override built-in defaults.
 
+!!! tip "Complete list of settings"
+    This page documents the common operational knobs. For the **complete,
+    auto-generated reference of every `SHOREGUARD_*` environment variable**
+    — including sub-models for audit, webhooks, rate limits, and more —
+    see [settings.md](settings.md).
+
+    You can also dump the current effective configuration live:
+
+    ```bash
+    shoreguard config show                   # all settings as a table
+    shoreguard config show auth              # single section
+    shoreguard config show --format json     # machine-readable
+    shoreguard config show --show-sensitive  # reveal redacted values
+    shoreguard config schema --format markdown  # regenerate settings.md
+    ```
+
 ## Precedence
 
 1. **CLI flags** — always win

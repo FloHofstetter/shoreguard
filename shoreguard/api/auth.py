@@ -76,7 +76,7 @@ def verify_password(password: str, hashed: str) -> bool:
         return _hasher.verify(password, hashed)
     except ValueError, TypeError:
         # Corrupt or unrecognised hash format — treat as non-match.
-        logger.warning("Password verification error (corrupt hash?)")
+        logger.warning("Password verification error (corrupt hash?)", exc_info=True)
         return False
 
 

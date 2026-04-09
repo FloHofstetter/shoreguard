@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 
 from alembic import command
@@ -11,7 +12,7 @@ from alembic.config import Config as AlembicConfig
 from sqlalchemy import create_engine as sa_create_engine
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 from shoreguard.config import default_database_url
@@ -123,17 +124,52 @@ def init_db(url: str | None = None) -> Engine:
         Base.metadata.create_all(_engine)
     else:
         cfg = _alembic_config(database_url)
-        try:
-            logger.info("Running database migrations...")
-            command.upgrade(cfg, "head")
-        except (RuntimeError, OSError, SQLAlchemyError) as e:
+        from shoreguard.settings import get_settings
+
+        db_cfg2 = get_settings().database
+        attempts = max(1, db_cfg2.startup_retry_attempts)
+        delay = max(0.1, db_cfg2.startup_retry_delay)
+        max_delay = max(delay, db_cfg2.startup_retry_max_delay)
+
+        last_exc: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                logger.info("Running database migrations (attempt %d/%d)...", attempt, attempts)
+                command.upgrade(cfg, "head")
+                last_exc = None
+                break
+            except OperationalError as e:
+                last_exc = e
+                if attempt >= attempts:
+                    break
+                logger.warning(
+                    "DB not ready (attempt %d/%d): %s — retrying in %.1fs",
+                    attempt,
+                    attempts,
+                    e,
+                    delay,
+                )
+                time.sleep(delay)
+                delay = min(delay * 2, max_delay)
+            except (RuntimeError, OSError, SQLAlchemyError) as e:
+                logger.error(
+                    "Database migration failed: %s (type=%s)",
+                    e,
+                    type(e).__name__,
+                    exc_info=True,
+                )
+                raise RuntimeError(f"Database migration failed: {e}") from e
+
+        if last_exc is not None:
             logger.error(
-                "Database migration failed: %s (type=%s)",
-                e,
-                type(e).__name__,
+                "Database migration failed after %d attempts: %s",
+                attempts,
+                last_exc,
                 exc_info=True,
             )
-            raise RuntimeError(f"Database migration failed: {e}") from e
+            raise RuntimeError(
+                f"Database migration failed after {attempts} attempts: {last_exc}"
+            ) from last_exc
 
     if database_url.startswith("sqlite:///"):
         db_path = Path(database_url.removeprefix("sqlite:///"))

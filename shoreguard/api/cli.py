@@ -26,6 +26,13 @@ cli = typer.Typer(
     add_completion=False,
 )
 
+# Register subcommand groups
+from shoreguard.api.cli_audit import audit_app  # noqa: E402
+from shoreguard.api.cli_config import config_app  # noqa: E402
+
+cli.add_typer(config_app)
+cli.add_typer(audit_app)
+
 
 def _version_callback(value: bool) -> None:
     """Print version and exit when --version is passed.
@@ -45,6 +52,7 @@ def _version_callback(value: bool) -> None:
 
 @cli.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     host: Annotated[
         str,
         typer.Option(
@@ -119,6 +127,7 @@ def main(
     """Start the Shoreguard server.
 
     Args:
+        ctx: Typer context — used to detect whether a subcommand was invoked.
         host: Network interface to listen on.
         port: HTTP port for the dashboard and REST API.
         log_level: Verbosity for Shoreguard and Uvicorn.
@@ -128,6 +137,11 @@ def main(
         database_url: SQLAlchemy database URL override.
         version: Print version and exit (handled by callback).
     """
+    # If a subcommand (e.g. `shoreguard config show`) was invoked, the
+    # callback still runs — but we must not start the server.
+    if ctx.invoked_subcommand is not None:
+        return
+
     import uvicorn
 
     from shoreguard.settings import get_settings, override_settings
@@ -156,13 +170,22 @@ def main(
 
     use_json = settings.server.log_format == "json"
 
+    # Request-ID filter — must be attached to any handler that renders
+    # %(request_id)s, otherwise the formatter raises KeyError.  The root
+    # logger also gets it via shoreguard.api.main lifespan so propagated
+    # records are covered, but attaching to the handler directly ensures
+    # non-propagating loggers (e.g. uvicorn with propagate=True but its
+    # own handlers) work too.
+    from shoreguard.api.metrics import RequestIdFilter
+
     handler = logging.StreamHandler()
+    handler.addFilter(RequestIdFilter())
     if use_json:
         from shoreguard.api.logging_config import JSONFormatter
 
         handler.setFormatter(JSONFormatter())
     else:
-        _LOG_FORMAT = "%(asctime)s %(levelname)-5s %(name)-20s  %(message)s"
+        _LOG_FORMAT = "%(asctime)s %(levelname)-5s [%(request_id)s] %(name)-20s  %(message)s"
         _LOG_DATE = "%H:%M:%S"
 
         class _ShortNameFormatter(logging.Formatter):
@@ -186,50 +209,19 @@ def main(
         logger.info("Using database: %s", database_url.split("://")[0])
 
     # Unified log config for uvicorn so all output uses the same format.
-    # In JSON mode, let uvicorn logs propagate to the root logger which has
-    # the JSONFormatter installed.  In text mode, use the same text format.
-    if use_json:
-        _uvicorn_log_config: dict = {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "handlers": {},
-            "loggers": {
-                "uvicorn": {"level": log_level.upper(), "propagate": True},
-                "uvicorn.error": {"level": log_level.upper(), "propagate": True},
-                "uvicorn.access": {"level": log_level.upper(), "propagate": True},
-            },
-        }
-    else:
-        _uvicorn_log_config = {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {
-                "default": {
-                    "format": "%(asctime)s %(levelname)-5s %(name)-20s  %(message)s",
-                    "datefmt": "%H:%M:%S",
-                },
-            },
-            "handlers": {
-                "default": {
-                    "formatter": "default",
-                    "class": "logging.StreamHandler",
-                    "stream": "ext://sys.stderr",
-                },
-            },
-            "loggers": {
-                "uvicorn": {
-                    "handlers": ["default"],
-                    "level": log_level.upper(),
-                    "propagate": False,
-                },
-                "uvicorn.error": {"level": log_level.upper(), "propagate": False},
-                "uvicorn.access": {
-                    "handlers": ["default"],
-                    "level": log_level.upper(),
-                    "propagate": False,
-                },
-            },
-        }
+    # In both JSON and text mode, let uvicorn logs propagate to the root
+    # logger where our formatter + RequestIdFilter are installed.  This
+    # ensures access logs carry the same request_id as application logs.
+    _uvicorn_log_config: dict = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {},
+        "loggers": {
+            "uvicorn": {"level": log_level.upper(), "propagate": True},
+            "uvicorn.error": {"level": log_level.upper(), "propagate": True},
+            "uvicorn.access": {"level": log_level.upper(), "propagate": True},
+        },
+    }
 
     uvicorn.run(
         "shoreguard.api.main:app",

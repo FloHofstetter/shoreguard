@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import csv
 import datetime
 import io
 import json
 import logging
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
+from sqlalchemy import event
 from sqlalchemy.exc import SQLAlchemyError
 
 if TYPE_CHECKING:
@@ -22,6 +25,56 @@ logger = logging.getLogger(__name__)
 
 # Module-level singleton — set during app lifespan (see shoreguard.api.main).
 audit_service: AuditService | None = None
+
+
+# ── Append-only enforcement ──────────────────────────────────────────────
+#
+# AuditEntry rows must never be mutated and may only be deleted by
+# AuditService.cleanup().  The ContextVar-gated SQLAlchemy event listeners
+# below raise ``AuditIntegrityError`` when any other code path tries to
+# UPDATE or DELETE an audit entry through the ORM.
+#
+# Caveats:
+# * Enforcement happens at the ORM layer only.  Direct SQL (``sqlite3``,
+#   ``psql``, or raw ``connection.execute``) bypasses it.  DB-level
+#   triggers as a defense-in-depth layer are a post-v1.0 item.
+# * ``Query.delete()`` bulk-deletes do NOT fire ``before_delete`` on
+#   individual rows, so cleanup() uses row-by-row deletion inside an
+#   explicit bypass context.  See :meth:`AuditService.cleanup`.
+
+_audit_mutation_allowed: ContextVar[bool] = ContextVar("_audit_mutation_allowed", default=False)
+
+
+class AuditIntegrityError(RuntimeError):
+    """Raised when code tries to mutate or delete an AuditEntry illegally."""
+
+
+@contextlib.contextmanager
+def _allow_audit_mutation():
+    """Context manager that permits AuditEntry deletes for its duration.
+
+    Only :meth:`AuditService.cleanup` should enter this context.
+    """
+    token = _audit_mutation_allowed.set(True)
+    try:
+        yield
+    finally:
+        _audit_mutation_allowed.reset(token)
+
+
+@event.listens_for(AuditEntry, "before_update", propagate=True)
+def _block_audit_update(_mapper, _conn, _target) -> None:  # type: ignore[no-untyped-def]
+    """ORM-level guard: AuditEntry rows are never updatable."""
+    raise AuditIntegrityError("AuditEntry is append-only — UPDATE is not allowed")
+
+
+@event.listens_for(AuditEntry, "before_delete", propagate=True)
+def _block_audit_delete(_mapper, _conn, _target) -> None:  # type: ignore[no-untyped-def]
+    """ORM-level guard: AuditEntry deletion is only permitted from cleanup()."""
+    if not _audit_mutation_allowed.get():
+        raise AuditIntegrityError(
+            "AuditEntry is append-only — DELETE only allowed via AuditService.cleanup()"
+        )
 
 
 class AuditService:
@@ -233,6 +286,11 @@ class AuditService:
     def cleanup(self, older_than_days: int | None = None) -> int:
         """Delete audit entries older than the given number of days.
 
+        Uses row-by-row deletion (not ``Query.delete()``) so that the
+        ``before_delete`` listener fires and the ContextVar bypass is
+        honoured.  Retention cleanup runs once per ``cleanup_interval``
+        so the slight extra cost is negligible.
+
         Args:
             older_than_days: Age threshold in days.
 
@@ -245,8 +303,11 @@ class AuditService:
             older_than_days = get_settings().audit.retention_days
         cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=older_than_days)
         try:
-            with self._session_factory() as session:
-                count = session.query(AuditEntry).filter(AuditEntry.timestamp < cutoff).delete()
+            with self._session_factory() as session, _allow_audit_mutation():
+                stale = session.query(AuditEntry).filter(AuditEntry.timestamp < cutoff).all()
+                count = len(stale)
+                for entry in stale:
+                    session.delete(entry)
                 session.commit()
                 if count:
                     logger.info(
@@ -258,6 +319,39 @@ class AuditService:
         except SQLAlchemyError:
             logger.warning("Audit cleanup failed", exc_info=True)
             return 0
+
+    def export_json(
+        self,
+        *,
+        actor: str | None = None,
+        action: str | None = None,
+        resource_type: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+    ) -> str:
+        """Export audit entries as a JSON array string.
+
+        Args:
+            actor: Filter by actor identity.
+            action: Filter by action type.
+            resource_type: Filter by resource type.
+            since: ISO-format start timestamp filter.
+            until: ISO-format end timestamp filter.
+
+        Returns:
+            str: JSON-formatted list of matching entries.
+        """
+        from shoreguard.settings import get_settings
+
+        entries = self.list(
+            limit=get_settings().audit.export_limit,
+            actor=actor,
+            action=action,
+            resource_type=resource_type,
+            since=since,
+            until=until,
+        )
+        return json.dumps(entries, indent=2, default=str)
 
     @staticmethod
     def _to_dict(entry: AuditEntry) -> dict[str, Any]:

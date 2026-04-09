@@ -27,9 +27,35 @@ from urllib.parse import urlencode
 import httpx
 import jwt
 
+from shoreguard.api.validation import DomainValidationError, validate_webhook_url
+
 logger = logging.getLogger(__name__)
 
 JWKS_CACHE_TTL = 3600  # 1 hour
+
+
+def _check_oidc_url(url: str, *, field: str) -> None:
+    """Reject OIDC endpoint URLs that point to private/loopback addresses.
+
+    Protects against SSRF via a malicious or compromised OIDC provider that
+    could direct discovery/JWKS/token requests to internal services (e.g.
+    cloud metadata endpoints).  Reuses :func:`validate_url` which honours
+    ``server.local_mode``.
+
+    Args:
+        url: The URL to validate.
+        field: Logical name of the URL (``issuer``, ``jwks_uri``,
+            ``token_endpoint``) for logging.
+
+    Raises:
+        DomainValidationError: If the URL points to a private address.
+    """
+    try:
+        validate_webhook_url(url)
+    except DomainValidationError:
+        logger.warning("OIDC %s points to private address — rejected: %s", field, url)
+        raise
+
 
 # ─── Provider dataclass ───────────────────────────────────────────────────────
 
@@ -117,6 +143,7 @@ async def discover(provider: OIDCProvider) -> dict:
     if provider._discovery is not None:
         return provider._discovery
     url = f"{provider.issuer}/.well-known/openid-configuration"
+    _check_oidc_url(url, field="issuer")
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(url)
         resp.raise_for_status()
@@ -131,6 +158,7 @@ async def get_jwks(provider: OIDCProvider) -> list[dict]:
         return provider._jwks[0]
     disco = await discover(provider)
     jwks_uri = disco["jwks_uri"]
+    _check_oidc_url(jwks_uri, field="jwks_uri")
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(jwks_uri)
         resp.raise_for_status()
@@ -198,9 +226,11 @@ async def exchange_code(
         "client_secret": provider.client_secret,
         "code_verifier": code_verifier,
     }
+    token_endpoint = disco["token_endpoint"]
+    _check_oidc_url(token_endpoint, field="token_endpoint")
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(
-            disco["token_endpoint"],
+            token_endpoint,
             data=data,
             headers={"Accept": "application/json"},
         )
