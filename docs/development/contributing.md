@@ -15,10 +15,49 @@ approach. Once the issue is triaged, you can reference it in your PR.
 git clone https://github.com/FloHofstetter/shoreguard.git
 cd shoreguard
 uv sync --group dev
+uv run pre-commit install --hook-type pre-commit --hook-type pre-push
 ```
 
 This installs all runtime and development dependencies in an isolated virtual
-environment managed by [uv](https://docs.astral.sh/uv/).
+environment managed by [uv](https://docs.astral.sh/uv/), and registers the
+pre-commit hooks described in [Pre-commit hooks](#pre-commit-hooks) below.
+
+## Pre-commit hooks
+
+ShoreGuard uses [pre-commit](https://pre-commit.com/) to run all static
+analysis tools automatically on every `git commit` and `git push`.
+
+**On `git commit` (fast, seconds):**
+
+- File hygiene: trailing whitespace, EOF newlines, YAML/JSON/TOML syntax,
+  merge-conflict markers, large files, private keys
+- **`ruff check --fix`** (auto-fixes trivial issues and fails if any)
+- **`ruff format`**
+- **`pyright`** (type checker, whole project)
+- **`pydoclint`** (Google-style docstring enforcement)
+- **`yamllint`** (linter, beyond syntax)
+- **`markdownlint-cli2`**
+- **`actionlint`** (GitHub Actions workflow validation)
+- **`detect-secrets`** (scans for leaked credentials against
+  `.secrets.baseline`)
+
+**On `git push` (slow, 10-30s):**
+
+- **`pip-audit`** (dependency CVE scan — needs network)
+- **`mkdocs build --strict`** (docs build, catches broken links and
+  mkdocstrings resolver errors)
+
+Run all hooks manually against the full repo:
+
+```bash
+uv run pre-commit run --all-files
+```
+
+If a hook auto-fixes something (e.g. `ruff check --fix`), the commit fails
+once so you can stage the fixes and re-commit.
+
+If you ever need to bypass the hooks in an emergency, use `git commit
+--no-verify` — but please re-run them before pushing.
 
 ## Running the server
 

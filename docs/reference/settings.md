@@ -159,4 +159,3 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_CORS_ALLOW_METHODS` | `["*"]` | HTTP methods allowed by CORS (default: all) |
 | `SHOREGUARD_CORS_ALLOW_HEADERS` | `["*"]` | Request headers allowed by CORS (default: all) |
 | `SHOREGUARD_CORS_MAX_AGE` | `600` | CORS preflight cache duration in seconds |
-

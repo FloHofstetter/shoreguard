@@ -1,0 +1,103 @@
+# Install: uv run pre-commit install --hook-type pre-commit --hook-type pre-push
+# Run all hooks against the full repo: uv run pre-commit run --all-files
+#
+# Fast checks run on every commit; slow checks (pip-audit, mkdocs --strict)
+# run only on `git push` via the pre-push stage.
+
+default_language_version:
+  python: python3.14
+
+default_stages: [pre-commit]
+
+repos:
+  # ── Standard file hygiene ──────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^shoreguard/client/_proto/
+      - id: end-of-file-fixer
+        exclude: ^shoreguard/client/_proto/
+      - id: check-yaml
+        args: [--unsafe]  # mkdocs.yml uses !!python/name: custom tags
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: detect-private-key
+        # test_registry.py holds a test-only private key for mTLS fixtures.
+        exclude: ^tests/test_registry\.py$
+
+  # ── Ruff: lint + format ────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.0  # keep in sync with pyproject.toml [dependency-groups].dev
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # ── YAML linting (beyond syntax) ───────────────────────────────────
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: [-c, .yamllint.yaml]
+
+  # ── Markdown linting ───────────────────────────────────────────────
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.14.0
+    hooks:
+      - id: markdownlint-cli2
+        args: [--config, .markdownlint.yaml]
+        exclude: ^(shoreguard/client/_proto/|frontend/|site/|dist/|node_modules/)
+
+  # ── GitHub Actions workflow validation ─────────────────────────────
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.4
+    hooks:
+      - id: actionlint
+
+  # ── Secret scanning ────────────────────────────────────────────────
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: ^(\.secrets\.baseline|shoreguard/client/_proto/)
+
+  # ── Local hooks (need project env for uv run) ──────────────────────
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: uv run pyright
+        language: system
+        types: [python]
+        pass_filenames: false  # pyright wants the whole project
+        stages: [pre-commit]
+
+      - id: pydoclint
+        name: pydoclint
+        entry: uv run pydoclint
+        language: system
+        types: [python]
+        files: ^shoreguard/
+        exclude: ^shoreguard/client/_proto/
+        stages: [pre-commit]
+
+      - id: pip-audit
+        name: pip-audit
+        entry: uv run pip-audit
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        # Only runs on push — slow + needs network.
+
+      - id: mkdocs-build-strict
+        name: mkdocs build --strict
+        entry: uv run --group docs mkdocs build --strict --site-dir /tmp/mkdocs-strict-check
+        language: system
+        pass_filenames: false
+        files: ^(docs/|mkdocs\.yml|shoreguard/.*\.py)$
+        stages: [pre-push]

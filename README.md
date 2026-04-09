@@ -241,6 +241,7 @@ PyPI wheels ship with [PEP 740 attestations](https://peps.python.org/pep-0740/) 
 git clone https://github.com/FloHofstetter/shoreguard.git
 cd shoreguard
 uv sync --group dev
+uv run pre-commit install --hook-type pre-commit --hook-type pre-push
 uv run shoreguard --local --no-auth
 ```
 

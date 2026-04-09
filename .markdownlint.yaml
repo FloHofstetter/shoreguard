@@ -1,0 +1,39 @@
+# markdownlint-cli2 config — disables noisy rules that conflict with our
+# CHANGELOG + docs prose style. Keeps the rules that catch real bugs.
+
+default: true
+
+# Line length: we use natural prose wrapping, not hard 80-char limits.
+MD013: false
+
+# Inline HTML: mkdocs-material uses admonitions + html blocks occasionally.
+MD033: false
+
+# First line heading: CHANGELOG.md starts with a paragraph, not H1.
+MD041: false
+
+# Bare URLs: fine in CHANGELOG and code blocks.
+MD034: false
+
+# Ordered list prefix: we use both "1. 1. 1." and "1. 2. 3." — allow both.
+MD029: false
+
+# Fenced code block language: not always needed for short shell snippets.
+MD040: false
+
+# Duplicate headings: Keep-a-Changelog intentionally repeats Added/Changed/
+# Fixed per release. Use siblings_only so duplicates under different parents
+# are allowed.
+MD024:
+  siblings_only: true
+
+# Code-block style: we use fenced and indented interchangeably depending on
+# context (fenced for shell/python, indented for inline under lists).
+MD046: false
+
+# Blanks around tables / headings: not structurally important for rendering.
+MD022: false
+MD058: false
+
+# Blank lines inside blockquotes: mkdocs-material admonitions use this style.
+MD028: false

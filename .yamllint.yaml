@@ -1,0 +1,22 @@
+# yamllint config — relaxed base with a few tightenings.
+# See: https://yamllint.readthedocs.io/en/stable/rules.html
+
+extends: relaxed
+
+rules:
+  line-length:
+    max: 120
+    level: warning
+  key-duplicates: enable
+  trailing-spaces: enable
+  truthy:
+    # GitHub Actions uses `on:` which yamllint's default rule flags.
+    check-keys: false
+
+ignore: |
+  shoreguard/client/_proto/
+  .venv/
+  dist/
+  site/
+  node_modules/
+  mkdocs.yml
