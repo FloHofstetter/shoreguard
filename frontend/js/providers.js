@@ -246,3 +246,8 @@ async function deleteProvider(name) {
         showToast(`Delete failed: ${e.message}`, 'danger');
     }
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Only auto-run on the providers page — wizard.html also loads this file.
+    if (document.getElementById('providers-page-content')) loadProvidersPage();
+});

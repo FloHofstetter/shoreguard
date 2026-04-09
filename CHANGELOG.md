@@ -18,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `{% if csp_strict_enabled() %}`. This is Milestone 1 of the multi-session
   CSP hardening plan — see `csp-hardening-followup.md` for the full roadmap.
 
+### Changed
+
+- **CSP hardening M2** — All inline `<script>` blocks extracted from Jinja
+  templates into `frontend/js/` (`theme-init.js`, `dashboard.js`, `audit.js`;
+  `providers.js` and `wizard.js` bind their own `DOMContentLoaded` handlers).
+  `GW` is now read from `document.documentElement.dataset.gateway` in
+  `constants.js`, eliminating the last Jinja-templated inline script. With
+  `SHOREGUARD_CSP_STRICT=true`, strict CSP no longer reports inline-script
+  violations — only inline-style (M3) and Alpine `x-data` (M4) violations
+  remain.
+
 ## [0.25.0] — 2026-04-09
 
 ### Added

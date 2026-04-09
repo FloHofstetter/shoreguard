@@ -111,8 +111,8 @@ async def test_csp_strict_nonce_differs_per_request(monkeypatch):
     assert len(m1.group(1)) >= 16
 
 
-async def test_csp_nonce_available_in_template(monkeypatch):
-    """The Jinja global csp_nonce(request) should render the per-request value."""
+async def test_theme_init_is_external_in_strict_mode(monkeypatch):
+    """M2: theme-init is loaded as an external script, not inline."""
     monkeypatch.setenv("SHOREGUARD_CSP_STRICT", "true")
 
     from shoreguard.settings import reset_settings
@@ -128,10 +128,29 @@ async def test_csp_nonce_available_in_template(monkeypatch):
         resp = await client.get("/login")
 
     assert resp.status_code == 200
-    # The per-request nonce must be interpolated into the theme-init <script nonce="...">
+    # Theme-init is now an external script, not inline.
+    assert '<script src="/static/js/theme-init.js">' in resp.text
+    # The CSP header still carries a nonce (mechanism stays for future M3 use).
+    assert "nonce-" in resp.headers["Content-Security-Policy"]
+
+
+async def test_no_inline_scripts_on_login():
+    """M2: no inline <script> blocks on /login — only external src= tags."""
     import re
 
-    header_match = re.search(r"nonce-([A-Za-z0-9_-]+)", resp.headers["Content-Security-Policy"])
-    assert header_match is not None
-    nonce = header_match.group(1)
-    assert f'nonce="{nonce}"' in resp.text
+    from shoreguard.settings import reset_settings
+
+    reset_settings()
+
+    from shoreguard.api.main import app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get("/login")
+
+    assert resp.status_code == 200
+    # Match any <script> tag without src= that has non-whitespace content inside.
+    inline = re.findall(r"<script(?![^>]*\bsrc=)[^>]*>\s*\S", resp.text)
+    assert inline == [], f"Unexpected inline <script> blocks on /login: {inline}"

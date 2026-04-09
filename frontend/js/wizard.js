@@ -456,3 +456,5 @@ async function launchSandbox() {
         logEl.scrollTop = logEl.scrollHeight;
     }
 }
+
+document.addEventListener('DOMContentLoaded', initWizard);

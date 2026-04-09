@@ -1,7 +1,7 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
-<script nonce="{{ csp_nonce(request) }}">document.documentElement.setAttribute('data-bs-theme', localStorage.getItem('sg-theme') || 'dark');</script>
+<html lang="en" data-bs-theme="dark" data-gateway="{{ gateway_name|default('') }}">
 <head>
+    <script src="/static/js/theme-init.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Shoreguard{% endblock %}</title>
@@ -154,7 +154,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script nonce="{{ csp_nonce(request) }}">const GW = {{ gateway_name|default("")|tojson }};</script>
     <script src="/static/js/constants.js"></script>
     <script src="/static/js/app.js"></script>
     <script src="/static/js/components.js"></script>

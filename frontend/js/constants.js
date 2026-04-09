@@ -4,6 +4,8 @@
  * All OpenShell-derived data (providers, agents, images) comes from the API.
  */
 
+const GW = document.documentElement.dataset.gateway || "";
+
 const SG = {
     badges: {
         phase: {
