@@ -5,6 +5,74 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.25.0] — 2026-04-09
+
+### Added
+
+- **`shoreguard config show [section]`** — dump the effective configuration
+  as a table, JSON, or `.env`-style output. Secret values (`secret_key`,
+  `admin_password`, `client_secret`, `password`) are redacted by default;
+  `--show-sensitive` reveals them.
+- **`shoreguard config schema [section]`** — dump pristine defaults plus
+  descriptions in table/json/env/markdown format. Used to regenerate
+  `docs/reference/settings.md`.
+- **Self-documenting settings** — every `Settings` field now carries
+  `Field(default=..., description=...)`. All ~100 environment variables
+  have a one-line description surfaced via `config show`.
+- **`shoreguard audit export`** — offline audit log export (JSON or CSV)
+  with a `sha256sum`-compatible digest file and a `manifest.json` carrying
+  entry count, filters, timestamp, and tool version. All three files are
+  written with 0600 permissions.
+- **Structured logging improvements** — text mode now renders
+  `[request_id]` via the `RequestIdFilter` (was silently dropped);
+  `JSONFormatter` adds `module`/`func`/`line`, merges caller extras, and
+  emits `stack_info`. uvicorn access logs carry the same request-id as
+  application logs in both modes.
+- **Global per-IP rate limiter** (`SHOREGUARD_GLOBAL_RATE_LIMIT_*`) as a
+  coarse DDoS guardrail applied by `global_rate_limit_middleware` to every
+  HTTP request except health/metrics endpoints.
+- **Request body size limit** middleware
+  (`SHOREGUARD_LIMIT_MAX_REQUEST_BODY_BYTES`, default 10 MiB) returning
+  HTTP 413 before Starlette reads the body.
+- **DB migration retry loop** on startup with exponential backoff against
+  `OperationalError` (`SHOREGUARD_DB_STARTUP_RETRY_*`). Compose-friendly.
+- **Background task supervision** surfaced in `/readyz` with
+  `asyncio.wait_for` on dependency probes (`SHOREGUARD_READYZ_TIMEOUT`).
+- **Production-readiness check expansion** — six new warnings: HSTS off,
+  CSP contains `unsafe-*`, `allow_registration` in prod, multi-replica
+  with in-process rate limiter, SQLite in prod, text log format in prod.
+  Warnings now carry `ERROR:` / `WARN:` severity prefixes.
+- **`docs/reference/settings.md`** — auto-generated reference of every
+  `SHOREGUARD_*` environment variable grouped by sub-model.
+
+### Changed
+
+- **Audit log is now ORM-level append-only.** `AuditEntry` rows cannot be
+  updated via the ORM, and deletion is only permitted from
+  `AuditService.cleanup()` via a `ContextVar`-gated bypass. Enforcement
+  raises `AuditIntegrityError` on commit. `cleanup()` switched to
+  row-by-row deletion so the `before_delete` listener fires. Direct SQL
+  still bypasses enforcement — DB-level triggers are a post-v1.0 item.
+- **CLI callback respects `ctx.invoked_subcommand`** — the main Typer
+  callback no longer tries to bind a socket when `shoreguard config ...`
+  or `shoreguard audit ...` subcommands are invoked.
+- **Graceful shutdown timeout** honoured by uvicorn startup path.
+- **CORS settings** tightened and exposed via `SHOREGUARD_CORS_*`.
+
+### Security
+
+- **OIDC SSRF protection** — `discover()`, `get_jwks()`, and
+  `exchange_code()` run all URLs (including those returned by a
+  provider's discovery document) through the existing private-IP check.
+  A compromised identity provider can no longer pivot requests to
+  internal services like cloud metadata endpoints.
+
+### Fixed
+
+- **Version drift** — `pyproject.toml` was still reporting `0.23.0` after
+  the v0.24.0 tag was cut. This release bumps directly to 0.25.0 to
+  resync the package metadata with the release stream.
+
 ## [0.24.0] — 2026-04-08
 
 ### Added
