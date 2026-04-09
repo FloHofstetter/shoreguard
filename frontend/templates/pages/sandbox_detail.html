@@ -2,7 +2,8 @@
 {% block title %}{{ sandbox_name }} — Shoreguard{% endblock %}
 
 {% block content %}
-<div x-data='sandboxDetail({{ sandbox_name|tojson }})' x-init="init()">
+<div x-data='sandboxDetail({{ sandbox_name|tojson }})' x-init="init()"
+     @sg:ws-state.window="onWsState($event)">
     <!-- Loading -->
     <div x-show="loading" class="text-center text-muted py-5">
         <div class="spinner-border spinner-border-sm me-2"></div>Loading sandbox...
@@ -19,9 +20,7 @@
                 <div class="d-flex align-items-center gap-3 mb-2">
                     <h3 class="mb-0" x-text="sandbox.name"></h3>
                     <span class="badge" :class="phaseBadge()" x-text="sandbox.phase"></span>
-                    <span x-data="{ wsState: 'connecting' }"
-                          @sg:ws-state.window="if ($event.detail.sandboxName === sandboxName) wsState = $event.detail.state"
-                          x-show="wsState !== 'connected'"
+                    <span x-show="wsState !== 'connected'"
                           x-cloak
                           class="badge text-bg-warning ms-1">
                         <i class="bi bi-wifi-off"></i>

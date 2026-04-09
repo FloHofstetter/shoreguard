@@ -49,6 +49,14 @@ document.addEventListener('alpine:init', () => {
             const ranks = { admin: 2, operator: 1, viewer: 0 };
             return (ranks[this.role] || 0) >= (ranks[minimum] || 99);
         },
+
+        async logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+            } finally {
+                window.location.href = '/login';
+            }
+        },
     });
 
     // ─── Toast Store ────────────────────────────────────────────────────────
@@ -75,6 +83,10 @@ document.addEventListener('alpine:init', () => {
 
         remove(id) {
             this.items = this.items.filter(t => t.id !== id);
+        },
+
+        scheduleRemove(id, delay) {
+            setTimeout(() => this.remove(id), delay);
         },
     });
 

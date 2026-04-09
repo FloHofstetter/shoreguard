@@ -156,6 +156,50 @@ async def test_no_inline_scripts_on_login():
     assert inline == [], f"Unexpected inline <script> blocks on /login: {inline}"
 
 
+async def test_login_uses_csp_alpine_build_in_strict_mode(monkeypatch):
+    """M4: strict-mode login page loads @alpinejs/csp, not the regular build."""
+    monkeypatch.setenv("SHOREGUARD_CSP_STRICT", "true")
+
+    from shoreguard.settings import reset_settings
+
+    reset_settings()
+
+    from shoreguard.api.main import app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get("/login")
+
+    assert resp.status_code == 200
+    assert "@alpinejs/csp@" in resp.text
+    assert 'alpinejs@3.14.9/dist/cdn.min.js"' not in resp.text
+
+
+async def test_no_inline_x_data_objects_on_login():
+    """M4: /login uses a registered Alpine.data() component, not an inline object."""
+    import re
+
+    from shoreguard.settings import reset_settings
+
+    reset_settings()
+
+    from shoreguard.api.main import app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get("/login")
+
+    assert resp.status_code == 200
+    # No inline object literal in x-data (neither `x-data="{` nor `x-data='{`).
+    assert not re.search(r'x-data\s*=\s*["\'][^"\']*\{', resp.text), (
+        "unexpected inline x-data object literal on /login"
+    )
+
+
 async def test_no_inline_styles_on_login():
     """M3: no inline <style> blocks or style="..." attributes on /login."""
     import re

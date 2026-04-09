@@ -43,3 +43,7 @@ function dashboardPage() {
         },
     };
 }
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('dashboardPage', dashboardPage);
+});

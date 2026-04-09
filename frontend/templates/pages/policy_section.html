@@ -76,7 +76,7 @@
         <div>
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Add or remove filesystem paths.</span>
-                <button class="btn btn-outline-success btn-sm" @click="showAddForm = true; $nextTick(() => $refs.newPathInput?.focus())"
+                <button class="btn btn-outline-success btn-sm" @click="openAddForm()"
                         x-show="$store.auth.hasRole('operator')" x-cloak>
                     <i class="bi bi-plus me-1"></i>Add Path
                 </button>

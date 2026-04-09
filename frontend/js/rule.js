@@ -205,3 +205,7 @@ function ruleDetailPage(sandboxName, ruleKey) {
         },
     };
 }
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('ruleDetailPage', ruleDetailPage);
+});

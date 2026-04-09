@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<div x-data="{ ...gatewayList(), ...sortableTable('name') }" x-init="load()" @gateway-registered.window="load()">
+<div x-data="gatewaysList" x-init="load()" @gateway-registered.window="load()">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h5 class="mb-0">Gateways</h5>
         <div class="btn-group btn-group-sm">

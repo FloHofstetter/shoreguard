@@ -10,7 +10,7 @@
 {% block content %}
 <h5 class="mb-3">Policy Presets</h5>
 
-<div x-data="{ ...presetsList(), ...sortableTable('name') }">
+<div x-data="presetsListPage">
     <!-- Loading -->
     <div x-show="loading" class="text-center text-muted py-5">
         <div class="spinner-border spinner-border-sm me-2"></div>Loading presets...

@@ -331,6 +331,11 @@ function userNewForm() {
                 this.loading = false;
             }
         },
+
+        copyInvite() {
+            navigator.clipboard.writeText(this.inviteUrl);
+            showToast('Copied!', 'success');
+        },
     };
 }
 
@@ -370,5 +375,17 @@ function spNewForm() {
                 this.loading = false;
             }
         },
+
+        copyKey() {
+            navigator.clipboard.writeText(this.spKey);
+            showToast('Copied!', 'success');
+        },
     };
 }
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('usersPage', usersPage);
+    Alpine.data('userNewForm', userNewForm);
+    Alpine.data('spNewForm', spNewForm);
+    Alpine.data('usersListPage', () => ({ ...usersPage(), ...sortableTable('email') }));
+});

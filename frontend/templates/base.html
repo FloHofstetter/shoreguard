@@ -51,7 +51,7 @@
               x-cloak x-show="$store.auth.authenticated" x-text="$store.auth.role"></span>
         <button class="btn btn-sm btn-outline-secondary ms-2"
                 x-cloak x-show="$store.auth.authenticated"
-                @click="fetch('/api/auth/logout',{method:'POST'}).then(()=>window.location.href='/login')"
+                @click="$store.auth.logout()"
                 title="Log out" aria-label="Log out">
             <i class="bi bi-box-arrow-right"></i>
         </button>
@@ -70,7 +70,7 @@
         <div class="toast-container position-fixed bottom-0 end-0 p-3" id="approval-toasts" x-data aria-live="polite">
             <template x-for="toast in $store.toasts.items" :key="toast.id">
                 <div class="toast show" role="alert"
-                     x-init="setTimeout(() => $store.toasts.remove(toast.id), toast.delay)"
+                     x-init="$store.toasts.scheduleRemove(toast.id, toast.delay)"
                      x-transition:leave="transition ease-in duration-200"
                      x-transition:leave-start="opacity-100"
                      x-transition:leave-end="opacity-0">
@@ -163,10 +163,6 @@
     <script src="/static/js/websocket.js"></script>
     <script src="/static/js/search.js"></script>
     {% block extra_js %}{% endblock %}
-    {% if csp_strict_enabled() %}
-    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/csp@3.14.9/dist/cdn.min.js"></script>
-    {% else %}
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
-    {% endif %}
+    {% include "components/alpine_loader.html" %}
 </body>
 </html>

@@ -57,9 +57,16 @@ function sandboxDetail(name) {
         newMetaVal: '',
         saving: false,
         saveOutput: '',
+        wsState: 'connecting',
 
         async init() {
             await this.load();
+        },
+
+        onWsState(ev) {
+            if (ev.detail && ev.detail.sandboxName === this.sandboxName) {
+                this.wsState = ev.detail.state;
+            }
         },
 
         async load() {
@@ -250,6 +257,15 @@ function terminalPage(sandboxName) {
         },
     };
 }
+
+
+// ─── Alpine.data registrations ──────────────────────────────────────────────
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('sandboxList', sandboxList);
+    Alpine.data('sandboxDetail', sandboxDetail);
+    Alpine.data('terminalPage', terminalPage);
+});
 
 
 // ─── Sandbox Delete (global, used by subnav) ────────────────────────────────

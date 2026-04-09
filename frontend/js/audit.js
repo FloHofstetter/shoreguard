@@ -46,3 +46,7 @@ function auditPage() {
         },
     };
 }
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('auditPage', auditPage);
+});

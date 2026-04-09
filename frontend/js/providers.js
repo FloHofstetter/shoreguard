@@ -247,6 +247,10 @@ async function deleteProvider(name) {
     }
 }
 
+document.addEventListener('alpine:init', () => {
+    Alpine.data('providerForm', providerForm);
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     // Only auto-run on the providers page — wizard.html also loads this file.
     if (document.getElementById('providers-page-content')) loadProvidersPage();

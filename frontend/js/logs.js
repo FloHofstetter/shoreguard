@@ -52,3 +52,7 @@ function logsPage(name) {
         },
     };
 }
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('logsPage', logsPage);
+});

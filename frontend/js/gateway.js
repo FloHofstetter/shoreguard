@@ -385,6 +385,10 @@ function inferenceConfig() {
             return this.providers.find(p => p.name === this.provider) || null;
         },
 
+        maybeLoad(gw) {
+            if (gw && gw.connected && !this.loaded) this.load();
+        },
+
         async load() {
             this.loading = true;
             this.loaded = true;
@@ -439,6 +443,17 @@ function inferenceConfig() {
         },
     };
 }
+
+// ─── Alpine.data registrations ─────────────────────────────────────────────
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('gatewayRegisterPage', gatewayRegisterPage);
+    Alpine.data('gatewayDetail', gatewayDetail);
+    Alpine.data('inferenceConfig', inferenceConfig);
+    // Spread-merge factory replacing inline `{ ...gatewayList(), ...sortableTable('name') }`.
+    Alpine.data('gatewaysList', () => ({ ...gatewayList(), ...sortableTable('name') }));
+});
+
 
 // ─── Shared Helpers ────────────────────────────────────────────────────────
 

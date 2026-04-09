@@ -129,6 +129,11 @@ function filesystemPolicyPage(name) {
             await this.load();
         },
 
+        openAddForm() {
+            this.showAddForm = true;
+            this.$nextTick(() => this.$refs.newPathInput?.focus());
+        },
+
         async load() {
             this.loading = true;
             this.error = '';
@@ -662,3 +667,17 @@ function presetDetail(presetName) {
         },
     };
 }
+
+
+// ─── Alpine.data registrations ─────────────────────────────────────────────
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('policyPage', policyPage);
+    Alpine.data('networkPoliciesPage', networkPoliciesPage);
+    Alpine.data('filesystemPolicyPage', filesystemPolicyPage);
+    Alpine.data('processPolicyPage', processPolicyPage);
+    Alpine.data('presetsPage', presetsPage);
+    Alpine.data('presetDetail', presetDetail);
+    // Spread-merge factory replacing inline `{ ...presetsList(), ...sortableTable('name') }`.
+    Alpine.data('presetsListPage', () => ({ ...presetsList(), ...sortableTable('name') }));
+});

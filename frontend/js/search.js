@@ -133,6 +133,11 @@ function searchPalette() {
     };
 }
 
+// Alpine.data registration for strict-CSP build
+document.addEventListener('alpine:init', () => {
+    Alpine.data('searchPalette', searchPalette);
+});
+
 // Global keyboard shortcut
 document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {

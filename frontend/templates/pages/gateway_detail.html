@@ -186,7 +186,7 @@
 
                 <!-- ── Inference (only when connected) ── -->
                 <fieldset x-show="gw?.connected" x-cloak class="sg-fieldset mb-3"
-                          x-data="inferenceConfig()" x-effect="if (gw?.connected && !loaded) load()">
+                          x-data="inferenceConfig" x-effect="maybeLoad(gw)">
                     <legend class="sg-legend">Inference</legend>
                     <div x-show="loading" class="text-muted small">
                         <div class="spinner-border spinner-border-sm me-2"></div>Loading provider config...

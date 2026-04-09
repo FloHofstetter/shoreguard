@@ -11,46 +11,11 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="/static/css/style.css" rel="stylesheet">
     <link href="/static/css/auth.css" rel="stylesheet">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+    <script defer src="/static/js/auth.js"></script>
+    {% include "components/alpine_loader.html" %}
 </head>
 <body class="sg-auth-body">
-    <div class="register-card" x-data="{
-        email: '',
-        password: '',
-        confirm: '',
-        error: '',
-        loading: false,
-
-        async submit() {
-            this.error = '';
-            if (this.password !== this.confirm) {
-                this.error = 'Passwords do not match';
-                return;
-            }
-            if (this.password.length < 8) {
-                this.error = 'Password must be at least 8 characters';
-                return;
-            }
-            this.loading = true;
-            try {
-                const resp = await fetch('/api/auth/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: this.email.trim(), password: this.password }),
-                });
-                if (resp.ok) {
-                    window.location.href = '/';
-                } else {
-                    const body = await resp.json().catch(() => ({}));
-                    this.error = body.detail || 'Registration failed';
-                }
-            } catch {
-                this.error = 'Network error — is the server running?';
-            } finally {
-                this.loading = false;
-            }
-        }
-    }">
+    <div class="register-card" x-data="registerForm">
         <div class="card sg-card-themed">
             <div class="card-body p-4">
                 <div class="text-center mb-4">
@@ -59,7 +24,7 @@
                     <p class="text-muted small">Register for a Shoreguard account.</p>
                 </div>
 
-                <form @submit.prevent="submit">
+                <form @submit.prevent="submit()">
                     <div class="mb-3">
                         <input
                             type="email"

@@ -8,7 +8,7 @@
 {% endblock %}
 
 {% block content %}
-<div x-data="{ ...usersPage(), ...sortableTable('email') }" x-init="load()">
+<div x-data="usersListPage" x-init="load()">
     <!-- Loading -->
     <div x-show="loading" class="text-center text-muted py-5">
         <div class="spinner-border spinner-border-sm me-2"></div>Loading...

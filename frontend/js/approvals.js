@@ -291,3 +291,7 @@ async function showApprovalHistory(sandboxName) {
         if (body) body.innerHTML = renderError(e.message);
     }
 }
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('approvalsPage', approvalsPage);
+});

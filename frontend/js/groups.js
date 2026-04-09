@@ -191,3 +191,8 @@ function groupsPage() {
         },
     };
 }
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('groupsPage', groupsPage);
+    Alpine.data('groupsListPage', () => ({ ...groupsPage(), ...sortableTable('name') }));
+});

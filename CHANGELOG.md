@@ -35,6 +35,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   toggling now uses `classList.toggle('d-none', ...)` instead of
   `element.style.display`. With `SHOREGUARD_CSP_STRICT=true`, strict CSP no
   longer reports `style-src` violations — only Alpine `x-data` (M4) remains.
+- **CSP hardening M4** — Every Alpine.js component is now registered via
+  `Alpine.data(name, factory)` (per-file inside each `frontend/js/*.js`
+  factory file, plus a new `frontend/js/auth.js` for the
+  login/register/setup/invite forms). Templates reference them by name
+  (`x-data="loginForm"`) instead of inline object or spread-merge literals —
+  the four `{ ...pageFn(), ...sortableTable(...) }` patterns on the
+  gateways/policies/users/groups pages are now `gatewaysList`,
+  `presetsListPage`, `usersListPage`, `groupsListPage`. Directive expressions
+  containing arrow functions, `if` statements, or multi-statement sequences
+  (logout click, toast auto-remove, ws-state listener, clipboard-copy
+  buttons, inference-config `x-effect`, filesystem-policy add-form focus)
+  were extracted to store/component methods (`$store.auth.logout`,
+  `$store.toasts.scheduleRemove`, `onWsState`, `copyInvite`, `copyKey`,
+  `maybeLoad`, `openAddForm`). Auth pages now share the new
+  `components/alpine_loader.html` partial with the main base template so the
+  CSP build is loaded consistently. With `SHOREGUARD_CSP_STRICT=true`, the
+  application loads with zero CSP-related Alpine violations — clearing the
+  last blocker to making strict CSP the default in a future minor bump.
 
 ## [0.25.0] — 2026-04-09
 
