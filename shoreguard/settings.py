@@ -211,7 +211,29 @@ class AuthSettings(BaseSettings):
             "font-src 'self' https://cdn.jsdelivr.net; "
             "img-src 'self' data:; connect-src 'self' wss:"
         ),
-        description="Content-Security-Policy header value",
+        description="Content-Security-Policy header value (used when csp_strict=False)",
+    )
+    csp_strict: bool = Field(
+        default=False,
+        description=(
+            "Enforce strict CSP with per-request nonce and no 'unsafe-*' directives. "
+            "Requires all inline scripts to be nonce-gated and the Alpine.js CSP build. "
+            "Default off until the frontend refactor (M2–M4) is complete."
+        ),
+    )
+    csp_policy_strict: str = Field(
+        default=(
+            "default-src 'self'; "
+            "script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net; "
+            "style-src 'self' https://cdn.jsdelivr.net; "
+            "font-src 'self' https://cdn.jsdelivr.net; "
+            "img-src 'self' data:; connect-src 'self' wss:; "
+            "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        ),
+        description=(
+            "CSP template used when csp_strict=True. Must contain a '{nonce}' "
+            "placeholder that is replaced per-request."
+        ),
     )
 
 

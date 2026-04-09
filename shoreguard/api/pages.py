@@ -163,6 +163,41 @@ FRONTEND_DIR = _resolve_frontend_dir()
 
 templates = Jinja2Templates(directory=str(FRONTEND_DIR / "templates"))
 
+
+def _csp_nonce_for(request: Request) -> str:
+    """Return the per-request CSP nonce set by ``security_headers_middleware``.
+
+    Exposed as a Jinja global so templates can render ``nonce="{{ csp_nonce(request) }}"``
+    on inline ``<script>``/``<style>`` tags without every TemplateResponse call
+    site having to pass it explicitly.
+
+    Args:
+        request: The incoming HTTP request whose state carries the nonce.
+
+    Returns:
+        str: The nonce string, or ``""`` if none has been set (e.g. during
+        isolated template rendering in tests).
+    """
+    return getattr(request.state, "csp_nonce", "")
+
+
+def _csp_strict_enabled() -> bool:
+    """Return whether strict CSP mode is currently enabled.
+
+    Exposed as a Jinja global so templates can switch between the standard
+    Alpine.js build and the CSP-safe build based on runtime configuration.
+
+    Returns:
+        bool: ``True`` when ``auth.csp_strict`` is enabled.
+    """
+    from shoreguard.settings import get_settings
+
+    return get_settings().auth.csp_strict
+
+
+templates.env.globals["csp_nonce"] = _csp_nonce_for
+templates.env.globals["csp_strict_enabled"] = _csp_strict_enabled
+
 router = APIRouter()
 
 

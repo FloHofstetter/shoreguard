@@ -5,6 +5,19 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **CSP strict-mode foundation** — `SHOREGUARD_CSP_STRICT=true` opt-in
+  enables a per-request nonce on `request.state.csp_nonce` and an
+  unsafe-*-free Content-Security-Policy built from `auth.csp_policy_strict`
+  (default remains off until the frontend refactor lands). Templates can
+  reference `{{ csp_nonce(request) }}` on inline `<script>` tags and switch
+  between the standard and CSP-safe Alpine.js builds via
+  `{% if csp_strict_enabled() %}`. This is Milestone 1 of the multi-session
+  CSP hardening plan — see `csp-hardening-followup.md` for the full roadmap.
+
 ## [0.25.0] — 2026-04-09
 
 ### Added

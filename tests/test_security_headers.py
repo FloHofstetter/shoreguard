@@ -49,3 +49,89 @@ async def test_custom_csp(monkeypatch):
     ) as client:
         resp = await client.get("/healthz")
     assert resp.headers["Content-Security-Policy"] == "default-src 'none'"
+
+
+async def test_csp_default_mode_contains_unsafe(api_client: AsyncClient):
+    """Default CSP retains 'unsafe-*' until M4 ships the Alpine refactor."""
+    resp = await api_client.get("/healthz")
+    csp = resp.headers["Content-Security-Policy"]
+    assert "'unsafe-inline'" in csp
+    assert "'unsafe-eval'" in csp
+    assert "nonce-" not in csp
+
+
+async def test_csp_strict_mode_emits_nonce(monkeypatch):
+    """csp_strict=True replaces {nonce} in csp_policy_strict and drops unsafe-*."""
+    monkeypatch.setenv("SHOREGUARD_CSP_STRICT", "true")
+
+    from shoreguard.settings import reset_settings
+
+    reset_settings()
+
+    from shoreguard.api.main import app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get("/healthz")
+
+    csp = resp.headers["Content-Security-Policy"]
+    assert "nonce-" in csp
+    assert "'unsafe-inline'" not in csp
+    assert "'unsafe-eval'" not in csp
+    assert "{nonce}" not in csp  # placeholder must be interpolated
+
+
+async def test_csp_strict_nonce_differs_per_request(monkeypatch):
+    """Each request must get a fresh cryptographic nonce."""
+    import re
+
+    monkeypatch.setenv("SHOREGUARD_CSP_STRICT", "true")
+
+    from shoreguard.settings import reset_settings
+
+    reset_settings()
+
+    from shoreguard.api.main import app
+
+    pattern = re.compile(r"nonce-([A-Za-z0-9_-]+)")
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        r1 = await client.get("/healthz")
+        r2 = await client.get("/healthz")
+
+    m1 = pattern.search(r1.headers["Content-Security-Policy"])
+    m2 = pattern.search(r2.headers["Content-Security-Policy"])
+    assert m1 is not None and m2 is not None
+    assert m1.group(1) != m2.group(1)
+    # urlsafe base64 of 16 random bytes ≥ ~21 chars
+    assert len(m1.group(1)) >= 16
+
+
+async def test_csp_nonce_available_in_template(monkeypatch):
+    """The Jinja global csp_nonce(request) should render the per-request value."""
+    monkeypatch.setenv("SHOREGUARD_CSP_STRICT", "true")
+
+    from shoreguard.settings import reset_settings
+
+    reset_settings()
+
+    from shoreguard.api.main import app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get("/login")
+
+    assert resp.status_code == 200
+    # The per-request nonce must be interpolated into the theme-init <script nonce="...">
+    import re
+
+    header_match = re.search(r"nonce-([A-Za-z0-9_-]+)", resp.headers["Content-Security-Policy"])
+    assert header_match is not None
+    nonce = header_match.group(1)
+    assert f'nonce="{nonce}"' in resp.text
