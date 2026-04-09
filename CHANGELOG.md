@@ -5,7 +5,7 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.26.0] — 2026-04-09
 
 ### Added
 
@@ -53,6 +53,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   CSP build is loaded consistently. With `SHOREGUARD_CSP_STRICT=true`, the
   application loads with zero CSP-related Alpine violations — clearing the
   last blocker to making strict CSP the default in a future minor bump.
+- **Pyright on `tests/` + parallel test execution** — Pyright's include list
+  now covers `tests/` alongside `shoreguard/`, and `pytest-xdist` is a dev
+  dependency so the suite runs with `pytest -n auto`. Enabling pyright on
+  tests surfaced 303 pre-existing errors across 19 files (Optional
+  narrowing, fake gRPC stub assignments typed as `OpenShellStub`, protobuf
+  enum kwargs passed as raw ints, and a handful of test-setup bugs such as
+  `_FakeRpcError` missing `cancel()`). All fixed test-side — zero changes
+  to `shoreguard/` — via `assert x is not None` narrowing and narrow
+  `# type: ignore[assignment|arg-type|override]` comments where the fake
+  object pattern made narrowing impossible. On a 16-core box the suite
+  now runs in ~43s parallel instead of ~4:46 serial (6.6× speedup).
 
 ## [0.25.0] — 2026-04-09
 
