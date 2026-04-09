@@ -5,6 +5,33 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.26.1] — 2026-04-10
+
+### Changed
+
+- **Docstring coverage — pydoclint clean across `shoreguard/`** — Every
+  public function, method, and Pydantic model in `shoreguard/` now has a
+  Google-style docstring with `Args`/`Returns`/`Raises`/`Attributes`
+  sections as appropriate. 410 pre-existing pydoclint violations across
+  21 files were fixed (96 in `api/schemas.py`, 64 in `services/operations.py`,
+  51 in `api/pages.py`, …). Zero runtime behaviour changes; this unblocks
+  `pydoclint` in CI so future docstring drift gets caught at review time.
+- **Removed stale linter suppressions** — Systematic audit of all `# noqa` /
+  `# type: ignore` / `# pyright: ignore` comments. ~150 justified suppressions
+  kept (stdlib API signatures, SQLAlchemy column semantics, protobuf stub
+  typing, fake gRPC test doubles, singleton `PLW0603`, `__init__` `D107`, …) —
+  each now carries a comment explaining *why*. 12 non-justified suppressions
+  removed by adding proper types or narrowing: SQLAlchemy event-handler
+  params in `db.py`, `operation_service` / `gateway_service` narrowing in
+  `api/main.py` + `api/metrics.py`, `_get_auth_settings` / `_webhook_settings`
+  / `_cli_init_db` return types, `_UNSET` sentinel `cast()` in
+  `services/registry.py` + `sandbox_meta.py`. The cleanup surfaced **two real
+  type bugs**: `_cli_init_db` was annotated `-> None` despite callers invoking
+  `.dispose()` on the returned `Engine`, and the module-level
+  `operation_service` carried a stale `AsyncOperationService | OperationService
+  | None` union that never matched runtime reality. Both fixed; no runtime
+  behaviour change.
+
 ## [0.26.0] — 2026-04-09
 
 ### Added
