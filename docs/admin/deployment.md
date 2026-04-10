@@ -138,7 +138,17 @@ gateway management enabled. No PostgreSQL required.
 
 ## Upgrading
 
-**1. Pull the latest changes and rebuild:**
+**1. Back up the database** before every upgrade. The bundled backup script
+auto-detects SQLite vs Postgres:
+
+```bash
+uv run python -m scripts.backup --target /var/backups/shoreguard
+```
+
+See [Database Migrations — Before Any Migration](database-migrations.md#before-any-migration)
+for details and the low-level equivalents.
+
+**2. Pull the latest changes and rebuild:**
 
 ```bash
 git pull
@@ -146,19 +156,21 @@ docker compose build
 docker compose up -d
 ```
 
-**2. Database migrations** are applied automatically on startup. No manual
+**3. Database migrations** are applied automatically on startup. No manual
 migration step is needed.
 
-**3. Verify** with the readiness probe:
+**4. Verify** with the readiness and version probes:
 
 ```bash
 curl -s http://localhost:8888/readyz | python3 -m json.tool
+curl -s http://localhost:8888/version
 ```
 
-> [!NOTE]
-> Always back up your database before upgrading. If something goes wrong,
-> restore from the backup and check the [changelog](../changelog.md) for
-> breaking changes.
+The `/version` endpoint reports the version, git SHA, and build time of the
+running binary — use it to confirm the new image actually landed.
+
+**5. If something breaks:** follow the [Rollback Runbook](rollback.md). Check
+the [changelog](../changelog.md) for breaking changes before redeploying.
 
 ## Production flags
 

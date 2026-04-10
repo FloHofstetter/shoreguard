@@ -5,6 +5,85 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **OCSF parsing & rendering in sandbox logs (M2 / S2.1).** OpenShell v0.0.26
+  emits structured security events in an OCSF shorthand format over the
+  existing `SandboxLogLine` stream (level `"OCSF"`, target `"ocsf"`).
+  ShoreGuard now parses these lines via a new `shoreguard.services.ocsf`
+  module and exposes `class_prefix`, `activity`, `severity`, `disposition`,
+  `summary`, and both bracket + gRPC structured fields on every log entry
+  that looks like OCSF. The sandbox logs viewer renders class badges,
+  disposition colours (green = ALLOWED, red = DENIED/BLOCKED), dynamic
+  class-prefix chips, and a per-row expand for structured field details.
+  Live websocket stream and the REST `/sandboxes/{name}/logs` endpoint
+  both include the parsed `ocsf` dict when present.
+- **OCSF server-side filters on `GET /sandboxes/{name}/logs` (M2 / S2.2).**
+  Four new query parameters — `ocsf_only`, `ocsf_class`, `ocsf_disposition`,
+  `ocsf_severity` — let advanced consumers pull forensic-sized windows
+  without client-side post-processing. The sandbox logs viewer exposes
+  `ocsf_only` as a "Server OCSF" toggle next to the existing level filters.
+- **Gateway observability toggle UI (M2 / S2.2).** The gateway detail page
+  now includes an "Observability" fieldset with a form-switch bound to the
+  upstream `ocsf_logging_enabled` gateway setting, wired via the existing
+  `PUT /gateway/{name}/settings/{key}` endpoint.
+- **`/version` endpoint (M5 / S5.1).** New unauthenticated endpoint that
+  returns `{version, git_sha, build_time}` for the running binary, so
+  operators can verify which artifact is serving traffic after a deploy.
+  Build identity is propagated through new `SHOREGUARD_GIT_SHA` and
+  `SHOREGUARD_BUILD_TIME` Dockerfile ARGs, `release.yml` build-args, and
+  `shoreguard_info` Prometheus labels. A short-SHA image tag
+  (`ghcr.io/.../shoreguard:a1b2c3d`) is now published alongside semver.
+- **Hard-fail on production-readiness ERRORs (M5 / S5.1).** New
+  `Settings.enforce_production_safety()` runs at startup and refuses to
+  boot when `check_production_readiness()` reports any `ERROR:`-severity
+  config issue (weak secret, CORS wildcard + credentials, SQLite in prod,
+  strict CSP disabled, unrestricted self-registration in prod). Set
+  `SHOREGUARD_ALLOW_UNSAFE_CONFIG=true` to downgrade the error to a
+  `CRITICAL` log line — documented as an emergency override in
+  [docs/reference/configuration.md](docs/reference/configuration.md).
+- **Backup and restore scripts (M5 / S5.1).** New `scripts/backup.py`
+  and `scripts/restore.py` auto-detect SQLite vs Postgres from the
+  database URL. SQLite uses the built-in online backup API; Postgres
+  shells out to `pg_dump --format=custom` / `pg_restore --clean
+  --if-exists`. The [Database Migrations](docs/admin/database-migrations.md)
+  guide now recommends these scripts as the primary backup path.
+- **`POST /sandboxes/{name}/policy/analysis` (M1 / S1.3, closes M1).**
+  Pass-through REST endpoint for the OpenShell `SubmitPolicyAnalysis`
+  RPC. External denial analyzers (LLM-backed or rule-based) can submit
+  observed denial summaries + proposed policy chunks through ShoreGuard's
+  HTTP API; the gateway decides accept/reject per chunk and returns
+  counters plus rejection reasons. Admin-only, rate-limited, audit-logged
+  as `sandbox.policy.analyze`. This closes **M1 OpenShell v0.0.26
+  Alignment** — S1.1, S1.2, and S1.3 are now all merged.
+- **Rollback runbook.** New [docs/admin/rollback.md](docs/admin/rollback.md)
+  consolidates the incident-response flow (symptom detection → image
+  rollback → optional DB rollback or restore → verification →
+  post-mortem) into one page, with links into existing
+  troubleshooting, migration, and deployment docs.
+
+### Fixed
+
+- **`min_level` parameter on `GET /sandboxes/{name}/logs` now preserves
+  OCSF events.** OpenShell's `level_matches()` helper assigns unknown
+  levels (including `"OCSF"`) numeric rank 5, which any non-empty
+  `min_level` silently dropped. ShoreGuard now always fetches upstream
+  with `min_level=""` and applies the level filter locally, bypassing
+  OCSF entries unconditionally.
+- **`check_production_readiness()` now actually returns the warnings list**
+  that its type signature promised — the method previously collected the
+  list and fell through without a `return` statement, so callers always
+  got `None`.
+
+### Changed
+
+- **`PolicyManager.watch()` stream flattener forwards `target` and
+  `fields`.** The live `WatchSandbox` consumer was dropping both on the
+  live pathway, even though `get_logs()` surfaced them correctly via the
+  unary RPC. Additive change — no existing consumer breaks.
+
 ## [0.28.0] — 2026-04-10
 
 ### Added

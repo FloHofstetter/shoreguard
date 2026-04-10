@@ -52,6 +52,10 @@ These endpoints are **unauthenticated** and designed for container orchestration
 |--------|------|-------------|
 | `GET` | `/healthz` | Liveness probe — returns 200 if the process is running |
 | `GET` | `/readyz` | Readiness probe — checks database and service initialisation |
+| `GET` | `/version` | Build identity — returns `{version, git_sha, build_time}` for the running image |
+
+`/version` is the fastest way to verify which artifact a deploy actually landed — see the
+[Rollback Runbook](../admin/rollback.md) for how it fits into an incident response.
 
 ## Gateway management
 

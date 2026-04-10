@@ -40,6 +40,7 @@ environment variables, which override built-in defaults.
 | `SHOREGUARD_LOCAL_MODE` | `--local` | `false` | Enable Docker-based gateway lifecycle management |
 | `SHOREGUARD_GRACEFUL_SHUTDOWN_TIMEOUT` | — | `5` | Seconds to wait for in-flight requests during shutdown |
 | `SHOREGUARD_GZIP_MINIMUM_SIZE` | — | `1000` | Minimum response size (bytes) before gzip compression kicks in |
+| `SHOREGUARD_ALLOW_UNSAFE_CONFIG` | — | `false` | **Emergency override.** When `true`, `enforce_production_safety()` logs `ERROR:`-severity config issues at `CRITICAL` and continues startup instead of refusing. Use only to bring a broken stack up for debugging — every start-up under this flag leaves a loud audit trail in the logs. |
 
 ## Authentication & Sessions {: #auth }
 
