@@ -170,6 +170,7 @@ class SandboxManager:
         workdir: str = "",
         env: dict[str, str] | None = None,
         timeout_seconds: int = 0,
+        tty: bool = False,
     ) -> dict[str, Any]:
         """Execute a command in a sandbox and return the result.
 
@@ -179,6 +180,8 @@ class SandboxManager:
             workdir: Working directory inside the sandbox.
             env: Optional environment variables for the command.
             timeout_seconds: Command timeout in seconds (0 for default).
+            tty: Allocate a TTY for the command (for interactive programs
+                that detect ``isatty()``).  Added in OpenShell v0.0.23.
 
         Returns:
             dict[str, Any]: Execution result with exit_code, stdout,
@@ -190,6 +193,7 @@ class SandboxManager:
             workdir=workdir,
             environment=dict(env or {}),
             timeout_seconds=timeout_seconds,
+            tty=tty,
         )
         grpc_timeout = max(self._timeout, (timeout_seconds or 600) + 10)
         stream = self._stub.ExecSandbox(request, timeout=grpc_timeout)

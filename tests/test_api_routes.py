@@ -101,6 +101,24 @@ async def test_get_inference(api_client, mock_client):
     data = resp.json()
     assert data["provider_name"] == "anthropic"
     assert data["model_id"] == "claude-3"
+    # Default call uses empty route_name (= cluster default route).
+    mock_client.get_cluster_inference.assert_called_with(route_name="")
+
+
+async def test_get_inference_with_route_name(api_client, mock_client):
+    """GET /inference?route_name=sandbox-system forwards the route name."""
+    mock_client.get_cluster_inference.return_value = {
+        "provider_name": "anthropic",
+        "model_id": "claude-3-haiku",
+        "version": 1,
+        "route_name": "sandbox-system",
+        "timeout_secs": 60,
+    }
+    resp = await api_client.get(f"/api/gateways/{GW}/inference?route_name=sandbox-system")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["route_name"] == "sandbox-system"
+    mock_client.get_cluster_inference.assert_called_with(route_name="sandbox-system")
 
 
 async def test_set_inference_validation(api_client, mock_client):
@@ -200,6 +218,29 @@ async def test_exec_sandbox(api_client, mock_client):
 
     assert resp.status_code == 202
     assert "operation_id" in resp.json()
+
+
+async def test_exec_sandbox_tty_forwarded(api_client, mock_client):
+    """POST /exec with tty=true forwards tty into the gRPC exec call."""
+    mock_client.sandboxes.get.return_value = {"id": "abc-123", "name": "sb1"}
+    mock_client.sandboxes.exec.return_value = {"exit_code": 0, "stdout": ""}
+
+    resp = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes/sb1/exec",
+        json={"command": "python", "tty": True},
+    )
+    assert resp.status_code == 202
+    # Poll until the background LRO work has run so the mock was called.
+    op_id = resp.json()["operation_id"]
+    for _ in range(50):
+        poll = await api_client.get(f"/api/operations/{op_id}")
+        if poll.json().get("status") in ("succeeded", "failed"):
+            break
+        await asyncio.sleep(0.02)
+    # tty flag must have reached the underlying client call.
+    assert mock_client.sandboxes.exec.called
+    call_kwargs = mock_client.sandboxes.exec.call_args.kwargs
+    assert call_kwargs.get("tty") is True
 
 
 async def test_get_sandbox_logs(api_client, mock_client):

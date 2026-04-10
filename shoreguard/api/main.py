@@ -590,17 +590,25 @@ class SetInferenceRequest(BaseModel):
 
 
 @gw_api.get("/inference", response_model=InferenceConfigResponse)
-async def get_inference(gw: str, client: ShoreGuardClient = Depends(get_client)) -> dict[str, Any]:
+async def get_inference(
+    gw: str,
+    route_name: str = "",
+    client: ShoreGuardClient = Depends(get_client),
+) -> dict[str, Any]:
     """Return current cluster inference configuration.
 
     Args:
         gw: The gateway name.
+        route_name: Named inference route to query. Empty string returns
+            the default cluster route. ``sandbox-system`` returns the
+            route used for sandbox system-level model calls (OpenShell
+            v0.0.25+).
         client: The ShoreGuardClient for this gateway.
 
     Returns:
         dict[str, Any]: Current inference provider and model settings.
     """
-    return await asyncio.to_thread(client.get_cluster_inference)
+    return await asyncio.to_thread(client.get_cluster_inference, route_name=route_name)
 
 
 @gw_api.put(

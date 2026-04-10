@@ -112,6 +112,7 @@ class SandboxService:
         workdir: str = "",
         env: dict[str, str] | None = None,
         timeout_seconds: int = 0,
+        tty: bool = False,
     ) -> dict[str, Any]:
         """Execute a command inside a sandbox.
 
@@ -123,6 +124,7 @@ class SandboxService:
             workdir: Working directory inside the sandbox.
             env: Environment variables to set.
             timeout_seconds: Execution timeout (0 for no timeout).
+            tty: Allocate a TTY for the command (for interactive programs).
 
         Returns:
             dict[str, Any]: Execution result with stdout, stderr, exit code.
@@ -142,6 +144,7 @@ class SandboxService:
             workdir=workdir,
             env=env,
             timeout_seconds=timeout_seconds,
+            tty=tty,
         )
 
     def get_logs(

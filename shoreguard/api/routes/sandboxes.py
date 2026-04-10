@@ -118,12 +118,16 @@ class ExecRequest(BaseModel):
         workdir: Working directory for the command.
         env: Environment variables for the command.
         timeout_seconds: Execution timeout in seconds (0 = no timeout).
+        tty: Allocate a TTY for the command — set true for interactive
+            programs that check ``isatty()`` (e.g. python REPL, vim).
+            Added in OpenShell v0.0.23.
     """
 
     command: str | list[str]
     workdir: str = Field(default="", max_length=4096)
     env: dict[str, str] = Field(default_factory=dict)
     timeout_seconds: int = Field(default=0, ge=0, le=3600)
+    tty: bool = False
 
     @field_validator("env")
     @classmethod
@@ -427,6 +431,7 @@ async def exec_in_sandbox(
             workdir=body.workdir,
             env=body.env or None,
             timeout_seconds=body.timeout_seconds,
+            tty=body.tty,
         )
         exit_code = result.get("exit_code")
         logger.info("Exec completed (sandbox=%s, actor=%s)", name, actor)
@@ -440,6 +445,7 @@ async def exec_in_sandbox(
                 "command": body.command[:200],
                 "exit_code": exit_code,
                 "timeout_seconds": body.timeout_seconds,
+                "tty": body.tty,
                 "status": "success" if exit_code == 0 else "failed",
             },
         )

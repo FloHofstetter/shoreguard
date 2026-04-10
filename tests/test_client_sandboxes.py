@@ -131,6 +131,18 @@ def test_exec_parses_stdout(mgr, stub):
     assert result["exit_code"] == 0
 
 
+def test_exec_tty_default_false(mgr, stub):
+    """exec() without tty kwarg sends tty=False (the proto default)."""
+    mgr.exec("abc", ["bash"])
+    assert stub.request.tty is False
+
+
+def test_exec_tty_true_forwarded(mgr, stub):
+    """exec(tty=True) forwards the flag into ExecSandboxRequest."""
+    mgr.exec("abc", ["python"], tty=True)
+    assert stub.request.tty is True
+
+
 def test_create_ssh_session(mgr, stub):
     """create_ssh_session() sends sandbox_id and returns token dict."""
     result = mgr.create_ssh_session("abc")

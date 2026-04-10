@@ -160,7 +160,15 @@ class RevokeSshSessionResponse(_message.Message):
     def __init__(self, revoked: bool = ...) -> None: ...
 
 class ExecSandboxRequest(_message.Message):
-    __slots__ = ("sandbox_id", "command", "workdir", "environment", "timeout_seconds", "stdin")
+    __slots__ = (
+        "sandbox_id",
+        "command",
+        "workdir",
+        "environment",
+        "timeout_seconds",
+        "stdin",
+        "tty",
+    )
     class EnvironmentEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -175,12 +183,14 @@ class ExecSandboxRequest(_message.Message):
     ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
     TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
     STDIN_FIELD_NUMBER: _ClassVar[int]
+    TTY_FIELD_NUMBER: _ClassVar[int]
     sandbox_id: str
     command: _containers.RepeatedScalarFieldContainer[str]
     workdir: str
     environment: _containers.ScalarMap[str, str]
     timeout_seconds: int
     stdin: bytes
+    tty: bool
     def __init__(
         self,
         sandbox_id: _Optional[str] = ...,
@@ -189,6 +199,7 @@ class ExecSandboxRequest(_message.Message):
         environment: _Optional[_Mapping[str, str]] = ...,
         timeout_seconds: _Optional[int] = ...,
         stdin: _Optional[bytes] = ...,
+        tty: bool = ...,
     ) -> None: ...
 
 class ExecSandboxStdout(_message.Message):

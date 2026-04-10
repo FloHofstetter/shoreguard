@@ -280,6 +280,7 @@ def test_exec_forwards_workdir_env_timeout(sandbox_svc, mock_client):
         workdir="/app",
         env={"KEY": "val"},
         timeout_seconds=60,
+        tty=False,
     )
 
 
