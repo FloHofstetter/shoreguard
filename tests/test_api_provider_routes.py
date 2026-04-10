@@ -126,3 +126,92 @@ async def test_create_duplicate_provider(api_client, mock_client):
     )
 
     assert resp.status_code == 409
+
+
+# ── GET /{name}/env ─────────────────────────────────────────────────────────
+
+
+async def test_get_provider_env_with_credentials(api_client, mock_client):
+    """GET /providers/{name}/env returns credential keys redacted."""
+    mock_client.providers.get.return_value = {
+        "name": "my-prov",
+        "type": "anthropic",
+        "credentials": {"ANTHROPIC_API_KEY": "sk-ant-secret"},  # pragma: allowlist secret
+        "config": {},
+    }
+
+    resp = await api_client.get(f"{BASE}/my-prov/env")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["provider"] == "my-prov"
+    assert data["type"] == "anthropic"
+    assert len(data["env"]) == 1
+    entry = data["env"][0]
+    assert entry["key"] == "ANTHROPIC_API_KEY"
+    assert entry["source"] == "credential"
+    assert entry["redacted_value"] == "[REDACTED]"
+    # Secret value must NEVER appear in the response body.
+    assert "sk-ant-secret" not in resp.text  # pragma: allowlist secret
+
+
+async def test_get_provider_env_includes_config_and_type_default(api_client, mock_client):
+    """Env projection covers credentials, config, and type_default fallback."""
+    mock_client.providers.get.return_value = {
+        "name": "gh-prov",
+        "type": "github",
+        "credentials": {},
+        "config": {"GITHUB_ORG": "acme"},
+    }
+
+    resp = await api_client.get(f"{BASE}/gh-prov/env")
+
+    assert resp.status_code == 200
+    entries = {e["key"]: e for e in resp.json()["env"]}
+    # Config key is surfaced
+    assert entries["GITHUB_ORG"]["source"] == "config"
+    # Type default (GITHUB_TOKEN from openshell.yaml) is added when missing
+    assert entries["GITHUB_TOKEN"]["source"] == "type_default"
+
+
+async def test_get_provider_env_dedupes_type_default(api_client, mock_client):
+    """When the type's cred_key is already in credentials, don't duplicate it."""
+    mock_client.providers.get.return_value = {
+        "name": "my-prov",
+        "type": "anthropic",
+        "credentials": {"ANTHROPIC_API_KEY": "sk-xxx"},
+        "config": {},
+    }
+
+    resp = await api_client.get(f"{BASE}/my-prov/env")
+
+    env = resp.json()["env"]
+    keys = [e["key"] for e in env]
+    assert keys.count("ANTHROPIC_API_KEY") == 1
+    assert env[0]["source"] == "credential"
+
+
+async def test_get_provider_env_unknown_type(api_client, mock_client):
+    """Unknown provider types don't crash — just no type_default entry."""
+    mock_client.providers.get.return_value = {
+        "name": "weird",
+        "type": "not-a-real-type",
+        "credentials": {"FOO": "bar"},
+        "config": {},
+    }
+
+    resp = await api_client.get(f"{BASE}/weird/env")
+
+    assert resp.status_code == 200
+    env = resp.json()["env"]
+    assert len(env) == 1
+    assert env[0]["key"] == "FOO"
+
+
+async def test_get_provider_env_not_found(api_client, mock_client):
+    """GET /providers/{name}/env returns 404 for unknown provider."""
+    mock_client.providers.get.side_effect = NotFoundError("Provider not found")
+
+    resp = await api_client.get(f"{BASE}/nonexistent/env")
+
+    assert resp.status_code == 404

@@ -14,6 +14,7 @@ from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.api.schemas import (
     PaginatedResponse,
     ProviderDeleteResponse,
+    ProviderEnvResponse,
     ProviderResponse,
     ProviderTypeResponse,
 )
@@ -224,6 +225,28 @@ async def get_provider(
         dict[str, Any]: Provider record.
     """
     return await asyncio.to_thread(svc.get, name)
+
+
+@router.get("/{name}/env", response_model=ProviderEnvResponse)
+async def get_provider_env(
+    name: str,
+    svc: ProviderService = Depends(_get_provider_service),
+) -> dict[str, Any]:
+    """Get the redacted environment projection for a provider.
+
+    Returns the environment variables this provider injects into sandboxes
+    without revealing any secret values. Useful for debugging agent
+    misconfiguration — e.g. verifying that a provider's credentials are
+    actually exposed under the expected variable name.
+
+    Args:
+        name: Provider name.
+        svc: Injected provider service.
+
+    Returns:
+        dict[str, Any]: Provider env projection with keys and sources.
+    """
+    return await asyncio.to_thread(svc.get_env, name)
 
 
 @router.put(

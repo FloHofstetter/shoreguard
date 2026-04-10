@@ -516,6 +516,44 @@ class ProviderTypeResponse(BaseModel):
     label: str | None = None
 
 
+class ProviderEnvVar(BaseModel):
+    """A single environment variable projected into sandboxes by a provider.
+
+    Secret values are never returned — only the key, its source, and a
+    redacted placeholder. Use this endpoint to debug agent misconfiguration
+    without exposing credentials.
+
+    Attributes:
+        key (str): Environment variable name (e.g. ``ANTHROPIC_API_KEY``).
+        source (str): Origin of the value: ``credential`` (from
+            ``provider.credentials``), ``config`` (from ``provider.config``),
+            or ``type_default`` (implied by the provider type's cred_key
+            mapping in ``openshell.yaml`` when no matching credential exists).
+        redacted_value (str): Constant placeholder (``[REDACTED]``) so callers
+            can distinguish "key is set" from "key is absent" without seeing
+            the real value.
+    """
+
+    key: str
+    source: str
+    redacted_value: str = "[REDACTED]"
+
+
+class ProviderEnvResponse(BaseModel):
+    """Environment-variable projection for a provider.
+
+    Attributes:
+        provider (str): Provider name.
+        type (str | None): Provider type identifier.
+        env (list[ProviderEnvVar]): Environment variables the provider
+            projects into sandboxes. Values are redacted.
+    """
+
+    provider: str
+    type: str | None = None
+    env: list[ProviderEnvVar]
+
+
 # ─── Policies ─────────────────────────────────────────────────────────────────
 
 

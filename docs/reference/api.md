@@ -158,9 +158,16 @@ All sandbox endpoints are scoped to a gateway via the `{gw}` path parameter.
 | `GET` | `/api/gateways/{gw}/providers` | List providers |
 | `POST` | `/api/gateways/{gw}/providers` | Create a provider |
 | `GET` | `/api/gateways/{gw}/providers/{name}` | Get provider details |
+| `GET` | `/api/gateways/{gw}/providers/{name}/env` | Redacted env-var projection for a provider (v0.28.0+) |
 | `PUT` | `/api/gateways/{gw}/providers/{name}` | Update a provider |
 | `DELETE` | `/api/gateways/{gw}/providers/{name}` | Delete a provider |
 | `GET` | `/api/gateways/{gw}/providers/types` | List known provider types |
+
+`GET /providers/{name}/env` returns the environment variables the provider
+projects into sandboxes — keys only, values redacted as `[REDACTED]`. Each
+entry carries a `source` of `credential`, `config`, or `type_default`
+(implied by the provider type's `cred_key` in `openshell.yaml`). Useful for
+debugging agent misconfiguration without exposing secrets.
 
 ## Inference
 

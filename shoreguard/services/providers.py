@@ -117,6 +117,59 @@ class ProviderService:
         """
         return self._client.providers.delete(name)
 
+    def get_env(self, name: str) -> dict[str, Any]:
+        """Get the redacted environment projection for a provider.
+
+        Returns the environment variables this provider injects into
+        sandboxes. Secret values are never included — only keys, their
+        source (``credential``, ``config``, ``type_default``), and a
+        constant ``[REDACTED]`` placeholder.
+
+        The key set is derived from three places:
+
+        1. Every key in the provider's ``credentials`` dict (source=``credential``).
+        2. Every key in the provider's ``config`` dict (source=``config``).
+        3. The provider type's ``cred_key`` from ``openshell.yaml``
+           (source=``type_default``), added only if it was not already
+           present in the credentials dict.
+
+        Args:
+            name: Provider name.
+
+        Returns:
+            dict[str, Any]: Record with ``provider``, ``type`` and ``env``.
+        """
+        provider = self._client.providers.get(name)
+        provider_type = provider.get("type") if isinstance(provider, dict) else None
+
+        env: list[dict[str, str]] = []
+        seen: set[str] = set()
+
+        creds = provider.get("credentials") or {} if isinstance(provider, dict) else {}
+        for key in creds:
+            if key in seen:
+                continue
+            env.append({"key": key, "source": "credential", "redacted_value": "[REDACTED]"})
+            seen.add(key)
+
+        config = provider.get("config") or {} if isinstance(provider, dict) else {}
+        for key in config:
+            if key in seen:
+                continue
+            env.append({"key": key, "source": "config", "redacted_value": "[REDACTED]"})
+            seen.add(key)
+
+        if provider_type:
+            meta = get_openshell_meta()
+            type_info = meta.get_provider_type(provider_type)
+            default_key = type_info.get("cred_key") if type_info else None
+            if default_key and default_key not in seen:
+                env.append(
+                    {"key": default_key, "source": "type_default", "redacted_value": "[REDACTED]"}
+                )
+
+        return {"provider": name, "type": provider_type, "env": env}
+
     @staticmethod
     def list_known_types() -> list[dict[str, str]]:
         """Return metadata about known provider types from openshell.yaml.
