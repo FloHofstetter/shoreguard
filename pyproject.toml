@@ -120,7 +120,9 @@ show_missing = true
 paths_to_mutate = ["shoreguard"]
 tests_dir = ["tests"]
 do_not_mutate = ["shoreguard/client/_proto/*"]
-also_copy = ["frontend"]
+# `frontend` is needed because the FastAPI app serves templates from there;
+# `scripts` is imported by tests/test_backup_restore.py via `from scripts.backup`.
+also_copy = ["frontend", "scripts"]
 runner = "python -m pytest -x --ignore=tests/integration"
 
 [tool.pydoclint]
