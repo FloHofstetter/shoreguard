@@ -471,6 +471,45 @@ async def test_get_sandbox_logs_with_params(api_client, mock_client):
     )
 
 
+async def test_get_sandbox_logs_enriches_ocsf_entries(api_client, mock_client):
+    """OCSF shorthand lines are parsed and surfaced under an ``ocsf`` key."""
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "sb1"}
+    mock_client.sandboxes.get_logs.return_value = [
+        {
+            "timestamp_ms": 1000,
+            "level": "INFO",
+            "target": "openshell_sandbox",
+            "message": "plain line",
+            "source": "sandbox",
+            "fields": {},
+        },
+        {
+            "timestamp_ms": 2000,
+            "level": "OCSF",
+            "target": "ocsf",
+            "message": (
+                "NET:OPEN [INFO] ALLOWED /usr/bin/curl(58) -> api.github.com:443 "
+                "[policy:github_api engine:opa]"
+            ),
+            "source": "sandbox",
+            "fields": {"dst_host": "api.github.com"},
+        },
+    ]
+
+    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/sb1/logs")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 2
+    assert "ocsf" not in data[0]
+    ocsf = data[1]["ocsf"]
+    assert ocsf["class_prefix"] == "NET"
+    assert ocsf["activity"] == "OPEN"
+    assert ocsf["severity"] == "INFO"
+    assert ocsf["disposition"] == "ALLOWED"
+    assert ocsf["bracket_fields"] == {"policy": "github_api", "engine": "opa"}
+    assert ocsf["fields"] == {"dst_host": "api.github.com"}
+
+
 # ── _parse_label_filters ────────────────────────────────────────────────────
 
 

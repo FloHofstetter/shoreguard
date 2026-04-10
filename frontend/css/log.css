@@ -23,3 +23,21 @@
 .log-output .log-error { color: var(--sg-danger); }
 .log-output .log-warn { color: var(--sg-warning); }
 .log-output .log-info { color: var(--sg-log-info); }
+
+.log-output .log-ocsf { color: var(--sg-log-text); }
+.log-output .log-ocsf-allowed { border-left: 2px solid var(--sg-success, #28a745); padding-left: 4px; }
+.log-output .log-ocsf-denied,
+.log-output .log-ocsf-blocked { border-left: 2px solid var(--sg-danger); padding-left: 4px; }
+
+.log-output .log-expand-btn { color: inherit; text-decoration: none; }
+
+.log-output .log-ocsf-details {
+    margin: 2px 0 6px 1rem;
+    padding: 4px 8px;
+    background-color: rgba(0, 0, 0, 0.15);
+    border-radius: 2px;
+    font-size: 0.75rem;
+}
+.log-output .log-ocsf-key { font-weight: 600; min-width: 5rem; }
+.log-output .log-ocsf-value { word-break: break-all; }
+.log-output .log-ocsf-raw { margin-top: 4px; font-style: italic; }

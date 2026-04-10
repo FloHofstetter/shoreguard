@@ -64,7 +64,12 @@ class _FakeStub:
         return SimpleNamespace(
             logs=[
                 openshell_pb2.SandboxLogLine(
-                    timestamp_ms=1000, level="info", message="started", source="sandbox"
+                    timestamp_ms=1000,
+                    level="info",
+                    message="started",
+                    source="sandbox",
+                    target="openshell_sandbox",
+                    fields={"k": "v"},
                 ),
             ]
         )
@@ -170,6 +175,34 @@ def test_get_logs_sends_params(mgr, stub):
     assert stub.request.min_level == "info"
     assert len(result) == 1
     assert result[0]["message"] == "started"
+    assert result[0]["target"] == "openshell_sandbox"
+    assert result[0]["fields"] == {"k": "v"}
+
+
+def test_watch_stream_passes_target_and_fields():
+    """watch() forwards target and fields from SandboxLogLine to the consumer."""
+    event = openshell_pb2.SandboxStreamEvent(
+        log=openshell_pb2.SandboxLogLine(
+            timestamp_ms=2000,
+            level="OCSF",
+            target="ocsf",
+            message=(
+                "NET:OPEN [INFO] ALLOWED /usr/bin/curl(58) -> api.github.com:443 "
+                "[policy:github_api engine:opa]"
+            ),
+            source="sandbox",
+            fields={"dst_host": "api.github.com"},
+        )
+    )
+    mgr = _make_watch_mgr([event])
+    events = list(mgr.watch("abc"))
+
+    assert len(events) == 1
+    ev = events[0]
+    assert ev["type"] == "log"
+    assert ev["data"]["target"] == "ocsf"
+    assert ev["data"]["fields"] == {"dst_host": "api.github.com"}
+    assert ev["data"]["level"] == "OCSF"
 
 
 # ─── wait_ready ──────────────────────────────────────────────────────────────

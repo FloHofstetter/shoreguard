@@ -25,6 +25,8 @@
                 <label class="btn btn-outline-warning" for="log-filter-warn">Warn</label>
                 <input type="checkbox" class="btn-check" id="log-filter-error" :checked="showError" @change="toggleLevel('error')">
                 <label class="btn btn-outline-danger" for="log-filter-error">Error</label>
+                <input type="checkbox" class="btn-check" id="log-filter-ocsf" :checked="showOcsf" @change="toggleLevel('ocsf')">
+                <label class="btn btn-outline-primary" for="log-filter-ocsf">OCSF</label>
             </div>
             <div class="d-flex gap-2">
                 <input type="text" class="form-control form-control-sm sg-w-180" placeholder="Filter..."
@@ -34,12 +36,79 @@
                 </button>
             </div>
         </div>
+        <!-- OCSF class chips -->
+        <div x-show="showOcsf && availableClasses.length > 0" class="mb-2 d-flex gap-1 flex-wrap">
+            <template x-for="cls in availableClasses" :key="cls">
+                <button type="button"
+                        class="btn btn-sm log-ocsf-chip"
+                        :class="classFilter[cls] === false ? 'btn-outline-secondary' : 'btn-primary'"
+                        @click="toggleClass(cls)"
+                        x-text="cls"></button>
+            </template>
+        </div>
         <div class="log-output" id="log-container" x-ref="logContainer">
             <template x-for="(log, i) in filteredLogs" :key="i">
-                <div :class="logCss(log)">
-                    <span class="text-muted" x-text="formatTimestamp(log.timestamp_ms)"></span>
-                    <span class="badge text-bg-secondary me-1" x-text="log.source || 'gateway'"></span>
-                    <span x-text="log.message"></span>
+                <div>
+                    <div :class="logCss(log)">
+                        <span class="text-muted" x-text="formatTimestamp(log.timestamp_ms)"></span>
+                        <template x-if="log.ocsf">
+                            <span>
+                                <span class="badge text-bg-primary me-1" x-text="log.ocsf.class_prefix || 'OCSF'"></span>
+                                <template x-if="log.ocsf.activity">
+                                    <span class="badge text-bg-secondary me-1" x-text="log.ocsf.activity"></span>
+                                </template>
+                                <template x-if="log.ocsf.severity">
+                                    <span class="badge text-bg-dark me-1" x-text="log.ocsf.severity"></span>
+                                </template>
+                                <template x-if="log.ocsf.disposition">
+                                    <span class="badge me-1"
+                                          :class="log.ocsf.disposition === 'ALLOWED' ? 'text-bg-success' : 'text-bg-danger'"
+                                          x-text="log.ocsf.disposition"></span>
+                                </template>
+                                <span x-text="log.ocsf.summary || log.message"></span>
+                                <button type="button"
+                                        x-show="hasExpandable(log)"
+                                        class="btn btn-sm btn-link p-0 ms-1 log-expand-btn"
+                                        @click="toggleExpand(i)"
+                                        :title="expanded[i] ? 'Collapse' : 'Expand'">
+                                    <i class="bi" :class="expanded[i] ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                                </button>
+                            </span>
+                        </template>
+                        <template x-if="!log.ocsf">
+                            <span>
+                                <span class="badge text-bg-secondary me-1" x-text="log.source || 'gateway'"></span>
+                                <span x-text="log.message"></span>
+                            </span>
+                        </template>
+                    </div>
+                    <div x-show="log.ocsf && expanded[i]" x-cloak class="log-ocsf-details">
+                        <template x-if="log.ocsf && Object.keys(log.ocsf.bracket_fields || {}).length > 0">
+                            <dl class="row mb-1">
+                                <template x-for="[k, v] in Object.entries(log.ocsf.bracket_fields)" :key="k">
+                                    <template x-if="true">
+                                        <div class="d-flex">
+                                            <dt class="log-ocsf-key" x-text="k + ':'"></dt>
+                                            <dd class="log-ocsf-value mb-0 ms-1" x-text="v"></dd>
+                                        </div>
+                                    </template>
+                                </template>
+                            </dl>
+                        </template>
+                        <template x-if="log.ocsf && Object.keys(log.ocsf.fields || {}).length > 0">
+                            <dl class="row mb-1">
+                                <template x-for="[k, v] in Object.entries(log.ocsf.fields)" :key="k">
+                                    <template x-if="true">
+                                        <div class="d-flex">
+                                            <dt class="log-ocsf-key" x-text="k + ':'"></dt>
+                                            <dd class="log-ocsf-value mb-0 ms-1" x-text="v"></dd>
+                                        </div>
+                                    </template>
+                                </template>
+                            </dl>
+                        </template>
+                        <div class="log-ocsf-raw text-muted" x-text="log.message"></div>
+                    </div>
                 </div>
             </template>
             <div x-show="$empty(filteredLogs)" class="text-muted">No logs match the current filters.</div>

@@ -350,6 +350,46 @@ def test_ws_streams_sandbox_events():
             assert msg2["type"] == "log"
 
 
+def test_ws_enriches_ocsf_log_events():
+    """OCSF shorthand log events on the WS stream carry a parsed ``ocsf`` dict."""
+    from starlette.testclient import TestClient
+
+    from shoreguard.api.main import app
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
+    mock_client.sandboxes.watch.return_value = iter(
+        [
+            {
+                "type": "log",
+                "data": {
+                    "timestamp_ms": 1000,
+                    "level": "OCSF",
+                    "target": "ocsf",
+                    "message": (
+                        "NET:OPEN [MED] DENIED /usr/bin/curl(64) -> httpbin.org:443 "
+                        "[policy:- engine:opa]"
+                    ),
+                    "source": "sandbox",
+                    "fields": {"dst_host": "httpbin.org"},
+                },
+            },
+        ]
+    )
+
+    with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
+        mock_gw_svc.return_value.get_client.return_value = mock_client
+        client = TestClient(app)
+        with client.websocket_connect("/ws/test-gw/test-sb") as ws:
+            msg = ws.receive_json()
+            assert msg["type"] == "log"
+            ocsf = msg["data"]["ocsf"]
+            assert ocsf["class_prefix"] == "NET"
+            assert ocsf["disposition"] == "DENIED"
+            assert ocsf["severity"] == "MED"
+            assert ocsf["fields"] == {"dst_host": "httpbin.org"}
+
+
 def test_ws_handles_grpc_stream_error():
     """WebSocket sends error event when gRPC watch stream fails."""
     from starlette.testclient import TestClient

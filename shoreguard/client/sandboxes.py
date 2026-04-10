@@ -342,6 +342,8 @@ class SandboxManager:
                         "level": event.log.level,
                         "message": event.log.message,
                         "source": event.log.source,
+                        "target": event.log.target,
+                        "fields": dict(event.log.fields),
                     },
                 }
             elif payload_type == "event":

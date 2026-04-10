@@ -29,6 +29,7 @@ from shoreguard.exceptions import ValidationError
 from shoreguard.services import operations as _ops_mod
 from shoreguard.services import sandbox_meta as _sandbox_meta_mod
 from shoreguard.services.audit import audit_log
+from shoreguard.services.ocsf import parse_log_line as parse_ocsf_log
 from shoreguard.services.sandbox import SandboxService
 from shoreguard.services.webhooks import fire_webhook
 
@@ -543,7 +544,7 @@ async def get_sandbox_logs(
         list[dict[str, Any]]: Log entry records.
     """
     source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else None
-    return await asyncio.to_thread(
+    logs = await asyncio.to_thread(
         svc.get_logs,
         name,
         lines=lines,
@@ -551,3 +552,8 @@ async def get_sandbox_logs(
         sources=source_list,
         min_level=min_level,
     )
+    for entry in logs:
+        ocsf = parse_ocsf_log(entry)
+        if ocsf is not None:
+            entry["ocsf"] = ocsf
+    return logs

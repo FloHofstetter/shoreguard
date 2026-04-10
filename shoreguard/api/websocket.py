@@ -9,6 +9,7 @@ import grpc
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from shoreguard.exceptions import GatewayNotConnectedError, friendly_grpc_error
+from shoreguard.services.ocsf import parse_log_line as parse_ocsf_log
 from shoreguard.services.webhooks import fire_webhook
 
 from .auth import require_auth_ws
@@ -91,6 +92,12 @@ async def sandbox_events(
                     ):
                         if cancel_event.is_set():
                             break
+                        if event.get("type") == "log":
+                            data = event.get("data")
+                            if isinstance(data, dict):
+                                ocsf = parse_ocsf_log(data)
+                                if ocsf is not None:
+                                    data["ocsf"] = ocsf
                         try:
                             queue.put_nowait(event)
                             consecutive_drops = 0
