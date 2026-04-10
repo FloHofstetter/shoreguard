@@ -1609,12 +1609,14 @@ class TestPasswordHashingExact:
         h2 = hash_password("b")
         assert h1 != h2
 
-    def test_corrupt_hash_raises(self):
-        """pwdlib raises UnknownHashError for unrecognized hash formats."""
-        from pwdlib.exceptions import UnknownHashError
+    def test_corrupt_hash_returns_false(self):
+        """verify_password swallows pwdlib UnknownHashError and returns False.
 
-        with pytest.raises(UnknownHashError):
-            verify_password("test", "not-a-valid-hash")
+        Fixed in dedb544 — previously the error propagated, which broke login
+        for accounts with a garbage stored hash. Mutation-killer: catches any
+        mutant that removes PwdlibError from the except tuple or re-raises.
+        """
+        assert verify_password("test", "not-a-valid-hash") is False
 
 
 # ─── _hash_key ───────────────────────────────────────────────────────────
