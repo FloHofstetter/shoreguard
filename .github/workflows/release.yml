@@ -67,6 +67,19 @@ jobs:
             SHOREGUARD_GIT_SHA=${{ github.sha }}
             SHOREGUARD_BUILD_TIME=${{ steps.build_time.outputs.iso }}
 
+      # Scan the freshly pushed image by-digest to rule out tag race conditions.
+      # ignore-unfixed = skip CVEs upstream has not released a fix for yet.
+      # Fails the release only on CRITICAL/HIGH findings to stay noise-free.
+      - name: Scan image for CRITICAL/HIGH CVEs
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          vuln-type: os,library
+
       - uses: sigstore/cosign-installer@v3
 
       - name: Sign container image (keyless via GitHub OIDC)

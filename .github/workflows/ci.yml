@@ -30,6 +30,19 @@ jobs:
       - run: uv sync --group dev
       - run: uv run pip-audit
 
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+      - run: uv sync --group dev
+      # -ll = medium severity and above; -q = quiet banner.
+      # pip-audit covers dependency CVEs; bandit covers source-code SAST
+      # for Python-specific patterns (eval, shell injection, insecure hashing).
+      - run: uv run bandit -r shoreguard -ll -q
+
   typecheck:
     runs-on: ubuntu-latest
     steps:

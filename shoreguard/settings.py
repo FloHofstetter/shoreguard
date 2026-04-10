@@ -47,7 +47,10 @@ class ServerSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_")
 
-    host: str = Field(default="0.0.0.0", description="Bind address for the HTTP server")
+    host: str = Field(
+        default="0.0.0.0",  # nosec B104 # Intentional default for containerised deploys behind a reverse proxy
+        description="Bind address for the HTTP server",
+    )
     port: int = Field(default=8888, description="TCP port for the HTTP server")
     log_level: str = Field(
         default="info",

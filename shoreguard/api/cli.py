@@ -62,7 +62,7 @@ def main(
             help="Network interface to listen on. Use 127.0.0.1 for localhost only.",
             rich_help_panel="Server",
         ),
-    ] = "0.0.0.0",
+    ] = "0.0.0.0",  # nosec B104 # Intentional default for containerised deploys behind a reverse proxy
     port: Annotated[
         int,
         typer.Option(

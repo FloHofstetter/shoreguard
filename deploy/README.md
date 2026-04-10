@@ -75,3 +75,17 @@ docker compose -f docker-compose.standalone.yml up -d
 ```
 
 Caddy automatically provisions TLS certificates for the domain in `SHOREGUARD_DOMAIN`. Make sure DNS points to the server and ports 80/443 are open.
+
+---
+
+## Monitoring
+
+ShoreGuard exposes a Prometheus-scrapable `/metrics` endpoint. For details on the available metrics, scrape config, and example alerting rules, see [docs/integrations/prometheus.md](../docs/integrations/prometheus.md).
+
+A starter Grafana dashboard lives at [`grafana/shoreguard.json`](grafana/shoreguard.json). Panels cover HTTP request rate, p95/p99 latency by path, gateway counts by status, operation queue depth, and webhook success rate. To import:
+
+1. Grafana → **Dashboards** → **New** → **Import**.
+2. Upload `deploy/grafana/shoreguard.json` (or paste its contents).
+3. Select your Prometheus data source when prompted.
+
+A build-info annotation overlays every `shoreguard_info` change (version, git_sha) as a vertical line, so you can correlate deploys with metric shifts.
