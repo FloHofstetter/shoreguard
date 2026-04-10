@@ -453,7 +453,13 @@ async def test_get_sandbox_logs_default_params(api_client, mock_client):
 
 
 async def test_get_sandbox_logs_with_params(api_client, mock_client):
-    """GET /api/gateways/{gw}/sandboxes/{name}/logs passes query params."""
+    """GET /api/gateways/{gw}/sandboxes/{name}/logs passes query params.
+
+    Note: ``min_level`` is intentionally **not** forwarded to the gateway
+    — ShoreGuard always fetches with ``min_level=""`` and applies the level
+    filter locally so OCSF entries are not silently dropped by the upstream
+    level ranking (OCSF maps to rank 5 there).
+    """
     mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "sb1"}
     mock_client.sandboxes.get_logs.return_value = []
 
@@ -467,7 +473,7 @@ async def test_get_sandbox_logs_with_params(api_client, mock_client):
         lines=50,
         since_ms=500,
         sources=["app", "system"],
-        min_level="ERROR",
+        min_level="",
     )
 
 
@@ -508,6 +514,179 @@ async def test_get_sandbox_logs_enriches_ocsf_entries(api_client, mock_client):
     assert ocsf["disposition"] == "ALLOWED"
     assert ocsf["bracket_fields"] == {"policy": "github_api", "engine": "opa"}
     assert ocsf["fields"] == {"dst_host": "api.github.com"}
+
+
+def _mixed_log_fixture() -> list[dict]:
+    """Return a mixed stream of plain + OCSF log entries for filter tests."""
+    net_allowed = (
+        "NET:OPEN [INFO] ALLOWED /usr/bin/curl(58) -> api.github.com:443 "
+        "[policy:github_api engine:opa]"
+    )
+    net_denied = "NET:OPEN [MED] DENIED /usr/bin/curl(64) -> httpbin.org:443 [policy:- engine:opa]"
+    http_get = "HTTP:GET [INFO] ALLOWED GET http://api.github.com/zen [policy:github_api]"
+    finding_blocked = 'FINDING:BLOCKED [HIGH] "policy violation" [confidence:high]'
+    return [
+        {
+            "timestamp_ms": 1000,
+            "level": "INFO",
+            "target": "openshell_sandbox",
+            "message": "plain info",
+            "source": "sandbox",
+            "fields": {},
+        },
+        {
+            "timestamp_ms": 1100,
+            "level": "WARN",
+            "target": "openshell_sandbox",
+            "message": "plain warn",
+            "source": "sandbox",
+            "fields": {},
+        },
+        {
+            "timestamp_ms": 1200,
+            "level": "ERROR",
+            "target": "openshell_sandbox",
+            "message": "plain error",
+            "source": "sandbox",
+            "fields": {},
+        },
+        {
+            "timestamp_ms": 1300,
+            "level": "DEBUG",
+            "target": "openshell_sandbox",
+            "message": "plain debug",
+            "source": "sandbox",
+            "fields": {},
+        },
+        {
+            "timestamp_ms": 2000,
+            "level": "OCSF",
+            "target": "ocsf",
+            "message": net_allowed,
+            "source": "sandbox",
+            "fields": {},
+        },
+        {
+            "timestamp_ms": 2100,
+            "level": "OCSF",
+            "target": "ocsf",
+            "message": net_denied,
+            "source": "sandbox",
+            "fields": {},
+        },
+        {
+            "timestamp_ms": 2200,
+            "level": "OCSF",
+            "target": "ocsf",
+            "message": http_get,
+            "source": "sandbox",
+            "fields": {},
+        },
+        {
+            "timestamp_ms": 2300,
+            "level": "OCSF",
+            "target": "ocsf",
+            "message": finding_blocked,
+            "source": "sandbox",
+            "fields": {},
+        },
+    ]
+
+
+async def test_get_sandbox_logs_ocsf_only(api_client, mock_client):
+    """``?ocsf_only=true`` drops every non-OCSF entry."""
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "sb1"}
+    mock_client.sandboxes.get_logs.return_value = _mixed_log_fixture()
+
+    resp = await api_client.get(
+        f"/api/gateways/{GW}/sandboxes/sb1/logs",
+        params={"ocsf_only": "true"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 4
+    assert all("ocsf" in entry for entry in data)
+
+
+async def test_get_sandbox_logs_ocsf_class_filter(api_client, mock_client):
+    """``?ocsf_class=NET,HTTP`` keeps only NET/HTTP OCSF entries."""
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "sb1"}
+    mock_client.sandboxes.get_logs.return_value = _mixed_log_fixture()
+
+    resp = await api_client.get(
+        f"/api/gateways/{GW}/sandboxes/sb1/logs",
+        params={"ocsf_class": "NET,HTTP"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    classes = sorted(entry["ocsf"]["class_prefix"] for entry in data)
+    assert classes == ["HTTP", "NET", "NET"]
+
+
+async def test_get_sandbox_logs_ocsf_disposition_filter(api_client, mock_client):
+    """``?ocsf_disposition=DENIED,BLOCKED`` drops ALLOWED OCSF entries."""
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "sb1"}
+    mock_client.sandboxes.get_logs.return_value = _mixed_log_fixture()
+
+    resp = await api_client.get(
+        f"/api/gateways/{GW}/sandboxes/sb1/logs",
+        params={"ocsf_disposition": "DENIED,BLOCKED"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    dispositions = sorted(entry["ocsf"]["disposition"] for entry in data)
+    assert dispositions == ["BLOCKED", "DENIED"]
+
+
+async def test_get_sandbox_logs_ocsf_severity_filter(api_client, mock_client):
+    """``?ocsf_severity=HIGH,CRIT`` keeps only high-severity OCSF entries."""
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "sb1"}
+    mock_client.sandboxes.get_logs.return_value = _mixed_log_fixture()
+
+    resp = await api_client.get(
+        f"/api/gateways/{GW}/sandboxes/sb1/logs",
+        params={"ocsf_severity": "HIGH,CRIT"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    severities = [entry["ocsf"]["severity"] for entry in data]
+    assert severities == ["HIGH"]
+
+
+async def test_get_sandbox_logs_min_level_preserves_ocsf(api_client, mock_client):
+    """``min_level=INFO`` drops DEBUG/TRACE locally but keeps OCSF entries.
+
+    This is a regression guard for the gateway's upstream level_matches()
+    which assigns unknown levels (including "OCSF") rank 5 and silently
+    drops them for any non-empty min_level. ShoreGuard fetches with an
+    empty min_level and applies the filter locally.
+    """
+    mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "sb1"}
+    mock_client.sandboxes.get_logs.return_value = _mixed_log_fixture()
+
+    resp = await api_client.get(
+        f"/api/gateways/{GW}/sandboxes/sb1/logs",
+        params={"min_level": "INFO"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+
+    # DEBUG entry is gone, INFO/WARN/ERROR stay, all 4 OCSF entries survive.
+    levels = [entry["level"] for entry in data]
+    assert "DEBUG" not in levels
+    assert levels.count("INFO") == 1
+    assert levels.count("WARN") == 1
+    assert levels.count("ERROR") == 1
+    assert levels.count("OCSF") == 4
+
+    # Gateway was called with empty min_level (the fix).
+    mock_client.sandboxes.get_logs.assert_called_once_with(
+        "sb-123",
+        lines=200,
+        since_ms=0,
+        sources=None,
+        min_level="",
+    )
 
 
 # ── _parse_label_filters ────────────────────────────────────────────────────

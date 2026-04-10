@@ -29,6 +29,13 @@
                 <label class="btn btn-outline-primary" for="log-filter-ocsf">OCSF</label>
             </div>
             <div class="d-flex gap-2">
+                <button class="btn btn-sm"
+                        :class="serverOcsfOnly ? 'btn-primary' : 'btn-outline-primary'"
+                        @click="toggleServerOcsfOnly()"
+                        :title="serverOcsfOnly ? 'Fetching OCSF events only. Click to fetch all.' : 'Fetch OCSF events only (server-side filter).'">
+                    <i class="bi bi-funnel"></i>
+                    <span class="ms-1">Server OCSF</span>
+                </button>
                 <input type="text" class="form-control form-control-sm sg-w-180" placeholder="Filter..."
                        x-model="filterText">
                 <button class="btn btn-outline-secondary btn-sm" @click="load()" title="Refresh">

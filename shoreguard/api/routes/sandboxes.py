@@ -521,6 +521,65 @@ async def revoke_ssh_session(
     return {"revoked": revoked}
 
 
+# Numeric severity ranking used for local min_level filtering.
+#
+# Mirrors the OpenShell gateway's level_matches() helper in
+# crates/openshell-server/src/grpc/validation.rs. We replicate the filter in
+# ShoreGuard so OCSF events — which carry an unknown "OCSF" level that the
+# gateway maps to rank 5 and silently drops for any non-empty min_level — stay
+# in the result set.
+_LEVEL_RANKS: dict[str, int] = {
+    "ERROR": 0,
+    "WARN": 1,
+    "INFO": 2,
+    "DEBUG": 3,
+    "TRACE": 4,
+}
+
+
+def _filter_by_min_level(logs: list[dict[str, Any]], min_level: str) -> list[dict[str, Any]]:
+    """Drop entries whose level is below *min_level*, keeping OCSF events.
+
+    Args:
+        logs: Log entry dicts as returned by ``SandboxService.get_logs``.
+        min_level: Minimum severity threshold (case-insensitive). Empty string
+            disables filtering.
+
+    Returns:
+        list[dict[str, Any]]: Entries whose numeric level rank is ``<=`` the
+        threshold rank. OCSF entries (detected via ``level == "OCSF"`` or
+        ``target == "ocsf"``) bypass the filter unconditionally.
+    """
+    if not min_level:
+        return logs
+    threshold = _LEVEL_RANKS.get(min_level.upper())
+    if threshold is None:
+        return logs
+    kept: list[dict[str, Any]] = []
+    for entry in logs:
+        level = str(entry.get("level") or "").upper()
+        target = str(entry.get("target") or "").lower()
+        if level == "OCSF" or target == "ocsf":
+            kept.append(entry)
+            continue
+        rank = _LEVEL_RANKS.get(level, 5)
+        if rank <= threshold:
+            kept.append(entry)
+    return kept
+
+
+def _split_csv(value: str) -> set[str]:
+    """Return an uppercase token set from a comma-separated query string value.
+
+    Args:
+        value: Raw query string, e.g. ``"NET,HTTP,finding"``.
+
+    Returns:
+        set[str]: Upper-cased, whitespace-stripped, non-empty tokens.
+    """
+    return {token.strip().upper() for token in value.split(",") if token.strip()}
+
+
 @router.get("/{name}/logs", response_model=list[LogEntryResponse])
 async def get_sandbox_logs(
     name: str,
@@ -528,6 +587,10 @@ async def get_sandbox_logs(
     since_ms: int = 0,
     min_level: str = "",
     sources: str = "",
+    ocsf_only: bool = False,
+    ocsf_class: str = "",
+    ocsf_disposition: str = "",
+    ocsf_severity: str = "",
     svc: SandboxService = Depends(_get_sandbox_service),
 ) -> list[dict[str, Any]]:
     """Fetch recent log entries from a sandbox.
@@ -536,24 +599,53 @@ async def get_sandbox_logs(
         name: Sandbox name.
         lines: Maximum number of log lines to return.
         since_ms: Only return logs newer than this Unix timestamp in ms.
-        min_level: Minimum log level filter.
+        min_level: Minimum severity filter (``ERROR``/``WARN``/``INFO``/
+            ``DEBUG``/``TRACE``). Applied locally, OCSF entries are never
+            dropped by this filter (gateway-side ``min_level`` would silently
+            drop them — see ``_filter_by_min_level``).
         sources: Comma-separated list of log sources to include.
+        ocsf_only: When true, drop every entry that is not an OCSF event.
+        ocsf_class: Comma-separated OCSF class prefixes to keep (e.g.
+            ``NET,HTTP,FINDING``). Non-OCSF entries are dropped when set.
+        ocsf_disposition: Comma-separated OCSF dispositions to keep
+            (``ALLOWED``/``DENIED``/``BLOCKED``).
+        ocsf_severity: Comma-separated OCSF severities to keep
+            (``INFO``/``LOW``/``MED``/``HIGH``/``CRIT``/``FATAL``).
         svc: Injected sandbox service.
 
     Returns:
         list[dict[str, Any]]: Log entry records.
     """
     source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else None
+    # Always pull with min_level="" so OCSF events survive the gateway filter.
     logs = await asyncio.to_thread(
         svc.get_logs,
         name,
         lines=lines,
         since_ms=since_ms,
         sources=source_list,
-        min_level=min_level,
+        min_level="",
     )
     for entry in logs:
         ocsf = parse_ocsf_log(entry)
         if ocsf is not None:
             entry["ocsf"] = ocsf
+
+    logs = _filter_by_min_level(logs, min_level)
+
+    if ocsf_only:
+        logs = [e for e in logs if "ocsf" in e]
+
+    if ocsf_class:
+        wanted = _split_csv(ocsf_class)
+        logs = [e for e in logs if "ocsf" in e and (e["ocsf"]["class_prefix"] or "") in wanted]
+
+    if ocsf_disposition:
+        wanted = _split_csv(ocsf_disposition)
+        logs = [e for e in logs if "ocsf" in e and (e["ocsf"]["disposition"] or "") in wanted]
+
+    if ocsf_severity:
+        wanted = _split_csv(ocsf_severity)
+        logs = [e for e in logs if "ocsf" in e and (e["ocsf"]["severity"] or "") in wanted]
+
     return logs

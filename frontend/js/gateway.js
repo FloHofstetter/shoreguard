@@ -477,12 +477,71 @@ function inferenceConfig() {
     };
 }
 
+// ─── Gateway Settings Component ────────────────────────────────────────────
+
+function gatewaySettings() {
+    return {
+        ocsfLoggingEnabled: false,
+        loading: false,
+        loaded: false,
+        saving: false,
+        gwName: '',
+
+        maybeLoad(gw) {
+            if (gw && gw.connected && !this.loaded) {
+                this.gwName = gw.name;
+                this.load();
+            }
+        },
+
+        async load() {
+            this.loading = true;
+            this.loaded = true;
+            try {
+                const config = await apiFetch(`${API_GLOBAL}/gateway/${this.gwName}/settings`);
+                const settings = (config && config.settings) || {};
+                this.ocsfLoggingEnabled = settings.ocsf_logging_enabled === true;
+            } catch {
+                this.ocsfLoggingEnabled = false;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async onOcsfToggle() {
+            const previous = !this.ocsfLoggingEnabled;
+            this.saving = true;
+            try {
+                await apiFetch(
+                    `${API_GLOBAL}/gateway/${this.gwName}/settings/ocsf_logging_enabled`,
+                    {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ value: this.ocsfLoggingEnabled }),
+                    },
+                );
+                showToast(
+                    `OCSF logging ${this.ocsfLoggingEnabled ? 'enabled' : 'disabled'}.`,
+                    'success',
+                );
+            } catch (e) {
+                this.ocsfLoggingEnabled = previous;
+                showToast(`Failed to update setting: ${e.message}`, 'danger');
+            } finally {
+                this.saving = false;
+            }
+        },
+    };
+}
+
+
 // ─── Alpine.data registrations ─────────────────────────────────────────────
 
 document.addEventListener('alpine:init', () => {
     Alpine.data('gatewayRegisterPage', gatewayRegisterPage);
     Alpine.data('gatewayDetail', gatewayDetail);
     Alpine.data('inferenceConfig', inferenceConfig);
+    Alpine.data('gatewaySettings', gatewaySettings);
     // Spread-merge factory replacing inline `{ ...gatewayList(), ...sortableTable('name') }`.
     Alpine.data('gatewaysList', () => ({ ...gatewayList(), ...sortableTable('name') }));
 });

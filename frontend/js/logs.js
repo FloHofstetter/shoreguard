@@ -13,6 +13,7 @@ function logsPage(name) {
         showWarn: true,
         showError: true,
         showOcsf: true,
+        serverOcsfOnly: false,
         classFilter: {},
         expanded: {},
         filterText: '',
@@ -53,7 +54,9 @@ function logsPage(name) {
             this.loading = true;
             this.error = '';
             try {
-                this.allLogs = await apiFetch(`${API}/sandboxes/${name}/logs?lines=${SG.config.logLinesDefault}`);
+                const params = new URLSearchParams({ lines: SG.config.logLinesDefault });
+                if (this.serverOcsfOnly) params.set('ocsf_only', 'true');
+                this.allLogs = await apiFetch(`${API}/sandboxes/${name}/logs?${params.toString()}`);
                 // Default every newly-seen OCSF class to "on".
                 for (const cls of this.availableClasses) {
                     if (this.classFilter[cls] === undefined) {
@@ -66,6 +69,11 @@ function logsPage(name) {
             } finally {
                 this.loading = false;
             }
+        },
+
+        toggleServerOcsfOnly() {
+            this.serverOcsfOnly = !this.serverOcsfOnly;
+            this.load();
         },
 
         toggleLevel(level) {

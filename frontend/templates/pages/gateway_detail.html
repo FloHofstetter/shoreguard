@@ -228,6 +228,30 @@
                     </div>
                 </fieldset>
 
+                <!-- ── Observability / OCSF toggle (only when connected) ── -->
+                <fieldset x-show="gwConnected" x-cloak class="sg-fieldset mb-3"
+                          x-data="gatewaySettings" x-effect="maybeLoad(gw)">
+                    <legend class="sg-legend">Observability</legend>
+                    <div x-show="loading" class="text-muted small">
+                        <div class="spinner-border spinner-border-sm me-2"></div>Loading settings...
+                    </div>
+                    <div x-show="!loading" x-cloak>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="gw-ocsf-toggle"
+                                   x-model="ocsfLoggingEnabled"
+                                   @change="onOcsfToggle()"
+                                   :disabled="!$isAdmin || saving">
+                            <label class="form-check-label" for="gw-ocsf-toggle">
+                                Enable OCSF logging
+                            </label>
+                        </div>
+                        <div class="small text-muted mt-1">
+                            When enabled, the gateway streams OCSF security events
+                            (network, HTTP, process, findings) alongside standard logs.
+                        </div>
+                    </div>
+                </fieldset>
+
                 <!-- ── Single Save button ── -->
                 <div x-show="$isAdmin" x-cloak class="d-flex align-items-center gap-2 pt-2">
                     <button class="btn btn-primary btn-sm" @click="saveAll()" :disabled="saving">
