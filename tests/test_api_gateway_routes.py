@@ -53,6 +53,89 @@ async def test_gateway_config(gw_client, mock_gw_svc):
     mock_gw_svc.get_config.assert_called_once_with("gw1")
 
 
+# ─── Gateway settings (S1.2) ─────────────────────────────────────────────────
+
+
+async def test_gateway_settings_get(gw_client, mock_gw_svc):
+    mock_gw_svc.get_config.return_value = {
+        "settings": {"ocsf_logging_enabled": True, "max_ops": 100},
+        "settings_revision": 7,
+    }
+    resp = await gw_client.get("/api/gateway/gw1/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["settings"]["ocsf_logging_enabled"] is True
+    assert body["settings"]["max_ops"] == 100
+    assert body["settings_revision"] == 7
+    mock_gw_svc.get_config.assert_called_once_with("gw1")
+
+
+async def test_gateway_settings_get_not_found(gw_client, mock_gw_svc):
+    from shoreguard.exceptions import NotFoundError
+
+    mock_gw_svc.get_config.side_effect = NotFoundError("Gateway 'missing' not registered")
+    resp = await gw_client.get("/api/gateway/missing/settings")
+    assert resp.status_code == 404
+
+
+async def test_gateway_settings_put_bool(gw_client, mock_gw_svc):
+    mock_gw_svc.update_setting.return_value = {"settings_revision": 8, "deleted": False}
+    resp = await gw_client.put(
+        "/api/gateway/gw1/settings/ocsf_logging_enabled",
+        json={"value": False},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"settings_revision": 8, "deleted": False}
+    mock_gw_svc.update_setting.assert_called_once_with("gw1", "ocsf_logging_enabled", False)
+
+
+async def test_gateway_settings_put_int(gw_client, mock_gw_svc):
+    mock_gw_svc.update_setting.return_value = {"settings_revision": 9, "deleted": False}
+    resp = await gw_client.put(
+        "/api/gateway/gw1/settings/max_ops",
+        json={"value": 250},
+    )
+    assert resp.status_code == 200
+    mock_gw_svc.update_setting.assert_called_once_with("gw1", "max_ops", 250)
+
+
+async def test_gateway_settings_put_str(gw_client, mock_gw_svc):
+    mock_gw_svc.update_setting.return_value = {"settings_revision": 10, "deleted": False}
+    resp = await gw_client.put(
+        "/api/gateway/gw1/settings/log_level",
+        json={"value": "debug"},
+    )
+    assert resp.status_code == 200
+    mock_gw_svc.update_setting.assert_called_once_with("gw1", "log_level", "debug")
+
+
+async def test_gateway_settings_put_invalid_payload_422(gw_client, mock_gw_svc):
+    resp = await gw_client.put("/api/gateway/gw1/settings/foo", json={})
+    assert resp.status_code == 422
+    mock_gw_svc.update_setting.assert_not_called()
+
+
+async def test_gateway_settings_put_not_found(gw_client, mock_gw_svc):
+    from shoreguard.exceptions import NotFoundError
+
+    mock_gw_svc.update_setting.side_effect = NotFoundError("Gateway 'missing' not registered")
+    resp = await gw_client.put(
+        "/api/gateway/missing/settings/foo",
+        json={"value": "bar"},
+    )
+    assert resp.status_code == 404
+
+
+async def test_gateway_settings_delete(gw_client, mock_gw_svc):
+    mock_gw_svc.update_setting.return_value = {"settings_revision": 11, "deleted": True}
+    resp = await gw_client.delete("/api/gateway/gw1/settings/ocsf_logging_enabled")
+    assert resp.status_code == 200
+    assert resp.json() == {"settings_revision": 11, "deleted": True}
+    mock_gw_svc.update_setting.assert_called_once_with(
+        "gw1", "ocsf_logging_enabled", None, delete=True
+    )
+
+
 # ─── Registration ────────────────────────────────────────────────────────────
 
 

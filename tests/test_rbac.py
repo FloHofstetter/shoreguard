@@ -257,6 +257,23 @@ async def test_viewer_cannot_register_gateway(viewer_client):
     assert resp.status_code == 403
 
 
+async def test_viewer_cannot_read_gateway_settings(viewer_client):
+    resp = await viewer_client.get(f"/api/gateway/{GW}/settings")
+    assert resp.status_code == 403
+
+
+async def test_viewer_cannot_update_gateway_settings(viewer_client):
+    resp = await viewer_client.put(
+        f"/api/gateway/{GW}/settings/ocsf_logging_enabled", json={"value": True}
+    )
+    assert resp.status_code == 403
+
+
+async def test_viewer_cannot_delete_gateway_settings(viewer_client):
+    resp = await viewer_client.delete(f"/api/gateway/{GW}/settings/ocsf_logging_enabled")
+    assert resp.status_code == 403
+
+
 async def test_operator_cannot_register_gateway(operator_client):
     resp = await operator_client.post(
         "/api/gateway/register", json={"name": "evil", "endpoint": "1.2.3.4:443"}

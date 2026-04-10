@@ -242,6 +242,116 @@ async def gateway_config(name: str) -> dict[str, Any]:
     return await asyncio.to_thread(_get_gateway_service().get_config, name)
 
 
+# ─── Gateway settings (S1.2 — OpenShell v0.0.26 alignment) ──────────────
+
+
+class GatewaySettingUpdate(BaseModel):
+    """Body for ``PUT /{name}/settings/{key}``.
+
+    Attributes:
+        value: New value for the setting. Type determines the ``SettingValue``
+            oneof field sent to the gateway (``bool`` is checked before ``int``
+            since ``bool`` is a subclass of ``int``).
+    """
+
+    value: str | bool | int
+
+
+@router.get(
+    "/{name}/settings",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def gateway_settings_get(name: str) -> dict[str, Any]:
+    """Get global gateway settings and revision.
+
+    Args:
+        name: Gateway name.
+
+    Returns:
+        dict[str, Any]: ``{"settings": {...}, "settings_revision": int}``.
+    """
+    _validate_name_param(name)
+    return await asyncio.to_thread(_get_gateway_service().get_config, name)
+
+
+@router.put(
+    "/{name}/settings/{key}",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def gateway_settings_put(
+    name: str, key: str, body: GatewaySettingUpdate, request: Request
+) -> dict[str, Any]:
+    """Update a single global gateway setting.
+
+    Args:
+        name: Gateway name.
+        key: Setting key to update.
+        body: New value.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: ``{"settings_revision": int, "deleted": bool}``.
+
+    Raises:
+        HTTPException: If the setting key is empty.
+    """
+    _validate_name_param(name)
+    if not key:
+        raise HTTPException(400, "Setting key must not be empty")
+    result = await asyncio.to_thread(
+        _get_gateway_service().update_setting,
+        name,
+        key,
+        body.value,
+    )
+    await audit_log(
+        request,
+        "gateway.setting_update",
+        "gateway",
+        name,
+        detail={"key": key, "value": body.value},
+    )
+    return result
+
+
+@router.delete(
+    "/{name}/settings/{key}",
+    dependencies=[Depends(require_role("admin"))],
+)
+async def gateway_settings_delete(name: str, key: str, request: Request) -> dict[str, Any]:
+    """Delete a single global gateway setting.
+
+    Args:
+        name: Gateway name.
+        key: Setting key to delete.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: ``{"settings_revision": int, "deleted": bool}``.
+
+    Raises:
+        HTTPException: If the setting key is empty.
+    """
+    _validate_name_param(name)
+    if not key:
+        raise HTTPException(400, "Setting key must not be empty")
+    result = await asyncio.to_thread(
+        _get_gateway_service().update_setting,
+        name,
+        key,
+        None,
+        delete=True,
+    )
+    await audit_log(
+        request,
+        "gateway.setting_delete",
+        "gateway",
+        name,
+        detail={"key": key},
+    )
+    return result
+
+
 # ─── Registration (v0.3) ──────────────────────────────────────────────────
 
 

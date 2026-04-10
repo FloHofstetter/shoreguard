@@ -218,6 +218,58 @@ class ShoreGuardClient:
                 settings[key] = val.bytes_value
         return {"settings": settings, "settings_revision": resp.settings_revision}
 
+    def update_gateway_setting(
+        self,
+        *,
+        key: str,
+        value: str | bool | int | None = None,
+        delete: bool = False,
+    ) -> dict:
+        """Update (or delete) a single global gateway setting.
+
+        Args:
+            key: Setting key name.
+            value: New value. Type determines the ``SettingValue`` oneof field
+                (``bool`` before ``int`` since ``bool`` is a subclass of ``int``).
+                Ignored when ``delete`` is True.
+            delete: If True, remove the setting instead of updating it.
+
+        Returns:
+            dict: ``{"settings_revision": int, "deleted": bool}``.
+
+        Raises:
+            TypeError: If ``value`` has an unsupported Python type.
+        """
+        if delete:
+            setting_value = None
+        else:
+            sv = sandbox_pb2.SettingValue()
+            if isinstance(value, bool):
+                sv.bool_value = value
+            elif isinstance(value, int):
+                sv.int_value = value
+            elif isinstance(value, str):
+                sv.string_value = value
+            elif isinstance(value, bytes):
+                sv.bytes_value = value
+            else:
+                raise TypeError(f"Unsupported setting value type: {type(value).__name__}")
+            setting_value = sv
+
+        resp = self._stub.UpdateConfig(
+            openshell_pb2.UpdateConfigRequest(
+                setting_key=key,
+                setting_value=setting_value,
+                delete_setting=delete,
+                **{"global": True},  # type: ignore[arg-type]
+            ),
+            timeout=self._timeout,
+        )
+        return {
+            "settings_revision": resp.settings_revision,
+            "deleted": resp.deleted,
+        }
+
     def set_cluster_inference(
         self,
         *,

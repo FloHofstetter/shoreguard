@@ -487,6 +487,28 @@ class GatewayService:
         client = self.get_client(name=name)
         return client.get_gateway_config()
 
+    def update_setting(
+        self,
+        name: str,
+        key: str,
+        value: str | bool | int | None = None,
+        *,
+        delete: bool = False,
+    ) -> dict[str, Any]:
+        """Update (or delete) a single global gateway setting via gRPC.
+
+        Args:
+            name: Gateway name.
+            key: Setting key.
+            value: New value. Ignored when ``delete`` is True.
+            delete: If True, remove the setting instead of updating it.
+
+        Returns:
+            dict[str, Any]: ``{"settings_revision": int, "deleted": bool}``.
+        """
+        client = self.get_client(name=name)
+        return client.update_gateway_setting(key=key, value=value, delete=delete)
+
     # ── Health monitor ────────────────────────────────────────────────────
 
     def check_all_health(self) -> None:
