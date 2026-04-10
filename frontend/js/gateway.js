@@ -31,7 +31,8 @@ function gatewayList() {
             this.loading = true;
             this.error = null;
             try {
-                this.gateways = await apiFetch(`${API_GLOBAL}/gateway/list`);
+                const resp = await apiFetch(`${API_GLOBAL}/gateway/list`);
+                this.gateways = Array.isArray(resp) ? resp : (resp.items || []);
             } catch (e) {
                 this.error = e.message;
             } finally {
@@ -66,12 +67,18 @@ function gatewayList() {
 
 function gatewayRegisterPage() {
     return {
-        form: { name: '', endpoint: '', scheme: 'https', auth_mode: 'mtls', gpu: false, caFile: null, certFile: null, keyFile: null, description: '' },
+        fName: '', fEndpoint: '', fScheme: 'https', fAuthMode: 'mtls', fGpu: false, fCaFile: null, fCertFile: null, fKeyFile: null, fDescription: '',
         labelRows: [],
         newLabelKey: '',
         newLabelVal: '',
         submitting: false,
         output: '',
+
+        get canAddLabel() { return this.newLabelKey.trim().length > 0; },
+
+        pickCaFile(e) { this.fCaFile = e.target.files[0]; },
+        pickCertFile(e) { this.fCertFile = e.target.files[0]; },
+        pickKeyFile(e) { this.fKeyFile = e.target.files[0]; },
 
         addLabel() {
             const key = this.newLabelKey.trim();
@@ -89,22 +96,22 @@ function gatewayRegisterPage() {
         },
 
         async submit() {
-            if (!this.form.name.trim()) { this.output = '<div class="text-danger small">Name is required.</div>'; return; }
-            if (!this.form.endpoint.trim()) { this.output = '<div class="text-danger small">Endpoint is required.</div>'; return; }
+            if (!this.fName.trim()) { this.output = '<div class="text-danger small">Name is required.</div>'; return; }
+            if (!this.fEndpoint.trim()) { this.output = '<div class="text-danger small">Endpoint is required.</div>'; return; }
 
             this.submitting = true;
             this.output = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Registering gateway...</div>';
 
             try {
                 const body = {
-                    name: this.form.name.trim(),
-                    endpoint: this.form.endpoint.trim(),
-                    scheme: this.form.scheme,
-                    auth_mode: this.form.auth_mode,
-                    metadata: { gpu: this.form.gpu },
+                    name: this.fName.trim(),
+                    endpoint: this.fEndpoint.trim(),
+                    scheme: this.fScheme,
+                    auth_mode: this.fAuthMode,
+                    metadata: { gpu: this.fGpu },
                 };
 
-                const desc = this.form.description.trim();
+                const desc = this.fDescription.trim();
                 if (desc) body.description = desc;
 
                 if (this.labelRows.length > 0) {
@@ -113,9 +120,9 @@ function gatewayRegisterPage() {
                     body.labels = labels;
                 }
 
-                if (this.form.caFile) body.ca_cert = await readFileAsBase64(this.form.caFile);
-                if (this.form.certFile) body.client_cert = await readFileAsBase64(this.form.certFile);
-                if (this.form.keyFile) body.client_key = await readFileAsBase64(this.form.keyFile);
+                if (this.fCaFile) body.ca_cert = await readFileAsBase64(this.fCaFile);
+                if (this.fCertFile) body.client_cert = await readFileAsBase64(this.fCertFile);
+                if (this.fKeyFile) body.client_key = await readFileAsBase64(this.fKeyFile);
 
                 await apiFetch(`${API_GLOBAL}/gateway/register`, {
                     method: 'POST',
@@ -145,16 +152,42 @@ function gatewayDetail(name) {
         actionOutput: '',
         actionClass: '',
         acting: false,
-        metaForm: { description: '' },
+        metaDescription: '',
         metaLabels: [],
         newMetaKey: '',
         newMetaVal: '',
         saving: false,
         saveOutput: '',
 
+        get canAddMeta() { return this.newMetaKey.trim().length > 0; },
+
         statusIcon(s) { return _gwStatusIcons[s || 'offline'] || 'circle'; },
         statusLabel(s) { return _gwStatusLabels[s || 'offline'] || (s || 'offline'); },
         gwUrl(path) { return `/gateways/${name}${path}`; },
+
+        // ── CSP-strict getters ─────────────────────────────────────────────
+        // The Alpine CSP expression parser can't evaluate `gw?.xxx` or
+        // `gw.xxx === 'y'` directly, so the template reads the data it
+        // needs through these single-variable getters.
+        get gwStatus() { return this.gw?.status || ''; },
+        get gwConnected() { return this.gw?.status === 'connected'; },
+        get gwNotConnected() { return this.gw?.status !== 'connected'; },
+        get gwVersion() { return this.gw?.version || ''; },
+        get gwDescription() { return this.gw?.description || '—'; },
+        get gwAuthMode() { return this.gw?.auth_mode; },
+        get gwRegisteredAt() { return this.gw?.registered_at; },
+        get gwLastSeen() { return this.gw?.last_seen; },
+        get gwEndpointDisplay() {
+            return (this.gw?.scheme || 'https') + '://' + (this.gw?.endpoint || '—');
+        },
+        get gwStatusBadgeClass() {
+            return (SG.badges.gateway || {})[this.gw?.status] || 'text-bg-secondary';
+        },
+        get gwStatusIconClass() { return 'bi-' + this.statusIcon(this.gw?.status); },
+        get gwStatusLabelText() { return this.statusLabel(this.gw?.status); },
+        get gwSandboxesUrl() { return this.gw?.status === 'connected' ? this.gwUrl('/sandboxes') : null; },
+        get gwProvidersUrl() { return this.gw?.status === 'connected' ? this.gwUrl('/providers') : null; },
+        get gwWizardUrl() { return this.gw?.status === 'connected' ? this.gwUrl('/wizard') : null; },
 
         async load() {
             this.loading = true;
@@ -165,7 +198,7 @@ function gatewayDetail(name) {
                 if (!this.gw) return;
 
                 // Populate metadata form from gateway data
-                this.metaForm.description = this.gw.description || '';
+                this.metaDescription = this.gw.description || '';
                 this.metaLabels = Object.entries(this.gw.labels || {}).map(([k, v]) => ({ key: k, val: v }));
 
                 // Cache providers for inference config
@@ -294,7 +327,7 @@ function gatewayDetail(name) {
 
             // Save metadata (always)
             const metaBody = {};
-            const desc = this.metaForm.description.trim();
+            const desc = this.metaDescription.trim();
             metaBody.description = desc || null;
             if (this.metaLabels.length > 0) {
                 const labels = {};

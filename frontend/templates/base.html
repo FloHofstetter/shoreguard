@@ -22,7 +22,7 @@
 <body>
     <a href="#main-content" class="visually-hidden-focusable">Skip to content</a>
     <nav class="topbar" x-data>
-        <button class="sidebar-toggle" @click="$store.sidebar.toggle()" aria-label="Toggle navigation">
+        <button class="sidebar-toggle" @click="$toggleSidebar()" aria-label="Toggle navigation">
             <i class="bi bi-list"></i>
         </button>
         <a class="topbar-brand" href="/">
@@ -37,29 +37,29 @@
         <span id="gateway-status" class="topbar-status badge bg-secondary"
               x-cloak x-show="GW"
               :class="{
-                  'bg-success': $store.health.connected,
-                  'bg-danger': !$store.health.connected && $store.health.status !== 'unknown',
-                  'bg-secondary': $store.health.status === 'unknown'
+                  'bg-success': $healthConnected,
+                  'bg-danger': !$healthConnected && $healthStatus !== 'unknown',
+                  'bg-secondary': $healthStatus === 'unknown'
               }">
             <i class="bi bi-circle-fill me-1"></i>
-            <span x-show="$store.health.connected" x-text="($store.health.gwName ? $store.health.gwName + ' ' : '') + ($store.health.version || 'Connected')"></span>
-            <span x-show="!$store.health.connected && $store.health.status !== 'unknown'" x-text="$store.health.status === 'degraded' ? 'Degraded' : 'Disconnected'"></span>
+            <span x-show="$healthConnected" x-text="($healthGwName ? $healthGwName + ' ' : '') + ($healthVersion || 'Connected')"></span>
+            <span x-show="!$healthConnected && $healthStatus !== 'unknown'" x-text="$healthStatus === 'degraded' ? 'Degraded' : 'Disconnected'"></span>
         </span>
         <span class="text-muted small ms-2"
-              x-cloak x-show="$store.auth.email" x-text="$store.auth.email"></span>
+              x-cloak x-show="$authEmail" x-text="$authEmail"></span>
         <span class="badge bg-secondary ms-2"
-              x-cloak x-show="$store.auth.authenticated" x-text="$store.auth.role"></span>
+              x-cloak x-show="$authAuthenticated" x-text="$authRole"></span>
         <button class="btn btn-sm btn-outline-secondary ms-2"
-                x-cloak x-show="$store.auth.authenticated"
-                @click="$store.auth.logout()"
+                x-cloak x-show="$authAuthenticated"
+                @click="$doLogout()"
                 title="Log out" aria-label="Log out">
             <i class="bi bi-box-arrow-right"></i>
         </button>
     </nav>
 
     {% include "components/sidebar.html" %}
-    <div class="sidebar-backdrop" x-data x-show="$store.sidebar?.open" x-cloak
-         @click="$store.sidebar.open = false"></div>
+    <div class="sidebar-backdrop" x-data x-show="$sidebarOpen" x-cloak
+         @click="$closeSidebar()"></div>
 
     {% block subnav %}{% endblock %}
 
@@ -68,9 +68,9 @@
 
         <!-- Toast Container (Alpine-powered) -->
         <div class="toast-container position-fixed bottom-0 end-0 p-3" id="approval-toasts" x-data aria-live="polite">
-            <template x-for="toast in $store.toasts.items" :key="toast.id">
+            <template x-for="toast in $toasts" :key="toast.id">
                 <div class="toast show" role="alert"
-                     x-init="$store.toasts.scheduleRemove(toast.id, toast.delay)"
+                     x-init="$scheduleToastRemove(toast.id, toast.delay)"
                      x-transition:leave="transition ease-in duration-200"
                      x-transition:leave-start="opacity-100"
                      x-transition:leave-end="opacity-0">
@@ -125,15 +125,15 @@
                            x-model="query" @input="search()" @keydown="onKeydown($event)"
                            autocomplete="off">
                     <div class="sg-palette-results">
-                        <template x-if="results.length === 0 && query">
+                        <template x-if="$empty(results) && query">
                             <div class="sg-palette-empty">No results for "<span x-text="query"></span>"</div>
                         </template>
                         <template x-for="(r, idx) in results" :key="idx">
                             <div>
-                                <template x-if="r.type === 'group'">
+                                <template x-if="$eq(r.type, 'group')">
                                     <div class="sg-palette-group" x-text="r.label"></div>
                                 </template>
-                                <template x-if="r.type === 'item'">
+                                <template x-if="$eq(r.type, 'item')">
                                     <div class="sg-palette-item" :class="{ active: idx === selected }"
                                          @click="navigate(r)" @mouseenter="selected = idx">
                                         <i class="bi" :class="r.icon"></i>

@@ -28,33 +28,33 @@
         <!-- Status bar -->
         <div class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom sg-border-sg">
             <div class="d-flex align-items-center gap-3">
-                <span class="badge" :class="SG.badges.gateway[gw?.status] || 'text-bg-secondary'">
-                    <i class="bi me-1" :class="'bi-' + statusIcon(gw?.status)"></i>
-                    <span x-text="statusLabel(gw?.status)"></span>
+                <span class="badge" :class="gwStatusBadgeClass">
+                    <i class="bi me-1" :class="gwStatusIconClass"></i>
+                    <span x-text="gwStatusLabelText"></span>
                 </span>
-                <span x-show="gw?.version" class="text-muted" x-text="'v' + (gw?.version || '')"></span>
+                <span x-show="gwVersion" class="text-muted" x-text="'v' + gwVersion"></span>
             </div>
             <div class="d-flex gap-2">
-                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && gw?.status !== 'connected'" x-cloak
+                <button x-show="$localMode && $isAdmin && gwNotConnected" x-cloak
                         class="btn btn-outline-success btn-sm" :disabled="acting" @click="startGateway()">
                     <template x-if="acting"><span class="spinner-border spinner-border-sm me-1"></span></template>
                     <i x-show="!acting" class="bi bi-play-fill me-1"></i>Start
                 </button>
-                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && gw?.status === 'connected'" x-cloak
+                <button x-show="$localMode && $isAdmin && gwConnected" x-cloak
                         class="btn btn-outline-danger btn-sm" :disabled="acting" @click="stopGateway()">
                     <template x-if="acting"><span class="spinner-border spinner-border-sm me-1"></span></template>
                     <i x-show="!acting" class="bi bi-stop-fill me-1"></i>Stop
                 </button>
-                <button x-show="$store.auth.localMode && $store.auth.hasRole('admin') && gw?.status === 'connected'" x-cloak
+                <button x-show="$localMode && $isAdmin && gwConnected" x-cloak
                         class="btn btn-outline-warning btn-sm" :disabled="acting" @click="restartGateway()">
                     <template x-if="acting"><span class="spinner-border spinner-border-sm me-1"></span></template>
                     <i x-show="!acting" class="bi bi-arrow-repeat me-1"></i>Restart
                 </button>
-                <button x-show="$store.auth.hasRole('admin')" x-cloak
+                <button x-show="$isAdmin" x-cloak
                         class="btn btn-outline-primary btn-sm" @click="testConnection()">
                     <i class="bi bi-plug me-1"></i>Test Connection
                 </button>
-                <button x-show="$store.auth.hasRole('admin')" x-cloak
+                <button x-show="$isAdmin" x-cloak
                         class="btn btn-outline-danger btn-sm" @click="unregister()" title="Unregister">
                     <i class="bi bi-trash"></i>
                 </button>
@@ -74,23 +74,23 @@
         <!-- Quick links -->
         <div class="row g-3 mb-4">
             <div class="col">
-                <a :href="gw?.status === 'connected' ? gwUrl('/sandboxes') : null"
+                <a :href="gwSandboxesUrl"
                    class="btn btn-outline-secondary w-100 py-3"
-                   :class="{ 'disabled': gw?.status !== 'connected' }">
+                   :class="{ 'disabled': gwNotConnected }">
                     <i class="bi bi-grid me-2"></i>Sandboxes
                 </a>
             </div>
             <div class="col">
-                <a :href="gw?.status === 'connected' ? gwUrl('/providers') : null"
+                <a :href="gwProvidersUrl"
                    class="btn btn-outline-secondary w-100 py-3"
-                   :class="{ 'disabled': gw?.status !== 'connected' }">
+                   :class="{ 'disabled': gwNotConnected }">
                     <i class="bi bi-key me-2"></i>Providers
                 </a>
             </div>
             <div class="col">
-                <a :href="gw?.status === 'connected' ? gwUrl('/wizard') : null"
+                <a :href="gwWizardUrl"
                    class="btn btn-outline-success w-100 py-3"
-                   :class="{ 'disabled': gw?.status !== 'connected' }">
+                   :class="{ 'disabled': gwNotConnected }">
                     <i class="bi bi-plus-circle me-2"></i>New Sandbox
                 </a>
             </div>
@@ -105,29 +105,29 @@
                     <div class="row g-3">
                         <div class="col-12">
                             <label class="form-label small text-muted"><i class="bi bi-card-text me-1"></i>Description</label>
-                            <template x-if="$store.auth.hasRole('admin')">
-                                <input type="text" class="form-control form-control-sm" x-model="metaForm.description"
+                            <template x-if="$isAdmin">
+                                <input type="text" class="form-control form-control-sm" x-model="metaDescription"
                                        placeholder="e.g. Production EU-West for ML team" maxlength="1000">
                             </template>
-                            <template x-if="!$store.auth.hasRole('admin')">
-                                <div class="form-control-plaintext small" x-text="gw?.description || '—'"></div>
+                            <template x-if="!$isAdmin">
+                                <div class="form-control-plaintext small" x-text="gwDescription"></div>
                             </template>
                         </div>
                         <div class="col-12">
                             <label class="form-label small text-muted"><i class="bi bi-tags me-1"></i>Labels</label>
-                            <div x-show="metaLabels.length > 0" class="mb-2 d-flex flex-wrap gap-1">
+                            <div x-show="$notEmpty(metaLabels)" class="mb-2 d-flex flex-wrap gap-1">
                                 <template x-for="lbl in metaLabels" :key="lbl.key">
                                     <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
                                         <span class="font-monospace" x-text="lbl.key"></span>
                                         <span class="text-muted">=</span>
                                         <span x-text="lbl.val"></span>
-                                        <button x-show="$store.auth.hasRole('admin')" type="button"
+                                        <button x-show="$isAdmin" type="button"
                                                 class="btn-close btn-close-sm ms-1 sg-fs-xxs"
                                                 @click="removeMetaLabel(lbl.key)"></button>
                                     </span>
                                 </template>
                             </div>
-                            <div x-show="$store.auth.hasRole('admin') && metaLabels.length < 20"
+                            <div x-show="$isAdmin && $lenLt(metaLabels, 20)"
                                  class="input-group input-group-sm sg-mw-400">
                                 <input type="text" class="form-control font-monospace" x-model="newMetaKey"
                                        placeholder="key" @keydown.enter.prevent="addMetaLabel()">
@@ -135,11 +135,11 @@
                                 <input type="text" class="form-control" x-model="newMetaVal"
                                        placeholder="value" @keydown.enter.prevent="addMetaLabel()">
                                 <button class="btn btn-outline-success" type="button" @click="addMetaLabel()"
-                                        :disabled="!newMetaKey.trim()">
+                                        :disabled="!canAddMeta">
                                     <i class="bi bi-plus"></i>
                                 </button>
                             </div>
-                            <span x-show="!$store.auth.hasRole('admin') && metaLabels.length === 0"
+                            <span x-show="!$isAdmin && $empty(metaLabels)"
                                   class="text-muted fst-italic small">No labels</span>
                         </div>
                     </div>
@@ -153,16 +153,16 @@
                             <tr>
                                 <td class="text-muted sg-w-120"><i class="bi bi-globe me-2"></i>URL</td>
                                 <td>
-                                    <span class="endpoint-badge px-2 py-1" x-text="(gw?.scheme || 'https') + '://' + (gw?.endpoint || '\u2014')"></span>
+                                    <span class="endpoint-badge px-2 py-1" x-text="gwEndpointDisplay"></span>
                                 </td>
                             </tr>
-                            <template x-if="gw?.auth_mode">
+                            <template x-if="gwAuthMode">
                                 <tr>
                                     <td class="text-muted"><i class="bi bi-shield-check me-2"></i>Auth</td>
                                     <td x-text="gw.auth_mode"></td>
                                 </tr>
                             </template>
-                            <template x-if="gw?.registered_at">
+                            <template x-if="gwRegisteredAt">
                                 <tr>
                                     <td class="text-muted"><i class="bi bi-calendar-plus me-2"></i>Registered</td>
                                     <td>
@@ -171,7 +171,7 @@
                                     </td>
                                 </tr>
                             </template>
-                            <template x-if="gw?.last_seen">
+                            <template x-if="gwLastSeen">
                                 <tr>
                                     <td class="text-muted"><i class="bi bi-clock-history me-2"></i>Last Seen</td>
                                     <td>
@@ -185,7 +185,7 @@
                 </fieldset>
 
                 <!-- ── Inference (only when connected) ── -->
-                <fieldset x-show="gw?.connected" x-cloak class="sg-fieldset mb-3"
+                <fieldset x-show="gwConnected" x-cloak class="sg-fieldset mb-3"
                           x-data="inferenceConfig" x-effect="maybeLoad(gw)">
                     <legend class="sg-legend">Inference</legend>
                     <div x-show="loading" class="text-muted small">
@@ -198,7 +198,7 @@
                                 <select class="form-select form-select-sm" x-model="provider" @change="onProviderChange()">
                                     <option value="">— Select —</option>
                                     <template x-for="p in providers" :key="p.name">
-                                        <option :value="p.name" x-text="p.label" :selected="p.name === provider"></option>
+                                        <option :value="p.name" x-text="p.label" :selected="$eq(p.name, provider)"></option>
                                     </template>
                                 </select>
                             </div>
@@ -216,7 +216,7 @@
                         <div x-show="provider" class="mt-2 small text-muted">
                             <i class="bi bi-info-circle me-1"></i>
                             API key must be set as environment variable
-                            <template x-if="currentProvider?.env_var">
+                            <template x-if="$prop(currentProvider, 'env_var')">
                                 <code x-text="currentProvider.env_var"></code>
                             </template>
                             on the gateway host.
@@ -229,7 +229,7 @@
                 </fieldset>
 
                 <!-- ── Single Save button ── -->
-                <div x-show="$store.auth.hasRole('admin')" x-cloak class="d-flex align-items-center gap-2 pt-2">
+                <div x-show="$isAdmin" x-cloak class="d-flex align-items-center gap-2 pt-2">
                     <button class="btn btn-primary btn-sm" @click="saveAll()" :disabled="saving">
                         <template x-if="saving"><span class="spinner-border spinner-border-sm me-1"></span></template>
                         <i x-show="!saving" class="bi bi-check-lg me-1"></i>Save

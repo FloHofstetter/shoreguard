@@ -66,7 +66,7 @@
             </div>
 
             <!-- Filter -->
-            <template x-if="groups.length > 0">
+            <template x-if="$notEmpty(groups)">
                 <div class="mb-2">
                     <input type="text" class="form-control form-control-sm sg-mw-300" placeholder="Filter groups..."
                            x-model="_filterText">
@@ -74,7 +74,7 @@
             </template>
 
             <!-- Groups Table -->
-            <template x-if="groups.length > 0">
+            <template x-if="$notEmpty(groups)">
                 <div class="table-responsive">
                     <table class="table table-striped table-sm align-middle">
                         <thead>
@@ -121,7 +121,7 @@
             </template>
 
             <!-- Empty -->
-            <template x-if="groups.length === 0">
+            <template x-if="$empty(groups)">
                 <div class="text-center text-muted py-5">
                     <i class="bi bi-collection fs-1 d-block mb-3"></i>
                     <p>No groups yet.</p>
@@ -177,7 +177,7 @@
                 <div class="modal-header border-bottom">
                     <h5 class="modal-title">
                         <i class="bi bi-people me-2"></i>Members:
-                        <span x-text="membersGroup?.name"></span>
+                        <span x-text="$prop(membersGroup, 'name')"></span>
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -189,7 +189,7 @@
                     <template x-if="!membersLoading">
                         <div>
                             <!-- Member list -->
-                            <template x-if="members.length > 0">
+                            <template x-if="$notEmpty(members)">
                                 <div class="table-responsive mb-3">
                                     <table class="table table-striped table-sm align-middle">
                                         <thead>
@@ -216,12 +216,12 @@
                                     </table>
                                 </div>
                             </template>
-                            <template x-if="members.length === 0">
+                            <template x-if="$empty(members)">
                                 <p class="text-muted mb-3">No members yet.</p>
                             </template>
 
                             <!-- Add member -->
-                            <template x-if="allUsers.length > 0">
+                            <template x-if="$notEmpty(allUsers)">
                                 <div class="card bg-dark border-secondary">
                                     <div class="card-body py-2">
                                         <div class="row g-2 align-items-end">

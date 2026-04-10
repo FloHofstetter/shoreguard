@@ -9,13 +9,18 @@ function logsPage(name) {
         loading: true,
         error: '',
         allLogs: [],
-        filters: { info: true, warn: true, error: true, text: '' },
+        showInfo: true,
+        showWarn: true,
+        showError: true,
+        filterText: '',
 
         get filteredLogs() {
             return this.allLogs.filter(log => {
                 const level = (log.level || 'info').toLowerCase();
-                if (this.filters[level] !== undefined && !this.filters[level]) return false;
-                if (this.filters.text && !log.message?.toLowerCase().includes(this.filters.text.toLowerCase())) return false;
+                if (level === 'info' && !this.showInfo) return false;
+                if (level === 'warn' && !this.showWarn) return false;
+                if (level === 'error' && !this.showError) return false;
+                if (this.filterText && !log.message?.toLowerCase().includes(this.filterText.toLowerCase())) return false;
                 return true;
             });
         },
@@ -38,7 +43,9 @@ function logsPage(name) {
         },
 
         toggleLevel(level) {
-            this.filters[level] = !this.filters[level];
+            if (level === 'info') this.showInfo = !this.showInfo;
+            else if (level === 'warn') this.showWarn = !this.showWarn;
+            else if (level === 'error') this.showError = !this.showError;
         },
 
         logCss(log) {

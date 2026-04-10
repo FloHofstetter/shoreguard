@@ -32,7 +32,7 @@
         <template x-if="!loading && !error">
             <div>
                 <!-- Existing overrides -->
-                <template x-if="roles.length > 0">
+                <template x-if="$notEmpty(roles)">
                     <div class="table-responsive mb-3">
                         <table class="table table-striped table-sm align-middle">
                             <thead>
@@ -59,12 +59,12 @@
                     </div>
                 </template>
 
-                <template x-if="roles.length === 0">
+                <template x-if="$empty(roles)">
                     <p class="text-muted mb-3">No gateway-specific role overrides. The global role applies everywhere.</p>
                 </template>
 
                 <!-- Add override form -->
-                <template x-if="availableGateways.length > 0">
+                <template x-if="$notEmpty(availableGateways)">
                     <div class="card bg-dark border-secondary">
                         <div class="card-body py-2">
                             <div class="row g-2 align-items-end">

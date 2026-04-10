@@ -201,7 +201,7 @@ async function openGatewayRolesModal(entityType, entityId, entityLabel) {
             if (roles.length > 0) {
                 html += `<div class="table-responsive mb-3">
                     <table class="table table-striped table-sm align-middle">
-                        <thead><tr><th>Gateway</th><th>Role</th><th class="text-end" style="width:60px"></th></tr></thead>
+                        <thead><tr><th>Gateway</th><th>Role</th><th class="text-end sg-w-60"></th></tr></thead>
                         <tbody>
                             ${roles.map(r => `<tr>
                                 <td><strong>${escapeHtml(r.gateway_name)}</strong></td>

@@ -72,18 +72,36 @@ def test_warns_on_hsts_disabled_in_prod() -> None:
     assert any("hsts_enabled=false" in w for w in warnings)
 
 
-def test_warns_on_unsafe_csp_always() -> None:
-    # Even in local mode — unsafe-* in CSP is never acceptable
+def test_warns_on_unsafe_csp_in_legacy_mode() -> None:
+    # When strict mode is explicitly disabled, unsafe-* in the legacy
+    # csp_policy must still trigger an error — even on local binds.
     s = _make_settings(
         server=ServerSettings(host="127.0.0.1"),
         auth=AuthSettings(
             no_auth=False,
             secret_key="x" * 32,
+            csp_strict=False,
             csp_policy="default-src 'self'; script-src 'self' 'unsafe-inline'",
         ),
     )
     warnings = s.check_production_readiness()
     assert any("unsafe-*" in w and "ERROR" in w for w in warnings)
+
+
+def test_no_unsafe_csp_warning_in_strict_mode() -> None:
+    # Strict mode is the default as of v0.27.0 — the legacy csp_policy
+    # field is unused, so unsafe-* content in it must not trigger the warning.
+    s = _make_settings(
+        server=ServerSettings(host="127.0.0.1"),
+        auth=AuthSettings(
+            no_auth=False,
+            secret_key="x" * 32,
+            csp_strict=True,
+            csp_policy="default-src 'self'; script-src 'self' 'unsafe-inline'",
+        ),
+    )
+    warnings = s.check_production_readiness()
+    assert not any("unsafe-*" in w for w in warnings)
 
 
 def test_warns_on_allow_registration_in_prod() -> None:

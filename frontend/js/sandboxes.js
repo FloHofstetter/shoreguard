@@ -51,9 +51,10 @@ function sandboxDetail(name) {
         pendingCount: 0,
         networkCount: 0,
         policy: null,
-        metaForm: { description: '' },
+        metaDescription: '',
         metaLabels: [],
         newMetaKey: '',
+        get canAddMeta() { return this.newMetaKey.trim().length > 0; },
         newMetaVal: '',
         saving: false,
         saveOutput: '',
@@ -80,7 +81,7 @@ function sandboxDetail(name) {
                 ]);
 
                 this.sandbox = sb;
-                this.metaForm.description = sb.description || '';
+                this.metaDescription = sb.description || '';
                 this.metaLabels = Object.entries(sb.labels || {}).map(([k, v]) => ({ key: k, val: v }));
                 this.pendingCount = pendingApprovals?.length || 0;
                 this.policy = policyData?.policy || null;
@@ -142,7 +143,7 @@ function sandboxDetail(name) {
             this.saving = true;
             this.saveOutput = '';
             const body = {};
-            const desc = this.metaForm.description.trim();
+            const desc = this.metaDescription.trim();
             body.description = desc || null;
             if (this.metaLabels.length > 0) {
                 const labels = {};
@@ -261,10 +262,22 @@ function terminalPage(sandboxName) {
 
 // ─── Alpine.data registrations ──────────────────────────────────────────────
 
+// ─── Sandbox subnav component (CSP-strict @click dispatcher) ────────────────
+// Used by components/sandbox_nav.html — reads sandbox name from data-attr so
+// the delete button can dispatch via a component method instead of inline onclick.
+function sandboxNav() {
+    return {
+        sandboxName: '',
+        init() { this.sandboxName = this.$el.dataset.sandboxName || ''; },
+        del() { if (this.sandboxName) deleteSandbox(this.sandboxName); },
+    };
+}
+
 document.addEventListener('alpine:init', () => {
     Alpine.data('sandboxList', sandboxList);
     Alpine.data('sandboxDetail', sandboxDetail);
     Alpine.data('terminalPage', terminalPage);
+    Alpine.data('sandboxNav', sandboxNav);
 });
 
 

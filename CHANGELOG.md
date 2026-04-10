@@ -5,6 +5,55 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.27.0] — 2026-04-10
+
+### Security
+
+- **Strict CSP is now the default** — `SHOREGUARD_CSP_STRICT` defaults to
+  `true`, closing the loop on the M1–M4 hardening work that shipped in
+  v0.26.0 plus the M2.1 inline-event-handler extraction completed in this
+  release. Fresh installs now receive a Content-Security-Policy with a
+  per-request cryptographic nonce on every `<script>` tag, **no**
+  `'unsafe-inline'`, `frame-ancestors 'none'` (clickjacking protection),
+  `base-uri 'self'` (base-tag injection protection), and
+  `form-action 'self'` (form hijacking protection). `'unsafe-eval'` is
+  retained in `script-src` because Alpine.js uses the `Function()`
+  constructor internally — the `@alpinejs/csp` build was evaluated during
+  M2.1 but its expression parser is limited to plain property chains (no
+  operators, no literals, no method-call arguments), which proved too
+  restrictive for this UI. Unlike `'unsafe-inline'`, `'unsafe-eval'` does
+  not permit DOM-injected script execution, so the XSS surface remains
+  dramatically smaller than the legacy policy.
+
+- **CSP hardening M2.1 — inline event handler extraction.** M2 in v0.26.0
+  extracted inline `<script>` blocks but missed 28 inline event handler
+  attributes (`onclick=""`, `onkeydown=""`) which `script-src-attr`
+  blocks regardless of nonce. All 28 are now converted: static template
+  handlers become Alpine `@click`/`@keydown` directives on registered
+  `Alpine.data()` components, and dynamically-rendered `innerHTML`
+  handlers use `data-action`/`data-arg` markers dispatched by a single
+  delegated click listener per component. Inline `style=""` attributes
+  produced by JS renderers (policy editor, wizard) also replaced with
+  Bootstrap utility classes so `style-src-attr` stays clean.
+
+  **For operators running stock ShoreGuard:** no action needed. The
+  pages you already use (dashboard, sandboxes, wizard, policy editor,
+  audit log, approvals, gateways, providers, users, groups, settings,
+  invite flow) have all been refactored to work under strict CSP.
+
+  **For operators with custom templates, inline scripts, or third-party
+  embeds** that cannot yet be nonce-gated: set
+  `SHOREGUARD_CSP_STRICT=false` to fall back to the legacy
+  `'unsafe-inline'` policy. The legacy field `SHOREGUARD_CSP_POLICY`
+  continues to work as an escape hatch when strict mode is off.
+
+### Changed
+
+- **Production-readiness check is now strict-mode aware.** The warning
+  about `'unsafe-*'` directives in `auth.csp_policy` is now gated on
+  `csp_strict=False` — when strict mode is enabled (default), that
+  field is unused and no warning fires.
+
 ## [0.26.1] — 2026-04-10
 
 ### Changed

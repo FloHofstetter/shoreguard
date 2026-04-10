@@ -100,7 +100,7 @@ function renderProviderRow(provider) {
                 <a class="btn btn-sm text-muted" href="${window.location.pathname}/${escapeHtml(provider.name)}/edit" title="Edit">
                     <i class="bi bi-pencil"></i>
                 </a>
-                <button class="btn btn-sm text-muted delete-btn" onclick="deleteProvider('${escapeHtml(provider.name)}')" title="Delete">
+                <button class="btn btn-sm text-muted delete-btn" data-action="delete" data-arg="${escapeHtml(provider.name)}" title="Delete">
                     <i class="bi bi-trash3"></i>
                 </button>` : ''}
             </td>
@@ -131,7 +131,7 @@ function providerForm(mode, providerName) {
     return {
         mode,
         providerName,
-        form: { name: '', type: '', apiKey: '', creds: '', config: '' },
+        fName: '', fType: '', fApiKey: '', fCreds: '', fConfig: '',
         credLabel: 'API_KEY',
         apiKeyPlaceholder: 'sk-...',
         submitting: false,
@@ -144,11 +144,11 @@ function providerForm(mode, providerName) {
                     const providers = await apiFetch(`${API}/providers`);
                     const provider = providers.find(p => p.name === this.providerName);
                     if (provider) {
-                        this.form.name = provider.name;
-                        this.form.type = provider.type;
+                        this.fName = provider.name;
+                        this.fType = provider.type;
                         this.onTypeChange();
                         const configObj = provider.config || {};
-                        this.form.config = Object.entries(configObj).map(([k, v]) => `${k}=${v}`).join('\n');
+                        this.fConfig = Object.entries(configObj).map(([k, v]) => `${k}=${v}`).join('\n');
                     }
                 } catch (e) {
                     this.output = `<div class="text-danger small">${escapeHtml(e.message)}</div>`;
@@ -157,7 +157,7 @@ function providerForm(mode, providerName) {
         },
 
         onTypeChange() {
-            this.credLabel = _getProviderCredKey(this.form.type);
+            this.credLabel = _getProviderCredKey(this.fType);
             this.apiKeyPlaceholder = this.mode === 'edit' ? '(leave blank to keep current)' : 'sk-...';
         },
 
@@ -170,28 +170,28 @@ function providerForm(mode, providerName) {
         },
 
         async _create() {
-            if (!this.form.name.trim()) { this.output = '<div class="text-danger small">Name is required.</div>'; return; }
-            if (!this.form.type) { this.output = '<div class="text-danger small">Type is required.</div>'; return; }
-            if (!this.form.apiKey.trim()) { this.output = '<div class="text-danger small">API key is required.</div>'; return; }
+            if (!this.fName.trim()) { this.output = '<div class="text-danger small">Name is required.</div>'; return; }
+            if (!this.fType) { this.output = '<div class="text-danger small">Type is required.</div>'; return; }
+            if (!this.fApiKey.trim()) { this.output = '<div class="text-danger small">API key is required.</div>'; return; }
 
             this.submitting = true;
             this.output = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Creating...</div>';
 
             try {
-                const extraCreds = _parseKeyValueLines(this.form.creds);
-                const config = _parseKeyValueLines(this.form.config);
+                const extraCreds = _parseKeyValueLines(this.fCreds);
+                const config = _parseKeyValueLines(this.fConfig);
                 await apiFetch(`${API}/providers`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        name: this.form.name.trim(),
-                        type: this.form.type,
-                        api_key: this.form.apiKey.trim(),
+                        name: this.fName.trim(),
+                        type: this.fType,
+                        api_key: this.fApiKey.trim(),
                         credentials: Object.keys(extraCreds).length > 0 ? extraCreds : undefined,
                         config: Object.keys(config).length > 0 ? config : undefined,
                     }),
                 });
-                showToast(`Provider "${this.form.name}" created.`, 'success');
+                showToast(`Provider "${this.fName}" created.`, 'success');
                 navigateTo(window.location.pathname.replace('/providers/new', '/providers'));
             } catch (e) {
                 this.output = `<div class="text-danger small"><i class="bi bi-x-circle me-1"></i>${escapeHtml(e.message)}</div>`;
@@ -205,16 +205,16 @@ function providerForm(mode, providerName) {
             this.output = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Saving...</div>';
 
             try {
-                const config = _parseKeyValueLines(this.form.config);
-                const extraCreds = _parseKeyValueLines(this.form.creds);
+                const config = _parseKeyValueLines(this.fConfig);
+                const extraCreds = _parseKeyValueLines(this.fCreds);
                 const body = {
-                    type: this.form.type,
+                    type: this.fType,
                     config: Object.keys(config).length > 0 ? config : {},
                 };
-                if (this.form.apiKey.trim() || Object.keys(extraCreds).length > 0) {
-                    const keyName = _getProviderCredKey(this.form.type);
+                if (this.fApiKey.trim() || Object.keys(extraCreds).length > 0) {
+                    const keyName = _getProviderCredKey(this.fType);
                     body.credentials = { ...extraCreds };
-                    if (this.form.apiKey.trim()) body.credentials[keyName] = this.form.apiKey.trim();
+                    if (this.fApiKey.trim()) body.credentials[keyName] = this.fApiKey.trim();
                 }
                 await apiFetch(`${API}/providers/${this.providerName}`, {
                     method: 'PUT',
@@ -247,11 +247,31 @@ async function deleteProvider(name) {
     }
 }
 
+// ─── Providers List Page Component (CSP-strict) ────────────────────────────
+// Wraps providers.html so `@click` can dispatch to component methods, and
+// provides a delegated handler for the innerHTML-injected delete buttons
+// (which can no longer use inline onclick under strict CSP).
+function providersPage() {
+    return {
+        init() {
+            loadProvidersPage();
+            // Delegated click dispatcher for the innerHTML-rendered
+            // delete buttons — the CSP expression parser rejects
+            // `@click="handleAction($event)"` on the root element.
+            this.$el.addEventListener('click', (e) => this.handleAction(e));
+        },
+        refresh() { loadProvidersPage(); },
+        handleAction(e) {
+            const el = e.target.closest('[data-action]');
+            if (!el) return;
+            const action = el.dataset.action;
+            const arg = el.dataset.arg;
+            if (action === 'delete') deleteProvider(arg);
+        },
+    };
+}
+
 document.addEventListener('alpine:init', () => {
     Alpine.data('providerForm', providerForm);
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-    // Only auto-run on the providers page — wizard.html also loads this file.
-    if (document.getElementById('providers-page-content')) loadProvidersPage();
+    Alpine.data('providersPage', providersPage);
 });

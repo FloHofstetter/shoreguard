@@ -19,16 +19,16 @@
     <div x-show="!loading && !error" x-cloak>
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="btn-group btn-group-sm" role="group">
-                <input type="checkbox" class="btn-check" id="log-filter-info" :checked="filters.info" @change="toggleLevel('info')">
+                <input type="checkbox" class="btn-check" id="log-filter-info" :checked="showInfo" @change="toggleLevel('info')">
                 <label class="btn btn-outline-info" for="log-filter-info">Info</label>
-                <input type="checkbox" class="btn-check" id="log-filter-warn" :checked="filters.warn" @change="toggleLevel('warn')">
+                <input type="checkbox" class="btn-check" id="log-filter-warn" :checked="showWarn" @change="toggleLevel('warn')">
                 <label class="btn btn-outline-warning" for="log-filter-warn">Warn</label>
-                <input type="checkbox" class="btn-check" id="log-filter-error" :checked="filters.error" @change="toggleLevel('error')">
+                <input type="checkbox" class="btn-check" id="log-filter-error" :checked="showError" @change="toggleLevel('error')">
                 <label class="btn btn-outline-danger" for="log-filter-error">Error</label>
             </div>
             <div class="d-flex gap-2">
                 <input type="text" class="form-control form-control-sm sg-w-180" placeholder="Filter..."
-                       x-model="filters.text">
+                       x-model="filterText">
                 <button class="btn btn-outline-secondary btn-sm" @click="load()" title="Refresh">
                     <i class="bi bi-arrow-clockwise"></i>
                 </button>
@@ -42,7 +42,7 @@
                     <span x-text="log.message"></span>
                 </div>
             </template>
-            <div x-show="filteredLogs.length === 0" class="text-muted">No logs match the current filters.</div>
+            <div x-show="$empty(filteredLogs)" class="text-muted">No logs match the current filters.</div>
         </div>
     </div>
 </div>

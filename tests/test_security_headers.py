@@ -35,6 +35,9 @@ async def test_hsts_when_enabled(monkeypatch):
 
 
 async def test_custom_csp(monkeypatch):
+    # SHOREGUARD_CSP_POLICY is the legacy override; only consulted when strict
+    # mode is off. Opt out of strict mode explicitly for this test.
+    monkeypatch.setenv("SHOREGUARD_CSP_STRICT", "false")
     monkeypatch.setenv("SHOREGUARD_CSP_POLICY", "default-src 'none'")
 
     from shoreguard.settings import reset_settings
@@ -51,9 +54,39 @@ async def test_custom_csp(monkeypatch):
     assert resp.headers["Content-Security-Policy"] == "default-src 'none'"
 
 
-async def test_csp_default_mode_contains_unsafe(api_client: AsyncClient):
-    """Default CSP retains 'unsafe-*' until M4 ships the Alpine refactor."""
+async def test_csp_default_is_strict(api_client: AsyncClient):
+    """As of v0.27.0, the default CSP is strict: nonce-gated, no 'unsafe-inline'.
+
+    'unsafe-eval' is retained because Alpine.js uses Function() internally;
+    the @alpinejs/csp build was evaluated but its expression parser was too
+    restrictive for this UI. See alpine_loader.html for the rationale.
+    """
     resp = await api_client.get("/healthz")
+    csp = resp.headers["Content-Security-Policy"]
+    assert "nonce-" in csp
+    assert "'unsafe-inline'" not in csp
+    assert "'unsafe-eval'" in csp  # required for Alpine.js Function() constructor
+    assert "frame-ancestors 'none'" in csp
+    assert "base-uri 'self'" in csp
+    assert "form-action 'self'" in csp
+
+
+async def test_csp_legacy_mode_contains_unsafe(monkeypatch):
+    """Legacy mode (SHOREGUARD_CSP_STRICT=false) still ships 'unsafe-*'."""
+    monkeypatch.setenv("SHOREGUARD_CSP_STRICT", "false")
+
+    from shoreguard.settings import reset_settings
+
+    reset_settings()
+
+    from shoreguard.api.main import app
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        resp = await client.get("/healthz")
+
     csp = resp.headers["Content-Security-Policy"]
     assert "'unsafe-inline'" in csp
     assert "'unsafe-eval'" in csp
@@ -79,7 +112,7 @@ async def test_csp_strict_mode_emits_nonce(monkeypatch):
     csp = resp.headers["Content-Security-Policy"]
     assert "nonce-" in csp
     assert "'unsafe-inline'" not in csp
-    assert "'unsafe-eval'" not in csp
+    assert "'unsafe-eval'" in csp  # retained for Alpine.js Function() constructor
     assert "{nonce}" not in csp  # placeholder must be interpolated
 
 
@@ -156,8 +189,15 @@ async def test_no_inline_scripts_on_login():
     assert inline == [], f"Unexpected inline <script> blocks on /login: {inline}"
 
 
-async def test_login_uses_csp_alpine_build_in_strict_mode(monkeypatch):
-    """M4: strict-mode login page loads @alpinejs/csp, not the regular build."""
+async def test_login_uses_regular_alpine_build_in_strict_mode(monkeypatch):
+    """v0.27.0: strict mode uses the regular Alpine build, not @alpinejs/csp.
+
+    The CSP build was evaluated during M2.1 but its expression parser only
+    supports plain property chains (no operators, no literals, no method
+    args) — too restrictive for this UI. Strict mode instead allows
+    'unsafe-eval' in script-src for Alpine's Function() constructor while
+    keeping all other hardening (no 'unsafe-inline', nonce-gated, etc.).
+    """
     monkeypatch.setenv("SHOREGUARD_CSP_STRICT", "true")
 
     from shoreguard.settings import reset_settings
@@ -173,8 +213,8 @@ async def test_login_uses_csp_alpine_build_in_strict_mode(monkeypatch):
         resp = await client.get("/login")
 
     assert resp.status_code == 200
-    assert "@alpinejs/csp@" in resp.text
-    assert 'alpinejs@3.14.9/dist/cdn.min.js"' not in resp.text
+    assert "@alpinejs/csp@" not in resp.text
+    assert 'alpinejs@3.14.9/dist/cdn.min.js"' in resp.text
 
 
 async def test_no_inline_x_data_objects_on_login():

@@ -9,6 +9,67 @@
 
 document.addEventListener('alpine:init', () => {
 
+    // ─── CSP-strict magic properties ────────────────────────────────────────
+    // The @alpinejs/csp build's expression parser only supports single-variable
+    // accesses and simple property chains on local scope — it cannot evaluate
+    // `$store.foo.bar` chains (see alpinejs/alpine#4427). We expose every store
+    // access the templates need as a dedicated magic ($isAdmin, $healthConnected,
+    // …) so directives stay one-variable-deep and the CSP parser stays happy.
+    //
+    // Bindings: these return values (used by x-show, x-text, :class, etc.)
+    Alpine.magic('isAdmin', () => Alpine.store('auth')?.hasRole('admin') ?? false);
+    Alpine.magic('isOperator', () => Alpine.store('auth')?.hasRole('operator') ?? false);
+    Alpine.magic('localMode', () => Alpine.store('auth')?.localMode ?? false);
+    Alpine.magic('authEmail', () => Alpine.store('auth')?.email ?? null);
+    Alpine.magic('authRole', () => Alpine.store('auth')?.role ?? 'viewer');
+    Alpine.magic('authAuthenticated', () => Alpine.store('auth')?.authenticated ?? false);
+    Alpine.magic('registrationEnabled', () => Alpine.store('auth')?.registrationEnabled ?? false);
+    Alpine.magic('healthConnected', () => Alpine.store('health')?.connected ?? false);
+    Alpine.magic('healthStatus', () => Alpine.store('health')?.status ?? 'unknown');
+    Alpine.magic('healthGwName', () => Alpine.store('health')?.gwName ?? '');
+    Alpine.magic('healthVersion', () => Alpine.store('health')?.version ?? '');
+    Alpine.magic('sidebarOpen', () => Alpine.store('sidebar')?.open ?? false);
+    Alpine.magic('themeMode', () => Alpine.store('theme')?.mode ?? 'dark');
+    Alpine.magic('toasts', () => Alpine.store('toasts')?.items ?? []);
+
+    // Methods: these return a function so templates can write `$method()` /
+    // `$method(arg)` as a single-call directive expression.
+    Alpine.magic('toggleSidebar', () => () => Alpine.store('sidebar')?.toggle());
+    Alpine.magic('closeSidebar', () => () => {
+        const s = Alpine.store('sidebar');
+        if (s) s.open = false;
+    });
+    Alpine.magic('toggleTheme', () => () => Alpine.store('theme')?.toggle());
+    Alpine.magic('doLogout', () => () => Alpine.store('auth')?.logout());
+    Alpine.magic('checkHealth', () => () => Alpine.store('health')?.check());
+    Alpine.magic('scheduleToastRemove', () => (id, delay) =>
+        Alpine.store('toasts')?.scheduleRemove(id, delay));
+
+    // Array/length helpers — the CSP parser can't evaluate chained property
+    // access combined with comparison operators (e.g. `arr.length === 0`),
+    // so we expose boolean helpers for the common patterns.
+    Alpine.magic('empty', () => (arr) => !arr || arr.length === 0);
+    Alpine.magic('notEmpty', () => (arr) => Array.isArray(arr) && arr.length > 0);
+    Alpine.magic('lenLt', () => (arr, n) => (arr || []).length < n);
+    Alpine.magic('lenGt', () => (arr, n) => (arr || []).length > n);
+    // String/value equality — same parser limitation for `obj.prop === 'x'`.
+    Alpine.magic('eq', () => (a, b) => a === b);
+    Alpine.magic('neq', () => (a, b) => a !== b);
+    Alpine.magic('gt', () => (a, b) => a > b);
+    Alpine.magic('lt', () => (a, b) => a < b);
+    Alpine.magic('gte', () => (a, b) => a >= b);
+    Alpine.magic('lte', () => (a, b) => a <= b);
+    // Object helper — global `Object.keys` isn't allowed in CSP expressions.
+    Alpine.magic('hasKeys', () => (obj) => !!obj && Object.keys(obj).length > 0);
+    // Safe property access — `gw?.status` in a directive becomes
+    // `$prop(gw, 'status')` because the CSP parser treats `?.` as a literal
+    // identifier character.
+    Alpine.magic('prop', () => (obj, key) => obj?.[key]);
+    // Length / slice helpers — chained `arr.length` and `str.substring()` are
+    // not allowed in CSP expression form.
+    Alpine.magic('len', () => (arr) => (arr || []).length);
+    Alpine.magic('slice', () => (str, start, end) => String(str || '').slice(start, end));
+
     // ─── Auth Store ─────────────────────────────────────────────────────────
     Alpine.store('auth', {
         role: 'viewer',

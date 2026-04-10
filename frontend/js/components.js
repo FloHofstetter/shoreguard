@@ -100,7 +100,7 @@ function renderKeyValueTable(rows) {
             <tbody>
                 ${rows.map(([label, value]) => `
                     <tr>
-                        <td class="text-muted" style="width:140px">${escapeHtml(label)}</td>
+                        <td class="text-muted sg-w-140">${escapeHtml(label)}</td>
                         <td>${value}</td>
                     </tr>
                 `).join('')}

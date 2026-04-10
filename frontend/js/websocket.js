@@ -169,13 +169,20 @@ function showApprovalToast(sandboxName, data) {
                 ${data.total_pending} pending approval(s).
                 ${data.summary ? `<br><small class="text-muted">${escapeHtml(data.summary)}</small>` : ''}
                 <div class="mt-2">
-                    <button class="btn btn-warning btn-sm" onclick="navigateTo(gwUrl('/sandboxes/${escapeHtml(sandboxName)}'))">
+                    <button class="btn btn-warning btn-sm toast-review-btn">
                         Review
                     </button>
                 </div>
             </div>
         </div>`);
     const toastEl = document.getElementById(toastId);
+    // Strict CSP forbids inline onclick, so wire the Review button imperatively.
+    const reviewBtn = toastEl.querySelector('.toast-review-btn');
+    if (reviewBtn) {
+        reviewBtn.addEventListener('click', () => {
+            navigateTo(gwUrl(`/sandboxes/${sandboxName}`));
+        });
+    }
     const toast = new bootstrap.Toast(toastEl, { autohide: true, delay: SG.config.approvalToastDelay });
     toast.show();
     toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());

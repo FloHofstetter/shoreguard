@@ -1,11 +1,13 @@
 {#
     Shared Alpine.js loader partial.
-    Loads the CSP build of Alpine when SHOREGUARD_CSP_STRICT=true, otherwise
-    the regular build. Used by base.html and the standalone auth pages so
-    the build choice stays consistent across the app.
+    Loads the regular Alpine build in both strict and legacy CSP modes.
+    The @alpinejs/csp build was evaluated during v0.27.0 M2.1 but its
+    expression parser is limited to plain property chains (no operators,
+    no literals, no method call args) — too restrictive for this UI.
+    Instead, strict mode ships 'unsafe-eval' in script-src (required for
+    Alpine's Function() constructor) while keeping all other hardening
+    (no 'unsafe-inline', nonce-gated scripts, frame-ancestors 'none').
+    'unsafe-eval' does not allow DOM-injected script execution, so the
+    XSS surface remains dramatically smaller than the legacy policy.
 #}
-{% if csp_strict_enabled() %}
-<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/csp@3.14.9/dist/cdn.min.js"></script>
-{% else %}
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
-{% endif %}

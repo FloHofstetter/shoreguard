@@ -89,29 +89,29 @@
                 <div class="row g-3">
                     <div class="col-12">
                         <label class="form-label small text-muted"><i class="bi bi-card-text me-1"></i>Description</label>
-                        <template x-if="$store.auth.hasRole('operator')">
-                            <input type="text" class="form-control form-control-sm" x-model="metaForm.description"
+                        <template x-if="$isOperator">
+                            <input type="text" class="form-control form-control-sm" x-model="metaDescription"
                                    placeholder="e.g. ML training sandbox for team-alpha" maxlength="1000">
                         </template>
-                        <template x-if="!$store.auth.hasRole('operator')">
-                            <div class="form-control-plaintext small" x-text="sandbox?.description || '—'"></div>
+                        <template x-if="!$isOperator">
+                            <div class="form-control-plaintext small" x-text="$prop(sandbox, 'description') || '—'"></div>
                         </template>
                     </div>
                     <div class="col-12">
                         <label class="form-label small text-muted"><i class="bi bi-tags me-1"></i>Labels</label>
-                        <div x-show="metaLabels.length > 0" class="mb-2 d-flex flex-wrap gap-1">
+                        <div x-show="$notEmpty(metaLabels)" class="mb-2 d-flex flex-wrap gap-1">
                             <template x-for="lbl in metaLabels" :key="lbl.key">
                                 <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
                                     <span class="font-monospace" x-text="lbl.key"></span>
                                     <span class="text-muted">=</span>
                                     <span x-text="lbl.val"></span>
-                                    <button x-show="$store.auth.hasRole('operator')" type="button"
+                                    <button x-show="$isOperator" type="button"
                                             class="btn-close btn-close-sm ms-1 sg-fs-xxs"
                                             @click="removeMetaLabel(lbl.key)"></button>
                                 </span>
                             </template>
                         </div>
-                        <div x-show="$store.auth.hasRole('operator') && metaLabels.length < 20"
+                        <div x-show="$isOperator && $lenLt(metaLabels, 20)"
                              class="input-group input-group-sm sg-mw-400">
                             <input type="text" class="form-control font-monospace" x-model="newMetaKey"
                                    placeholder="key" @keydown.enter.prevent="addMetaLabel()">
@@ -119,15 +119,15 @@
                             <input type="text" class="form-control" x-model="newMetaVal"
                                    placeholder="value" @keydown.enter.prevent="addMetaLabel()">
                             <button class="btn btn-outline-success" type="button" @click="addMetaLabel()"
-                                    :disabled="!newMetaKey.trim()">
+                                    :disabled="!canAddMeta">
                                 <i class="bi bi-plus"></i>
                             </button>
                         </div>
-                        <span x-show="!$store.auth.hasRole('operator') && metaLabels.length === 0"
+                        <span x-show="!$isOperator && $empty(metaLabels)"
                               class="text-muted fst-italic small">No labels</span>
                     </div>
                 </div>
-                <div x-show="$store.auth.hasRole('operator')" x-cloak class="d-flex align-items-center gap-2 pt-2">
+                <div x-show="$isOperator" x-cloak class="d-flex align-items-center gap-2 pt-2">
                     <button class="btn btn-primary btn-sm" @click="saveMeta()" :disabled="saving">
                         <template x-if="saving"><span class="spinner-border spinner-border-sm me-1"></span></template>
                         <i x-show="!saving" class="bi bi-check-lg me-1"></i>Save

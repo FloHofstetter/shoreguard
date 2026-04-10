@@ -3,10 +3,15 @@ function auditPage() {
         entries: [],
         loading: true,
         error: null,
-        filters: { actor: '', action: '', resource_type: '' },
+        // Flat filter properties — the Alpine CSP expression parser has
+        // trouble with nested `filters.actor` paths in x-model, so keep
+        // each filter at the top level.
+        filterActor: '',
+        filterAction: '',
+        filterResourceType: '',
 
         get hasFilters() {
-            return this.filters.actor || this.filters.action || this.filters.resource_type;
+            return this.filterActor || this.filterAction || this.filterResourceType;
         },
 
         async load() {
@@ -15,10 +20,11 @@ function auditPage() {
             try {
                 const params = new URLSearchParams();
                 params.set('limit', '1000');
-                if (this.filters.actor) params.set('actor', this.filters.actor);
-                if (this.filters.action) params.set('action', this.filters.action);
-                if (this.filters.resource_type) params.set('resource_type', this.filters.resource_type);
-                this.entries = await apiFetch(`/api/audit?${params}`);
+                if (this.filterActor) params.set('actor', this.filterActor);
+                if (this.filterAction) params.set('action', this.filterAction);
+                if (this.filterResourceType) params.set('resource_type', this.filterResourceType);
+                const resp = await apiFetch(`/api/audit?${params}`);
+                this.entries = Array.isArray(resp) ? resp : (resp.entries || resp.items || []);
             } catch (e) {
                 this.error = e.message;
             } finally {
@@ -27,7 +33,9 @@ function auditPage() {
         },
 
         clearFilters() {
-            this.filters = { actor: '', action: '', resource_type: '' };
+            this.filterActor = '';
+            this.filterAction = '';
+            this.filterResourceType = '';
             this.load();
         },
 
@@ -39,9 +47,9 @@ function auditPage() {
         exportAudit(format) {
             const params = new URLSearchParams();
             params.set('format', format);
-            if (this.filters.actor) params.set('actor', this.filters.actor);
-            if (this.filters.action) params.set('action', this.filters.action);
-            if (this.filters.resource_type) params.set('resource_type', this.filters.resource_type);
+            if (this.filterActor) params.set('actor', this.filterActor);
+            if (this.filterAction) params.set('action', this.filterAction);
+            if (this.filterResourceType) params.set('resource_type', this.filterResourceType);
             window.open(`/api/audit/export?${params}`, '_blank');
         },
     };

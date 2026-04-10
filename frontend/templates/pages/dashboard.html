@@ -89,14 +89,14 @@
             <!-- Two-column: Activity + Gateway Status -->
             <div class="row g-3 mb-4">
                 <!-- Recent Activity (admin only) -->
-                <div class="col-lg-7" x-show="$store.auth.hasRole('admin')" x-cloak>
+                <div class="col-lg-7" x-show="$isAdmin" x-cloak>
                     <div class="card sg-card-themed h-100">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h6 class="mb-0"><i class="bi bi-journal-text me-2"></i>Recent Activity</h6>
                                 <a href="/audit" class="small text-decoration-none text-muted">View all <i class="bi bi-arrow-right"></i></a>
                             </div>
-                            <template x-if="auditEntries.length > 0">
+                            <template x-if="$notEmpty(auditEntries)">
                                 <div class="list-group list-group-flush">
                                     <template x-for="entry in auditEntries" :key="entry.id">
                                         <div class="list-group-item bg-transparent border-secondary px-0 py-2">
@@ -112,7 +112,7 @@
                                     </template>
                                 </div>
                             </template>
-                            <template x-if="auditEntries.length === 0">
+                            <template x-if="$empty(auditEntries)">
                                 <p class="text-muted small mb-0">No recent activity.</p>
                             </template>
                         </div>
@@ -120,14 +120,14 @@
                 </div>
 
                 <!-- Gateway Status -->
-                <div :class="$store.auth.hasRole('admin') ? 'col-lg-5' : 'col-12'">
+                <div :class="$isAdmin ? 'col-lg-5' : 'col-12'">
                     <div class="card sg-card-themed h-100">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h6 class="mb-0"><i class="bi bi-hdd-network me-2"></i>Gateway Status</h6>
                                 <a href="/gateways" class="small text-decoration-none text-muted">Manage <i class="bi bi-arrow-right"></i></a>
                             </div>
-                            <template x-if="gateways.length > 0">
+                            <template x-if="$notEmpty(gateways)">
                                 <div class="list-group list-group-flush">
                                     <template x-for="gw in gateways" :key="gw.name">
                                         <a :href="'/gateways/' + gw.name"
@@ -140,12 +140,12 @@
                                     </template>
                                 </div>
                             </template>
-                            <template x-if="gateways.length === 0">
+                            <template x-if="$empty(gateways)">
                                 <div class="text-center text-muted py-3">
                                     <i class="bi bi-hdd-network fs-3 d-block mb-2"></i>
                                     <p class="small mb-2">No gateways registered.</p>
                                     <a href="/gateways/new" class="btn btn-sm btn-outline-success"
-                                       x-show="$store.auth.hasRole('admin')">
+                                       x-show="$isAdmin">
                                         <i class="bi bi-plus me-1"></i>Register Gateway
                                     </a>
                                 </div>
@@ -171,7 +171,7 @@
                         </a>
                     </div>
                 </template>
-                <template x-if="!GW && $store.auth.hasRole('admin')">
+                <template x-if="!GW && $isAdmin">
                     <div class="col-md-6">
                         <a href="/gateways/new" class="btn btn-outline-success w-100 py-3">
                             <i class="bi bi-plus-circle me-2"></i>Register Gateway

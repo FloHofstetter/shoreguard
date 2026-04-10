@@ -275,17 +275,21 @@ class AuthSettings(BaseSettings):
         description="Content-Security-Policy header value (used when csp_strict=False)",
     )
     csp_strict: bool = Field(
-        default=False,
+        default=True,
         description=(
-            "Enforce strict CSP with per-request nonce and no 'unsafe-*' directives. "
-            "Requires all inline scripts to be nonce-gated and the Alpine.js CSP build. "
-            "Default off until the frontend refactor (M2–M4) is complete."
+            "Enforce strict CSP with per-request nonce, no 'unsafe-inline', and "
+            "frame-ancestors 'none'. Default as of v0.27.0 — blocks inline scripts, "
+            "inline event handlers, and inline styles (M1–M3 + M2.1). 'unsafe-eval' "
+            "is retained in script-src because Alpine.js uses the Function() "
+            "constructor; the regular Alpine build is used in both modes. "
+            "Set SHOREGUARD_CSP_STRICT=false to fall back to the legacy "
+            "'unsafe-inline' policy in `csp_policy`."
         ),
     )
     csp_policy_strict: str = Field(
         default=(
             "default-src 'self'; "
-            "script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'nonce-{nonce}' 'unsafe-eval' https://cdn.jsdelivr.net; "
             "style-src 'self' https://cdn.jsdelivr.net; "
             "font-src 'self' https://cdn.jsdelivr.net; "
             "img-src 'self' data:; connect-src 'self' wss:; "
@@ -783,11 +787,15 @@ class Settings(BaseSettings):
         if self.database.pool_size < 1:
             warnings.append(f"WARN: database.pool_size={self.database.pool_size} must be >= 1")
 
-        # ── CSP unsafe-* (always checked — never acceptable in prod) ────
-        if "'unsafe-" in self.auth.csp_policy:
+        # ── CSP unsafe-* (only relevant when strict mode is off) ────────
+        # When csp_strict=True the legacy csp_policy field is not used; the
+        # header is built from csp_policy_strict, which has no 'unsafe-*'.
+        if not self.auth.csp_strict and "'unsafe-" in self.auth.csp_policy:
             warnings.append(
                 "ERROR: auth.csp_policy contains 'unsafe-*' directives "
-                "(unsafe-inline / unsafe-eval) — XSS protection is degraded"
+                "(unsafe-inline / unsafe-eval) — XSS protection is degraded. "
+                "Enable SHOREGUARD_CSP_STRICT=true (default) to use the "
+                "nonce-based strict policy instead."
             )
 
         # ── Prod-like gated checks ──────────────────────────────────────

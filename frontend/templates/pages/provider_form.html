@@ -26,12 +26,12 @@
                 <form @submit.prevent="submit()">
                     <div class="mb-3">
                         <label class="form-label">Name</label>
-                        <input type="text" class="form-control" x-model="form.name" placeholder="my-provider"
+                        <input type="text" class="form-control" x-model="fName" placeholder="my-provider"
                                {% if mode == 'edit' %}disabled{% endif %} required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Type</label>
-                        <select class="form-select" x-model="form.type" @change="onTypeChange()"
+                        <select class="form-select" x-model="fType" @change="onTypeChange()"
                                 {% if mode == 'edit' %}disabled{% endif %} required>
                             <option value="">Select type...</option>
                             {% for ptype in provider_types %}
@@ -43,7 +43,7 @@
                         <label class="form-label">API Key</label>
                         <div class="input-group">
                             <span class="input-group-text font-monospace small sg-surface-card-wide" x-text="credLabel"></span>
-                            <input type="password" class="form-control font-monospace" x-model="form.apiKey"
+                            <input type="password" class="form-control font-monospace" x-model="fApiKey"
                                    :placeholder="apiKeyPlaceholder" autocomplete="off">
                         </div>
                         <template x-if="mode === 'edit'">
@@ -55,11 +55,11 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Additional Credentials <span class="text-muted small">(optional, KEY=value per line)</span></label>
-                        <textarea class="form-control font-monospace" x-model="form.creds" rows="2" placeholder="EXTRA_TOKEN=..."></textarea>
+                        <textarea class="form-control font-monospace" x-model="fCreds" rows="2" placeholder="EXTRA_TOKEN=..."></textarea>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Config <span class="text-muted small">(optional, KEY=value per line)</span></label>
-                        <textarea class="form-control font-monospace" x-model="form.config" rows="2" placeholder="base_url=https://..."></textarea>
+                        <textarea class="form-control font-monospace" x-model="fConfig" rows="2" placeholder="base_url=https://..."></textarea>
                     </div>
 
                     <!-- Status output -->

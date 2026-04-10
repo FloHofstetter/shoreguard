@@ -43,10 +43,10 @@ function _renderTemplateCards() {
         const icon = categoryIcons[t.category] || 'file-earmark-code';
         return `
             <div class="col">
-                <div class="card sg-card-themed h-100 agent-card" style="cursor:pointer"
-                     onclick="selectTemplate('${escapeHtml(t.name)}')">
+                <div class="card sg-card-themed h-100 agent-card sg-cursor-pointer"
+                     data-action="select-template" data-arg="${escapeHtml(t.name)}">
                     <div class="card-body text-center py-3">
-                        <i class="bi bi-${icon} fs-3 d-block mb-2" style="color:var(--sg-accent)"></i>
+                        <i class="bi bi-${icon} fs-3 d-block mb-2 sg-text-accent"></i>
                         <div class="fw-semibold">${escapeHtml(t.name)}</div>
                         <div class="text-muted small mt-1">${escapeHtml(t.description)}</div>
                         <span class="badge text-bg-secondary mt-2">${escapeHtml(t.category || 'general')}</span>
@@ -123,7 +123,7 @@ function addWizardEnvVar(key = '', value = '') {
             <input type="text" class="form-control env-key" placeholder="KEY" value="${escapeHtml(key)}">
             <span class="input-group-text">=</span>
             <input type="text" class="form-control env-val" placeholder="value" value="${escapeHtml(value)}">
-            <button class="btn btn-outline-danger" type="button" onclick="document.getElementById('${id}').remove()">
+            <button class="btn btn-outline-danger" type="button" data-action="remove-env-var">
                 <i class="bi bi-x"></i>
             </button>
         </div>`);
@@ -171,8 +171,8 @@ function _renderWizardLabels() {
             <span class="font-monospace">${escapeHtml(k)}</span>
             <span class="text-muted">=</span>
             <span>${escapeHtml(v)}</span>
-            <button type="button" class="btn-close btn-close-sm ms-1" style="font-size:.55rem"
-                    onclick="removeWizardLabel('${escapeHtml(k)}')"></button>
+            <button type="button" class="btn-close btn-close-sm ms-1 sg-fs-xxs"
+                    data-action="remove-label" data-arg="${escapeHtml(k)}"></button>
         </span>`
     ).join('') + '</div>';
     const input = document.getElementById('wizard-label-input');
@@ -259,15 +259,15 @@ async function loadWizardPresets() {
             <table class="table table-sm table-hover align-middle mb-0">
                 <thead>
                     <tr>
-                        <th style="width:40px"></th>
+                        <th class="sg-w-40"></th>
                         <th>Preset</th>
                         <th>Description</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${presets.map(p => `
-                        <tr class="table-clickable" onclick="toggleWizardPreset('${escapeHtml(p.name)}', this)">
-                            <td><input class="form-check-input" type="checkbox" ${wizardState.presets.has(p.name) ? 'checked' : ''} onclick="event.stopPropagation(); toggleWizardPreset('${escapeHtml(p.name)}', this.closest('tr'))"></td>
+                        <tr class="table-clickable" data-action="toggle-preset" data-arg="${escapeHtml(p.name)}">
+                            <td><input class="form-check-input" type="checkbox" ${wizardState.presets.has(p.name) ? 'checked' : ''} data-action="toggle-preset-stop" data-arg="${escapeHtml(p.name)}"></td>
                             <td><strong>${escapeHtml(p.name)}</strong></td>
                             <td class="text-muted small">${escapeHtml(p.description || '')}</td>
                         </tr>
@@ -425,13 +425,13 @@ async function launchSandbox() {
                     <strong>Sandbox "${escapeHtml(sandbox.name)}" is running.</strong>
                 </div>
                 <div class="d-flex gap-2">
-                    <button class="btn btn-success btn-sm" onclick="navigateTo(gwUrl('/sandboxes/${escapeHtml(sandbox.name)}'))">
+                    <button class="btn btn-success btn-sm" data-action="nav" data-arg="/sandboxes/${escapeHtml(sandbox.name)}">
                         <i class="bi bi-box-arrow-in-right me-1"></i>Open Sandbox
                     </button>
-                    <button class="btn btn-outline-light btn-sm" onclick="navigateTo(gwUrl('/sandboxes'))">
+                    <button class="btn btn-outline-light btn-sm" data-action="nav" data-arg="/sandboxes">
                         <i class="bi bi-grid me-1"></i>Sandboxes
                     </button>
-                    <button class="btn btn-outline-light btn-sm" onclick="navigateTo(gwUrl('/wizard'))">
+                    <button class="btn btn-outline-light btn-sm" data-action="nav" data-arg="/wizard">
                         <i class="bi bi-plus-circle me-1"></i>Create Another
                     </button>
                 </div>
@@ -445,10 +445,10 @@ async function launchSandbox() {
         logEl.insertAdjacentHTML('beforeend', `
             <div class="mt-3 pt-3 border-top border-secondary">
                 <div class="d-flex gap-2">
-                    <button class="btn btn-outline-light btn-sm" onclick="navigateTo(gwUrl('/wizard'))">
+                    <button class="btn btn-outline-light btn-sm" data-action="nav" data-arg="/wizard">
                         <i class="bi bi-arrow-clockwise me-1"></i>Try Again
                     </button>
-                    <button class="btn btn-outline-light btn-sm" onclick="navigateTo(gwUrl('/sandboxes'))">
+                    <button class="btn btn-outline-light btn-sm" data-action="nav" data-arg="/sandboxes">
                         <i class="bi bi-grid me-1"></i>Sandboxes
                     </button>
                 </div>
@@ -456,5 +456,63 @@ async function launchSandbox() {
         logEl.scrollTop = logEl.scrollHeight;
     }
 }
+
+// ─── Alpine component (CSP-strict dispatcher) ───────────────────────────────
+// The Alpine CSP expression parser only permits method calls on the enclosing
+// component, so wizard.html needs a wrapping x-data="sandboxWizard" with thin
+// wrapper methods that delegate to the existing global functions. The same
+// component's `handleAction($event)` listener dispatches data-action markers
+// from innerHTML-injected buttons (templates, presets, labels, env vars,
+// post-launch nav buttons) — no full declarative rewrite needed.
+function sandboxWizard() {
+    return {
+        init() {
+            // Delegated click handler for data-action markers in innerHTML
+            // renderers. The Alpine CSP expression parser rejects `@click=
+            // "handleAction($event)"` on the root, so we wire it here in JS.
+            this.$el.addEventListener('click', (e) => this.handleAction(e));
+        },
+        selectAgent(type, e) { selectAgent(type, e); },
+        next() { wizardNext(); },
+        prev() { wizardPrev(); },
+        customize() { wizardCustomize(); },
+        launch() { launchSandbox(); },
+        addEnv() { addWizardEnvVar(); },
+        addLabel() { addWizardLabel(); },
+        labelKeyDown(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addWizardLabel();
+            }
+        },
+        handleAction(e) {
+            const el = e.target.closest('[data-action]');
+            if (!el) return;
+            const action = el.dataset.action;
+            const arg = el.dataset.arg;
+            if (action === 'select-agent') {
+                selectAgent(arg, { currentTarget: el });
+            } else if (action === 'select-template') {
+                selectTemplate(arg);
+            } else if (action === 'remove-env-var') {
+                const row = el.closest('.input-group');
+                if (row) row.remove();
+            } else if (action === 'remove-label') {
+                removeWizardLabel(arg);
+            } else if (action === 'toggle-preset') {
+                toggleWizardPreset(arg, el.closest('tr'));
+            } else if (action === 'toggle-preset-stop') {
+                e.stopPropagation();
+                toggleWizardPreset(arg, el.closest('tr'));
+            } else if (action === 'nav') {
+                navigateTo(gwUrl(arg));
+            }
+        },
+    };
+}
+
+document.addEventListener('alpine:init', () => {
+    Alpine.data('sandboxWizard', sandboxWizard);
+});
 
 document.addEventListener('DOMContentLoaded', initWizard);

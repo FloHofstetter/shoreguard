@@ -55,7 +55,8 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_METRICS_PUBLIC` | `false` | Expose /metrics without authentication (default: admin-only) |
 | `SHOREGUARD_HSTS_ENABLED` | `false` | Emit Strict-Transport-Security header (enable behind HTTPS proxy) |
 | `SHOREGUARD_HSTS_MAX_AGE` | `63072000` | HSTS max-age in seconds (default: 2 years) |
-| `SHOREGUARD_CSP_POLICY` | `default-src 'self'; script-src 'self'...` | Content-Security-Policy header value |
+| `SHOREGUARD_CSP_STRICT` | `true` | Enforce strict CSP with per-request nonce and no `'unsafe-*'` directives (default since v0.27.0) |
+| `SHOREGUARD_CSP_POLICY` | `default-src 'self'; script-src 'self'...` | Legacy Content-Security-Policy header value (only used when `SHOREGUARD_CSP_STRICT=false`) |
 ## `gateway`
 
 | Environment variable | Default | Description |

@@ -62,15 +62,40 @@ environment variables, which override built-in defaults.
 | `SHOREGUARD_METRICS_PUBLIC` | `false` | Expose `/metrics` without authentication |
 | `SHOREGUARD_HSTS_ENABLED` | `false` | Send `Strict-Transport-Security` header |
 | `SHOREGUARD_HSTS_MAX_AGE` | `63072000` | HSTS max-age in seconds (default: 2 years) |
-| `SHOREGUARD_CSP_POLICY` | *(see below)* | Content-Security-Policy header value |
+| `SHOREGUARD_CSP_STRICT` | `true` | Enforce strict CSP with per-request nonce and no `'unsafe-inline'` (default since v0.27.0) |
+| `SHOREGUARD_CSP_POLICY` | *(legacy, see below)* | Content-Security-Policy header value used only when `SHOREGUARD_CSP_STRICT=false` |
 
-Default CSP policy:
+Default CSP policy (strict, since v0.27.0):
+
+```
+default-src 'self'; script-src 'self' 'nonce-<per-request>' 'unsafe-eval' https://cdn.jsdelivr.net;
+style-src 'self' https://cdn.jsdelivr.net;
+font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' wss:;
+frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+```
+
+Every response carries a fresh cryptographic nonce; all inline `<script>` tags
+rendered by ShoreGuard templates carry that nonce. No `'unsafe-inline'`, and
+`frame-ancestors 'none'` blocks clickjacking. `'unsafe-eval'` is retained
+because Alpine.js uses the `Function()` constructor internally; the
+`@alpinejs/csp` build was evaluated during v0.27.0 development but its
+expression parser is too restrictive for this UI (plain property chains only,
+no operators, literals, or method-call arguments). Unlike `'unsafe-inline'`,
+`'unsafe-eval'` does not permit DOM-injected script execution, so the XSS
+surface remains dramatically smaller than the legacy policy.
+
+**Legacy opt-out.** If you ship custom templates with unverified inline
+scripts or third-party embeds, set `SHOREGUARD_CSP_STRICT=false` to fall back
+to the pre-v0.27.0 policy:
 
 ```
 default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net;
 style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
 font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' wss:
 ```
+
+`SHOREGUARD_CSP_POLICY` overrides the legacy template when set; it has no
+effect when strict mode is on.
 
 ## OIDC / SSO {: #oidc }
 

@@ -309,10 +309,10 @@ async function showPolicyRevisions(sandboxName) {
                         ${renderSpinner('Loading revisions...')}
                     </div>
                     <div class="modal-footer border-0">
-                        <button id="policy-diff-btn" class="btn btn-outline-info" disabled style="display:none">
+                        <button id="policy-diff-btn" class="btn btn-outline-info d-none" disabled>
                             <i class="bi bi-arrow-left-right me-1"></i>Compare
                         </button>
-                        <button id="policy-diff-back" class="btn btn-outline-secondary" style="display:none">
+                        <button id="policy-diff-back" class="btn btn-outline-secondary d-none">
                             <i class="bi bi-arrow-left me-1"></i>Back
                         </button>
                         <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
@@ -336,15 +336,15 @@ async function showPolicyRevisions(sandboxName) {
         if (btn) {
             const enabled = selectedA != null && selectedB != null && selectedA !== selectedB;
             btn.disabled = !enabled;
-            btn.style.display = '';
+            btn.classList.remove('d-none');
         }
     }
 
     function renderRevisionsList(revisions) {
         const body = document.getElementById('policy-revisions-body');
         const backBtn = document.getElementById('policy-diff-back');
-        if (backBtn) backBtn.style.display = 'none';
-        document.getElementById('policy-diff-btn').style.display = '';
+        if (backBtn) backBtn.classList.add('d-none');
+        document.getElementById('policy-diff-btn').classList.remove('d-none');
 
         body.innerHTML = `
             <p class="text-muted small mb-2">Select two versions to compare:</p>
@@ -352,8 +352,8 @@ async function showPolicyRevisions(sandboxName) {
                 <table class="table table-striped table-sm align-middle">
                     <thead>
                         <tr>
-                            <th style="width:40px">A</th>
-                            <th style="width:40px">B</th>
+                            <th class="sg-w-40">A</th>
+                            <th class="sg-w-40">B</th>
                             <th>Version</th>
                             <th>Status</th>
                             <th>Hash</th>
@@ -402,8 +402,8 @@ async function showPolicyRevisions(sandboxName) {
     async function showDiff() {
         const body = document.getElementById('policy-revisions-body');
         body.innerHTML = renderSpinner('Loading policy diff...');
-        document.getElementById('policy-diff-btn').style.display = 'none';
-        document.getElementById('policy-diff-back').style.display = '';
+        document.getElementById('policy-diff-btn').classList.add('d-none');
+        document.getElementById('policy-diff-back').classList.remove('d-none');
 
         try {
             const data = await apiFetch(
