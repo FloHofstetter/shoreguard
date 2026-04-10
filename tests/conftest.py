@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import multiprocessing
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from shoreguard.client import ShoreGuardClient
-from shoreguard.models import OperationRecord
 
 # Workaround for mutmut v3: its __main__.py calls set_start_method('fork')
 # at import time, which crashes when imported inside an asyncio worker thread.
@@ -20,76 +19,6 @@ try:
     multiprocessing.set_start_method("fork", force=True)
 except RuntimeError:
     pass
-
-
-class _AsyncOperationAdapter:
-    """Wraps the sync OperationService so routes can ``await`` its methods.
-
-    Used in tests where we don't want the aiosqlite dependency for the
-    in-memory database but need the async call interface that the routes
-    and ``run_lro`` helper expect.
-    """
-
-    def __init__(self, sync_svc):
-        self._svc = sync_svc
-
-    # Async wrappers for all methods called by routes / run_lro.
-
-    async def create(self, *args, **kwargs) -> OperationRecord:
-        return self._svc.create(*args, **kwargs)
-
-    async def create_if_not_running(self, *args, **kwargs) -> OperationRecord | None:
-        return self._svc.create_if_not_running(*args, **kwargs)
-
-    async def start(self, *args, **kwargs) -> None:
-        self._svc.start(*args, **kwargs)
-
-    async def complete(self, *args, **kwargs) -> None:
-        self._svc.complete(*args, **kwargs)
-
-    async def fail(self, *args, **kwargs) -> None:
-        self._svc.fail(*args, **kwargs)
-
-    async def update_progress(self, *args, **kwargs) -> None:
-        self._svc.update_progress(*args, **kwargs)
-
-    async def get(self, *args, **kwargs) -> OperationRecord | None:
-        return self._svc.get(*args, **kwargs)
-
-    async def get_by_idempotency_key(self, *args, **kwargs) -> OperationRecord | None:
-        return self._svc.get_by_idempotency_key(*args, **kwargs)
-
-    async def list_ops(self, *args, **kwargs) -> tuple[list[OperationRecord], int]:
-        return self._svc.list_ops(*args, **kwargs)
-
-    async def is_running(self, *args, **kwargs) -> bool:
-        return self._svc.is_running(*args, **kwargs)
-
-    async def status_counts(self) -> dict[str, int]:
-        return self._svc.status_counts()
-
-    def register_task(self, op_id: str, task: asyncio.Task[None]) -> None:
-        self._svc.register_task(op_id, task)
-
-    async def cancel(self, *args, **kwargs) -> OperationRecord | None:
-        return self._svc.cancel(*args, **kwargs)
-
-    async def recover_orphans(self) -> int:
-        return self._svc.recover_orphans()
-
-    async def cleanup(self) -> int:
-        return self._svc.cleanup()
-
-    @staticmethod
-    def to_dict(op: OperationRecord) -> dict[str, Any]:
-        from shoreguard.services.operations import OperationService
-
-        return OperationService.to_dict(op)
-
-    # Expose internal session factory for test cleanup.
-    @property
-    def _session_factory(self):
-        return self._svc._session_factory
 
 
 @pytest.fixture
@@ -104,9 +33,16 @@ def mock_client():
 
 
 @pytest.fixture(autouse=True)
-def _init_gateway_service():
-    """Initialize gateway_service and audit_service with shared in-memory DB."""
+async def _init_gateway_service():
+    """Initialize gateway, audit, sandbox-meta, and operations services per test.
+
+    Uses a sync in-memory SQLite engine for the services that still use sync
+    SQLAlchemy (gateway registry, audit, sandbox meta), and a separate
+    async aiosqlite engine for ``AsyncOperationService`` — the class used
+    in production (see ``shoreguard/api/main.py``).
+    """
     from sqlalchemy import create_engine
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
 
@@ -118,25 +54,48 @@ def _init_gateway_service():
     from shoreguard.services.gateway import _reset_clients
     from shoreguard.services.registry import GatewayRegistry
 
-    engine = create_engine(
+    # Sync engine for services that still use sync SQLAlchemy.
+    sync_engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    registry = GatewayRegistry(factory)
+    Base.metadata.create_all(sync_engine)
+    sync_factory = sessionmaker(bind=sync_engine)
+    registry = GatewayRegistry(sync_factory)
     gw_mod.gateway_service = gw_mod.GatewayService(registry)
-    audit_mod.audit_service = audit_mod.AuditService(factory)
-    sandbox_meta_mod.sandbox_meta_store = sandbox_meta_mod.SandboxMetaStore(factory)
-    sync_ops = ops_mod.OperationService(factory)
-    ops_mod.operation_service = _AsyncOperationAdapter(sync_ops)  # type: ignore[assignment]
+    audit_mod.audit_service = audit_mod.AuditService(sync_factory)
+    sandbox_meta_mod.sandbox_meta_store = sandbox_meta_mod.SandboxMetaStore(sync_factory)
+
+    # Async engine for AsyncOperationService — the prod class (see api/main.py).
+    async_engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+    ops_mod.operation_service = ops_mod.AsyncOperationService(async_factory)
+
     yield
+
+    # Drain any still-running LRO background tasks before disposing the
+    # engine, otherwise a late progress-update hits a closed DB.
+    pending = list(ops_mod.operation_service._tasks.values())  # type: ignore[union-attr]
+    for task in pending:
+        if not task.done():
+            task.cancel()
+    for task in pending:
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
+
     _reset_clients()
     audit_mod.audit_service = None
     sandbox_meta_mod.sandbox_meta_store = None
     ops_mod.operation_service = None
-    engine.dispose()
+    sync_engine.dispose()
+    await async_engine.dispose()
 
 
 @pytest.fixture(autouse=True)
@@ -162,28 +121,6 @@ def _disable_auth():
     auth.reset()
     reset_login_limiter()
     reset_settings()
-
-
-@pytest.fixture(autouse=True)
-def _reset_operations():
-    """Clean operation records between tests."""
-    from shoreguard.services.operations import operation_service
-
-    svc: Any = operation_service
-    if svc is not None:
-        from shoreguard.models import OperationRecord
-
-        with svc._session_factory() as session:
-            session.query(OperationRecord).delete()
-            session.commit()
-    yield
-    svc2: Any = operation_service
-    if svc2 is not None:
-        from shoreguard.models import OperationRecord
-
-        with svc2._session_factory() as session:
-            session.query(OperationRecord).delete()
-            session.commit()
 
 
 @pytest.fixture

@@ -312,9 +312,9 @@ async def test_get_operation_found(api_client):
 
     svc: Any = operation_service
     assert svc is not None
-    op = svc._svc.create("sandbox", "test-sb")
-    svc._svc.start(op.id)
-    svc._svc.complete(op.id, {"name": "test-sb"})
+    op = await svc.create("sandbox", "test-sb")
+    await svc.start(op.id)
+    await svc.complete(op.id, {"name": "test-sb"})
     resp = await api_client.get(f"/api/operations/{op.id}")
     assert resp.status_code == 200
     data = resp.json()
@@ -387,7 +387,7 @@ async def test_create_sandbox_empty_name(api_client, mock_client):
 
     svc: Any = operation_service
     assert svc is not None
-    op = svc._svc.get(op_id)
+    op = await svc.get(op_id)
     assert op.resource_key == "unnamed"
 
 

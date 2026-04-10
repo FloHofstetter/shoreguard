@@ -40,7 +40,7 @@ shoreguard/
 │   ├── policy.py              # PolicyService — policy CRUD
 │   ├── providers.py           # ProviderService — provider config
 │   ├── approvals.py           # ApprovalService — draft management
-│   ├── operations.py          # OperationService — async task tracking (DB-backed)
+│   ├── operations.py          # AsyncOperationService — async task tracking (DB-backed)
 │   ├── operations_types.py    # Operation type definitions
 │   ├── registry.py            # GatewayRegistry — persistent storage
 │   ├── local_gateway.py       # LocalGatewayManager — Docker lifecycle

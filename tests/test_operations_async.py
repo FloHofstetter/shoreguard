@@ -1,15 +1,8 @@
-"""Tests for :class:`AsyncOperationService`.
+"""Direct tests for :class:`AsyncOperationService` against an aiosqlite DB.
 
-The existing ``tests/test_operations.py`` exercises the sync ``OperationService``
-directly. At runtime, ``tests/conftest.py`` routes ``ops_mod.operation_service``
-through an ``_AsyncOperationAdapter`` wrapping the sync class, so API-level
-tests never actually hit ``AsyncOperationService`` — which is the class prod
-really uses (see ``shoreguard/api/main.py:121``).
-
-This file closes that gap with direct aiosqlite-backed tests against
-``AsyncOperationService``. It also covers the sync-class active-task
-cancel branch (``operations.py:431-433``) which is unreachable through the
-adapter.
+``AsyncOperationService`` is the class production uses (see
+``shoreguard/api/main.py``). These tests cover it end-to-end against a
+real in-memory aiosqlite engine — no sync shim, no adapter.
 """
 
 from __future__ import annotations
@@ -22,7 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from shoreguard.models import Base
-from shoreguard.services.operations import AsyncOperationService, OperationService
+from shoreguard.services.operations import AsyncOperationService
 from shoreguard.services.operations_types import ErrorCode, OpStatus
 
 
@@ -356,68 +349,6 @@ async def test_cleanup_retention_delete(async_svc):
 
 async def test_cleanup_noop_when_empty(async_svc):
     assert await async_svc.cleanup() == 0
-
-
-# ── Sync class — active-task cancel branch (lines 431-433) ─────────────────
-
-
-async def test_sync_cancel_with_active_task(tmp_path):
-    """Cover the sync OperationService.cancel() active-task branch.
-
-    That branch (``operations.py:429-433``) is unreachable from the adapter
-    used by the main test suite because the adapter never registers a task.
-    """
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    db_path = tmp_path / "sync.db"
-    engine = create_engine(f"sqlite:///{db_path}")
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(engine, expire_on_commit=False)
-    svc = OperationService(factory, running_ttl=3600.0, retention_days=30)
-
-    op = svc.create("sandbox", "sb-sync-cancel")
-    svc.start(op.id)
-
-    async def _long():
-        await asyncio.sleep(10)
-
-    task = asyncio.create_task(_long())
-    svc.register_task(op.id, task)
-
-    # Call the sync cancel — it should set status to cancelling and cancel
-    # the task, returning the current (cancelling) record.
-    result = svc.cancel(op.id)
-    assert result is not None
-    assert result.status == OpStatus.cancelling
-
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
-    assert task.cancelled() or task.done()
-
-    engine.dispose()
-
-
-async def test_sync_cancel_no_task_fails_directly(tmp_path):
-    """Cover the sync cancel() no-task branch (line 436)."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    db_path = tmp_path / "sync2.db"
-    engine = create_engine(f"sqlite:///{db_path}")
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(engine, expire_on_commit=False)
-    svc = OperationService(factory, running_ttl=3600.0, retention_days=30)
-
-    op = svc.create("sandbox", "sb-sync-cancel-no-task")
-    result = svc.cancel(op.id)
-    assert result is not None
-    assert result.status == OpStatus.failed
-    assert result.error_code == ErrorCode.cancelled
-
-    engine.dispose()
 
 
 # Silence unused-import warning for pytest (fixture is used via string name).
