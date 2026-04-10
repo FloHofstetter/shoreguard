@@ -32,6 +32,14 @@ class _FakeStub:
         self.request = req
         return SimpleNamespace(version=5, policy_hash="new-hash")
 
+    def SubmitPolicyAnalysis(self, req, timeout=None):
+        self.request = req
+        return SimpleNamespace(
+            accepted_chunks=2,
+            rejected_chunks=1,
+            rejection_reasons=["conflicts with rule foo"],
+        )
+
 
 @pytest.fixture
 def stub():
@@ -79,6 +87,80 @@ def test_update_sends_proto(mgr, stub):
     assert stub.request.policy == policy
     assert result["version"] == 5
     assert result["policy_hash"] == "new-hash"
+
+
+def test_submit_analysis_forwards_summaries_and_chunks(mgr, stub):
+    """submit_analysis() builds a proto request from plain dicts."""
+    summaries = [
+        {
+            "sandbox_id": "sb1",
+            "host": "api.example.com",
+            "port": 443,
+            "binary": "/usr/bin/curl",
+            "deny_reason": "host not in allow list",
+            "count": 3,
+        },
+    ]
+    chunks = [
+        {
+            "id": "chunk-1",
+            "rule_name": "allow_example_api",
+            # proposed_rule is a nested NetworkPolicyRule — passing a dict
+            # lets the proto constructor build it recursively.
+            "proposed_rule": {
+                "name": "allow_example_api",
+                "endpoints": [{"host": "api.example.com", "port": 443}],
+            },
+            "rationale": "3 denials on same host in last hour",
+            "confidence": 0.92,
+        },
+    ]
+
+    result = mgr.submit_analysis(
+        "sb1",
+        summaries=summaries,
+        proposed_chunks=chunks,
+        analysis_mode="auto",
+    )
+
+    # Request built from dicts.
+    assert stub.request.name == "sb1"
+    assert stub.request.analysis_mode == "auto"
+    assert len(stub.request.summaries) == 1
+    assert stub.request.summaries[0].host == "api.example.com"
+    assert stub.request.summaries[0].port == 443
+    assert stub.request.summaries[0].binary == "/usr/bin/curl"
+    assert len(stub.request.proposed_chunks) == 1
+    assert stub.request.proposed_chunks[0].rule_name == "allow_example_api"
+    assert stub.request.proposed_chunks[0].proposed_rule.name == "allow_example_api"
+    assert stub.request.proposed_chunks[0].proposed_rule.endpoints[0].host == "api.example.com"
+
+    # Response flattened to plain dict.
+    assert result == {
+        "accepted_chunks": 2,
+        "rejected_chunks": 1,
+        "rejection_reasons": ["conflicts with rule foo"],
+    }
+
+
+def test_submit_analysis_accepts_empty_lists(mgr, stub):
+    """Empty summaries + proposed_chunks produce a valid empty request."""
+    result = mgr.submit_analysis("sb1", summaries=[], proposed_chunks=[])
+
+    assert stub.request.name == "sb1"
+    assert list(stub.request.summaries) == []
+    assert list(stub.request.proposed_chunks) == []
+    assert result["accepted_chunks"] == 2  # fake stub always returns 2
+
+
+def test_submit_analysis_raises_on_unknown_field(mgr):
+    """Unknown dict keys surface as TypeError from the proto constructor."""
+    with pytest.raises((ValueError, TypeError)):
+        mgr.submit_analysis(
+            "sb1",
+            summaries=[{"bogus_field": "x"}],
+            proposed_chunks=[],
+        )
 
 
 # ─── Proto → Dict conversion tests ──────────────────────────────────────────

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # ─── Generic / shared ─────────────────────────────────────────────────────────
 
@@ -593,6 +593,55 @@ class PolicyDiffResponse(BaseModel):
 
     model_config = ConfigDict(extra="allow")
     # extra="allow": structure depends on gateway protocol version
+
+
+class PolicyAnalysisRequest(BaseModel):
+    """Request body for POST /sandboxes/{name}/policy/analysis.
+
+    Pass-through envelope for the OpenShell ``SubmitPolicyAnalysis`` RPC.
+    The two list fields are dicts shaped like the upstream
+    ``DenialSummary`` and ``PolicyChunk`` proto messages; ShoreGuard
+    does not duplicate the proto schemas in Pydantic because the field
+    set is large (33 fields combined) and will drift with OpenShell
+    releases. Unknown keys in the dicts surface as ``TypeError`` from
+    the proto constructor at the client layer.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (unknown top-level
+            fields rejected).
+        summaries (list[dict[str, Any]]): ``DenialSummary`` dicts.
+        proposed_chunks (list[dict[str, Any]]): ``PolicyChunk`` dicts —
+            the rules that would fix the denials in *summaries*.
+        analysis_mode (str): Opaque mode tag forwarded verbatim to the
+            gateway (e.g. ``"auto"``, ``"manual"``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    summaries: list[dict[str, Any]] = Field(default_factory=list)
+    proposed_chunks: list[dict[str, Any]] = Field(default_factory=list)
+    analysis_mode: str = ""
+
+
+class PolicyAnalysisResponse(BaseModel):
+    """Response body for POST /sandboxes/{name}/policy/analysis.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed
+            to accommodate upstream proto drift).
+        accepted_chunks (int): Number of proposed chunks merged into the
+            draft policy.
+        rejected_chunks (int): Number of proposed chunks the gateway
+            rejected.
+        rejection_reasons (list[str]): Per-rejection reason strings from
+            the gateway, aligned by index with the rejected subset.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    accepted_chunks: int
+    rejected_chunks: int
+    rejection_reasons: list[str] = Field(default_factory=list)
 
 
 class PresetSummaryResponse(BaseModel):

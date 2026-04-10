@@ -11,7 +11,13 @@ from pydantic import BaseModel, Field
 
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
-from shoreguard.api.schemas import PolicyDiffResponse, PolicyResponse, PresetSummaryResponse
+from shoreguard.api.schemas import (
+    PolicyAnalysisRequest,
+    PolicyAnalysisResponse,
+    PolicyDiffResponse,
+    PolicyResponse,
+    PresetSummaryResponse,
+)
 from shoreguard.api.validation import check_write_rate_limit
 from shoreguard.client import ShoreGuardClient
 from shoreguard.presets import get_preset as _get_preset
@@ -115,6 +121,69 @@ async def get_effective_policy(
         dict[str, Any]: Effective policy envelope.
     """
     return await asyncio.to_thread(svc.get_effective, name)
+
+
+@router.post(
+    "/sandboxes/{name}/policy/analysis",
+    response_model=PolicyAnalysisResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
+async def submit_policy_analysis(
+    name: str,
+    body: PolicyAnalysisRequest,
+    request: Request,
+    svc: PolicyService = Depends(_get_policy_service),
+) -> dict[str, Any]:
+    """Submit denial analysis results and proposed policy chunks to the gateway.
+
+    Pass-through to the OpenShell ``SubmitPolicyAnalysis`` RPC. Used by
+    external analyzers (LLM-backed or rule-based) that observe sandbox
+    denials, propose policy chunks that would fix them, and submit the
+    bundle for the gateway to merge into the draft policy. The gateway
+    decides accept/reject per chunk and returns counters plus
+    rejection reasons.
+
+    Args:
+        name: Target sandbox name.
+        body: Request envelope with ``summaries``, ``proposed_chunks``,
+            and optional ``analysis_mode``.
+        request: Incoming HTTP request (for rate limiting + audit).
+        svc: Injected policy service.
+
+    Returns:
+        dict[str, Any]: ``{"accepted_chunks": int, "rejected_chunks":
+        int, "rejection_reasons": list[str]}``.
+    """
+    check_write_rate_limit(request)
+    result = await asyncio.to_thread(
+        svc.submit_analysis,
+        name,
+        summaries=body.summaries,
+        proposed_chunks=body.proposed_chunks,
+        analysis_mode=body.analysis_mode,
+    )
+    logger.info(
+        "Policy analysis submitted (sandbox=%s, actor=%s, accepted=%d, rejected=%d)",
+        name,
+        get_actor(request),
+        result["accepted_chunks"],
+        result["rejected_chunks"],
+    )
+    await audit_log(
+        request,
+        "sandbox.policy.analyze",
+        "sandbox",
+        name,
+        gateway=get_gateway_name(request),
+        detail={
+            "analysis_mode": body.analysis_mode,
+            "summary_count": len(body.summaries),
+            "chunk_count": len(body.proposed_chunks),
+            "accepted": result["accepted_chunks"],
+            "rejected": result["rejected_chunks"],
+        },
+    )
+    return result
 
 
 @router.put(

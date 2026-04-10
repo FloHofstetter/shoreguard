@@ -219,3 +219,46 @@ class PolicyManager:
             "version": resp.version,
             "policy_hash": resp.policy_hash,
         }
+
+    def submit_analysis(
+        self,
+        sandbox_name: str,
+        *,
+        summaries: list[dict[str, Any]],
+        proposed_chunks: list[dict[str, Any]],
+        analysis_mode: str = "",
+    ) -> dict[str, Any]:
+        """Submit denial-analysis results and proposed chunks to the gateway.
+
+        The gateway merges accepted chunks into the draft policy and rejects
+        the rest with a per-chunk reason. Used by external analyzers
+        (LLM-backed or rule-based) that observe sandbox denials and propose
+        policy fixes.
+
+        Args:
+            sandbox_name: Target sandbox name — goes into ``request.name``.
+            summaries: ``DenialSummary`` dicts. Unknown keys raise
+                ``TypeError`` from the proto constructor — the caller is
+                responsible for sending only fields that the currently
+                pinned OpenShell proto defines.
+            proposed_chunks: ``PolicyChunk`` dicts with the rules that would
+                fix the denials described in *summaries*.
+            analysis_mode: Optional mode tag forwarded verbatim, e.g.
+                ``"auto"`` or ``"manual"``.
+
+        Returns:
+            dict[str, Any]: ``{"accepted_chunks": int, "rejected_chunks": int,
+            "rejection_reasons": list[str]}``.
+        """
+        req = openshell_pb2.SubmitPolicyAnalysisRequest(
+            name=sandbox_name,
+            analysis_mode=analysis_mode,
+            summaries=[openshell_pb2.DenialSummary(**s) for s in summaries],
+            proposed_chunks=[openshell_pb2.PolicyChunk(**c) for c in proposed_chunks],
+        )
+        resp = self._stub.SubmitPolicyAnalysis(req, timeout=self._timeout)
+        return {
+            "accepted_chunks": resp.accepted_chunks,
+            "rejected_chunks": resp.rejected_chunks,
+            "rejection_reasons": list(resp.rejection_reasons),
+        }

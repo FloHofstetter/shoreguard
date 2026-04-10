@@ -65,6 +65,50 @@ class PolicyService:
             return {**result, "source": "gateway_runtime"}
         return {"policy": result, "source": "gateway_runtime"}
 
+    def submit_analysis(
+        self,
+        sandbox_name: str,
+        *,
+        summaries: list[dict[str, Any]],
+        proposed_chunks: list[dict[str, Any]],
+        analysis_mode: str = "",
+    ) -> dict[str, Any]:
+        """Forward a policy analysis submission to the gateway.
+
+        Thin pass-through to :meth:`PolicyManager.submit_analysis`. The
+        gateway merges accepted chunks into the draft policy; rejected
+        chunks come back with a per-chunk reason. Used by external
+        analyzers (LLM-backed or rule-based) that observe sandbox denials
+        and propose fixes — ShoreGuard itself does not generate analysis
+        results, it only brokers them.
+
+        Args:
+            sandbox_name: Target sandbox name.
+            summaries: ``DenialSummary`` dicts. See the OpenShell proto
+                for the field layout.
+            proposed_chunks: ``PolicyChunk`` dicts containing the rules
+                that would fix the denials described in *summaries*.
+            analysis_mode: Opaque mode tag forwarded verbatim, e.g.
+                ``"auto"`` or ``"manual"``.
+
+        Returns:
+            dict[str, Any]: ``{"accepted_chunks": int, "rejected_chunks":
+            int, "rejection_reasons": list[str]}``.
+        """
+        logger.info(
+            "Submitting policy analysis for sandbox '%s' (%d summaries, %d chunks, mode=%r)",
+            sandbox_name,
+            len(summaries),
+            len(proposed_chunks),
+            analysis_mode,
+        )
+        return self._client.policies.submit_analysis(
+            sandbox_name,
+            summaries=summaries,
+            proposed_chunks=proposed_chunks,
+            analysis_mode=analysis_mode,
+        )
+
     def update(self, sandbox_name: str, policy_dict: dict) -> dict[str, Any]:
         """Push a new policy version and return the full PolicyResponse.
 

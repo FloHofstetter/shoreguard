@@ -121,6 +121,47 @@ def test_get_effective_policy_non_dict_result(policy_svc, mock_client):
     assert result == {"policy": "opaque-blob", "source": "gateway_runtime"}
 
 
+def test_submit_analysis_forwards_to_client(policy_svc, mock_client):
+    """submit_analysis() passes arguments through to the client unchanged."""
+    mock_client.policies.submit_analysis.return_value = {
+        "accepted_chunks": 3,
+        "rejected_chunks": 0,
+        "rejection_reasons": [],
+    }
+    summaries = [{"sandbox_id": "sb1", "host": "api.example.com", "port": 443}]
+    chunks = [{"rule_name": "allow_api"}]
+
+    result = policy_svc.submit_analysis(
+        "sb1",
+        summaries=summaries,
+        proposed_chunks=chunks,
+        analysis_mode="auto",
+    )
+
+    mock_client.policies.submit_analysis.assert_called_once_with(
+        "sb1",
+        summaries=summaries,
+        proposed_chunks=chunks,
+        analysis_mode="auto",
+    )
+    assert result["accepted_chunks"] == 3
+    assert result["rejected_chunks"] == 0
+
+
+def test_submit_analysis_default_mode(policy_svc, mock_client):
+    """analysis_mode defaults to empty string when not provided."""
+    mock_client.policies.submit_analysis.return_value = {
+        "accepted_chunks": 0,
+        "rejected_chunks": 0,
+        "rejection_reasons": [],
+    }
+
+    policy_svc.submit_analysis("sb1", summaries=[], proposed_chunks=[])
+
+    call_kwargs = mock_client.policies.submit_analysis.call_args.kwargs
+    assert call_kwargs["analysis_mode"] == ""
+
+
 def test_update_policy(policy_svc, mock_client):
     """update() converts dict to protobuf, calls update, then re-fetches full policy."""
     mock_client.policies.update.return_value = {"version": 5, "policy_hash": "abc"}
