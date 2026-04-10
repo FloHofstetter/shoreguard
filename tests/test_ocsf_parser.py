@@ -170,6 +170,47 @@ class TestEvent:
         assert result["summary"] == "generic event message"
 
 
+class TestBinaryExtraction:
+    def test_net_open_extracts_binary_from_summary(self):
+        msg = "NET:OPEN [INFO] ALLOWED /usr/bin/curl(58) -> api.github.com:443 [policy:github_api]"
+        result = parse_log_line(_ocsf(msg))
+        assert result is not None
+        assert result["binary"] == "/usr/bin/curl"
+
+    def test_http_get_extracts_binary(self):
+        msg = "HTTP:GET [INFO] ALLOWED /usr/bin/python3(1234) GET http://x [policy:p]"
+        result = parse_log_line(_ocsf(msg))
+        assert result is not None
+        assert result["binary"] == "/usr/bin/python3"
+
+    def test_proc_launch_extracts_binary(self):
+        msg = "PROC:LAUNCH [INFO] /usr/bin/curl(57) [exit:0]"
+        result = parse_log_line(_ocsf(msg))
+        assert result is not None
+        assert result["binary"] == "/usr/bin/curl"
+
+    def test_bracket_binary_fallback(self):
+        # No "<path>(pid)" marker in the summary, but bracket has binary:<path>.
+        msg = 'FINDING:BLOCKED [HIGH] "policy violation" [binary:/opt/app/main confidence:high]'
+        result = parse_log_line(_ocsf(msg))
+        assert result is not None
+        assert result["binary"] == "/opt/app/main"
+
+    def test_no_binary_when_absent(self):
+        msg = "LIFECYCLE:START [INFO] sandbox ready"
+        result = parse_log_line(_ocsf(msg))
+        assert result is not None
+        assert result["binary"] is None
+
+    def test_bracket_binary_ignored_when_not_absolute(self):
+        # Relative paths or bare names from the bracket are rejected — we
+        # only trust an absolute path as a binary.
+        msg = "EVENT [INFO] something happened [binary:curl]"
+        result = parse_log_line(_ocsf(msg))
+        assert result is not None
+        assert result["binary"] is None
+
+
 class TestMalformed:
     def test_unknown_class_prefix(self):
         msg = "QUIC:FOO [INFO] bar baz"

@@ -168,6 +168,7 @@ def test_chunk_to_dict_basic_fields():
         first_seen_ms=500,
         last_seen_ms=900,
         binary="/usr/bin/pip",
+        denial_summary_ids=["denial-a", "denial-b"],
     )
     result = _chunk_to_dict(chunk)
 
@@ -179,7 +180,15 @@ def test_chunk_to_dict_basic_fields():
     assert result["confidence"] == pytest.approx(0.95)
     assert result["hit_count"] == 3
     assert result["binary"] == "/usr/bin/pip"
+    assert result["denial_summary_ids"] == ["denial-a", "denial-b"]
     assert "proposed_rule" not in result
+
+
+def test_chunk_to_dict_denial_summary_ids_default_empty():
+    """An absent/empty denial_summary_ids surfaces as an empty list, not None."""
+    chunk = openshell_pb2.PolicyChunk(id="c1")
+    result = _chunk_to_dict(chunk)
+    assert result["denial_summary_ids"] == []
 
 
 def test_chunk_to_dict_with_proposed_rule():

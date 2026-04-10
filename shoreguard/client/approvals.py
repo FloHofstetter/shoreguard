@@ -31,6 +31,7 @@ def _chunk_to_dict(chunk: openshell_pb2.PolicyChunk) -> dict[str, Any]:
         "first_seen_ms": chunk.first_seen_ms,
         "last_seen_ms": chunk.last_seen_ms,
         "binary": chunk.binary,
+        "denial_summary_ids": list(chunk.denial_summary_ids),
     }
     if chunk.HasField("proposed_rule"):
         rule = chunk.proposed_rule

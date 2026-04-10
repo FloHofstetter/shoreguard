@@ -43,6 +43,10 @@ _SEVERITY_RE = re.compile(r"^\[(?P<severity>[A-Z]+)\]\s*(?P<rest>.*)$")
 # string so it does not eat inline brackets in the summary (e.g. IPv6).
 _TRAILING_BRACKET_RE = re.compile(r"\s*\[(?P<body>[^\[\]]*)\]\s*$")
 
+# Process-binary pattern: ``/absolute/path(pid)`` as seen at the head of
+# NET/HTTP/SSH/PROC summaries, e.g. ``/usr/bin/curl(58) -> api.github.com:443``.
+_BINARY_RE = re.compile(r"(?P<binary>/[^\s()]+)\(\d+\)")
+
 
 def _is_ocsf(log: dict[str, Any]) -> bool:
     """Return whether *log* looks like an OCSF shorthand entry.
@@ -84,6 +88,32 @@ def _split_trailing_bracket(rest: str) -> tuple[str, dict[str, str]]:
             if sep:
                 fields[key] = value
     return summary, fields
+
+
+def _extract_binary(summary: str, bracket_fields: dict[str, str]) -> str | None:
+    """Best-effort extraction of the triggering binary path.
+
+    For connection-oriented events (NET/HTTP/SSH/PROC), the shorthand summary
+    starts with ``<absolute-path>(<pid>)``; the path is the binary. For
+    FINDING/EVENT/CONFIG events there is usually no such marker, but the
+    upstream sandbox sometimes includes ``binary:<path>`` in the trailing
+    bracket — we honour that as a secondary source.
+
+    Args:
+        summary: The message body after the class head, severity bracket,
+            and disposition have been consumed.
+        bracket_fields: Key/value pairs parsed from the trailing bracket.
+
+    Returns:
+        str | None: The absolute binary path if one could be identified,
+        else ``None``.
+    """
+    match = _BINARY_RE.search(summary)
+    if match is not None:
+        return match.group("binary")
+    if "binary" in bracket_fields and bracket_fields["binary"].startswith("/"):
+        return bracket_fields["binary"]
+    return None
 
 
 def _extract_disposition(summary: str) -> tuple[str | None, str]:
@@ -130,7 +160,13 @@ def parse_log_line(log: dict[str, Any]) -> dict[str, Any] | None:
                 "summary": str,
                 "bracket_fields": dict[str, str],
                 "fields": dict[str, str],
+                "binary": str | None,
             }
+
+        The ``binary`` field is a best-effort extraction of the triggering
+        process path (e.g. ``/usr/bin/curl``) from either the summary's
+        ``<path>(pid)`` prefix or a ``binary:`` entry in the trailing
+        bracket. It is ``None`` when the shorthand did not include one.
     """
     if not _is_ocsf(log):
         return None
@@ -147,6 +183,7 @@ def parse_log_line(log: dict[str, Any]) -> dict[str, Any] | None:
         "summary": message,
         "bracket_fields": {},
         "fields": grpc_fields,
+        "binary": None,
     }
 
     if not message:
@@ -196,5 +233,9 @@ def parse_log_line(log: dict[str, Any]) -> dict[str, Any] | None:
         disposition, summary = _extract_disposition(summary)
         result["disposition"] = disposition
         result["summary"] = summary
+
+    # Best-effort binary path — used by the sandbox-logs viewer to build a
+    # cross-link into the approvals page for DENIED/BLOCKED events.
+    result["binary"] = _extract_binary(result["summary"], bracket_fields)
 
     return result

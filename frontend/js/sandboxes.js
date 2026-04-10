@@ -49,6 +49,8 @@ function sandboxDetail(name) {
         error: '',
         sandbox: null,
         pendingCount: 0,
+        securityFlaggedCount: 0,
+        lastAnalyzedAtMs: 0,
         networkCount: 0,
         policy: null,
         metaDescription: '',
@@ -74,16 +76,23 @@ function sandboxDetail(name) {
             this.loading = true;
             this.error = '';
             try {
-                const [sb, pendingApprovals, policyData] = await Promise.all([
+                const [sb, draft, policyData] = await Promise.all([
                     apiFetch(`${API}/sandboxes/${name}`),
-                    apiFetch(`${API}/sandboxes/${name}/approvals/pending`).catch(() => []),
+                    // Full draft (chunks + rolling_summary + last_analyzed_at_ms)
+                    // rather than /approvals/pending: lets us derive the three
+                    // overview-card counters in a single call.
+                    apiFetch(`${API}/sandboxes/${name}/approvals`).catch(() => null),
                     apiFetch(`${API}/sandboxes/${name}/policy`).catch(() => null),
                 ]);
 
                 this.sandbox = sb;
                 this.metaDescription = sb.description || '';
                 this.metaLabels = Object.entries(sb.labels || {}).map(([k, v]) => ({ key: k, val: v }));
-                this.pendingCount = pendingApprovals?.length || 0;
+                const chunks = (draft && draft.chunks) || [];
+                const pending = chunks.filter(c => c.status === 'pending');
+                this.pendingCount = pending.length;
+                this.securityFlaggedCount = pending.filter(c => c.security_notes && c.security_notes.trim()).length;
+                this.lastAnalyzedAtMs = (draft && draft.last_analyzed_at_ms) || 0;
                 this.policy = policyData?.policy || null;
                 this.networkCount = this.policy ? Object.keys(this.policy.network_policies || {}).length : 0;
 

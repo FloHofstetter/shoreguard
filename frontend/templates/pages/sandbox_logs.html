@@ -115,6 +115,14 @@
                             </dl>
                         </template>
                         <div class="log-ocsf-raw text-muted" x-text="log.message"></div>
+                        <div x-show="isDeniedOcsf(log)" class="mt-1">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-warning log-crosslink-btn"
+                                    @click="goToApprovals(log)"
+                                    title="Jump to the matching chunk in the approvals page">
+                                <i class="bi bi-arrow-up-right-square me-1"></i>Find in approvals
+                            </button>
+                        </div>
                     </div>
                 </div>
             </template>

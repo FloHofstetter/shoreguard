@@ -58,13 +58,15 @@
                             <th>Binary</th>
                             <th>Endpoints</th>
                             <th class="text-end">Hits</th>
+                            <th>Seen</th>
                             <th class="text-center">Confidence</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <template x-for="chunk in chunks" :key="chunk.id">
-                            <tr>
+                            <tr :id="'chunk-row-' + chunk.id"
+                                :class="highlightChunkId === chunk.id ? 'table-warning' : ''">
                                 <!-- Main row -->
                                 <td>
                                     <span class="badge" :class="SG.badges.approval[chunk.status] || 'text-bg-secondary'" x-text="chunk.status"></span>
@@ -78,8 +80,25 @@
                                         <p x-show="chunk.rationale" class="small text-muted mb-1">
                                             <i class="bi bi-chat-quote me-1"></i><span x-text="chunk.rationale"></span>
                                         </p>
-                                        <div x-show="chunk.security_notes" class="alert alert-warning small py-1 px-2 mb-0">
+                                        <div x-show="chunk.security_notes" class="alert alert-warning small py-1 px-2 mb-2">
                                             <i class="bi bi-exclamation-triangle me-1"></i><span x-text="chunk.security_notes"></span>
+                                        </div>
+                                        <div x-show="chunk.stage" class="small text-muted mb-1">
+                                            <span class="fw-semibold">Stage:</span>
+                                            <code x-text="chunk.stage"></code>
+                                        </div>
+                                        <div x-show="$gt(($prop(chunk, 'denial_summary_ids') || []).length, 0)" class="small text-muted mb-2">
+                                            <span class="fw-semibold">Related denials:</span>
+                                            <template x-for="id in ($prop(chunk, 'denial_summary_ids') || [])" :key="id">
+                                                <code class="me-1 px-1 bg-body-secondary rounded small" x-text="id"></code>
+                                            </template>
+                                        </div>
+                                        <div>
+                                            <button class="btn btn-sm btn-outline-secondary"
+                                                    @click.stop="goToLogs(chunk)"
+                                                    title="Open sandbox logs filtered by binary/host">
+                                                <i class="bi bi-arrow-up-right-square me-1"></i>View in logs
+                                            </button>
                                         </div>
                                     </div>
                                 </td>
@@ -94,6 +113,7 @@
                                     <span x-show="$empty($prop(chunk.proposed_rule, 'endpoints'))" class="text-muted">&mdash;</span>
                                 </td>
                                 <td class="text-end" x-text="$gt(chunk.hit_count, 1) ? chunk.hit_count : '\u2014'"></td>
+                                <td class="small text-muted" x-text="formatSeen(chunk)"></td>
                                 <td class="text-center">
                                     <template x-if="$gt(chunk.confidence, 0)">
                                         <div class="progress confidence-bar d-inline-flex" :title="confidencePercent(chunk) + '%'">

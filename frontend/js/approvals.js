@@ -3,6 +3,19 @@
  * Table-based draft policy approval flow.
  */
 
+// Known draft-history event types and their visual treatment. Used by the
+// history modal to colour + filter entries. Keys match the `event_type` field
+// upstream emits; see openshell.proto DraftHistoryEntry.
+const _HISTORY_EVENT_TYPES = [
+    { type: 'denial_detected', label: 'Denial detected', badge: 'text-bg-warning' },
+    { type: 'analysis_cycle', label: 'Analysis cycle', badge: 'text-bg-secondary' },
+    { type: 'approved', label: 'Approved', badge: 'text-bg-success' },
+    { type: 'rejected', label: 'Rejected', badge: 'text-bg-danger' },
+    { type: 'edited', label: 'Edited', badge: 'text-bg-info' },
+    { type: 'undone', label: 'Undone', badge: 'text-bg-info' },
+    { type: 'cleared', label: 'Cleared', badge: 'text-bg-secondary' },
+];
+
 function approvalsPage(name) {
     return {
         sandboxName: name,
@@ -10,7 +23,13 @@ function approvalsPage(name) {
         error: '',
         chunks: [],
         rollingSummary: '',
+        lastAnalyzedAtMs: 0,
         expandedChunks: {},
+
+        // After a Logs → Approvals navigation via hash fragment
+        // (#binary=X&host=Y), the matching chunk is scrolled into view and
+        // temporarily highlighted; non-matching chunks stay visible.
+        highlightChunkId: '',
 
         get pendingCount() {
             return this.chunks.filter(c => c.status === 'pending').length;
@@ -18,21 +37,34 @@ function approvalsPage(name) {
 
         async init() {
             await this.load();
-            // Connect WebSocket for live draft_policy_update events
-            if (typeof connectWebSocket === 'function') {
-                // The WebSocket handler in websocket.js will auto-refresh
-                // approvals-content if it exists, but we override that
-                // by listening for the custom event pattern
-            }
+
+            // Live-refresh: websocket.js dispatches this custom event when a
+            // draft_policy_update arrives over the sandbox WS stream. We just
+            // reload — load() is idempotent and cheap.
+            document.addEventListener('sg:approvals-update', (event) => {
+                if (event.detail && event.detail.sandbox_name === this.sandboxName) {
+                    this.load();
+                }
+            });
+
+            // Hash-fragment cross-link from the sandbox logs viewer:
+            // #binary=/usr/bin/curl&host=api.example.com → find and highlight
+            // the matching pending chunk.
+            this.$nextTick(() => this._applyHashCrossLink());
+            window.addEventListener('hashchange', () => this._applyHashCrossLink());
         },
 
         async load() {
+            // Guard against overlapping reloads triggered by the websocket
+            // burst + user clicks at the same time.
+            if (this.loading && this.chunks.length > 0) return;
             this.loading = true;
             this.error = '';
             try {
                 const data = await apiFetch(`${API}/sandboxes/${name}/approvals`);
                 this.chunks = data.chunks || [];
                 this.rollingSummary = data.rolling_summary || '';
+                this.lastAnalyzedAtMs = data.last_analyzed_at_ms || 0;
             } catch (e) {
                 this.error = e.message;
             } finally {
@@ -49,7 +81,13 @@ function approvalsPage(name) {
         },
 
         hasDetail(chunk) {
-            return !!(chunk.rationale || chunk.security_notes);
+            return !!(
+                chunk.rationale ||
+                chunk.security_notes ||
+                chunk.stage ||
+                (chunk.denial_summary_ids && chunk.denial_summary_ids.length > 0) ||
+                chunk.binary
+            );
         },
 
         confidencePercent(chunk) {
@@ -64,6 +102,67 @@ function approvalsPage(name) {
         endpointMore(endpoints, max = 2) {
             if (!endpoints || endpoints.length <= max) return 0;
             return endpoints.length - max;
+        },
+
+        // Relative "seen" summary used in the Seen column:
+        // "3× / last 2h ago" when hit_count > 1, single timestamp otherwise.
+        formatSeen(chunk) {
+            const first = chunk.first_seen_ms || 0;
+            const last = chunk.last_seen_ms || 0;
+            if (!first && !last) return '\u2014';
+            const lastStr = last ? formatTimestamp(last) : '\u2014';
+            if (chunk.hit_count && chunk.hit_count > 1) {
+                return `${chunk.hit_count}\u00d7, last ${lastStr}`;
+            }
+            return lastStr;
+        },
+
+        // Navigate to the sandbox logs viewer with a pre-populated text
+        // filter so the OCSF events that triggered this chunk are easy to
+        // spot. Uses binary (if known) + first endpoint host as filter seed.
+        goToLogs(chunk) {
+            const parts = [];
+            if (chunk.binary) parts.push(chunk.binary);
+            const endpoints = (chunk.proposed_rule && chunk.proposed_rule.endpoints) || [];
+            if (endpoints.length > 0 && endpoints[0].host) parts.push(endpoints[0].host);
+            const filter = parts.join(' ');
+            const url = `/gateways/${GW}/sandboxes/${this.sandboxName}/logs`
+                + (filter ? `?text=${encodeURIComponent(filter)}` : '');
+            window.location.href = url;
+        },
+
+        _parseHashFragment() {
+            const hash = (window.location.hash || '').replace(/^#/, '');
+            if (!hash) return {};
+            const out = {};
+            for (const part of hash.split('&')) {
+                const [k, v] = part.split('=', 2);
+                if (k) out[decodeURIComponent(k)] = v ? decodeURIComponent(v) : '';
+            }
+            return out;
+        },
+
+        _applyHashCrossLink() {
+            const params = this._parseHashFragment();
+            if (!params.binary && !params.host) return;
+            const match = this.chunks.find(c => {
+                if (params.binary && c.binary !== params.binary) return false;
+                if (params.host) {
+                    const endpoints = (c.proposed_rule && c.proposed_rule.endpoints) || [];
+                    if (!endpoints.some(ep => ep.host === params.host)) return false;
+                }
+                return true;
+            });
+            if (!match) return;
+            this.highlightChunkId = match.id;
+            this.expandedChunks[match.id] = true;
+            this.$nextTick(() => {
+                const el = document.getElementById(`chunk-row-${match.id}`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Clear the highlight after a short moment so it works as a
+                // visual cue, not a permanent marker.
+                setTimeout(() => { this.highlightChunkId = ''; }, 3500);
+            });
         },
 
         async approve(chunkId) {
@@ -217,7 +316,7 @@ function openEditChunkModal(sandboxName, chunk, onSave) {
 }
 
 
-// ─── Approval History Modal (imperative) ────────────────────────────────────
+// ─── Approval History Modal (imperative, with event-type filter chips) ─────
 
 async function showApprovalHistory(sandboxName) {
     const existing = document.getElementById('approvalHistoryModal');
@@ -257,35 +356,80 @@ async function showApprovalHistory(sandboxName) {
             return;
         }
 
+        // Count how many entries fall into each known event type (plus a
+        // fallback bucket for anything upstream adds later).
+        const counts = {};
+        for (const entry of history) {
+            const t = entry.event_type || 'unknown';
+            counts[t] = (counts[t] || 0) + 1;
+        }
+
+        const renderChips = () => _HISTORY_EVENT_TYPES
+            .filter(t => counts[t.type])
+            .map(t => `
+                <button type="button"
+                        class="btn btn-sm me-1 mb-1 history-chip ${t.badge}"
+                        data-event-type="${escapeHtml(t.type)}">
+                    ${escapeHtml(t.label)}
+                    <span class="badge bg-dark ms-1">${counts[t.type]}</span>
+                </button>
+            `).join('');
+
         body.innerHTML = `
+            <div class="mb-3 d-flex flex-wrap align-items-center">
+                <span class="text-muted small me-2">Filter:</span>
+                ${renderChips()}
+            </div>
             <div class="table-responsive">
-                <table class="table table-striped table-sm align-middle">
+                <table class="table table-striped table-sm align-middle" id="approval-history-table">
                     <thead>
                         <tr>
-                            <th>Rule</th>
-                            <th>Decision</th>
+                            <th>Event</th>
                             <th>Timestamp</th>
-                            <th>Details</th>
+                            <th>Chunk</th>
+                            <th>Description</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${history.map(entry => {
-                            const badgeClass = SG.badges.approval[entry.status] || SG.badges.approval[entry.decision] || 'text-bg-secondary';
-                            const decision = entry.status || entry.decision || 'unknown';
-                            const ts = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '\u2014';
-                            const rule = entry.rule_name || entry.chunk_id || '\u2014';
-                            const reason = entry.reason || '';
+                            const typeInfo = _HISTORY_EVENT_TYPES.find(t => t.type === entry.event_type);
+                            const badgeClass = typeInfo ? typeInfo.badge : 'text-bg-secondary';
+                            const label = typeInfo ? typeInfo.label : (entry.event_type || 'unknown');
+                            const ts = entry.timestamp_ms
+                                ? formatTimestamp(entry.timestamp_ms)
+                                : '\u2014';
+                            const chunk = entry.chunk_id || '\u2014';
+                            const desc = entry.description || '';
                             return `
-                                <tr>
-                                    <td><strong>${escapeHtml(rule)}</strong></td>
-                                    <td><span class="badge ${badgeClass}">${escapeHtml(decision)}</span></td>
+                                <tr data-event-type="${escapeHtml(entry.event_type || 'unknown')}">
+                                    <td><span class="badge ${badgeClass}">${escapeHtml(label)}</span></td>
                                     <td class="text-muted small">${escapeHtml(ts)}</td>
-                                    <td class="text-muted small">${reason ? escapeHtml(reason) : '\u2014'}</td>
+                                    <td class="font-monospace small">${escapeHtml(chunk)}</td>
+                                    <td class="text-muted small">${desc ? escapeHtml(desc) : '\u2014'}</td>
                                 </tr>`;
                         }).join('')}
                     </tbody>
                 </table>
             </div>`;
+
+        // Chip toggles hide/show rows via data-event-type. Local state so we
+        // don't wrangle Alpine inside an imperative modal.
+        const hidden = new Set();
+        body.querySelectorAll('.history-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const t = chip.dataset.eventType;
+                if (hidden.has(t)) {
+                    hidden.delete(t);
+                    chip.classList.remove('opacity-50');
+                } else {
+                    hidden.add(t);
+                    chip.classList.add('opacity-50');
+                }
+                body.querySelectorAll('#approval-history-table tbody tr').forEach(row => {
+                    row.style.display = hidden.has(row.dataset.eventType) ? 'none' : '';
+                });
+            });
+        });
     } catch (e) {
         const body = document.getElementById('approval-history-body');
         if (body) body.innerHTML = renderError(e.message);

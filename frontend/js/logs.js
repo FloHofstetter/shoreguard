@@ -47,7 +47,38 @@ function logsPage(name) {
         },
 
         async init() {
+            // Cross-link from an approvals page: /logs?text=/usr/bin/curl
+            const qs = new URLSearchParams(window.location.search);
+            const text = qs.get('text');
+            if (text) {
+                this.filterText = text;
+            }
             await this.load();
+        },
+
+        // Navigate to the sandbox approvals page, passing the denied
+        // binary/host as a hash fragment so the approvals page can scroll
+        // to the matching chunk.
+        goToApprovals(log) {
+            if (!log.ocsf) return;
+            const binary = log.ocsf.binary || '';
+            // Best-effort host: pull from bracket_fields[policy] is too
+            // indirect; the summary usually contains "-> host:port" for
+            // NET/HTTP events. Leave empty if we can't figure it out.
+            let host = '';
+            const m = (log.ocsf.summary || '').match(/->\s+([^\s:]+)/);
+            if (m) host = m[1];
+            const frag = [];
+            if (binary) frag.push(`binary=${encodeURIComponent(binary)}`);
+            if (host) frag.push(`host=${encodeURIComponent(host)}`);
+            const hash = frag.length ? '#' + frag.join('&') : '';
+            window.location.href = `/gateways/${GW}/sandboxes/${this.sandboxName}/approvals${hash}`;
+        },
+
+        isDeniedOcsf(log) {
+            if (!log.ocsf) return false;
+            const d = (log.ocsf.disposition || '').toUpperCase();
+            return d === 'DENIED' || d === 'BLOCKED';
         },
 
         async load() {
