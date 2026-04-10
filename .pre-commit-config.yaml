@@ -94,6 +94,16 @@ repos:
         stages: [pre-push]
         # Only runs on push — slow + needs network.
 
+      - id: bandit
+        name: bandit
+        entry: uv run bandit -r shoreguard -ll -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        # Source-level SAST; mirrors the CI `security` job. Scans the
+        # whole shoreguard/ tree at medium-and-above severity. pre-push
+        # only — full-repo scan is ~2–5s.
+
       - id: mkdocs-build-strict
         name: mkdocs build --strict
         entry: uv run --group docs mkdocs build --strict --site-dir /tmp/mkdocs-strict-check
