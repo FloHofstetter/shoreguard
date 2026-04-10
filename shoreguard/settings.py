@@ -841,6 +841,39 @@ class Settings(BaseSettings):
 
         for msg in warnings:
             logger.warning("Config check: %s", msg)
+        return warnings
+
+    def enforce_production_safety(self) -> None:
+        """Refuse to start if any ``ERROR:``-severity config check fires.
+
+        Calls :meth:`check_production_readiness` and raises ``RuntimeError``
+        when any returned message is prefixed with ``ERROR:``. An operator
+        can override the check with ``SHOREGUARD_ALLOW_UNSAFE_CONFIG=true``
+        — useful for bringing up a broken stack for debugging — in which
+        case the errors are logged at ``CRITICAL`` severity and startup
+        continues.
+
+        Raises:
+            RuntimeError: If ``ERROR:`` messages are present and the
+                override environment variable is not set to ``"true"``.
+        """
+        warnings = self.check_production_readiness()
+        errors = [w for w in warnings if w.startswith("ERROR:")]
+        if not errors:
+            return
+        if os.environ.get("SHOREGUARD_ALLOW_UNSAFE_CONFIG", "").lower() == "true":
+            logger.critical(
+                "SHOREGUARD_ALLOW_UNSAFE_CONFIG=true — starting with %d "
+                "ERROR-severity config issue(s): %s",
+                len(errors),
+                "; ".join(errors),
+            )
+            return
+        raise RuntimeError(
+            f"Refusing to start with {len(errors)} prod-readiness ERROR(s): "
+            f"{'; '.join(errors)}. Fix the config or set "
+            "SHOREGUARD_ALLOW_UNSAFE_CONFIG=true to override."
+        )
 
         return warnings
 

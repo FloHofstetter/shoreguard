@@ -104,6 +104,22 @@ class HealthResponse(BaseModel):
     status: str
 
 
+class VersionResponse(BaseModel):
+    """Build identity — lets operators verify which artifact is running.
+
+    Attributes:
+        version (str): Package version (from ``pyproject.toml``).
+        git_sha (str): Git commit hash the image was built from, or
+            ``"unknown"`` when built outside of CI.
+        build_time (str): ISO-8601 UTC timestamp of the image build, or
+            ``"unknown"`` when built outside of CI.
+    """
+
+    version: str
+    git_sha: str
+    build_time: str
+
+
 class ReadinessCheck(BaseModel):
     """Individual readiness check results.
 

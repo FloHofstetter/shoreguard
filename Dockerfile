@@ -12,12 +12,22 @@ RUN pip install --no-cache-dir hatchling \
 # ── Stage 2: Runtime ────────────────────────────────────────────────────────
 FROM python:3.14-slim
 
-# Pass version at build time: --build-arg SHOREGUARD_VERSION=0.16.0
-# CI sets this from the git tag; local builds default to "dev".
+# Pass build identity at build time. CI sets these from the git tag, commit,
+# and build timestamp; local builds default to "dev"/"unknown".
+#   --build-arg SHOREGUARD_VERSION=0.28.0
+#   --build-arg SHOREGUARD_GIT_SHA=a1b2c3d
+#   --build-arg SHOREGUARD_BUILD_TIME=2026-04-10T12:00:00Z
 ARG SHOREGUARD_VERSION=dev
+ARG SHOREGUARD_GIT_SHA=unknown
+ARG SHOREGUARD_BUILD_TIME=unknown
+ENV SHOREGUARD_VERSION=${SHOREGUARD_VERSION} \
+    SHOREGUARD_GIT_SHA=${SHOREGUARD_GIT_SHA} \
+    SHOREGUARD_BUILD_TIME=${SHOREGUARD_BUILD_TIME}
 LABEL org.opencontainers.image.title="ShoreGuard" \
       org.opencontainers.image.description="Open-source control plane for NVIDIA OpenShell" \
       org.opencontainers.image.version="${SHOREGUARD_VERSION}" \
+      org.opencontainers.image.revision="${SHOREGUARD_GIT_SHA}" \
+      org.opencontainers.image.created="${SHOREGUARD_BUILD_TIME}" \
       org.opencontainers.image.url="https://github.com/FloHofstetter/shoreguard" \
       org.opencontainers.image.source="https://github.com/FloHofstetter/shoreguard" \
       org.opencontainers.image.licenses="Apache-2.0"

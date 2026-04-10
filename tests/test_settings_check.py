@@ -72,6 +72,59 @@ def test_warns_on_hsts_disabled_in_prod() -> None:
     assert any("hsts_enabled=false" in w for w in warnings)
 
 
+# ── enforce_production_safety ──────────────────────────────────────────────
+
+
+def test_enforce_production_safety_noop_on_clean_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dev-default settings must not be misclassified as ERROR."""
+    monkeypatch.setenv("SHOREGUARD_DATABASE_URL", "postgresql://u:p@h/db")
+    s = _make_settings()
+    # Must not raise.
+    s.enforce_production_safety()
+
+
+def test_enforce_production_safety_raises_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A single ERROR-severity entry should block startup."""
+    monkeypatch.delenv("SHOREGUARD_ALLOW_UNSAFE_CONFIG", raising=False)
+    s = _make_settings(
+        # allow_registration=True in prod-like → ERROR.
+        auth=AuthSettings(
+            no_auth=False,
+            secret_key="x" * 32,
+            allow_registration=True,
+            hsts_enabled=True,
+            csp_policy="default-src 'self'",
+        ),
+    )
+    with pytest.raises(RuntimeError, match="prod-readiness ERROR"):
+        s.enforce_production_safety()
+
+
+def test_enforce_production_safety_override_allows_start(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The override env-var should turn the hard-fail into a CRITICAL log."""
+    import logging
+
+    monkeypatch.setenv("SHOREGUARD_ALLOW_UNSAFE_CONFIG", "true")
+    s = _make_settings(
+        auth=AuthSettings(
+            no_auth=False,
+            secret_key="x" * 32,
+            allow_registration=True,
+            hsts_enabled=True,
+            csp_policy="default-src 'self'",
+        ),
+    )
+    with caplog.at_level(logging.CRITICAL, logger="shoreguard.settings"):
+        s.enforce_production_safety()  # must not raise
+    assert any("SHOREGUARD_ALLOW_UNSAFE_CONFIG" in r.message for r in caplog.records)
+
+
 def test_warns_on_unsafe_csp_in_legacy_mode() -> None:
     # When strict mode is explicitly disabled, unsafe-* in the legacy
     # csp_policy must still trigger an error — even on local binds.

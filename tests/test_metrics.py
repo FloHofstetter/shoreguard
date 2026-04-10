@@ -86,6 +86,39 @@ class TestMetricsAuth:
         assert resp.status_code == 200
 
 
+class TestVersionEndpoint:
+    async def test_returns_200(self, client):
+        resp = await client.get("/version")
+        assert resp.status_code == 200
+
+    async def test_contains_version_fields(self, client):
+        resp = await client.get("/version")
+        body = resp.json()
+        assert set(body.keys()) == {"version", "git_sha", "build_time"}
+        # `version` is always populated from package metadata.
+        assert body["version"]
+
+    async def test_defaults_to_unknown_outside_ci(self, client, monkeypatch):
+        import shoreguard.api.main as main_mod
+
+        monkeypatch.setattr(main_mod, "__git_sha__", "unknown")
+        monkeypatch.setattr(main_mod, "__build_time__", "unknown")
+        resp = await client.get("/version")
+        body = resp.json()
+        assert body["git_sha"] == "unknown"
+        assert body["build_time"] == "unknown"
+
+    async def test_reflects_build_args_when_set(self, client, monkeypatch):
+        import shoreguard.api.main as main_mod
+
+        monkeypatch.setattr(main_mod, "__git_sha__", "a1b2c3d")
+        monkeypatch.setattr(main_mod, "__build_time__", "2026-04-10T12:00:00Z")
+        resp = await client.get("/version")
+        body = resp.json()
+        assert body["git_sha"] == "a1b2c3d"
+        assert body["build_time"] == "2026-04-10T12:00:00Z"
+
+
 class TestHealthEndpoints:
     async def test_readyz_logs_warning_on_db_failure(self, client, caplog):
         with (

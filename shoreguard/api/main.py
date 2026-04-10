@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from shoreguard import __version__
+from shoreguard import __build_time__, __git_sha__, __version__
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import GatewayNotConnectedError
 
@@ -42,7 +42,7 @@ from .routes import (
     templates,
     webhooks,
 )
-from .schemas import HealthResponse, InferenceConfigResponse
+from .schemas import HealthResponse, InferenceConfigResponse, VersionResponse
 from .security_headers import security_headers_middleware
 from .websocket import router as ws_router
 
@@ -75,7 +75,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from shoreguard.settings import get_settings
 
     settings = get_settings()
-    settings.check_production_readiness()
+    settings.enforce_production_safety()
 
     # Install request-ID log filter so %(request_id)s is available in all loggers.
     logging.getLogger().addFilter(RequestIdFilter())
@@ -141,7 +141,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Webhook service initialised")
 
     # ── Metrics ─────────────────────────────────────────────────────────
-    shoreguard_info.info({"version": __version__})
+    shoreguard_info.info(
+        {"version": __version__, "git_sha": __git_sha__, "build_time": __build_time__}
+    )
 
     # ── Auth ─────────────────────────────────────────────────────────────
     init_auth(session_factory)
@@ -339,6 +341,24 @@ async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@health_router.get("/version", response_model=VersionResponse)
+async def version_info() -> dict[str, str]:
+    """Report version, git SHA, and build time of the running binary.
+
+    Used after deploys to verify which artifact is actually serving
+    traffic. Git SHA and build time are populated by Dockerfile ARGs
+    at CI build time; local runs return ``"unknown"`` for both.
+
+    Returns:
+        dict[str, str]: ``{"version": ..., "git_sha": ..., "build_time": ...}``.
+    """
+    return {
+        "version": __version__,
+        "git_sha": __git_sha__,
+        "build_time": __build_time__,
+    }
+
+
 @health_router.get("/readyz")
 async def readyz(verbose: bool = False) -> JSONResponse:
     """Readiness probe — checks database connectivity and gateway health.
@@ -438,7 +458,7 @@ app.middleware("http")(security_headers_middleware)
 
 
 # ─── Global rate limit middleware ───────────────────────────────────────────
-_RATE_LIMIT_SKIP_PATHS = frozenset({"/healthz", "/readyz", "/metrics"})
+_RATE_LIMIT_SKIP_PATHS = frozenset({"/healthz", "/readyz", "/metrics", "/version"})
 
 
 @app.middleware("http")
