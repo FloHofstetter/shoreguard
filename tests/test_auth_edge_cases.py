@@ -101,6 +101,18 @@ class TestVerifyPasswordCorruptHash:
     def test_non_string_hash_triggers_type_error_branch(self):
         assert verify_password("pw", None) is False  # type: ignore[arg-type]
 
+    def test_unrecognised_hash_format_returns_false(self):
+        """Garbage hash strings raise ``UnknownHashError`` from pwdlib.
+
+        Regression test: before the PwdlibError fix, an unrecognised hash
+        propagated as an exception instead of returning ``False`` like the
+        function comment promises.
+        """
+        assert verify_password("anything", "totally-not-a-real-hash") is False
+        assert verify_password("x", "plaintext-not-a-hash") is False
+        # Empty string is also "unrecognised" by pwdlib.
+        assert verify_password("x", "") is False
+
 
 # ─── Session token expiry / malformed ─────────────────────────────────────
 

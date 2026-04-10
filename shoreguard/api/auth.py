@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import Cookie, HTTPException, Query, Request, WebSocket, status
 from pwdlib import PasswordHash
+from pwdlib.exceptions import PwdlibError
 from pwdlib.hashers.bcrypt import BcryptHasher
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -76,8 +77,10 @@ def verify_password(password: str, hashed: str) -> bool:
     """
     try:
         return _hasher.verify(password, hashed)
-    except ValueError, TypeError:
+    except ValueError, TypeError, PwdlibError:
         # Corrupt or unrecognised hash format — treat as non-match.
+        # PwdlibError covers UnknownHashError (garbage hash strings) and
+        # HasherNotAvailable (hash format from a disabled hasher).
         logger.warning("Password verification error (corrupt hash?)", exc_info=True)
         return False
 
