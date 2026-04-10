@@ -86,95 +86,82 @@ class SlidingWindowRateLimiter:
             del self._buckets[k]
 
 
-# ── Module-level singleton ────────────────────────────────────────────────
+# ── Module-level singletons ───────────────────────────────────────────────
+#
+# Three limiters share identical factory+reset boilerplate, so they live in
+# a small registry keyed by name. ``login`` guards authentication, ``write``
+# throttles authenticated mutations, and ``global`` is the coarse per-IP
+# DDoS guardrail applied by ``global_rate_limit_middleware``.
 
-_limiter: SlidingWindowRateLimiter | None = None
+_limiters: dict[str, SlidingWindowRateLimiter] = {}
 
 
+def get_limiter(name: str) -> SlidingWindowRateLimiter:
+    """Return the named rate limiter, creating it on first call.
+
+    Args:
+        name: One of ``"login"``, ``"write"``, ``"global"``.
+
+    Returns:
+        SlidingWindowRateLimiter: The singleton instance for *name*.
+    """
+    limiter = _limiters.get(name)
+    if limiter is None:
+        from shoreguard.settings import get_settings
+
+        s = get_settings().auth
+        limiter = SlidingWindowRateLimiter(
+            max_attempts=getattr(s, f"{name}_rate_limit_attempts"),
+            window_seconds=getattr(s, f"{name}_rate_limit_window"),
+            lockout_seconds=getattr(s, f"{name}_rate_limit_lockout"),
+        )
+        _limiters[name] = limiter
+    return limiter
+
+
+def reset_limiters() -> None:
+    """Clear all singleton limiters (for tests)."""
+    _limiters.clear()
+
+
+# Backwards-compatible aliases so call-sites don't churn.
 def get_login_limiter() -> SlidingWindowRateLimiter:
-    """Return the global login rate limiter, creating it on first call.
+    """Return the login rate limiter singleton.
 
     Returns:
         SlidingWindowRateLimiter: The singleton instance.
     """
-    global _limiter  # noqa: PLW0603
-    if _limiter is None:
-        from shoreguard.settings import get_settings
-
-        s = get_settings().auth
-        _limiter = SlidingWindowRateLimiter(
-            max_attempts=s.login_rate_limit_attempts,
-            window_seconds=s.login_rate_limit_window,
-            lockout_seconds=s.login_rate_limit_lockout,
-        )
-    return _limiter
-
-
-def reset_login_limiter() -> None:
-    """Clear the singleton (for tests)."""
-    global _limiter  # noqa: PLW0603
-    _limiter = None
-
-
-# ── Write rate limiter (for authenticated mutation endpoints) ────────────
-
-_write_limiter: SlidingWindowRateLimiter | None = None
+    return get_limiter("login")
 
 
 def get_write_limiter() -> SlidingWindowRateLimiter:
-    """Return the global write rate limiter, creating it on first call.
+    """Return the write rate limiter singleton.
 
     Returns:
         SlidingWindowRateLimiter: The singleton instance.
     """
-    global _write_limiter  # noqa: PLW0603
-    if _write_limiter is None:
-        from shoreguard.settings import get_settings
-
-        s = get_settings().auth
-        _write_limiter = SlidingWindowRateLimiter(
-            max_attempts=s.write_rate_limit_attempts,
-            window_seconds=s.write_rate_limit_window,
-            lockout_seconds=s.write_rate_limit_lockout,
-        )
-    return _write_limiter
-
-
-def reset_write_limiter() -> None:
-    """Clear the singleton (for tests)."""
-    global _write_limiter  # noqa: PLW0603
-    _write_limiter = None
-
-
-# ── Global API rate limiter (coarse DDoS guardrail, per client IP) ────────
-
-_global_limiter: SlidingWindowRateLimiter | None = None
+    return get_limiter("write")
 
 
 def get_global_limiter() -> SlidingWindowRateLimiter:
-    """Return the global API rate limiter, creating it on first call.
-
-    Applied by ``global_rate_limit_middleware`` to every HTTP request
-    except health/metrics endpoints. Intended as a coarse DDoS guardrail,
-    not fine-grained abuse protection.
+    """Return the global API rate limiter singleton.
 
     Returns:
         SlidingWindowRateLimiter: The singleton instance.
     """
-    global _global_limiter  # noqa: PLW0603
-    if _global_limiter is None:
-        from shoreguard.settings import get_settings
+    return get_limiter("global")
 
-        s = get_settings().auth
-        _global_limiter = SlidingWindowRateLimiter(
-            max_attempts=s.global_rate_limit_attempts,
-            window_seconds=s.global_rate_limit_window,
-            lockout_seconds=s.global_rate_limit_lockout,
-        )
-    return _global_limiter
+
+def reset_login_limiter() -> None:
+    """Clear the login limiter singleton (for tests)."""
+    _limiters.pop("login", None)
+
+
+def reset_write_limiter() -> None:
+    """Clear the write limiter singleton (for tests)."""
+    _limiters.pop("write", None)
 
 
 def reset_global_limiter() -> None:
-    """Clear the singleton (for tests)."""
-    global _global_limiter  # noqa: PLW0603
-    _global_limiter = None
+    """Clear the global limiter singleton (for tests)."""
+    _limiters.pop("global", None)
