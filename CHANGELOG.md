@@ -5,6 +5,72 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.28.0] — 2026-04-10
+
+### Added
+
+- **OpenShell v0.0.26 alignment (M1 / S1.1).** Protobuf stubs regenerated
+  against upstream OpenShell v0.0.26 (was v0.0.22). Three stub files
+  actually changed (`inference_pb2.py`, `openshell_pb2.py`,
+  `openshell_pb2.pyi`); the rest compiled byte-identically. This unblocks
+  the two user-visible features below.
+- **TTY exec for interactive commands.** `POST
+  /api/gateways/{gw}/sandboxes/{name}/exec` now accepts a boolean `tty`
+  field in the request body. When `true`, the gateway allocates a
+  pseudo-terminal so interactive programs that check `isatty()` (e.g.
+  `python` REPL, `vim`, `htop`) behave correctly. Defaults to `false`,
+  so existing callers are unaffected. Requires a gateway running
+  OpenShell v0.0.23 or newer.
+- **Named inference routes on `GET /inference`.** `GET
+  /api/gateways/{gw}/inference` now accepts an optional `?route_name=`
+  query parameter. Empty (the default) returns the cluster's default
+  inference route; passing a name like `sandbox-system` returns the
+  route that OpenShell v0.0.25+ uses for sandbox system-level model
+  calls. `PUT /inference` already accepted `route_name` in the request
+  body; this release closes the GET-side gap.
+- **Gateway Settings API (M1 / S1.2).** New admin-gated REST endpoints
+  expose OpenShell's global gateway configuration:
+  `GET /api/gateway/{name}/settings`,
+  `PUT /api/gateway/{name}/settings/{key}` (body `{"value": …}` accepting
+  string, bool, or int), and `DELETE /api/gateway/{name}/settings/{key}`.
+  OpenShell has no separate `UpdateGatewayConfig` RPC; updates are sent
+  per-key via the existing `UpdateConfig` RPC with the `global` flag set.
+  The new API is value-agnostic — any settings key the gateway recognises
+  (including the new `ocsf_logging_enabled` toggle) can be read and
+  written without further code changes.
+
+### Changed
+
+- **Error responses now follow RFC 9457 Problem Details.** Error bodies
+  are served with `Content-Type: application/problem+json` and carry the
+  standard `type`, `title`, `status`, and `detail` fields alongside the
+  existing ShoreGuard `code` (and any extension members such as
+  `request_id`, `errors`, `feature`, or `upgrade_required`). The
+  `detail` field is unchanged, so existing clients that read only
+  `body.detail` (including the ShoreGuard web UI) keep working without
+  modification.
+
+### Fixed
+
+- **`verify_password` no longer raises on corrupt hashes.** A malformed
+  or truncated password hash row in the database used to surface as an
+  unhandled `PwdlibError`; it now returns `False` so the login attempt
+  fails cleanly and the account lockout counter advances as intended.
+
+### Tests
+
+- **Auth edge-case coverage raised from 75% to 96%** — targeted tests
+  for token expiry, account lockout transitions, and OIDC error paths.
+- **WebSocket auth-error coverage raised from 67% to 94%** — coverage
+  for authentication failure branches in the sandbox log stream
+  endpoint.
+- **`shoreguard/services/operations.py` coverage raised from 61% to 100%.**
+  The previous baseline reflected an inverted gap: the test suite
+  exercised the sync `OperationService` via an adapter in `conftest.py`
+  while the prod `AsyncOperationService` (used by the API routes) was
+  untested. A new `tests/test_operations_async.py` hits the async class
+  directly through an in-memory aiosqlite fixture.
+
 ## [0.27.0] — 2026-04-10
 
 ### Security

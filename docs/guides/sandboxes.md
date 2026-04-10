@@ -117,6 +117,27 @@ Content-Type: application/json
 
 The response contains `stdout`, `stderr`, and the exit code.
 
+### Interactive (TTY) exec
+
+Since v0.28.0, the exec endpoint accepts an optional `tty` flag. When set
+to `true`, the gateway allocates a pseudo-terminal for the command so
+interactive programs that check `isatty()` — e.g. `python` REPL, `vim`,
+`htop` — behave correctly:
+
+```http
+POST /api/gateways/{gw}/sandboxes/{name}/exec
+Content-Type: application/json
+
+{
+  "command": ["python", "-q"],
+  "tty": true
+}
+```
+
+TTY exec requires a gateway running **OpenShell v0.0.23 or newer**. The
+flag defaults to `false`, so existing non-interactive callers are
+unaffected.
+
 ## SSH sessions
 
 You can create a temporary SSH session for interactive access to a sandbox.
