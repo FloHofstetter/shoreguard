@@ -130,16 +130,16 @@ async def test_timeout_returns_504(api_client, mock_client):
 
 async def test_grpc_error_handler_maps_status_codes():
     """Verify the gRPC status code mapping dict is correct."""
-    from shoreguard.api.errors import _GRPC_STATUS_MAP
+    from shoreguard.api.errors import _GRPC_MAP
 
-    assert _GRPC_STATUS_MAP[grpc.StatusCode.NOT_FOUND] == 404
-    assert _GRPC_STATUS_MAP[grpc.StatusCode.ALREADY_EXISTS] == 409
-    assert _GRPC_STATUS_MAP[grpc.StatusCode.UNAVAILABLE] == 503
-    assert _GRPC_STATUS_MAP[grpc.StatusCode.INVALID_ARGUMENT] == 400
-    assert _GRPC_STATUS_MAP[grpc.StatusCode.PERMISSION_DENIED] == 403
-    assert _GRPC_STATUS_MAP[grpc.StatusCode.UNAUTHENTICATED] == 401
-    assert _GRPC_STATUS_MAP[grpc.StatusCode.UNIMPLEMENTED] == 501
-    assert _GRPC_STATUS_MAP[grpc.StatusCode.DEADLINE_EXCEEDED] == 504
+    assert _GRPC_MAP[grpc.StatusCode.NOT_FOUND][0] == 404
+    assert _GRPC_MAP[grpc.StatusCode.ALREADY_EXISTS][0] == 409
+    assert _GRPC_MAP[grpc.StatusCode.UNAVAILABLE][0] == 503
+    assert _GRPC_MAP[grpc.StatusCode.INVALID_ARGUMENT][0] == 400
+    assert _GRPC_MAP[grpc.StatusCode.PERMISSION_DENIED][0] == 403
+    assert _GRPC_MAP[grpc.StatusCode.UNAUTHENTICATED][0] == 401
+    assert _GRPC_MAP[grpc.StatusCode.UNIMPLEMENTED][0] == 501
+    assert _GRPC_MAP[grpc.StatusCode.DEADLINE_EXCEEDED][0] == 504
 
 
 async def test_grpc_unimplemented_returns_501(api_client, mock_client):
@@ -156,14 +156,14 @@ async def test_grpc_unimplemented_returns_501(api_client, mock_client):
 
 async def test_domain_error_status_map():
     """Verify domain exception → HTTP status mapping."""
-    from shoreguard.api.errors import _DOMAIN_STATUS_MAP
+    from shoreguard.api.errors import _DOMAIN_MAP
     from shoreguard.exceptions import FeatureNotAvailableError
 
-    assert _DOMAIN_STATUS_MAP[GatewayNotConnectedError] == 503
-    assert _DOMAIN_STATUS_MAP[NotFoundError] == 404
-    assert _DOMAIN_STATUS_MAP[PolicyError] == 400
-    assert _DOMAIN_STATUS_MAP[SandboxError] == 409
-    assert _DOMAIN_STATUS_MAP[FeatureNotAvailableError] == 501
+    assert _DOMAIN_MAP[GatewayNotConnectedError][0] == 503
+    assert _DOMAIN_MAP[NotFoundError][0] == 404
+    assert _DOMAIN_MAP[PolicyError][0] == 400
+    assert _DOMAIN_MAP[SandboxError][0] == 409
+    assert _DOMAIN_MAP[FeatureNotAvailableError][0] == 501
 
 
 def test_detect_feature_from_path_policy():

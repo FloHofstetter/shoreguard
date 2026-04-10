@@ -100,6 +100,32 @@ class TestCodeForStatus:
         assert code_for_status(418) == INTERNAL_ERROR
 
 
+# ── RFC 9457 Problem Details contract ────────────────────────────────────────
+
+
+class TestRFC9457Shape:
+    """Error responses follow RFC 9457 Problem Details for HTTP APIs."""
+
+    async def test_body_carries_rfc9457_members(self, err_client):
+        _pending_exc["exc"] = HTTPException(404, "not here")
+        resp = await err_client.get("/raise")
+        body = resp.json()
+        assert body["type"] == "about:blank"
+        assert body["title"] == "Not Found"
+        assert body["status"] == 404
+        assert body["detail"] == "not here"
+        assert body["code"] == NOT_FOUND
+
+    async def test_content_type_is_problem_json(self, err_client):
+        _pending_exc["exc"] = HTTPException(409, "duplicate")
+        resp = await err_client.get("/raise")
+        assert resp.headers["content-type"].startswith("application/problem+json")
+
+    async def test_title_humanizes_snake_case_code(self, err_client):
+        body = await _get_error(err_client, HTTPException(503, "down"))
+        assert body["title"] == "Service Unavailable"
+
+
 # ── HTTPException handler ────────────────────────────────────────────────────
 
 
