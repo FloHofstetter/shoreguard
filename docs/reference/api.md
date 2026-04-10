@@ -134,6 +134,7 @@ All sandbox endpoints are scoped to a gateway via the `{gw}` path parameter.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy` | Get the active sandbox policy |
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy/effective` | Get the effective policy — what the gateway enforces (v0.28.0+) |
 | `PUT` | `/api/gateways/{gw}/sandboxes/{name}/policy` | Update the full sandbox policy |
 | `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy/revisions` | List policy revisions |
 | `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy/diff` | Compare two revisions |

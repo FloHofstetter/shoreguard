@@ -19,6 +19,32 @@ async def test_get_policy(api_client, mock_client):
     assert "policy" in resp.json()
 
 
+async def test_get_effective_policy(api_client, mock_client):
+    """GET /policy/effective returns the enforced policy with source marker."""
+    mock_client.policies.get.return_value = {
+        "active_version": 3,
+        "revision": {"version": 3, "status": "loaded"},
+        "policy": {"network_policies": {"pypi": {}}},
+    }
+
+    resp = await api_client.get(f"{BASE}/effective")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["active_version"] == 3
+    assert data["policy"]["network_policies"] == {"pypi": {}}
+    assert data["source"] == "gateway_runtime"
+
+
+async def test_get_effective_policy_not_found(api_client, mock_client):
+    """GET /policy/effective returns 404 when the sandbox is missing."""
+    mock_client.policies.get.side_effect = NotFoundError("Sandbox not found")
+
+    resp = await api_client.get(f"{BASE}/effective")
+
+    assert resp.status_code == 404
+
+
 async def test_update_policy(api_client, mock_client):
     """PUT /policy returns full PolicyResponse after update."""
     mock_client.policies.update.return_value = {"version": 3, "policy_hash": "abc"}

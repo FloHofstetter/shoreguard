@@ -96,6 +96,31 @@ def test_get_policy(policy_svc, mock_client):
     assert result == _make_policy()
 
 
+def test_get_effective_policy_adds_source_marker(policy_svc, mock_client):
+    """get_effective() returns the client policy with a gateway_runtime marker."""
+    mock_client.policies.get.return_value = {
+        "active_version": 7,
+        "revision": {"version": 7, "status": "loaded"},
+        "policy": {"network_policies": {"pypi": {}}},
+    }
+
+    result = policy_svc.get_effective("sb1")
+
+    mock_client.policies.get.assert_called_once_with("sb1")
+    assert result["source"] == "gateway_runtime"
+    assert result["active_version"] == 7
+    assert result["policy"]["network_policies"] == {"pypi": {}}
+
+
+def test_get_effective_policy_non_dict_result(policy_svc, mock_client):
+    """get_effective() wraps non-dict client responses in a policy envelope."""
+    mock_client.policies.get.return_value = "opaque-blob"
+
+    result = policy_svc.get_effective("sb1")
+
+    assert result == {"policy": "opaque-blob", "source": "gateway_runtime"}
+
+
 def test_update_policy(policy_svc, mock_client):
     """update() converts dict to protobuf, calls update, then re-fetches full policy."""
     mock_client.policies.update.return_value = {"version": 5, "policy_hash": "abc"}

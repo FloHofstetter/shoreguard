@@ -92,6 +92,31 @@ async def get_policy(
     return await asyncio.to_thread(svc.get, name)
 
 
+@router.get("/sandboxes/{name}/policy/effective", response_model=PolicyResponse)
+async def get_effective_policy(
+    name: str,
+    svc: PolicyService = Depends(_get_policy_service),
+) -> dict[str, Any]:
+    """Get the effective policy — what the gateway currently enforces.
+
+    Returns the same envelope as ``GET /policy`` (active_version, revision,
+    policy), plus a ``source: "gateway_runtime"`` marker. In today's
+    architecture presets are merged eagerly into the declared policy at
+    apply time, so the stored policy already is the fully resolved
+    document — this endpoint is the stable contract the UI should use when
+    it wants "what is actually being enforced" rather than "what was last
+    PUT".
+
+    Args:
+        name: Sandbox name.
+        svc: Injected policy service.
+
+    Returns:
+        dict[str, Any]: Effective policy envelope.
+    """
+    return await asyncio.to_thread(svc.get_effective, name)
+
+
 @router.put(
     "/sandboxes/{name}/policy",
     response_model=PolicyResponse,

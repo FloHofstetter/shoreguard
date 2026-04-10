@@ -38,6 +38,33 @@ class PolicyService:
         """
         return self._client.policies.get(sandbox_name)
 
+    def get_effective(self, sandbox_name: str) -> dict[str, Any]:
+        """Get the effective policy — what the gateway currently enforces.
+
+        In the current architecture, presets are merged eagerly into the
+        declared policy at apply time (read-modify-write in
+        :meth:`apply_preset`), so the gateway's stored policy is already
+        the fully resolved document. This method returns that document
+        under a stable ``/policy/effective`` contract, giving the UI and
+        API clients a dedicated endpoint that will keep working if
+        OpenShell ever separates declared from effective server-side.
+
+        The return value is the same envelope ``policies.get`` returns
+        (``active_version``, ``revision``, ``policy``) with an added
+        ``source: "gateway_runtime"`` marker so callers can distinguish
+        this response from the plain ``GET /policy`` route.
+
+        Args:
+            sandbox_name: Name of the sandbox.
+
+        Returns:
+            dict[str, Any]: Effective policy envelope.
+        """
+        result = self._client.policies.get(sandbox_name)
+        if isinstance(result, dict):
+            return {**result, "source": "gateway_runtime"}
+        return {"policy": result, "source": "gateway_runtime"}
+
     def update(self, sandbox_name: str, policy_dict: dict) -> dict[str, Any]:
         """Push a new policy version and return the full PolicyResponse.
 
