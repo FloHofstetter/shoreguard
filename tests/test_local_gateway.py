@@ -528,21 +528,27 @@ class TestDiagnosticsExhaustive:
 
     @patch("shoreguard.services.local_gateway.shutil.which")
     @patch("shoreguard.services.local_gateway.subprocess.run")
-    @patch("shoreguard.services.local_gateway.os.environ", {"USER": "testuser"})
-    def test_user_from_environ(self, mock_run, mock_which, mgr):
-        """User field comes from os.environ."""
+    def test_user_from_environ(self, mock_run, mock_which, mgr, monkeypatch):
+        """User field comes from os.environ.
+
+        Uses ``monkeypatch.setenv`` instead of ``@patch(..., os.environ, {...})``
+        so other environment variables are preserved — notably
+        ``MUTANT_UNDER_TEST``, which mutmut injects into its trampolines.
+        A full dict replacement would strip it and break mutation testing.
+        """
         mock_which.return_value = None
         mock_run.return_value = MagicMock(returncode=0, stdout="testuser")
+        monkeypatch.setenv("USER", "testuser")
         result = mgr.diagnostics()
         assert result["user"] == "testuser"
 
     @patch("shoreguard.services.local_gateway.shutil.which")
     @patch("shoreguard.services.local_gateway.subprocess.run")
-    @patch("shoreguard.services.local_gateway.os.environ", {})
-    def test_user_defaults_to_unknown(self, mock_run, mock_which, mgr):
+    def test_user_defaults_to_unknown(self, mock_run, mock_which, mgr, monkeypatch):
         """User field defaults to 'unknown' when USER env var missing."""
         mock_which.return_value = None
         mock_run.return_value = MagicMock(returncode=0, stdout="")
+        monkeypatch.delenv("USER", raising=False)
         result = mgr.diagnostics()
         assert result["user"] == "unknown"
 
