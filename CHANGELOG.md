@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### M8 — multi-gateway federation (proven 2026-04-11)
+
+The federation story (label-based gateway selection, cross-gateway
+audit aggregation, gateway list filtering, ⌘K search across multiple
+clusters) ships from this release as **proven against two live
+gateways**, not just hypothetically supported.
+
+The M8 demo runs the full M7 flow concurrently against two OpenShell
+clusters (`cluster-dev` env=dev on :8089, `cluster-staging`
+env=staging on :8189), with a different unallowlisted host per
+gateway (`httpbin.org` vs `jsonplaceholder.typicode.com`), and
+asserts:
+
+- `?label=env:dev` returns only the dev cluster, `?label=env:staging`
+  returns only staging, unfiltered returns both.
+- Both `claude -p PONG` calls succeed via their own routed inference.
+- Both L7 denials produce real draft chunks; both approves trigger
+  proxy reloads; both retries return HTTP 200 from the upstream
+  service.
+- `/api/audit?gateway=cluster-dev` returns only dev rows (no
+  cross-attribution), same for staging; unfiltered shows both
+  interleaved with the gateway column populated correctly per row.
+- `/api/gateway/list` returns both with labels intact and
+  `status=connected`.
+
+Verified end-to-end via [`scripts/m8_demo.py`](scripts/m8_demo.py)
+on the first try, ~3-4 min wall time, exit 0.
+
 ### M7 — end-to-end vision demo (proven 2026-04-11)
 
 The post-v0.29 milestone M7 ("can we run the whole story end-to-end?")
@@ -33,18 +61,37 @@ report and the half-dozen smaller bugs surfaced along the way.
 
 ### Added
 
+- **Topbar gateway switcher** (`cca61ce`). Replaces the read-only
+  `#gateway-status` badge in [base.html](frontend/templates/base.html)
+  with a dropdown that lists every registered gateway, shows their
+  status dots and labels, and navigates on click. Pure URL-based
+  switching (no client-side selected-gateway state). New file
+  [frontend/js/gateway-switcher.js](frontend/js/gateway-switcher.js).
+- **Label filter UI on the gateways list page** (`8c1684f`). Wires
+  the existing backend `?label=key:value` filter into a debounced
+  text input next to the existing free-text filter on
+  [gateways.html](frontend/templates/pages/gateways.html). Mirrors
+  the audit-page filter pattern. Tests cover single-label,
+  multi-label (AND semantics), and malformed input on
+  [test_api_gateway_routes.py](tests/test_api_gateway_routes.py).
+- [scripts/m8-demo.md](scripts/m8-demo.md) — canonical step-by-step
+  runbook for the M8 federation demo, with the per-phase report table.
+- [scripts/m8_demo.py](scripts/m8_demo.py) — single-file Python
+  automation of the M8 federation flow. Idempotent, ~3-4 min wall
+  time, exit 0 on success. (`17a8c32`)
 - `gateway` query parameter on `/api/audit` and `/api/audit/export` —
   filter audit entries by the gateway they happened on, used by the M7
   demo to reconstruct the full launch → call → deny → approve sequence
   for one gateway in chronological order. Audit page UI gets a matching
   filter input. (`d88fd82`)
-- `scripts/m7-demo.md` — canonical step-by-step runbook for the M7
-  end-to-end demo, with the first-run findings inline. (`b4be86d`,
-  `a40fcdc`, `5d78054`)
-- `scripts/m7_demo.py` — single-file Python automation of the same
-  flow over the HTTP API + `openshell sandbox exec`. Idempotent,
-  ~30s wall time, exit 0 on success. Includes the wait-for-loaded
-  poll that fixes the approve→reload race. (`e9c3ea0`)
+- [scripts/m7-demo.md](scripts/m7-demo.md) — canonical step-by-step
+  runbook for the M7 end-to-end demo, with the first-run findings
+  inline. (`b4be86d`, `a40fcdc`, `5d78054`)
+- [scripts/m7_demo.py](scripts/m7_demo.py) — single-file Python
+  automation of the M7 vision flow over the HTTP API + `openshell
+  sandbox exec`. Idempotent, ~30s wall time, exit 0 on success.
+  Includes the wait-for-loaded poll that fixes the approve→reload
+  race. (`e9c3ea0`)
 
 ### Fixed
 
@@ -58,6 +105,14 @@ report and the half-dozen smaller bugs surfaced along the way.
   gateway: `GatewayService.get_info()` injects `configured` and
   `version` into the dict, but `GatewayResponse` was
   `extra="forbid"`. Schema now accepts both fields. (`485bf71`)
+- CSP-strict tests in
+  [test_security_headers.py](tests/test_security_headers.py)
+  asserted `'unsafe-inline'` was a substring of the CSP header,
+  which broke after `45129f4` added `style-src-attr 'unsafe-inline'`
+  for Alpine inline styles. Replaces the substring check with a
+  per-directive check that allows the narrower `style-src-attr`
+  while keeping `default-src` / `script-src` / `style-src` strict.
+  (`88fcb40`)
 
 ## [0.29.0] — 2026-04-11
 
