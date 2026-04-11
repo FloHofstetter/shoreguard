@@ -193,7 +193,8 @@ function gatewayDetail(name) {
             this.loading = true;
             this.error = null;
             try {
-                const gateways = await apiFetch(`${API_GLOBAL}/gateway/list`);
+                const resp = await apiFetch(`${API_GLOBAL}/gateway/list`);
+                const gateways = Array.isArray(resp) ? resp : (resp.items || []);
                 this.gw = gateways.find(g => g.name === name) || null;
                 if (!this.gw) return;
 

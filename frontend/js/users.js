@@ -191,10 +191,11 @@ async function openGatewayRolesModal(entityType, entityId, entityLabel) {
     async function renderRoles() {
         const body = document.getElementById('gw-roles-body');
         try {
-            const [roles, gateways] = await Promise.all([
+            const [roles, gwResp] = await Promise.all([
                 apiFetch(basePath),
                 apiFetch('/api/gateway/list'),
             ]);
+            const gateways = Array.isArray(gwResp) ? gwResp : (gwResp.items || []);
             const gwNames = gateways.map(g => g.name);
 
             let html = '';
