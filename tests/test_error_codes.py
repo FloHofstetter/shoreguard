@@ -12,9 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from shoreguard.api.error_codes import (
     AUTHENTICATION_REQUIRED,
     CONFLICT,
-    FEATURE_NOT_AVAILABLE,
     GATEWAY_NOT_CONNECTED,
-    GATEWAY_UPGRADE_REQUIRED,
     INTERNAL_ERROR,
     NOT_FOUND,
     PERMISSION_DENIED,
@@ -29,7 +27,6 @@ from shoreguard.api.error_codes import (
 from shoreguard.api.errors import register_error_handlers
 from shoreguard.exceptions import (
     ConflictError,
-    FeatureNotAvailableError,
     GatewayNotConnectedError,
     NotFoundError,
     PolicyError,
@@ -169,7 +166,6 @@ class TestDomainExceptionCodes:
             (SandboxError, SANDBOX_CONFLICT),
             (ConflictError, CONFLICT),
             (ValidationError, VALIDATION_ERROR),
-            (FeatureNotAvailableError, FEATURE_NOT_AVAILABLE),
         ],
     )
     async def test_domain_exceptions_produce_correct_code(
@@ -220,8 +216,12 @@ class TestGrpcExceptionCodes:
         ("grpc_code", "expected_error_code"),
         [
             (grpc.StatusCode.INVALID_ARGUMENT, VALIDATION_ERROR),
+            (grpc.StatusCode.OUT_OF_RANGE, VALIDATION_ERROR),
             (grpc.StatusCode.NOT_FOUND, NOT_FOUND),
             (grpc.StatusCode.ALREADY_EXISTS, CONFLICT),
+            (grpc.StatusCode.ABORTED, CONFLICT),
+            (grpc.StatusCode.FAILED_PRECONDITION, CONFLICT),
+            (grpc.StatusCode.RESOURCE_EXHAUSTED, CONFLICT),
             (grpc.StatusCode.PERMISSION_DENIED, PERMISSION_DENIED),
             (grpc.StatusCode.UNAUTHENTICATED, AUTHENTICATION_REQUIRED),
             (grpc.StatusCode.UNAVAILABLE, GATEWAY_NOT_CONNECTED),
@@ -234,12 +234,6 @@ class TestGrpcExceptionCodes:
         exc = self._make_grpc_error(grpc_code)
         body = await _get_error(err_client, exc)
         assert body["code"] == expected_error_code
-
-    async def test_grpc_unimplemented_produces_upgrade_required(self, err_client):
-        exc = self._make_grpc_error(grpc.StatusCode.UNIMPLEMENTED)
-        body = await _get_error(err_client, exc)
-        assert body["code"] == GATEWAY_UPGRADE_REQUIRED
-        assert body["upgrade_required"] is True
 
 
 # ── RequestValidationError handler ──────────────────────────────────────────

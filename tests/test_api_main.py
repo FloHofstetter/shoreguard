@@ -138,57 +138,18 @@ async def test_grpc_error_handler_maps_status_codes():
     assert _GRPC_MAP[grpc.StatusCode.INVALID_ARGUMENT][0] == 400
     assert _GRPC_MAP[grpc.StatusCode.PERMISSION_DENIED][0] == 403
     assert _GRPC_MAP[grpc.StatusCode.UNAUTHENTICATED][0] == 401
-    assert _GRPC_MAP[grpc.StatusCode.UNIMPLEMENTED][0] == 501
     assert _GRPC_MAP[grpc.StatusCode.DEADLINE_EXCEEDED][0] == 504
-
-
-async def test_grpc_unimplemented_returns_501(api_client, mock_client):
-    """gRPC UNIMPLEMENTED returns 501 with feature and upgrade_required fields."""
-    mock_client.policies.get.side_effect = _FakeRpcError(
-        grpc.StatusCode.UNIMPLEMENTED, "Method not implemented"
-    )
-    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/sb1/policy")
-    assert resp.status_code == 501
-    data = resp.json()
-    assert data["upgrade_required"] is True
-    assert "feature" in data
+    assert _GRPC_MAP[grpc.StatusCode.FAILED_PRECONDITION][0] == 409
 
 
 async def test_domain_error_status_map():
     """Verify domain exception → HTTP status mapping."""
     from shoreguard.api.errors import _DOMAIN_MAP
-    from shoreguard.exceptions import FeatureNotAvailableError
 
     assert _DOMAIN_MAP[GatewayNotConnectedError][0] == 503
     assert _DOMAIN_MAP[NotFoundError][0] == 404
     assert _DOMAIN_MAP[PolicyError][0] == 400
     assert _DOMAIN_MAP[SandboxError][0] == 409
-    assert _DOMAIN_MAP[FeatureNotAvailableError][0] == 501
-
-
-def test_detect_feature_from_path_policy():
-    from shoreguard.api.errors import _detect_feature_from_path
-
-    assert "policy" in _detect_feature_from_path("/api/gateways/gw/sandboxes/sb/policy").lower()
-
-
-def test_detect_feature_from_path_approvals():
-    from shoreguard.api.errors import _detect_feature_from_path
-
-    result = _detect_feature_from_path("/api/gateways/gw/sandboxes/sb/approvals")
-    assert "approval" in result.lower()
-
-
-def test_detect_feature_from_path_inference():
-    from shoreguard.api.errors import _detect_feature_from_path
-
-    assert "inference" in _detect_feature_from_path("/api/gateways/gw/inference").lower()
-
-
-def test_detect_feature_from_path_unknown():
-    from shoreguard.api.errors import _detect_feature_from_path
-
-    assert _detect_feature_from_path("/api/gateways/gw/sandboxes") == "This operation"
 
 
 # ─── 3B: Page Routes ─────────────────────────────────────────────────────────

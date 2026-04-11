@@ -255,8 +255,7 @@ the standard fields plus the ShoreGuard `code`:
 | `code` | Machine-readable ShoreGuard error code (e.g. `not_found`, `forbidden`) |
 
 Endpoints may include additional extension members such as `request_id`
-(for correlation with server logs), `errors` (field-level validation
-details on 422 responses), `feature` and `upgrade_required` (for
-capability-gated features). The `detail` field is preserved from
+(for correlation with server logs) and `errors` (field-level validation
+details on 422 responses). The `detail` field is preserved from
 pre-v0.29.0 responses, so clients that only read `body.detail` continue
 to work unchanged.

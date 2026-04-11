@@ -58,7 +58,3 @@ class ConflictError(ShoreGuardError):
 
 class ValidationError(ShoreGuardError):
     """Input validation failed (e.g. malformed command syntax)."""
-
-
-class FeatureNotAvailableError(ShoreGuardError):
-    """A feature is not available in the current OpenShell gateway version."""

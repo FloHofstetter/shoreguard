@@ -16,7 +16,6 @@ from fastapi.responses import JSONResponse
 
 from shoreguard.exceptions import (
     ConflictError,
-    FeatureNotAvailableError,
     GatewayNotConnectedError,
     NotFoundError,
     PolicyError,
@@ -29,9 +28,7 @@ from shoreguard.exceptions import (
 from .error_codes import (
     AUTHENTICATION_REQUIRED,
     CONFLICT,
-    FEATURE_NOT_AVAILABLE,
     GATEWAY_NOT_CONNECTED,
-    GATEWAY_UPGRADE_REQUIRED,
     INTERNAL_ERROR,
     NOT_FOUND,
     PERMISSION_DENIED,
@@ -54,7 +51,6 @@ _DOMAIN_MAP: dict[type, tuple[int, str]] = {
     SandboxError: (409, SANDBOX_CONFLICT),
     ConflictError: (409, CONFLICT),
     ValidationError: (400, VALIDATION_ERROR),
-    FeatureNotAvailableError: (501, FEATURE_NOT_AVAILABLE),
 }
 
 _GRPC_MAP: dict[grpc.StatusCode, tuple[int, str]] = {
@@ -68,27 +64,8 @@ _GRPC_MAP: dict[grpc.StatusCode, tuple[int, str]] = {
     grpc.StatusCode.UNAUTHENTICATED: (401, AUTHENTICATION_REQUIRED),
     grpc.StatusCode.RESOURCE_EXHAUSTED: (429, CONFLICT),
     grpc.StatusCode.UNAVAILABLE: (503, GATEWAY_NOT_CONNECTED),
-    grpc.StatusCode.UNIMPLEMENTED: (501, FEATURE_NOT_AVAILABLE),
     grpc.StatusCode.DEADLINE_EXCEEDED: (504, TIMEOUT),
 }
-
-
-def _detect_feature_from_path(path: str) -> str:
-    """Extract a human-readable feature name from the request URL path.
-
-    Args:
-        path: The URL path of the incoming request.
-
-    Returns:
-        str: A human-readable feature name.
-    """
-    if "/policy" in path:
-        return "Sandbox policy management"
-    if "/approvals" in path:
-        return "Policy approval workflow"
-    if "/inference" in path:
-        return "Inference routing"
-    return "This operation"
 
 
 def _get_request_id(request: Request) -> str | None:
@@ -208,20 +185,6 @@ def register_error_handlers(app: FastAPI) -> None:
             code,
             friendly_grpc_error(exc),
         )
-        if code == grpc.StatusCode.UNIMPLEMENTED:
-            feature = _detect_feature_from_path(request.url.path)
-            detail = (
-                f"{feature} is not supported by the current OpenShell gateway version. "
-                f"This feature requires a newer gateway."
-            )
-            return _problem(
-                detail,
-                request,
-                status=501,
-                code=GATEWAY_UPGRADE_REQUIRED,
-                feature=feature,
-                upgrade_required=True,
-            )
         http_status, error_code = (
             _GRPC_MAP.get(code, (500, INTERNAL_ERROR))
             if code is not None
