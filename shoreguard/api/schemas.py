@@ -335,6 +335,9 @@ class GatewayResponse(BaseModel):
         labels (dict[str, str] | None): Label key/value pairs for filtering.
         registered_at (str | None): ISO timestamp of initial registration.
         last_seen (str | None): ISO timestamp of the last successful contact.
+        configured (bool | None): Whether the gateway is registered (only set by ``get_info``).
+        version (str | None): Upstream openshell version reported by the live gateway when
+            reachable.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -354,6 +357,8 @@ class GatewayResponse(BaseModel):
     labels: dict[str, str] | None = None
     registered_at: str | None = None
     last_seen: str | None = None
+    configured: bool | None = None
+    version: str | None = None
 
 
 class GatewayUnregisterResponse(BaseModel):
