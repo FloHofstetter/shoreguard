@@ -20,3 +20,5 @@ ignore: |
   site/
   node_modules/
   mkdocs.yml
+  # Helm templates are Go templates, not pure YAML — `helm lint` covers them.
+  charts/*/templates/

@@ -1,0 +1,34 @@
+ShoreGuard {{ .Chart.AppVersion }} installed as release "{{ .Release.Name }}".
+
+1. Forward the dashboard port to your machine:
+
+   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "shoreguard.fullname" . }} 8888:{{ .Values.service.port }}
+
+2. Open http://127.0.0.1:8888 in a browser and sign in:
+
+     email:    admin@localhost
+     password: (whatever you passed via --set admin.password=...)
+
+3. Smoke-check from the shell:
+
+   curl -sf http://127.0.0.1:8888/healthz
+   curl -sf http://127.0.0.1:8888/version
+
+4. Provision an Anthropic (or other LLM) provider post-install. The key is
+   NOT read from the chart — ShoreGuard stores it as a gateway provider
+   credential. Use the Settings UI or POST /api/gateways/{gw}/providers.
+
+{{- if not .Values.database.url }}
+
+-------------------------------------------------------------------------------
+NOT FOR PRODUCTION — M10 MVP notes
+-------------------------------------------------------------------------------
+This release uses SQLite in an emptyDir volume. State is lost when the pod
+restarts. SHOREGUARD_ALLOW_UNSAFE_CONFIG=true was set automatically so the
+pod boots past the prod-readiness gate.
+
+For a real deployment:
+  * Set database.url to a postgres:// connection string
+  * Wait for the M11 chart preset (PVC, Ingress+TLS, multi-replica, helm test)
+-------------------------------------------------------------------------------
+{{- end }}

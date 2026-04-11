@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "shoreguard.configMapName" . }}
+  labels:
+    {{- include "shoreguard.labels" . | nindent 4 }}
+data:
+  SHOREGUARD_LOG_LEVEL: {{ .Values.logLevel | quote }}
+  SHOREGUARD_LOG_FORMAT: {{ .Values.logFormat | quote }}
+  SHOREGUARD_HOST: "0.0.0.0"
+  SHOREGUARD_PORT: "8888"
+  SHOREGUARD_RELOAD: "false"
+  {{- if not .Values.database.url }}
+  # SQLite default tripping prod-readiness gate — allow unsafe config so the
+  # pod actually starts. Switching database.url to postgres:// removes this.
+  SHOREGUARD_ALLOW_UNSAFE_CONFIG: "true"
+  {{- end }}

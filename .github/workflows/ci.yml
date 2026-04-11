@@ -65,3 +65,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --group dev
       - run: uv run pytest -m 'not integration' --cov=shoreguard --cov-report=term-missing
+
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint charts/shoreguard
+      # `helm template` catches rendering errors that `helm lint` misses
+      # (missing required values, bad pipelines, required()-gated fields).
+      - run: helm template sg charts/shoreguard --set admin.password=ci-test-placeholder > /dev/null  # pragma: allowlist secret

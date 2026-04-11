@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Helm chart MVP at `charts/shoreguard/`** (M10). Single-replica,
+  SQLite-in-emptyDir, no Ingress by default — gets ShoreGuard running on
+  a fresh `kind`/`k3d` cluster with `helm install sg ./charts/shoreguard
+  --set admin.password=...`. Secret key is generated once per release
+  and preserved across upgrades via a `lookup`. `SHOREGUARD_ALLOW_UNSAFE_CONFIG`
+  is injected automatically when `database.url` is empty so the pod boots
+  past the prod-readiness gate. Production-shaped features (PVC,
+  cert-manager, multi-replica, helm test) are explicitly deferred to M11.
+  New `helm-lint` CI job covers `helm lint` + a `helm template` render
+  smoke check.
+
 ## [0.30.0] — 2026-04-11
 
 The headline of this release is **federation in production shape**:

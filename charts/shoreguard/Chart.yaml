@@ -1,0 +1,19 @@
+apiVersion: v2
+name: shoreguard
+description: ShoreGuard — AI-native security gateway control plane
+type: application
+version: 0.1.0
+appVersion: "0.30.0"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/FloHofstetter/shoreguard
+sources:
+  - https://github.com/FloHofstetter/shoreguard
+keywords:
+  - security
+  - ai
+  - llm
+  - gateway
+  - shoreguard
+maintainers:
+  - name: Florian Hofstetter
+    url: https://github.com/FloHofstetter

@@ -1,0 +1,82 @@
+# Default values for the ShoreGuard Helm chart (M10 MVP).
+#
+# Scope note: this chart is the M10 minimum — single replica, SQLite in an
+# emptyDir, no TLS, no Ingress by default. Production-shaped deploys
+# (PVC, multi-replica, cert-manager, helm test) land in M11. Do not use
+# this chart for production workloads.
+
+image:
+  repository: ghcr.io/flohofstetter/shoreguard
+  # tag "" → Chart.yaml appVersion. Override to pin a specific release.
+  tag: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# Admin bootstrap password. REQUIRED — the chart fails rendering if empty.
+# On first startup the backend provisions admin@localhost with this password.
+admin:
+  password: ""
+
+# Session HMAC key. Leave empty to have the chart generate a 48-char random
+# value once per release (preserved across upgrades via a lookup on the
+# existing Secret). Must be >= 32 chars if you override it.
+secretKey: ""
+
+# Database URL. Leave empty to use the built-in SQLite default
+# (stored in an emptyDir at /home/shoreguard/.config/shoreguard/shoreguard.db).
+# State does not survive pod restarts in that mode — that is an M11 concern.
+#
+# When SQLite is active the chart sets SHOREGUARD_ALLOW_UNSAFE_CONFIG=true
+# because ShoreGuard refuses SQLite in "prod-like" deploys by default
+# (shoreguard/settings.py:enforce_production_safety). Setting this URL
+# to a real postgres:// connection removes the override automatically.
+database:
+  url: ""
+
+service:
+  type: ClusterIP
+  port: 8888
+
+# Ingress is disabled in M10. M11 adds a production preset with cert-manager.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: shoreguard.local
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+logLevel: info
+logFormat: text
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
