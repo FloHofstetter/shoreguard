@@ -261,6 +261,73 @@ class WebhookService:
             self._delivery_tasks.add(task)
             task.add_done_callback(self._delivery_tasks.discard)
 
+    async def fire_to(self, webhook_id: int, event_type: str, payload: dict[str, Any]) -> bool:
+        """Deliver an event to ONE specific webhook, bypassing subscription filter.
+
+        Used by the ``POST /api/webhooks/{id}/test`` endpoint so the test
+        button on the webhooks page reaches its target regardless of
+        whether that webhook subscribes to the test event type. Without
+        this path, clicking "test" on a webhook that doesn't include
+        ``webhook.test`` (or ``*``) in its subscriptions silently produced
+        no delivery.
+
+        The webhook must still be active — paused webhooks return False.
+
+        Args:
+            webhook_id: Primary key of the webhook to deliver to.
+            event_type: Event type string carried in the payload.
+            payload: Event data payload.
+
+        Returns:
+            bool: ``True`` if a delivery task was scheduled, ``False`` if
+                the webhook was missing or inactive.
+        """
+        target = await asyncio.to_thread(self._target_for_webhook, webhook_id)
+        if target is None:
+            return False
+
+        timestamp = datetime.datetime.now(datetime.UTC).isoformat()
+        payload_json = json.dumps(payload, default=str)
+        delivery_id = await asyncio.to_thread(
+            self._create_delivery, target.webhook_id, event_type, payload_json
+        )
+        formatter = FORMATTERS.get(target.channel_type, FORMATTERS["generic"])
+        body = formatter(event_type, payload, timestamp)
+        task = asyncio.create_task(self._deliver(target, body, delivery_id))
+        self._delivery_tasks.add(task)
+        task.add_done_callback(self._delivery_tasks.discard)
+        return True
+
+    def _target_for_webhook(self, webhook_id: int) -> _Target | None:
+        """Build a delivery ``_Target`` for one specific active webhook.
+
+        Args:
+            webhook_id: Primary key of the webhook.
+
+        Returns:
+            _Target | None: The delivery target, or ``None`` if the webhook
+                is missing or paused.
+        """
+        try:
+            with self._session_factory() as session:
+                wh = (
+                    session.query(Webhook)
+                    .filter(Webhook.id == webhook_id, Webhook.is_active.is_(True))
+                    .first()
+                )
+                if wh is None:
+                    return None
+                return _Target(
+                    webhook_id=wh.id,
+                    url=wh.url,
+                    secret=wh.secret,
+                    channel_type=wh.channel_type,
+                    extra_config=wh.extra_config,
+                )
+        except SQLAlchemyError:
+            logger.exception("Failed to look up webhook %d for direct delivery", webhook_id)
+            return None
+
     async def shutdown(self, timeout: float = 5.0) -> int:
         """Cancel all in-flight webhook deliveries.
 

@@ -323,10 +323,13 @@ async def test_webhook(webhook_id: int, request: Request) -> dict[str, str]:
     wh = await asyncio.to_thread(svc.get, webhook_id)
     if wh is None:
         raise HTTPException(404, "Webhook not found")
-    await svc.fire(
+    delivered = await svc.fire_to(
+        webhook_id,
         "webhook.test",
         {"webhook_id": wh["id"], "message": "Test event from Shoreguard"},
     )
+    if not delivered:
+        raise HTTPException(409, "Webhook is paused — resume it before sending a test event")
     await audit_log(request, "webhook.test", "webhook", str(webhook_id))
     return {"status": "Test event sent"}
 

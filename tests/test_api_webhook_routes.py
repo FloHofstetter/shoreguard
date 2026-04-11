@@ -236,6 +236,39 @@ class TestTestWebhook:
         assert resp.status_code == 200
         assert resp.json()["status"] == "Test event sent"
 
+    async def test_test_records_delivery_even_without_subscription(self, admin_client):
+        """The /test endpoint must reach its target regardless of subscription filter.
+
+        Regression for the M9 dry-run finding: clicking "test" on a webhook
+        whose event_types didn't include "webhook.test" (or "*") silently
+        produced zero deliveries. fire_to() bypasses the subscription
+        filter so the test button is always meaningful.
+        """
+        created = await _create_webhook(
+            admin_client,
+            event_types=["sandbox.created"],  # NOT subscribed to webhook.test
+        )
+        resp = await admin_client.post(f"/api/webhooks/{created['id']}/test")
+        assert resp.status_code == 200
+        # Give the async delivery task a beat to land in the DB
+        import asyncio as _asyncio
+
+        await _asyncio.sleep(0.5)
+        resp = await admin_client.get(f"/api/webhooks/{created['id']}/deliveries")
+        assert resp.status_code == 200
+        deliveries = resp.json()
+        assert len(deliveries) >= 1
+        assert deliveries[0]["event_type"] == "webhook.test"
+
+    async def test_test_paused_webhook_returns_409(self, admin_client):
+        """Test against a paused webhook should fail loudly, not silently."""
+        created = await _create_webhook(admin_client)
+        # Pause it
+        resp = await admin_client.put(f"/api/webhooks/{created['id']}", json={"is_active": False})
+        assert resp.status_code == 200
+        resp = await admin_client.post(f"/api/webhooks/{created['id']}/test")
+        assert resp.status_code == 409
+
 
 class TestListDeliveries:
     async def test_deliveries_nonexistent_webhook(self, admin_client):
