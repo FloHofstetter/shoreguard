@@ -144,18 +144,25 @@ def configure_inference(client: httpx.Client, anthropic_key: str) -> None:
         fail(f"provider create failed: {r.status_code} {r.text[:200]}")
     ok(f"provider {PROVIDER} created")
 
-    r = client.put(
-        f"/api/gateways/{GW}/inference",
-        json={
-            "provider_name": PROVIDER,
-            "model_id": MODEL,
-            "verify": False,
-            "timeout_secs": 30,
-        },
-    )
-    if r.status_code != 200:
-        fail(f"set_inference failed: {r.status_code} {r.text[:200]}")
-    ok(f"inference wired: route_name={r.json().get('route_name')}")
+    # set_inference can transiently 409 with FAILED_PRECONDITION right
+    # after a provider re-create — the cluster needs a beat to see the
+    # new provider record. Retry briefly.
+    inference_body = {
+        "provider_name": PROVIDER,
+        "model_id": MODEL,
+        "verify": False,
+        "timeout_secs": 30,
+    }
+    last: httpx.Response | None = None
+    for _ in range(5):
+        last = client.put(f"/api/gateways/{GW}/inference", json=inference_body)
+        if last.status_code == 200:
+            break
+        time.sleep(1)
+    assert last is not None
+    if last.status_code != 200:
+        fail(f"set_inference failed: {last.status_code} {last.text[:200]}")
+    ok(f"inference wired: route_name={last.json().get('route_name')}")
 
 
 def launch_sandbox(client: httpx.Client) -> None:
@@ -184,11 +191,43 @@ def launch_sandbox(client: httpx.Client) -> None:
         last_status = op.get("status", "")
         if last_status in ("succeeded", "success"):
             ok(f"{SB} ready (op={op_id[:8]})")
+            wait_for_exec_ready()
             return
         if last_status in ("failed", "error"):
             fail(f"sandbox creation failed: {op}")
         time.sleep(2)
     fail(f"sandbox creation timed out (last status={last_status})")
+
+
+def wait_for_exec_ready() -> None:
+    """Wait for the in-sandbox exec/ssh transport to be reachable.
+
+    Even after the LRO operation flips to ``succeeded``, the
+    in-sandbox SSH endpoint that ``openshell sandbox exec`` rides on
+    can need up to ~60s before it accepts connections on a truly
+    fresh sandbox. Empirically the failure mode goes through three
+    stages: ``ssh transport: Connection reset by peer`` for the first
+    ~30s, then ``phase: Provisioning`` (a brief restart bounce), then
+    finally a clean exec.
+
+    Polls a cheap ``openshell sandbox exec ... -- true`` every 2s for
+    up to 90s. Fails loudly if the sandbox never becomes execable.
+    """
+    deadline = time.time() + 90
+    attempt = 0
+    while time.time() < deadline:
+        attempt += 1
+        proc = subprocess.run(
+            ["openshell", "sandbox", "exec", "--name", SB, "--timeout", "5", "--", "true"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if proc.returncode == 0:
+            ok(f"exec transport ready (after {attempt} probe(s))")
+            return
+        time.sleep(2)
+    fail(f"exec transport never became reachable within 90s ({attempt} probes)")
 
 
 def routed_inference_call() -> None:
