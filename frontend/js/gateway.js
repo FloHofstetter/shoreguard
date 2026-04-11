@@ -23,6 +23,10 @@ function gatewayList() {
         gateways: [],
         loading: true,
         error: null,
+        // Server-side label filter, e.g. "env:dev" or "team:platform". Multi-label
+        // (comma-separated) maps to repeated ?label= params on the backend, which
+        // ANDs them at the registry layer.
+        filterLabel: '',
 
         statusIcon(s) { return _gwStatusIcons[s || 'offline'] || 'circle'; },
         statusLabel(s) { return _gwStatusLabels[s || 'offline'] || (s || 'offline'); },
@@ -31,13 +35,27 @@ function gatewayList() {
             this.loading = true;
             this.error = null;
             try {
-                const resp = await apiFetch(`${API_GLOBAL}/gateway/list`);
+                const params = new URLSearchParams();
+                if (this.filterLabel) {
+                    for (const lbl of this.filterLabel.split(',')) {
+                        const trimmed = lbl.trim();
+                        if (trimmed) params.append('label', trimmed);
+                    }
+                }
+                const qs = params.toString();
+                const url = qs ? `${API_GLOBAL}/gateway/list?${qs}` : `${API_GLOBAL}/gateway/list`;
+                const resp = await apiFetch(url);
                 this.gateways = Array.isArray(resp) ? resp : (resp.items || []);
             } catch (e) {
                 this.error = e.message;
             } finally {
                 this.loading = false;
             }
+        },
+
+        clearLabelFilter() {
+            this.filterLabel = '';
+            this.load();
         },
 
         async unregister(name) {

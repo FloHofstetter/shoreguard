@@ -40,10 +40,21 @@
         </a>
     </div>
 
-    <!-- Filter -->
-    <div x-show="!loading && !error && $notEmpty(gateways)" x-cloak class="mb-2">
-        <input type="text" class="form-control form-control-sm sg-mw-300" placeholder="Filter gateways..."
-               x-model="_filterText">
+    <!-- Filters -->
+    <div x-show="!loading && !error" x-cloak class="row g-2 mb-2">
+        <div class="col-md-4">
+            <input type="text" class="form-control form-control-sm" placeholder="Filter gateways..."
+                   x-model="_filterText">
+        </div>
+        <div class="col-md-4">
+            <input type="text" class="form-control form-control-sm" placeholder="Label filter (e.g. env:dev)"
+                   x-model.debounce.300ms="filterLabel" @input="load()">
+        </div>
+        <div class="col-md-4">
+            <button class="btn btn-sm btn-outline-secondary" @click="clearLabelFilter()" x-show="filterLabel">
+                <i class="bi bi-x-circle me-1"></i>Clear label filter
+            </button>
+        </div>
     </div>
 
     <!-- Gateway table -->

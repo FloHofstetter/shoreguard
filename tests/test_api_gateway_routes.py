@@ -37,6 +37,27 @@ async def test_gateway_list(gw_client, mock_gw_svc):
     mock_gw_svc.list_all.assert_called_once()
 
 
+async def test_gateway_list_label_filter(gw_client, mock_gw_svc):
+    mock_gw_svc.list_all.return_value = [{"name": "dev-gw", "labels": {"env": "dev"}}]
+    resp = await gw_client.get("/api/gateway/list?label=env:dev")
+    assert resp.status_code == 200
+    assert resp.json()["items"][0]["name"] == "dev-gw"
+    mock_gw_svc.list_all.assert_called_once_with(labels_filter={"env": "dev"})
+
+
+async def test_gateway_list_multi_label_filter(gw_client, mock_gw_svc):
+    mock_gw_svc.list_all.return_value = []
+    resp = await gw_client.get("/api/gateway/list?label=env:dev&label=team:platform")
+    assert resp.status_code == 200
+    mock_gw_svc.list_all.assert_called_once_with(labels_filter={"env": "dev", "team": "platform"})
+
+
+async def test_gateway_list_invalid_label(gw_client, mock_gw_svc):
+    resp = await gw_client.get("/api/gateway/list?label=missingcolon")
+    assert resp.status_code == 400
+    mock_gw_svc.list_all.assert_not_called()
+
+
 async def test_gateway_info(gw_client, mock_gw_svc):
     mock_gw_svc.get_info.return_value = {"name": "gw1", "connected": True}
     resp = await gw_client.get("/api/gateway/gw1/info")
