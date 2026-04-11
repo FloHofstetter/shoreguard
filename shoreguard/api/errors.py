@@ -59,10 +59,14 @@ _DOMAIN_MAP: dict[type, tuple[int, str]] = {
 
 _GRPC_MAP: dict[grpc.StatusCode, tuple[int, str]] = {
     grpc.StatusCode.INVALID_ARGUMENT: (400, VALIDATION_ERROR),
+    grpc.StatusCode.OUT_OF_RANGE: (400, VALIDATION_ERROR),
     grpc.StatusCode.NOT_FOUND: (404, NOT_FOUND),
     grpc.StatusCode.ALREADY_EXISTS: (409, CONFLICT),
+    grpc.StatusCode.ABORTED: (409, CONFLICT),
+    grpc.StatusCode.FAILED_PRECONDITION: (409, CONFLICT),
     grpc.StatusCode.PERMISSION_DENIED: (403, PERMISSION_DENIED),
     grpc.StatusCode.UNAUTHENTICATED: (401, AUTHENTICATION_REQUIRED),
+    grpc.StatusCode.RESOURCE_EXHAUSTED: (429, CONFLICT),
     grpc.StatusCode.UNAVAILABLE: (503, GATEWAY_NOT_CONNECTED),
     grpc.StatusCode.UNIMPLEMENTED: (501, FEATURE_NOT_AVAILABLE),
     grpc.StatusCode.DEADLINE_EXCEEDED: (504, TIMEOUT),

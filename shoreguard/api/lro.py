@@ -33,9 +33,11 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import grpc
 from fastapi import HTTPException
 from starlette.responses import JSONResponse
 
+from shoreguard.exceptions import friendly_grpc_error
 from shoreguard.models import OperationRecord
 from shoreguard.services import operations as _ops_mod
 from shoreguard.services.operations import AsyncOperationService
@@ -154,7 +156,8 @@ async def run_lro(
             await svc.fail(op.id, "Operation was cancelled", error_code=ErrorCode.cancelled)
         except Exception as exc:
             logger.exception("LRO %s/%s failed (op=%s)", resource_type, resource_key, op.id)
-            await svc.fail(op.id, str(exc)[:500])
+            message = friendly_grpc_error(exc) if isinstance(exc, grpc.RpcError) else str(exc)
+            await svc.fail(op.id, message[:500])
 
     task = asyncio.create_task(_run())
     _background_tasks.add(task)

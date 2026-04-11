@@ -299,7 +299,8 @@ body {
     margin-right: auto;
 }
 
-.has-subnav .app-content {
+.has-subnav .app-content,
+.subnav ~ .app-content {
     padding-top: calc(var(--topbar-height) + 40px + 1.5rem);
 }
 

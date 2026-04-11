@@ -294,6 +294,7 @@ class AuthSettings(BaseSettings):
             "default-src 'self'; "
             "script-src 'self' 'nonce-{nonce}' 'unsafe-eval' https://cdn.jsdelivr.net; "
             "style-src 'self' https://cdn.jsdelivr.net; "
+            "style-src-attr 'unsafe-inline'; "
             "font-src 'self' https://cdn.jsdelivr.net; "
             "img-src 'self' data:; connect-src 'self' wss:; "
             "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
