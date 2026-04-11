@@ -5,7 +5,7 @@
 - **Python 3.14** or newer
 - A running [NVIDIA OpenShell](https://docs.nvidia.com/openshell/) gateway
   (or use `--local` mode for local Docker-based gateways). OpenShell
-  **v0.0.26 or newer** is recommended — ShoreGuard v0.28.0 pins the
+  **v0.0.26 or newer** is recommended — ShoreGuard v0.29.0 pins the
   protobuf stubs to that release and exposes features (TTY exec, gateway
   settings API, named inference routes) that require v0.0.23–v0.0.26.
 

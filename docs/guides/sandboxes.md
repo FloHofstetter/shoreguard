@@ -119,7 +119,7 @@ The response contains `stdout`, `stderr`, and the exit code.
 
 ### Interactive (TTY) exec
 
-Since v0.28.0, the exec endpoint accepts an optional `tty` flag. When set
+Since v0.29.0, the exec endpoint accepts an optional `tty` flag. When set
 to `true`, the gateway allocates a pseudo-terminal for the command so
 interactive programs that check `isatty()` — e.g. `python` REPL, `vim`,
 `htop` — behave correctly:

@@ -67,9 +67,9 @@ These endpoints are **unauthenticated** and designed for container orchestration
 | `DELETE` | `/api/gateway/{name}` | Remove a gateway |
 | `GET` | `/api/gateway/{name}/info` | Gateway details (status, endpoint, dates) |
 | `GET` | `/api/gateway/{name}/config` | Gateway configuration |
-| `GET` | `/api/gateway/{name}/settings` | Get gateway settings (admin, v0.28.0+) |
-| `PUT` | `/api/gateway/{name}/settings/{key}` | Update a single setting (admin, v0.28.0+) |
-| `DELETE` | `/api/gateway/{name}/settings/{key}` | Delete a single setting (admin, v0.28.0+) |
+| `GET` | `/api/gateway/{name}/settings` | Get gateway settings (admin, v0.29.0+) |
+| `PUT` | `/api/gateway/{name}/settings/{key}` | Update a single setting (admin, v0.29.0+) |
+| `DELETE` | `/api/gateway/{name}/settings/{key}` | Delete a single setting (admin, v0.29.0+) |
 | `POST` | `/api/gateway/{name}/test-connection` | Test connectivity to a gateway |
 | `POST` | `/api/gateway/{name}/start` | Start gateway (local mode only) |
 | `POST` | `/api/gateway/{name}/stop` | Stop gateway (local mode only) |
@@ -128,7 +128,7 @@ All sandbox endpoints are scoped to a gateway via the `{gw}` path parameter.
 | `POST` | `/api/gateways/{gw}/sandboxes` | Create a sandbox (returns 202 + operation ID) |
 | `GET` | `/api/gateways/{gw}/sandboxes/{name}` | Get sandbox details |
 | `DELETE` | `/api/gateways/{gw}/sandboxes/{name}` | Delete a sandbox |
-| `POST` | `/api/gateways/{gw}/sandboxes/{name}/exec` | Execute a command in a sandbox (supports `tty: true` for interactive programs, v0.28.0+) |
+| `POST` | `/api/gateways/{gw}/sandboxes/{name}/exec` | Execute a command in a sandbox (supports `tty: true` for interactive programs, v0.29.0+) |
 | `POST` | `/api/gateways/{gw}/sandboxes/{name}/ssh` | Create SSH session |
 | `DELETE` | `/api/gateways/{gw}/sandboxes/{name}/ssh` | Revoke SSH session |
 | `GET` | `/api/gateways/{gw}/sandboxes/{name}/logs` | Get sandbox logs |
@@ -138,7 +138,7 @@ All sandbox endpoints are scoped to a gateway via the `{gw}` path parameter.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy` | Get the active sandbox policy |
-| `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy/effective` | Get the effective policy — what the gateway enforces (v0.28.0+) |
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy/effective` | Get the effective policy — what the gateway enforces (v0.29.0+) |
 | `PUT` | `/api/gateways/{gw}/sandboxes/{name}/policy` | Update the full sandbox policy |
 | `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy/revisions` | List policy revisions |
 | `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy/diff` | Compare two revisions |
@@ -163,7 +163,7 @@ All sandbox endpoints are scoped to a gateway via the `{gw}` path parameter.
 | `GET` | `/api/gateways/{gw}/providers` | List providers |
 | `POST` | `/api/gateways/{gw}/providers` | Create a provider |
 | `GET` | `/api/gateways/{gw}/providers/{name}` | Get provider details |
-| `GET` | `/api/gateways/{gw}/providers/{name}/env` | Redacted env-var projection for a provider (v0.28.0+) |
+| `GET` | `/api/gateways/{gw}/providers/{name}/env` | Redacted env-var projection for a provider (v0.29.0+) |
 | `PUT` | `/api/gateways/{gw}/providers/{name}` | Update a provider |
 | `DELETE` | `/api/gateways/{gw}/providers/{name}` | Delete a provider |
 | `GET` | `/api/gateways/{gw}/providers/types` | List known provider types |
@@ -178,10 +178,10 @@ debugging agent misconfiguration without exposing secrets.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/gateways/{gw}/inference` | Get cluster inference configuration (accepts `?route_name=` since v0.28.0) |
+| `GET` | `/api/gateways/{gw}/inference` | Get cluster inference configuration (accepts `?route_name=` since v0.29.0) |
 | `PUT` | `/api/gateways/{gw}/inference` | Set inference config (provider, model, timeout, optional `route_name`) |
 
-Since v0.28.0, `GET /inference` accepts an optional `?route_name=` query
+Since v0.29.0, `GET /inference` accepts an optional `?route_name=` query
 parameter. An empty value (the default) returns the cluster's default
 inference route; passing a name like `sandbox-system` returns the route
 that OpenShell v0.0.25+ uses for sandbox system-level model calls.
@@ -241,7 +241,7 @@ full metric list and scrape configuration.
 
 ## Error responses
 
-Since v0.28.0, error responses follow
+Since v0.29.0, error responses follow
 [RFC 9457 Problem Details](https://datatracker.ietf.org/doc/html/rfc9457).
 Bodies are served with `Content-Type: application/problem+json` and carry
 the standard fields plus the ShoreGuard `code`:
@@ -258,5 +258,5 @@ Endpoints may include additional extension members such as `request_id`
 (for correlation with server logs), `errors` (field-level validation
 details on 422 responses), `feature` and `upgrade_required` (for
 capability-gated features). The `detail` field is preserved from
-pre-v0.28.0 responses, so clients that only read `body.detail` continue
+pre-v0.29.0 responses, so clients that only read `body.detail` continue
 to work unchanged.

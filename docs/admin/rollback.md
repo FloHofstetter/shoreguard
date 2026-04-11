@@ -39,7 +39,7 @@ artifact is serving traffic:
 
 ```json
 {
-  "version": "0.28.0",
+  "version": "0.29.0",
   "git_sha": "a1b2c3d",
   "build_time": "2026-04-10T12:00:00Z"
 }
