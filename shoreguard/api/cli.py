@@ -233,6 +233,8 @@ def main(
         log_level=log_level,
         log_config=_uvicorn_log_config,
         timeout_graceful_shutdown=settings.server.graceful_shutdown_timeout,
+        proxy_headers=True,
+        forwarded_allow_ips=settings.server.forwarded_allow_ips,
     )
 
 

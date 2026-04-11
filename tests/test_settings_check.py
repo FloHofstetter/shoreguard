@@ -190,7 +190,32 @@ def test_warns_on_multi_replica_hint(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SHOREGUARD_DATABASE_URL", "postgresql://u:p@h/db")
     s = _make_settings()
     warnings = s.check_production_readiness()
-    assert any("SHOREGUARD_REPLICAS=3" in w for w in warnings)
+    # With secret_key set (the _make_settings default), we still warn about
+    # in-process rate limiters but do not escalate to an ERROR.
+    assert any("WARN: SHOREGUARD_REPLICAS=3" in w for w in warnings)
+    assert not any("ERROR: SHOREGUARD_REPLICAS=3" in w for w in warnings)
+
+
+def test_errors_on_multi_replica_without_secret_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SHOREGUARD_REPLICAS", "3")
+    monkeypatch.setenv("SHOREGUARD_DATABASE_URL", "postgresql://u:p@h/db")
+    s = _make_settings(
+        auth=AuthSettings(
+            no_auth=False,
+            secret_key=None,
+            allow_registration=False,
+            hsts_enabled=True,
+            csp_policy="default-src 'self'",
+        ),
+    )
+    warnings = s.check_production_readiness()
+    assert any("ERROR: SHOREGUARD_REPLICAS=3" in w and "secret_key is unset" in w for w in warnings)
+    # enforce_production_safety() must refuse to start without the override.
+    monkeypatch.delenv("SHOREGUARD_ALLOW_UNSAFE_CONFIG", raising=False)
+    with pytest.raises(RuntimeError, match="SHOREGUARD_REPLICAS=3"):
+        s.enforce_production_safety()
 
 
 def test_warns_on_sqlite_in_prod(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -43,6 +43,9 @@ class ServerSettings(BaseSettings):
         graceful_shutdown_timeout (int): Seconds uvicorn waits for in-flight requests on SIGTERM.
         gzip_minimum_size (int): Minimum response body size in bytes before gzip kicks in.
         readyz_timeout (float): Timeout in seconds for /readyz dependency probes.
+        forwarded_allow_ips (str): Comma-separated IPs (or "*") whose X-Forwarded-* headers
+            uvicorn trusts. Default "127.0.0.1" is wrong behind a k8s Ingress — set to "*"
+            (or the ingress controller's pod CIDR) when serving behind a TLS-terminating proxy.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_")
@@ -84,6 +87,12 @@ class ServerSettings(BaseSettings):
     readyz_timeout: float = Field(
         default=5.0,
         description="Timeout in seconds for /readyz dependency probes",
+    )
+    forwarded_allow_ips: str = Field(
+        default="127.0.0.1",
+        description="Comma-separated IPs (or '*') whose X-Forwarded-* headers uvicorn "
+        "trusts. Set to '*' when serving behind a k8s Ingress — the default only "
+        "trusts loopback, which means TLS-terminating proxies are ignored.",
     )
 
 
@@ -822,6 +831,13 @@ class Settings(BaseSettings):
             except ValueError:
                 replica_count = 1
             if replica_count > 1:
+                if self.auth.secret_key is None:
+                    warnings.append(
+                        f"ERROR: SHOREGUARD_REPLICAS={replica_count} but auth.secret_key is "
+                        "unset — each replica would derive its own on-disk key and sessions "
+                        "would break on every load-balancer decision. Set SHOREGUARD_SECRET_KEY "
+                        "to a stable 32+ char random string."
+                    )
                 warnings.append(
                     f"WARN: SHOREGUARD_REPLICAS={replica_count} but the rate limiters are "
                     "in-process only — limits do not coordinate across replicas "
