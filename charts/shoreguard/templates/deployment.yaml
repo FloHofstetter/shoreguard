@@ -1,3 +1,4 @@
+{{- include "shoreguard.validate" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,12 +6,21 @@ metadata:
   labels:
     {{- include "shoreguard.labels" . | nindent 4 }}
 spec:
-  # M10 is single-replica on purpose. Multi-replica requires a stable
-  # SHOREGUARD_SECRET_KEY (provided here), plus an external database
-  # and sticky routing or Redis-backed rate limits — that is the M11 preset.
-  replicas: 1
+  # Single-replica is the safe default and must stay so while the chart's
+  # persistence is RWO-only (ReadWriteOnce PVC can't attach to two pods).
+  # Multi-replica requires database.url set to an external Postgres; the
+  # backend's check_production_readiness() hard-fails on replicaCount > 1
+  # without a stable SHOREGUARD_SECRET_KEY, enforced at pod startup.
+  replicas: {{ .Values.replicaCount }}
   strategy:
+    {{- if gt (int .Values.replicaCount) 1 }}
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    {{- else }}
     type: Recreate
+    {{- end }}
   selector:
     matchLabels:
       {{- include "shoreguard.selectorLabels" . | nindent 6 }}
@@ -58,6 +68,10 @@ spec:
                 secretKeyRef:
                   name: {{ include "shoreguard.secretName" . }}
                   key: secret-key
+            - name: SHOREGUARD_REPLICAS
+              value: {{ .Values.replicaCount | quote }}
+            - name: SHOREGUARD_FORWARDED_ALLOW_IPS
+              value: {{ .Values.forwardedAllowIps | quote }}
             {{- if .Values.database.url }}
             - name: SHOREGUARD_DATABASE_URL
               value: {{ .Values.database.url | quote }}
@@ -93,7 +107,12 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
         - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-data" (include "shoreguard.fullname" .)) }}
+          {{- else }}
           emptyDir: {}
+          {{- end }}
         - name: tmp
           emptyDir: {}
       {{- with .Values.nodeSelector }}

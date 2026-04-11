@@ -5,7 +5,7 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.30.1] — unreleased (M10 + M11 — helm chart distribution story)
 
 ### Added
 
@@ -15,10 +15,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   --set admin.password=...`. Secret key is generated once per release
   and preserved across upgrades via a `lookup`. `SHOREGUARD_ALLOW_UNSAFE_CONFIG`
   is injected automatically when `database.url` is empty so the pod boots
-  past the prod-readiness gate. Production-shaped features (PVC,
-  cert-manager, multi-replica, helm test) are explicitly deferred to M11.
-  New `helm-lint` CI job covers `helm lint` + a `helm template` render
-  smoke check.
+  past the prod-readiness gate. New `helm-lint` CI job covers `helm lint`
+  plus a `helm template` render smoke check.
+- **`charts/shoreguard` — M11 production hardening.** Turns the M10 MVP
+  chart into something an ops team would actually roll. New values:
+  `replicaCount`, `persistence.{enabled,storageClassName,size,accessMode,existingClaim}`,
+  `existingSecret` (BYO Secret path), `networkPolicy.*` (ingress-namespace
+  selector, DNS/LLM-provider/Postgres/extra egress blocks),
+  `podDisruptionBudget.{enabled,minAvailable}`, `tests.{enabled,image}`,
+  `forwardedAllowIps`. New templates: `pvc.yaml`, `networkpolicy.yaml`,
+  `pdb.yaml`, `tests/test-connection.yaml`. The Deployment switches
+  strategy between `Recreate` (single-replica) and `RollingUpdate`
+  (`maxSurge=1, maxUnavailable=0` for multi-replica), passes
+  `SHOREGUARD_REPLICAS` and `SHOREGUARD_FORWARDED_ALLOW_IPS` to the pod,
+  and swaps the `data` volume between `emptyDir` and a PVC based on
+  `persistence.enabled`. Chart version bumped `0.1.0 → 0.2.0`,
+  `appVersion → 0.30.1`.
+- **`charts/shoreguard/values.production.yaml`** — opinionated preset
+  that enables PVC + cert-manager + nginx-ingress + NetworkPolicy +
+  structured JSON logs + forwarded-headers trust. Single-replica by
+  default (the preset is RWO-PVC-shaped); scale out only after setting
+  `database.url` to an external Postgres.
+- **Chart-time footgun guards (`templates/_helpers.tpl:shoreguard.validate`).**
+  `helm template` now fails with a clear message when
+  `existingSecret` collides with `admin.password`/`secretKey`, when
+  `replicaCount > 1` is combined with `persistence.enabled=true` and no
+  `database.url` (RWO-PVC deadlock), or when `replicaCount > 1` is
+  combined with no `secretKey`/`existingSecret` (session HMAC drift).
+- **`helm test` hook.** `helm test <release>` now runs a tiny
+  `curlimages/curl` pod that `curl`s `/healthz` and `/version` against
+  the in-cluster Service (not the Ingress — keeps the test independent
+  of cluster DNS and TLS trust). Gated on `tests.enabled`.
+- **`shoreguard.server.forwarded_allow_ips`** setting (env
+  `SHOREGUARD_FORWARDED_ALLOW_IPS`, default `"127.0.0.1"`). Passed to
+  uvicorn as `forwarded_allow_ips` together with `proxy_headers=True`,
+  so X-Forwarded-Proto/Host from a trusted TLS-terminating proxy is
+  honored. Without this, sessions behind nginx-ingress would see
+  `http://` internally and issue non-Secure cookies. The production
+  chart preset sets it to `"*"`.
+- **Backend hard-fail for multi-replica without a stable secret key.**
+  `check_production_readiness()` now emits an `ERROR` (escalated from a
+  `WARN`) when `SHOREGUARD_REPLICAS > 1` and `auth.secret_key` is unset,
+  which causes `enforce_production_safety()` to raise a `RuntimeError`
+  at startup. The original rate-limiter `WARN` stays because the
+  in-process limit problem is orthogonal to the secret key one.
+- **CI `helm-lint` job extended** to render the production preset and
+  assert that the multi-replica-without-secretKey footgun guard
+  actually fires.
+
+### Fixed
+
+- **Release workflow: `aquasecurity/trivy-action` pin** bumped from the
+  non-existent `@0.28.0` tag to `@v0.35.0`. The old pin failed the
+  GitHub Actions resolver *before* any step ran, so the `docker`
+  job in the release workflow never reached `build-push-action` and
+  the `v0.30.0` image never landed on GHCR (only `:latest` was
+  available). Verified against the failed run of `v0.30.0`
+  (`gh run view 24282878746 --log-failed` → `Unable to resolve
+  action aquasecurity/trivy-action@0.28.0`). The action's maintainers
+  migrated all tags to the `v`-prefix convention — `@v0.35.0` is the
+  current stable tag and keeps the same `image-ref` / `exit-code` /
+  `severity` / `vuln-type` input surface we rely on.
 
 ## [0.30.0] — 2026-04-11
 

@@ -1,0 +1,16 @@
+{{- if and .Values.podDisruptionBudget.enabled (gt (int .Values.replicaCount) 1) }}
+{{- if ge (int .Values.podDisruptionBudget.minAvailable) (int .Values.replicaCount) -}}
+{{- fail "podDisruptionBudget.minAvailable must be less than replicaCount — equal or greater blocks voluntary drains entirely." -}}
+{{- end }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "shoreguard.fullname" . }}
+  labels:
+    {{- include "shoreguard.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "shoreguard.selectorLabels" . | nindent 6 }}
+{{- end }}

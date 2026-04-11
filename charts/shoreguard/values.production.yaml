@@ -1,0 +1,54 @@
+# Production preset for the ShoreGuard Helm chart.
+#
+# Use: helm install sg ./charts/shoreguard -f values.production.yaml \
+#        --set ingress.host=shoreguard.example.com \
+#        --set existingSecret=sg-secrets
+#
+# This preset does NOT set admin.password or secretKey — you are expected
+# to bring your own Secret via `existingSecret`. Example:
+#
+#   kubectl create secret generic sg-secrets \
+#     --from-literal=admin-password=$(openssl rand -hex 16) \
+#     --from-literal=secret-key=$(openssl rand -hex 32)
+#
+# The default replicaCount here is 1. Scaling out (replicaCount ≥ 2)
+# requires database.url set to an external Postgres — the chart fails
+# rendering on the RWO-PVC-deadlock otherwise.
+
+replicaCount: 1
+
+persistence:
+  enabled: true
+  size: 2Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  host: shoreguard.example.com
+  tls:
+    - secretName: shoreguard-tls  # pragma: allowlist secret
+      hosts:
+        - shoreguard.example.com
+
+networkPolicy:
+  enabled: true
+
+# PDB is off by default here because the preset ships replicaCount=1;
+# bump replicaCount and flip this to true together when moving to Postgres.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+logFormat: json
+
+# Trust X-Forwarded-* from the in-cluster Ingress controller. Uvicorn's
+# default ("127.0.0.1") would silently ignore the headers from the nginx
+# pod and the app would see http:// internally.
+forwardedAllowIps: "*"
+
+tests:
+  enabled: true

@@ -5,6 +5,8 @@
 # (PVC, multi-replica, cert-manager, helm test) land in M11. Do not use
 # this chart for production workloads.
 
+replicaCount: 1
+
 image:
   repository: ghcr.io/flohofstetter/shoreguard
   # tag "" → Chart.yaml appVersion. Override to pin a specific release.
@@ -19,8 +21,19 @@ admin:
 
 # Session HMAC key. Leave empty to have the chart generate a 48-char random
 # value once per release (preserved across upgrades via a lookup on the
-# existing Secret). Must be >= 32 chars if you override it.
+# existing Secret). Must be >= 32 chars if you override it. Ignored when
+# existingSecret is set.
 secretKey: ""
+
+# Bring-your-own Secret. When set, the chart skips creating its own Secret
+# and the Deployment points SHOREGUARD_ADMIN_PASSWORD / SHOREGUARD_SECRET_KEY
+# at this Secret instead. The referenced Secret MUST contain both keys:
+#   admin-password: <bootstrap password>
+#   secret-key:     <>=32 char session HMAC>
+# Mutually exclusive with admin.password and secretKey. Note: rotating the
+# external Secret does NOT trigger a pod roll — run `kubectl rollout restart
+# deployment/<name>` manually after updating keys.
+existingSecret: ""
 
 # Database URL. Leave empty to use the built-in SQLite default
 # (stored in an emptyDir at /home/shoreguard/.config/shoreguard/shoreguard.db).
@@ -32,6 +45,21 @@ secretKey: ""
 # to a real postgres:// connection removes the override automatically.
 database:
   url: ""
+
+# Persistent volume for ShoreGuard's data directory (SQLite file + on-disk
+# secret key fallback). Disabled by default so the default install still
+# works on a cluster without a StorageClass. When enabled, the container's
+# /home/shoreguard/.config/shoreguard mount switches from emptyDir to a PVC.
+#
+# Only ReadWriteOnce is supported. Combining persistence.enabled=true with
+# replicaCount > 1 requires database.url set to an external Postgres —
+# the chart fails rendering if you do that without switching databases.
+persistence:
+  enabled: false
+  storageClassName: ""
+  size: 1Gi
+  accessMode: ReadWriteOnce
+  existingClaim: ""
 
 service:
   type: ClusterIP
@@ -55,6 +83,13 @@ resources:
 
 logLevel: info
 logFormat: text
+
+# forwardedAllowIps is passed to uvicorn's proxy_headers trust list. The
+# uvicorn default is "127.0.0.1", which silently ignores X-Forwarded-Proto
+# from a k8s Ingress. Set this to "*" (or the ingress-controller pod CIDR)
+# when serving behind a TLS-terminating proxy. The values.production.yaml
+# preset overrides this to "*".
+forwardedAllowIps: "127.0.0.1"
 
 serviceAccount:
   create: true
@@ -80,3 +115,52 @@ containerSecurityContext:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# NetworkPolicy for the ShoreGuard pod. Off by default so a vanilla
+# install works on clusters without a NetworkPolicy-enforcing CNI
+# (kindnet, flannel without the policy add-on). The values.production.yaml
+# preset enables this. kind's default CNI does NOT enforce NetworkPolicies
+# — install calico/cilium if you want to actually validate this in kind.
+networkPolicy:
+  enabled: false
+  # Namespace hosting the Ingress controller that fronts ShoreGuard.
+  # Default matches ingress-nginx installed in its own namespace.
+  ingressNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: ingress-nginx
+  egress:
+    # kube-dns on port 53 (UDP+TCP)
+    dns:
+      enabled: true
+    # LLM provider egress: allow 443/tcp to any non-RFC1918 CIDR so
+    # ShoreGuard can reach Anthropic / OpenAI / etc. without per-provider
+    # IP lists (they rotate constantly). Keeps lateral cluster access
+    # blocked by excluding the private ranges.
+    llmProviders:
+      enabled: true
+    # Postgres egress. Set podSelector + namespaceSelector to match the
+    # database pod; port defaults to 5432. Leave disabled when using an
+    # off-cluster database (egress will be allowed via the LLM block if
+    # the hostname resolves to a public IP, otherwise add an `extra` rule).
+    postgres:
+      enabled: false
+      port: 5432
+      podSelector: {}
+      namespaceSelector: {}
+    # Escape hatch: extra egress rules appended verbatim to the policy.
+    extra: []
+
+# PodDisruptionBudget for voluntary disruptions (node drains etc.). Only
+# renders when podDisruptionBudget.enabled AND replicaCount > 1 — a PDB
+# with a single replica deadlocks drains.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# helm test hook — small curl pod that exercises /healthz and /version
+# against the Service at `helm test <release>` time.
+tests:
+  enabled: true
+  image:
+    repository: curlimages/curl
+    tag: "8.10.1"

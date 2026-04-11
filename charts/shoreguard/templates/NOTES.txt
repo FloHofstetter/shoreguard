@@ -18,17 +18,24 @@ ShoreGuard {{ .Chart.AppVersion }} installed as release "{{ .Release.Name }}".
    NOT read from the chart — ShoreGuard stores it as a gateway provider
    credential. Use the Settings UI or POST /api/gateways/{gw}/providers.
 
-{{- if not .Values.database.url }}
+{{- if .Values.tests.enabled }}
+
+5. Run the bundled smoke test:
+
+   helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+{{- end }}
+
+{{- if and (not .Values.database.url) (not .Values.persistence.enabled) }}
 
 -------------------------------------------------------------------------------
-NOT FOR PRODUCTION — M10 MVP notes
+EPHEMERAL DATA — default-values install
 -------------------------------------------------------------------------------
 This release uses SQLite in an emptyDir volume. State is lost when the pod
 restarts. SHOREGUARD_ALLOW_UNSAFE_CONFIG=true was set automatically so the
 pod boots past the prod-readiness gate.
 
-For a real deployment:
-  * Set database.url to a postgres:// connection string
-  * Wait for the M11 chart preset (PVC, Ingress+TLS, multi-replica, helm test)
+For a real deployment see charts/shoreguard/values.production.yaml:
+  * Set database.url to a postgres:// connection string, OR
+  * Set persistence.enabled=true for a PVC-backed SQLite (still single-replica)
 -------------------------------------------------------------------------------
 {{- end }}

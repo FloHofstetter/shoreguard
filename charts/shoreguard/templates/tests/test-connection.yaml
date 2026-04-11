@@ -1,0 +1,30 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "shoreguard.fullname" . }}-test-connection
+  labels:
+    {{- include "shoreguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: helm-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: "{{ .Values.tests.image.repository }}:{{ .Values.tests.image.tag }}"
+      imagePullPolicy: IfNotPresent
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          base="http://{{ include "shoreguard.fullname" . }}:{{ .Values.service.port }}"
+          echo "GET $base/healthz"
+          curl --fail --show-error --silent "$base/healthz"
+          echo
+          echo "GET $base/version"
+          curl --fail --show-error --silent "$base/version"
+          echo
+{{- end }}

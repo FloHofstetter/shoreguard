@@ -58,10 +58,15 @@ Service account name
 {{- end -}}
 
 {{/*
-Secret name (fullname + "-secrets")
+Secret name. Returns .Values.existingSecret when set (BYO secret), otherwise
+the chart-managed name "<fullname>-secrets".
 */}}
 {{- define "shoreguard.secretName" -}}
+{{- if .Values.existingSecret -}}
+{{- .Values.existingSecret -}}
+{{- else -}}
 {{- printf "%s-secrets" (include "shoreguard.fullname" .) -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -95,6 +100,33 @@ Returns the raw string. Templates base64-encode it where needed.
 {{- else -}}
 {{- randAlphaNum 48 -}}
 {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Values-level validation. Called once from deployment.yaml so the checks
+fire at `helm template` / `helm install` time rather than at pod startup.
+Covers footgun combinations the backend can't catch until it's already
+running.
+*/}}
+{{- define "shoreguard.validate" -}}
+{{- if .Values.existingSecret -}}
+{{- if .Values.admin.password -}}
+{{- fail "existingSecret and admin.password are mutually exclusive — choose one. existingSecret means the user manages the Secret externally; admin.password tells the chart to write one." -}}
+{{- end -}}
+{{- if .Values.secretKey -}}
+{{- fail "existingSecret and secretKey are mutually exclusive — choose one." -}}
+{{- end -}}
+{{- else -}}
+{{- if not .Values.admin.password -}}
+{{- fail "admin.password is required — set it via --set admin.password=... or a values file (or provide an existingSecret with admin-password and secret-key keys)." -}}
+{{- end -}}
+{{- end -}}
+{{- if and (gt (int .Values.replicaCount) 1) .Values.persistence.enabled (not .Values.database.url) -}}
+{{- fail "replicaCount > 1 with persistence.enabled=true and no database.url is unsupported: ReadWriteOnce PVC can attach to only one pod. Set database.url to an external Postgres when scaling out." -}}
+{{- end -}}
+{{- if and (gt (int .Values.replicaCount) 1) (not .Values.secretKey) (not .Values.existingSecret) -}}
+{{- fail "replicaCount > 1 requires an explicit secretKey (or an existingSecret that provides one). Without it, each replica derives its own on-disk key and sessions break on every load-balancer decision." -}}
 {{- end -}}
 {{- end -}}
 

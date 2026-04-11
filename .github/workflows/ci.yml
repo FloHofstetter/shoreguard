@@ -74,4 +74,23 @@ jobs:
       - run: helm lint charts/shoreguard
       # `helm template` catches rendering errors that `helm lint` misses
       # (missing required values, bad pipelines, required()-gated fields).
-      - run: helm template sg charts/shoreguard --set admin.password=ci-test-placeholder > /dev/null  # pragma: allowlist secret
+      - name: Render default values
+        run: helm template sg charts/shoreguard --set admin.password=ci-test-placeholder > /dev/null  # pragma: allowlist secret
+      - name: Render production preset (existingSecret path)
+        run: |  # pragma: allowlist secret
+          helm template sg charts/shoreguard \
+            -f charts/shoreguard/values.production.yaml \
+            --set existingSecret=sg-secrets \
+            --set ingress.host=ci.example.com \
+            > /dev/null
+      - name: Render multi-replica footgun guard fires
+        # Negative test: replicaCount=3 without secretKey must fail to render.
+        run: |  # pragma: allowlist secret
+          if helm template sg charts/shoreguard \
+            --set admin.password=ci-test-placeholder \
+            --set replicaCount=3 \
+            --set database.url=postgresql://u:p@h/db \
+            > /dev/null 2>&1; then
+            echo "::error::expected helm template to fail (replicaCount=3 without secretKey)"
+            exit 1
+          fi
