@@ -309,6 +309,7 @@ async def gateway_settings_put(
         "gateway.setting_update",
         "gateway",
         name,
+        gateway=name,
         detail={"key": key, "value": body.value},
     )
     return result
@@ -347,6 +348,7 @@ async def gateway_settings_delete(name: str, key: str, request: Request) -> dict
         "gateway.setting_delete",
         "gateway",
         name,
+        gateway=name,
         detail={"key": key},
     )
     return result
@@ -436,6 +438,7 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
         "gateway.register",
         "gateway",
         body.name,
+        gateway=body.name,
         detail={
             "endpoint": body.endpoint,
             "auth_mode": body.auth_mode,
@@ -493,7 +496,7 @@ async def gateway_unregister(name: str, request: Request) -> dict[str, Any]:
         logger.warning("Unregister failed: gateway '%s' not found", name)
         raise HTTPException(404, f"Gateway '{name}' not found")
     logger.info("Gateway unregistered (gateway=%s, actor=%s)", name, get_actor(request))
-    await audit_log(request, "gateway.unregister", "gateway", name)
+    await audit_log(request, "gateway.unregister", "gateway", name, gateway=name)
     await fire_webhook(
         "gateway.unregistered",
         {"gateway": name, "actor": get_actor(request)},
@@ -550,6 +553,7 @@ async def gateway_update_metadata(
         "gateway.update_metadata",
         "gateway",
         name,
+        gateway=name,
         detail={"description": body.description, "labels": body.labels},
     )
     return result
@@ -621,7 +625,7 @@ async def gateway_start_named(name: str, request: Request) -> dict[str, Any]:
         raise HTTPException(404, "Local lifecycle only available in local mode")
     logger.info("Gateway start requested (gateway=%s, actor=%s)", name, get_actor(request))
     result = await asyncio.to_thread(mgr.start, name)
-    await audit_log(request, "gateway.start", "gateway", name)
+    await audit_log(request, "gateway.start", "gateway", name, gateway=name)
     return result
 
 
@@ -645,7 +649,7 @@ async def gateway_stop_named(name: str, request: Request) -> dict[str, Any]:
         raise HTTPException(404, "Local lifecycle only available in local mode")
     logger.info("Gateway stop requested (gateway=%s, actor=%s)", name, get_actor(request))
     result = await asyncio.to_thread(mgr.stop, name)
-    await audit_log(request, "gateway.stop", "gateway", name)
+    await audit_log(request, "gateway.stop", "gateway", name, gateway=name)
     return result
 
 
@@ -669,7 +673,7 @@ async def gateway_restart_named(name: str, request: Request) -> dict[str, Any]:
         raise HTTPException(404, "Local lifecycle only available in local mode")
     logger.info("Gateway restart requested (gateway=%s, actor=%s)", name, get_actor(request))
     result = await asyncio.to_thread(mgr.restart, name)
-    await audit_log(request, "gateway.restart", "gateway", name)
+    await audit_log(request, "gateway.restart", "gateway", name, gateway=name)
     return result
 
 
@@ -699,7 +703,9 @@ async def gateway_destroy(name: str, request: Request, force: bool = False) -> d
         get_actor(request),
     )
     result = await asyncio.to_thread(mgr.destroy, name, force=force)
-    await audit_log(request, "gateway.destroy", "gateway", name, detail={"force": force})
+    await audit_log(
+        request, "gateway.destroy", "gateway", name, gateway=name, detail={"force": force}
+    )
     return result
 
 
