@@ -27,7 +27,7 @@
             <input type="text" class="form-control form-control-sm" placeholder="Actor"
                    x-model.debounce.300ms="filterActor" @input="load()">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <select class="form-select form-select-sm" x-model="filterResourceType" @change="load()">
                 <option value="">All resources</option>
                 <option value="gateway">Gateway</option>
@@ -44,7 +44,11 @@
             <input type="text" class="form-control form-control-sm" placeholder="Action (e.g. sandbox.create)"
                    x-model.debounce.300ms="filterAction" @input="load()">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
+            <input type="text" class="form-control form-control-sm" placeholder="Gateway"
+                   x-model.debounce.300ms="filterGateway" @input="load()">
+        </div>
+        <div class="col-md-2">
             <button class="btn btn-sm btn-outline-secondary" @click="clearFilters()" x-show="hasFilters">
                 <i class="bi bi-x-circle me-1"></i>Clear
             </button>

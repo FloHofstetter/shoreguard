@@ -87,6 +87,24 @@ def _seed_audit(count=3):
         )
 
 
+def _seed_gateway_sequence(gateway: str) -> None:
+    """Seed an M7-style story for one gateway: register → create → approve."""
+    assert audit_mod.audit_service is not None
+    for action, rt, rid in (
+        ("gateway.register", "gateway", gateway),
+        ("sandbox.create", "sandbox", "demo-sb"),
+        ("approval.approve", "approval", "chunk-1"),
+    ):
+        audit_mod.audit_service.log(
+            actor="demo@test.com",
+            actor_role="admin",
+            action=action,
+            resource_type=rt,
+            resource_id=rid,
+            gateway=gateway,
+        )
+
+
 class TestListAudit:
     async def test_list_returns_entries(self, admin_client):
         _seed_audit(3)
@@ -113,6 +131,17 @@ class TestListAudit:
         assert len(data["entries"]) == 1
         assert data["entries"][0]["actor"] == "user0@test.com"
         assert data["total"] == 1
+
+    async def test_list_filter_by_gateway(self, admin_client):
+        _seed_gateway_sequence("nemoclaw")
+        _seed_gateway_sequence("staging-gw")
+        resp = await admin_client.get("/api/audit?gateway=nemoclaw")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 3
+        actions = sorted(e["action"] for e in data["entries"])
+        assert actions == ["approval.approve", "gateway.register", "sandbox.create"]
+        assert all(e["gateway"] == "nemoclaw" for e in data["entries"])
 
     async def test_list_pagination(self, admin_client):
         _seed_audit(10)

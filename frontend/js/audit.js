@@ -9,9 +9,10 @@ function auditPage() {
         filterActor: '',
         filterAction: '',
         filterResourceType: '',
+        filterGateway: '',
 
         get hasFilters() {
-            return this.filterActor || this.filterAction || this.filterResourceType;
+            return this.filterActor || this.filterAction || this.filterResourceType || this.filterGateway;
         },
 
         async load() {
@@ -23,6 +24,7 @@ function auditPage() {
                 if (this.filterActor) params.set('actor', this.filterActor);
                 if (this.filterAction) params.set('action', this.filterAction);
                 if (this.filterResourceType) params.set('resource_type', this.filterResourceType);
+                if (this.filterGateway) params.set('gateway', this.filterGateway);
                 const resp = await apiFetch(`/api/audit?${params}`);
                 this.entries = Array.isArray(resp) ? resp : (resp.entries || resp.items || []);
             } catch (e) {
@@ -36,6 +38,7 @@ function auditPage() {
             this.filterActor = '';
             this.filterAction = '';
             this.filterResourceType = '';
+            this.filterGateway = '';
             this.load();
         },
 
@@ -50,6 +53,7 @@ function auditPage() {
             if (this.filterActor) params.set('actor', this.filterActor);
             if (this.filterAction) params.set('action', this.filterAction);
             if (this.filterResourceType) params.set('resource_type', this.filterResourceType);
+            if (this.filterGateway) params.set('gateway', this.filterGateway);
             window.open(`/api/audit/export?${params}`, '_blank');
         },
     };

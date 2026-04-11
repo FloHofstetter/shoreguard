@@ -25,6 +25,7 @@ async def list_audit_entries(
     actor: str | None = None,
     action: str | None = None,
     resource_type: str | None = None,
+    gateway: str | None = None,
     since: str | None = None,
     until: str | None = None,
 ) -> dict[str, Any]:
@@ -36,6 +37,7 @@ async def list_audit_entries(
         actor: Filter by acting user identity.
         action: Filter by action type.
         resource_type: Filter by resource type.
+        gateway: Filter by gateway name.
         since: ISO-8601 lower bound for the entry timestamp.
         until: ISO-8601 upper bound for the entry timestamp.
 
@@ -51,6 +53,7 @@ async def list_audit_entries(
         actor=actor,
         action=action,
         resource_type=resource_type,
+        gateway=gateway,
         since=since,
         until=until,
     )
@@ -63,6 +66,7 @@ async def export_audit(
     actor: str | None = None,
     action: str | None = None,
     resource_type: str | None = None,
+    gateway: str | None = None,
     since: str | None = None,
     until: str | None = None,
 ) -> Response:
@@ -73,6 +77,7 @@ async def export_audit(
         actor: Filter by acting user identity.
         action: Filter by action type.
         resource_type: Filter by resource type.
+        gateway: Filter by gateway name.
         since: ISO-8601 lower bound for the entry timestamp.
         until: ISO-8601 upper bound for the entry timestamp.
 
@@ -90,6 +95,7 @@ async def export_audit(
             actor=actor,
             action=action,
             resource_type=resource_type,
+            gateway=gateway,
             since=since,
             until=until,
         )
@@ -105,6 +111,7 @@ async def export_audit(
         actor=actor,
         action=action,
         resource_type=resource_type,
+        gateway=gateway,
         since=since,
         until=until,
     )

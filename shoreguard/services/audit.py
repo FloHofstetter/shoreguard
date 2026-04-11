@@ -165,6 +165,7 @@ class AuditService:
         actor: str | None = None,
         action: str | None = None,
         resource_type: str | None = None,
+        gateway: str | None = None,
         since: str | None = None,
         until: str | None = None,
     ) -> list[dict[str, Any]]:
@@ -176,6 +177,7 @@ class AuditService:
             actor: Filter by actor identity.
             action: Filter by action type.
             resource_type: Filter by resource type.
+            gateway: Filter by gateway name (matches the ``gateway_name`` column).
             since: ISO-format start timestamp filter.
             until: ISO-format end timestamp filter.
 
@@ -191,6 +193,8 @@ class AuditService:
                     q = q.filter(AuditEntry.action == action)
                 if resource_type:
                     q = q.filter(AuditEntry.resource_type == resource_type)
+                if gateway:
+                    q = q.filter(AuditEntry.gateway_name == gateway)
                 if since:
                     since_dt = datetime.datetime.fromisoformat(since)
                     q = q.filter(AuditEntry.timestamp >= since_dt)
@@ -212,6 +216,7 @@ class AuditService:
         actor: str | None = None,
         action: str | None = None,
         resource_type: str | None = None,
+        gateway: str | None = None,
         since: str | None = None,
         until: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
@@ -223,6 +228,7 @@ class AuditService:
             actor: Filter by actor identity.
             action: Filter by action type.
             resource_type: Filter by resource type.
+            gateway: Filter by gateway name.
             since: ISO-format start timestamp filter.
             until: ISO-format end timestamp filter.
 
@@ -240,6 +246,8 @@ class AuditService:
                     q = q.filter(AuditEntry.action == action)
                 if resource_type:
                     q = q.filter(AuditEntry.resource_type == resource_type)
+                if gateway:
+                    q = q.filter(AuditEntry.gateway_name == gateway)
                 if since:
                     since_dt = datetime.datetime.fromisoformat(since)
                     q = q.filter(AuditEntry.timestamp >= since_dt)
@@ -260,6 +268,7 @@ class AuditService:
         actor: str | None = None,
         action: str | None = None,
         resource_type: str | None = None,
+        gateway: str | None = None,
         since: str | None = None,
         until: str | None = None,
     ) -> str:
@@ -269,6 +278,7 @@ class AuditService:
             actor: Filter by actor identity.
             action: Filter by action type.
             resource_type: Filter by resource type.
+            gateway: Filter by gateway name.
             since: ISO-format start timestamp filter.
             until: ISO-format end timestamp filter.
 
@@ -282,6 +292,7 @@ class AuditService:
             actor=actor,
             action=action,
             resource_type=resource_type,
+            gateway=gateway,
             since=since,
             until=until,
         )
@@ -348,6 +359,7 @@ class AuditService:
         actor: str | None = None,
         action: str | None = None,
         resource_type: str | None = None,
+        gateway: str | None = None,
         since: str | None = None,
         until: str | None = None,
     ) -> str:
@@ -357,6 +369,7 @@ class AuditService:
             actor: Filter by actor identity.
             action: Filter by action type.
             resource_type: Filter by resource type.
+            gateway: Filter by gateway name.
             since: ISO-format start timestamp filter.
             until: ISO-format end timestamp filter.
 
@@ -370,6 +383,7 @@ class AuditService:
             actor=actor,
             action=action,
             resource_type=resource_type,
+            gateway=gateway,
             since=since,
             until=until,
         )
