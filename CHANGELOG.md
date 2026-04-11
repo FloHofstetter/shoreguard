@@ -7,20 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### M7 progress — end-to-end vision demo (proven in substance)
+### M7 — end-to-end vision demo (proven 2026-04-11)
 
 The post-v0.29 milestone M7 ("can we run the whole story end-to-end?")
-got its first real run on 2026-04-11. The flow — register gateway →
-configure inference provider → launch sandboxed agent → call routed
-inference → trigger L7 denial → approve in UI → audit shows full
-sequence — completed successfully against a real Anthropic API key
-on a base+claude-code sandbox. The "no real draft chunks to test"
-blocker from the v0.29 e2e walk is closed: the demo produced an
-actual draft chunk (`allow_example_com_443`, confidence 0.65) from
-a real outbound denial. Two follow-ups are tracked but neither
-blocks closeout: Phase H response-path retry resets after the
-policy update, and the local-mode auto-register-with-mtls bug.
-See [scripts/m7-demo.md](scripts/m7-demo.md) for the full report.
+ran end-to-end on 2026-04-11. Full flow against a real Anthropic API
+key on a `base` + `claude-code` sandbox: register gateway → configure
+inference provider → launch sandbox → `claude` agent makes a routed
+inference call that returns `PONG` → unallowlisted curl produces a
+real `NET:OPEN DENIED` plus a draft chunk (confidence 0.65) →
+operator approves the chunk → audit log shows the full sequence
+filterable by gateway → retry returns HTTP 200 from the upstream
+service. The "no real draft chunks to test" blocker from the v0.29
+e2e walk is closed.
+
+One small follow-up tracked separately: the approve API returns
+immediately with a new `policy_version`, but the proxy reload is
+async — clients must poll `/api/gateways/<gw>/sandboxes/<sb>/policy`
+for `revision.status == "loaded"` and a matching `active_version`
+before issuing the retry. Worth a backend addition (a
+`wait_loaded=true` query param on approve, or a "policy reloaded"
+event for the UI to listen for).
+
+See [scripts/m7-demo.md](scripts/m7-demo.md) for the full per-phase
+report and the half-dozen smaller bugs surfaced along the way.
 
 ### Added
 
