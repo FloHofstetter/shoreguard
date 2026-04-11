@@ -7,169 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### M9 — Webhooks UI (shipped 2026-04-11)
+## [0.30.0] — 2026-04-11
 
-The webhook subscription backend has been fully implemented for
-several releases (CRUD + delivery log + HMAC signing + per-channel
-formatters), but had **no operator UI**. Admins could create/test/
-delete webhooks only via curl, and there was no per-webhook delivery
-log to surface failed deliveries. M9 closes that gap with three
-pieces:
+The headline of this release is **federation in production shape**:
+ShoreGuard now ships with a topbar switcher, label-based gateway
+filtering, per-gateway audit attribution, and a single-file Python
+script that drives the complete agent → routed inference → L7 denial
+→ approve → audit → retry flow against **two** live OpenShell
+clusters in parallel. The same release also closes the long-standing
+"webhook backend exists, no UI" gap with a new `/webhooks` admin
+page, and shore-up audit attribution across the gateway routes so the
+audit log can be sliced by gateway with no cross-attribution leaks.
 
-- **`/webhooks` admin page** lists every subscription with channel
-  badge, event-type chips, active/paused state, and per-row actions
-  for test, deliveries, pause/resume, edit, and delete. Inline create
-  form with one-time HMAC secret reveal callout. Edit and delivery-log
-  modals.
-- **Webhook CRUD now lands in the audit log** (`webhook.create`,
-  `webhook.update`, `webhook.delete`, `webhook.test`) with the URL,
-  event_types and channel_type in the detail blob. This was the last
-  unaudited route family in the API.
-- **The /test endpoint bypasses subscription filtering** so clicking
-  the "Test" button on a webhook always reaches its target, regardless
-  of whether the webhook subscribes to `webhook.test`. Found live
-  during the dry-run: a webhook subscribed to `sandbox.created` was
-  silently producing zero deliveries when tested. New
-  `WebhookService.fire_to(webhook_id, ...)` method handles direct
-  delivery; paused webhooks return 409 instead of silently dropping.
-
-Verified end-to-end via Firefox MCP against the running M8 stack:
-created a webhook pointing at `https://httpbin.org/post`, fired the
-test button, watched the delivery log update with status=success,
-response_code=200, and confirmed three matching rows in
-`/audit?resource_type=webhook`.
-
-### M8 — multi-gateway federation (proven 2026-04-11)
-
-The federation story (label-based gateway selection, cross-gateway
-audit aggregation, gateway list filtering, ⌘K search across multiple
-clusters) ships from this release as **proven against two live
-gateways**, not just hypothetically supported.
-
-The M8 demo runs the full M7 flow concurrently against two OpenShell
-clusters (`cluster-dev` env=dev on :8089, `cluster-staging`
-env=staging on :8189), with a different unallowlisted host per
-gateway (`httpbin.org` vs `jsonplaceholder.typicode.com`), and
-asserts:
-
-- `?label=env:dev` returns only the dev cluster, `?label=env:staging`
-  returns only staging, unfiltered returns both.
-- Both `claude -p PONG` calls succeed via their own routed inference.
-- Both L7 denials produce real draft chunks; both approves trigger
-  proxy reloads; both retries return HTTP 200 from the upstream
-  service.
-- `/api/audit?gateway=cluster-dev` returns only dev rows (no
-  cross-attribution), same for staging; unfiltered shows both
-  interleaved with the gateway column populated correctly per row.
-- `/api/gateway/list` returns both with labels intact and
-  `status=connected`.
-
-Verified end-to-end via [`scripts/m8_demo.py`](scripts/m8_demo.py)
-on the first try, ~3-4 min wall time, exit 0.
-
-### M7 — end-to-end vision demo (proven 2026-04-11)
-
-The post-v0.29 milestone M7 ("can we run the whole story end-to-end?")
-ran end-to-end on 2026-04-11. Full flow against a real Anthropic API
-key on a `base` + `claude-code` sandbox: register gateway → configure
-inference provider → launch sandbox → `claude` agent makes a routed
-inference call that returns `PONG` → unallowlisted curl produces a
-real `NET:OPEN DENIED` plus a draft chunk (confidence 0.65) →
-operator approves the chunk → audit log shows the full sequence
-filterable by gateway → retry returns HTTP 200 from the upstream
-service. The "no real draft chunks to test" blocker from the v0.29
-e2e walk is closed.
-
-One small follow-up tracked separately: the approve API returns
-immediately with a new `policy_version`, but the proxy reload is
-async — clients must poll `/api/gateways/<gw>/sandboxes/<sb>/policy`
-for `revision.status == "loaded"` and a matching `active_version`
-before issuing the retry. Worth a backend addition (a
-`wait_loaded=true` query param on approve, or a "policy reloaded"
-event for the UI to listen for).
-
-See [scripts/m7-demo.md](scripts/m7-demo.md) for the full per-phase
-report and the half-dozen smaller bugs surfaced along the way.
+Two end-to-end automation scripts (`scripts/m7_demo.py` and
+`scripts/m8_demo.py`) now exercise the full vision flow on every run;
+both pass exit 0 in ~30 seconds and ~3-4 minutes respectively,
+against real OpenShell gateways and a real Anthropic API key.
 
 ### Added
 
-- **`/webhooks` admin page** (`ae053fd`). New
-  [frontend/templates/pages/webhooks.html](frontend/templates/pages/webhooks.html)
-  alongside [frontend/js/webhooks.js](frontend/js/webhooks.js) Alpine
-  component. List, inline create, secret reveal, edit modal, delivery
-  log modal, pause/resume, send-test — all wired into
-  [sidebar.html](frontend/templates/components/sidebar.html) and the
-  ⌘K palette ([search.js](frontend/js/search.js)).
-- **Webhook CRUD audit hookup** (`dfd39df`). Adds `webhook.create`,
-  `webhook.update`, `webhook.delete`, `webhook.test` audit entries
-  via [routes/webhooks.py](shoreguard/api/routes/webhooks.py); URL,
-  event_types and channel_type land in the detail blob. New
-  `TestAuditHookup` test class on
-  [test_api_webhook_routes.py](tests/test_api_webhook_routes.py)
-  asserts each action lands as a row.
-- **`WebhookService.fire_to()`** (`af01b93`). Direct delivery to a
-  single active webhook, bypassing the subscription filter. Used by
-  the /test endpoint so the test button always reaches its target;
-  paused webhooks return 409.
-- **Topbar gateway switcher** (`cca61ce`). Replaces the read-only
-  `#gateway-status` badge in [base.html](frontend/templates/base.html)
-  with a dropdown that lists every registered gateway, shows their
-  status dots and labels, and navigates on click. Pure URL-based
-  switching (no client-side selected-gateway state). New file
-  [frontend/js/gateway-switcher.js](frontend/js/gateway-switcher.js).
-- **Label filter UI on the gateways list page** (`8c1684f`). Wires
-  the existing backend `?label=key:value` filter into a debounced
-  text input next to the existing free-text filter on
-  [gateways.html](frontend/templates/pages/gateways.html). Mirrors
-  the audit-page filter pattern. Tests cover single-label,
-  multi-label (AND semantics), and malformed input on
-  [test_api_gateway_routes.py](tests/test_api_gateway_routes.py).
-- [scripts/m8-demo.md](scripts/m8-demo.md) — canonical step-by-step
-  runbook for the M8 federation demo, with the per-phase report table.
-- [scripts/m8_demo.py](scripts/m8_demo.py) — single-file Python
-  automation of the M8 federation flow. Idempotent, ~3-4 min wall
-  time, exit 0 on success. (`17a8c32`)
-- `gateway` query parameter on `/api/audit` and `/api/audit/export` —
-  filter audit entries by the gateway they happened on, used by the M7
-  demo to reconstruct the full launch → call → deny → approve sequence
-  for one gateway in chronological order. Audit page UI gets a matching
-  filter input. (`d88fd82`)
-- [scripts/m7-demo.md](scripts/m7-demo.md) — canonical step-by-step
-  runbook for the M7 end-to-end demo, with the first-run findings
-  inline. (`b4be86d`, `a40fcdc`, `5d78054`)
-- [scripts/m7_demo.py](scripts/m7_demo.py) — single-file Python
-  automation of the M7 vision flow over the HTTP API + `openshell
-  sandbox exec`. Idempotent, ~30s wall time, exit 0 on success.
-  Includes the wait-for-loaded poll that fixes the approve→reload
-  race. (`e9c3ea0`)
+- **Webhook management UI at `/webhooks`** (admin only). Lists every
+  registered webhook with channel badge, event-type chips, active /
+  paused state, and per-row actions for test, view delivery log,
+  pause/resume, edit, and delete. Inline create form with a one-time
+  HMAC signing-secret reveal callout. Edit and delivery-log modals.
+  The webhook backend has shipped for several releases — this is the
+  first operator-facing surface for it.
+- **Topbar gateway switcher**. The read-only gateway status badge
+  has been replaced with a dropdown that lists every registered
+  gateway with status dot and labels, and navigates to the picked
+  gateway's detail page on click. Pure URL navigation, no client-side
+  "active gateway" state. Available on every page.
+- **Label filter on the gateways list page**. New text input next
+  to the existing free-text filter accepts `key:value` (or
+  comma-separated `k:v,k2:v2` for AND semantics) and reduces the
+  table to gateways carrying those labels. The backend `?label=`
+  query parameter on `/api/gateway/list` was already supported.
+- **Audit log filterable by gateway**. New `?gateway=<name>` query
+  parameter on `/api/audit` and `/api/audit/export`, plus a matching
+  text input on the audit page. Lets an operator reconstruct the
+  full register → configure → run → deny → approve sequence for one
+  gateway in chronological order, even when other gateways are
+  active concurrently.
+- **Webhook CRUD now lands in the audit log**. New `webhook.create`,
+  `webhook.update`, `webhook.delete`, and `webhook.test` audit
+  entries carry the URL, event types, and channel type in the
+  detail blob. This was the last unaudited route family in the API.
+- **`WebhookService.fire_to()` direct delivery**. The webhook
+  service now exposes a method to deliver an event to one specific
+  active webhook, bypassing the subscription filter. The `/test`
+  endpoint uses this so clicking the "Test" button on a webhook
+  always reaches its target — even if the webhook doesn't subscribe
+  to `webhook.test`. Paused webhooks now return HTTP 409 instead of
+  silently dropping the request.
+- **End-to-end demo scripts and runbooks.** `scripts/m7_demo.py`
+  drives the single-gateway vision flow (login → register →
+  inference provider → launch sandbox → claude agent → L7 denial →
+  approve → audit → retry) in ~30 seconds. `scripts/m8_demo.py`
+  does the federated version against two clusters in ~3-4 minutes,
+  with per-gateway audit-attribution assertions. Each script ships
+  alongside a markdown runbook (`scripts/m7-demo.md`,
+  `scripts/m8-demo.md`) for the manual recipe. Both scripts are
+  idempotent — re-running deletes any leftover state before
+  recreating.
 
 ### Fixed
 
-- Webhook /test endpoint silently produced zero deliveries when the
-  target webhook didn't subscribe to `webhook.test` (or `*`) — the
-  global `fire()` path filters by subscription. The `/test` button
-  on the new webhooks page now uses the new `fire_to()` direct
-  delivery path so the test action is always meaningful, and
-  responds 409 when targeting a paused webhook instead of dropping.
-  (`af01b93`)
-- Gateway-route audit entries (`gateway.register`, `unregister`,
-  `setting_update`/`delete`, `update_metadata`, `start`/`stop`/
-  `restart`/`destroy`) were landing with `gateway_name=NULL`,
-  invisible to the new `?gateway=<name>` filter. Now they pass
-  `gateway=name` to `audit_log()`. Discovered while dry-running
-  the M7 demo. (`09f2b5b`)
-- `GET /api/gateway/{name}/info` returned 500 on a connected
-  gateway: `GatewayService.get_info()` injects `configured` and
-  `version` into the dict, but `GatewayResponse` was
-  `extra="forbid"`. Schema now accepts both fields. (`485bf71`)
-- CSP-strict tests in
-  [test_security_headers.py](tests/test_security_headers.py)
-  asserted `'unsafe-inline'` was a substring of the CSP header,
-  which broke after `45129f4` added `style-src-attr 'unsafe-inline'`
-  for Alpine inline styles. Replaces the substring check with a
-  per-directive check that allows the narrower `style-src-attr`
-  while keeping `default-src` / `script-src` / `style-src` strict.
-  (`88fcb40`)
+- **`GET /api/gateway/{name}/info` returned 500** on a connected
+  gateway. `GatewayService.get_info()` injects `configured` and
+  `version` into the response dict, but `GatewayResponse` was
+  `extra="forbid"`, so the live endpoint crashed inside FastAPI's
+  response validator. Schema now accepts both fields.
+- **Gateway-route audit entries were landing with `gateway_name=NULL`.**
+  `gateway.register`, `unregister`, `setting_update`/`delete`,
+  `update_metadata`, `start` / `stop` / `restart` / `destroy` all
+  pass `gateway=name` to `audit_log()` now, so the new
+  `?gateway=<name>` filter actually finds them. Without this, every
+  gateway-scoped audit row was invisible to per-gateway queries.
+- **Webhook `/test` endpoint silently produced zero deliveries**
+  when the target webhook didn't subscribe to `webhook.test` (or
+  `*`). The global `fire()` path filters by subscription, so the
+  test button was a lie unless the webhook happened to subscribe to
+  the test event type. The new `fire_to()` direct-delivery path
+  fixes it; paused webhooks now return 409 instead of dropping.
+- **CSP-strict header tests** asserted `'unsafe-inline'` was not a
+  substring of the CSP header, which broke after the v0.29 fix that
+  added `style-src-attr 'unsafe-inline'` for Alpine.js's inline
+  `style` attributes (x-show / x-cloak / x-transition). Replaced
+  with a per-directive check that allows the narrower
+  `style-src-attr` while keeping `default-src`, `script-src`, and
+  `style-src` strict.
 
 ## [0.29.0] — 2026-04-11
 
