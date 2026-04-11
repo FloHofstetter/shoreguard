@@ -127,15 +127,15 @@ backup/restore scripts, a rollback runbook, and Trivy + Bandit in CI.
   strict CSP disabled, unrestricted self-registration in prod). Set
   `SHOREGUARD_ALLOW_UNSAFE_CONFIG=true` to downgrade the error to a
   `CRITICAL` log line — documented as an emergency override in
-  [docs/reference/configuration.md](docs/reference/configuration.md).
+  [reference/configuration.md](reference/configuration.md).
 - **Backup and restore scripts (M5 / S5.1).** New `scripts/backup.py`
   and `scripts/restore.py` auto-detect SQLite vs Postgres from the
   database URL. SQLite uses the built-in online backup API; Postgres
   shells out to `pg_dump --format=custom` / `pg_restore --clean
-  --if-exists`. The [Database Migrations](docs/admin/database-migrations.md)
+  --if-exists`. The [Database Migrations](admin/database-migrations.md)
   guide now recommends these scripts as the primary backup path.
 - **Rollback runbook (M5 / S5.2).** New
-  [docs/admin/rollback.md](docs/admin/rollback.md) consolidates the
+  [admin/rollback.md](admin/rollback.md) consolidates the
   incident-response flow (symptom detection → image rollback → optional
   DB rollback or restore → verification → post-mortem) into one page,
   with links into existing troubleshooting, migration, and deployment
