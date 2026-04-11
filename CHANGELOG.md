@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### M9 — Webhooks UI (shipped 2026-04-11)
+
+The webhook subscription backend has been fully implemented for
+several releases (CRUD + delivery log + HMAC signing + per-channel
+formatters), but had **no operator UI**. Admins could create/test/
+delete webhooks only via curl, and there was no per-webhook delivery
+log to surface failed deliveries. M9 closes that gap with three
+pieces:
+
+- **`/webhooks` admin page** lists every subscription with channel
+  badge, event-type chips, active/paused state, and per-row actions
+  for test, deliveries, pause/resume, edit, and delete. Inline create
+  form with one-time HMAC secret reveal callout. Edit and delivery-log
+  modals.
+- **Webhook CRUD now lands in the audit log** (`webhook.create`,
+  `webhook.update`, `webhook.delete`, `webhook.test`) with the URL,
+  event_types and channel_type in the detail blob. This was the last
+  unaudited route family in the API.
+- **The /test endpoint bypasses subscription filtering** so clicking
+  the "Test" button on a webhook always reaches its target, regardless
+  of whether the webhook subscribes to `webhook.test`. Found live
+  during the dry-run: a webhook subscribed to `sandbox.created` was
+  silently producing zero deliveries when tested. New
+  `WebhookService.fire_to(webhook_id, ...)` method handles direct
+  delivery; paused webhooks return 409 instead of silently dropping.
+
+Verified end-to-end via Firefox MCP against the running M8 stack:
+created a webhook pointing at `https://httpbin.org/post`, fired the
+test button, watched the delivery log update with status=success,
+response_code=200, and confirmed three matching rows in
+`/audit?resource_type=webhook`.
+
 ### M8 — multi-gateway federation (proven 2026-04-11)
 
 The federation story (label-based gateway selection, cross-gateway
@@ -61,6 +93,24 @@ report and the half-dozen smaller bugs surfaced along the way.
 
 ### Added
 
+- **`/webhooks` admin page** (`ae053fd`). New
+  [frontend/templates/pages/webhooks.html](frontend/templates/pages/webhooks.html)
+  alongside [frontend/js/webhooks.js](frontend/js/webhooks.js) Alpine
+  component. List, inline create, secret reveal, edit modal, delivery
+  log modal, pause/resume, send-test — all wired into
+  [sidebar.html](frontend/templates/components/sidebar.html) and the
+  ⌘K palette ([search.js](frontend/js/search.js)).
+- **Webhook CRUD audit hookup** (`dfd39df`). Adds `webhook.create`,
+  `webhook.update`, `webhook.delete`, `webhook.test` audit entries
+  via [routes/webhooks.py](shoreguard/api/routes/webhooks.py); URL,
+  event_types and channel_type land in the detail blob. New
+  `TestAuditHookup` test class on
+  [test_api_webhook_routes.py](tests/test_api_webhook_routes.py)
+  asserts each action lands as a row.
+- **`WebhookService.fire_to()`** (`af01b93`). Direct delivery to a
+  single active webhook, bypassing the subscription filter. Used by
+  the /test endpoint so the test button always reaches its target;
+  paused webhooks return 409.
 - **Topbar gateway switcher** (`cca61ce`). Replaces the read-only
   `#gateway-status` badge in [base.html](frontend/templates/base.html)
   with a dropdown that lists every registered gateway, shows their
@@ -95,6 +145,13 @@ report and the half-dozen smaller bugs surfaced along the way.
 
 ### Fixed
 
+- Webhook /test endpoint silently produced zero deliveries when the
+  target webhook didn't subscribe to `webhook.test` (or `*`) — the
+  global `fire()` path filters by subscription. The `/test` button
+  on the new webhooks page now uses the new `fire_to()` direct
+  delivery path so the test action is always meaningful, and
+  responds 409 when targeting a paused webhook instead of dropping.
+  (`af01b93`)
 - Gateway-route audit entries (`gateway.register`, `unregister`,
   `setting_update`/`delete`, `update_metadata`, `start`/`stop`/
   `restart`/`destroy`) were landing with `gateway_name=NULL`,
