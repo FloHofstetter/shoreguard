@@ -1,0 +1,56 @@
+{{- if .Values.bootstrap.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "openshell.fullname" . }}-bootstrap
+  labels:
+    {{- include "openshell.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "openshell.fullname" . }}-bootstrap
+  labels:
+    {{- include "openshell.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  # The bootstrap Job exec's into the cluster pod to generate mTLS
+  # material and create k3s-internal Secrets via the in-pod kubectl.
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+  # The bootstrap Job writes the exported client cert material as an
+  # outer-cluster Secret so that scripts/m12_demo.py can read it.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "openshell.fullname" . }}-bootstrap
+  labels:
+    {{- include "openshell.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "openshell.fullname" . }}-bootstrap
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "openshell.fullname" . }}-bootstrap
+    namespace: {{ .Release.Namespace }}
+{{- end }}

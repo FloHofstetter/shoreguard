@@ -94,3 +94,17 @@ jobs:
             echo "::error::expected helm template to fail (replicaCount=3 without secretKey)"
             exit 1
           fi
+      - run: helm lint charts/openshell-cluster --set label.env=dev
+      - name: Render openshell-cluster (positive)
+        run: |
+          helm template cluster-dev charts/openshell-cluster \
+            --set label.env=dev > /dev/null
+          helm template cluster-staging charts/openshell-cluster \
+            --set label.env=staging > /dev/null
+      - name: Render openshell-cluster missing label.env guard fires
+        # Negative test: label.env empty must fail to render.
+        run: |
+          if helm template cluster-dev charts/openshell-cluster > /dev/null 2>&1; then
+            echo "::error::expected helm template to fail (openshell-cluster without label.env)"
+            exit 1
+          fi

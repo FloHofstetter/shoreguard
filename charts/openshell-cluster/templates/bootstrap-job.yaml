@@ -1,0 +1,155 @@
+{{- if .Values.bootstrap.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "openshell.fullname" . }}-bootstrap
+  labels:
+    {{- include "openshell.labels" . | nindent 4 }}
+    openshell.io/bootstrap: "true"
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "openshell.selectorLabels" . | nindent 8 }}
+        openshell.io/bootstrap: "true"
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "openshell.fullname" . }}-bootstrap
+      containers:
+        - name: bootstrap
+          image: "{{ .Values.bootstrap.image.repository }}:{{ .Values.bootstrap.image.tag }}"
+          imagePullPolicy: {{ .Values.bootstrap.image.pullPolicy }}
+          env:
+            - name: POD
+              value: {{ include "openshell.fullname" . }}-0
+            - name: NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: SERVICE_FQDN
+              value: {{ printf "%s.%s.svc.cluster.local" (include "openshell.fullname" .) .Release.Namespace }}
+            - name: SERVICE_SHORT
+              value: {{ include "openshell.fullname" . }}
+            - name: CLIENT_SECRET
+              value: {{ include "openshell.clientSecretName" . }}
+            - name: K3S_TIMEOUT
+              value: {{ .Values.bootstrap.k3sReadyTimeoutSeconds | quote }}
+            - name: LABEL_ENV
+              value: {{ .Values.label.env | quote }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -eu
+              echo "[bootstrap] waiting for StatefulSet pod $POD to be Ready..."
+              kubectl -n "$NAMESPACE" wait --for=condition=Ready \
+                "pod/$POD" --timeout="${K3S_TIMEOUT}s"
+
+              echo "[bootstrap] waiting for k3s API inside pod (cluster image may take a minute)..."
+              end=$(( $(date +%s) + K3S_TIMEOUT ))
+              until kubectl -n "$NAMESPACE" exec "$POD" -- sh -c \
+                  'kubectl get nodes >/dev/null 2>&1'; do
+                if [ "$(date +%s)" -ge "$end" ]; then
+                  echo "[bootstrap] ERROR: k3s API did not come up within ${K3S_TIMEOUT}s" >&2
+                  exit 1
+                fi
+                sleep 3
+              done
+              echo "[bootstrap] k3s API reachable."
+
+              echo "[bootstrap] waiting for 'openshell' namespace in k3s..."
+              until kubectl -n "$NAMESPACE" exec "$POD" -- sh -c \
+                  'kubectl get ns openshell >/dev/null 2>&1'; do
+                sleep 3
+              done
+
+              # Generate mTLS certs inside the cluster pod if they don't
+              # already exist (idempotent on re-run / upgrade).
+              echo "[bootstrap] generating / refreshing mTLS material (SAN FQDN=$SERVICE_FQDN short=$SERVICE_SHORT)..."
+              # Pre-stage the openssl server-cert extension file with the
+              # SAN values substituted at the OUTER shell level, then
+              # stream it into the cluster pod via `kubectl exec … tee`.
+              # This avoids having to escape quotes through the nested
+              # kubectl exec → sh -c call path.
+              kubectl -n "$NAMESPACE" exec -i "$POD" -- sh -c 'mkdir -p /certs && tee /certs/server.ext > /dev/null' <<SERVEREXT
+              subjectAltName=DNS:${SERVICE_FQDN},DNS:${SERVICE_SHORT},DNS:openshell,DNS:openshell-0,DNS:openshell.openshell.svc.cluster.local,DNS:localhost,IP:127.0.0.1
+              basicConstraints=CA:FALSE
+              keyUsage=digitalSignature,keyEncipherment
+              extendedKeyUsage=serverAuth
+              SERVEREXT
+              kubectl -n "$NAMESPACE" exec -i "$POD" -- sh -c 'tee /certs/client.ext > /dev/null' <<CLIENTEXT
+              basicConstraints=CA:FALSE
+              keyUsage=digitalSignature,keyEncipherment
+              extendedKeyUsage=clientAuth
+              CLIENTEXT
+
+              kubectl -n "$NAMESPACE" exec "$POD" -- sh -euxc '
+                if [ -f /certs/ca.crt ] && [ -f /certs/client.crt ] && [ -f /certs/client.key ]; then
+                  echo "[bootstrap] cert material already present, skipping openssl"
+                else
+                  openssl genpkey -algorithm RSA -out /certs/ca.key -pkeyopt rsa_keygen_bits:2048 2>/dev/null
+                  openssl req -x509 -new -key /certs/ca.key -out /certs/ca.crt -days 3650 \
+                    -subj "/CN=openshell-ca" \
+                    -addext "basicConstraints=critical,CA:TRUE" \
+                    -addext "keyUsage=critical,keyCertSign,cRLSign" 2>/dev/null
+
+                  openssl genpkey -algorithm RSA -out /certs/server.key -pkeyopt rsa_keygen_bits:2048 2>/dev/null
+                  openssl req -new -key /certs/server.key -out /certs/server.csr -subj "/CN=openshell" 2>/dev/null
+                  openssl x509 -req -in /certs/server.csr -CA /certs/ca.crt -CAkey /certs/ca.key \
+                    -CAcreateserial -out /certs/server.crt -days 3650 -extfile /certs/server.ext 2>/dev/null
+
+                  openssl genpkey -algorithm RSA -out /certs/client.key -pkeyopt rsa_keygen_bits:2048 2>/dev/null
+                  openssl req -new -key /certs/client.key -out /certs/client.csr -subj "/CN=shoreguard-client" 2>/dev/null
+                  openssl x509 -req -in /certs/client.csr -CA /certs/ca.crt -CAkey /certs/ca.key \
+                    -CAcreateserial -out /certs/client.crt -days 3650 -extfile /certs/client.ext 2>/dev/null
+
+                  chmod 644 /certs/*.crt /certs/*.key
+                fi
+
+                kubectl create secret tls openshell-server-tls -n openshell \
+                  --cert=/certs/server.crt --key=/certs/server.key \
+                  --dry-run=client -o yaml | kubectl apply -f -
+                kubectl create secret generic openshell-server-client-ca -n openshell \
+                  --from-file=ca.crt=/certs/ca.crt \
+                  --dry-run=client -o yaml | kubectl apply -f -
+                kubectl create secret generic openshell-client-tls -n openshell \
+                  --from-file=tls.crt=/certs/client.crt \
+                  --from-file=tls.key=/certs/client.key \
+                  --from-file=ca.crt=/certs/ca.crt \
+                  --dry-run=client -o yaml | kubectl apply -f -
+                if ! kubectl get secret openshell-ssh-handshake -n openshell >/dev/null 2>&1; then
+                  kubectl create secret generic openshell-ssh-handshake -n openshell \
+                    --from-literal=secret=$(openssl rand -hex 32)
+                fi
+              '
+              echo "[bootstrap] k3s-internal secrets applied."
+
+              echo "[bootstrap] exporting client mTLS material to outer Secret $CLIENT_SECRET..."
+              CA=$(kubectl -n "$NAMESPACE" exec "$POD" -- sh -c 'base64 /certs/ca.crt | tr -d "\n"')
+              CRT=$(kubectl -n "$NAMESPACE" exec "$POD" -- sh -c 'base64 /certs/client.crt | tr -d "\n"')
+              KEY=$(kubectl -n "$NAMESPACE" exec "$POD" -- sh -c 'base64 /certs/client.key | tr -d "\n"')
+
+              cat <<EOF | kubectl -n "$NAMESPACE" apply -f -
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: $CLIENT_SECRET
+                labels:
+                  app.kubernetes.io/managed-by: Helm
+                  app.kubernetes.io/part-of: shoreguard
+                  openshell.io/env: "$LABEL_ENV"
+              type: Opaque
+              data:
+                ca.crt: $CA
+                client.crt: $CRT
+                client.key: $KEY
+              EOF
+
+              echo "[bootstrap] done. Register the gateway with:"
+              echo "  endpoint: $POD-openshell.$NAMESPACE.svc.cluster.local:{{ .Values.service.port }}"
+              echo "  client mTLS material in Secret: $NAMESPACE/$CLIENT_SECRET"
+{{- end }}

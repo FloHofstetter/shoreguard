@@ -1,0 +1,95 @@
+# Default values for the openshell-cluster Helm chart (M12).
+#
+# This chart runs the OpenShell cluster image (k3s-in-container) as a
+# StatefulSet so that a Helm-deployed ShoreGuard can federate multiple
+# gateways entirely in-cluster. It mirrors the docker-compose pattern
+# in deploy/docker-compose.yml (init-openshell + init-gateway).
+#
+# Deployment flow:
+#   1. StatefulSet comes up with the cluster image (privileged, runs k3s).
+#   2. A Helm post-install Job waits for k3s to be ready, then exec's into
+#      the pod to generate mTLS certs (CA + server + client) and to create
+#      the k3s-internal secrets OpenShell expects.
+#   3. The Job also exports the client cert material to an outer-cluster
+#      Secret ("<fullname>-client-tls") so ShoreGuard / scripts/m12_demo.py
+#      can register the gateway with mTLS credentials.
+
+image:
+  repository: ghcr.io/nvidia/openshell/cluster
+  # Pin tracks the OpenShell version listed in the project roadmap.
+  tag: "0.0.26"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# Gateway label. REQUIRED — the chart fails rendering if empty. This ends
+# up as the openshell.io/env pod label, which scripts/m12_demo.py uses when
+# registering the gateway ({labels: {env: <value>}}) so the federation
+# label-filter assertion (Phase D) is meaningful.
+label:
+  env: ""
+
+service:
+  type: ClusterIP
+  # k3s gRPC listener port (matches deploy/docker-compose.yml topology).
+  port: 30051
+
+# Persistent /var/lib/rancher so k3s state survives pod restarts.
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClassName: ""
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+# k3s needs root + privileged. The docker-compose reference uses no
+# non-root user either. Do not try to set runAsNonRoot here — the image
+# will not boot.
+podSecurityContext:
+  fsGroup: 0
+
+containerSecurityContext:
+  privileged: true
+  runAsUser: 0
+
+# Bootstrap Job that portes the deploy/docker-compose.yml init-openshell
+# block to k8s via `kubectl exec`. It generates mTLS material inside the
+# cluster pod and then exports the client cert to an outer Secret so that
+# scripts/m12_demo.py can read it via `kubectl get secret`.
+bootstrap:
+  enabled: true
+  image:
+    # bitnami/kubectl was taken down from docker.io in early 2026 when
+    # Bitnami moved their free community images behind a private
+    # registry. alpine/k8s bundles kubectl + bash + openssl + jq on
+    # top of alpine and has been a stable public mirror.
+    repository: alpine/k8s
+    tag: "1.30.0"
+    pullPolicy: IfNotPresent
+  # Override the outer client-cert Secret name. Default: "<fullname>-client-tls".
+  clientSecretName: ""
+  # Retry budget while waiting for k3s API inside the cluster pod.
+  k3sReadyTimeoutSeconds: 300
+
+# helm test hook: tcp-probe the gRPC port to prove the Service routes to
+# a listening cluster pod. Not a full gRPC handshake — the m12_demo Phase
+# B register call exercises that through ShoreGuard.
+tests:
+  enabled: true
+  image:
+    repository: busybox
+    tag: "1.36"
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Override chart name / fullname if the default (release + chart name)
+# collides with other helm releases in the namespace.
+nameOverride: ""
+fullnameOverride: ""

@@ -1,0 +1,30 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "openshell.fullname" . }}-test-connection
+  labels:
+    {{- include "openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: helm-test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: tcp-probe
+      image: "{{ .Values.tests.image.repository }}:{{ .Values.tests.image.tag }}"
+      imagePullPolicy: IfNotPresent
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          host={{ include "openshell.fullname" . }}
+          port={{ .Values.service.port }}
+          echo "[helm test] tcp probe ${host}:${port}"
+          # nc -zv is not a full gRPC handshake; it just proves the Service
+          # routes to a listening pod. The real mTLS handshake is exercised
+          # by scripts/m12_demo.py Phase B via ShoreGuard's gateway register.
+          nc -zv "${host}" "${port}"
+{{- end }}

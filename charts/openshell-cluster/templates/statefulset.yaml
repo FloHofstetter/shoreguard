@@ -1,0 +1,100 @@
+{{- include "openshell.validate" . -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "openshell.fullname" . }}
+  labels:
+    {{- include "openshell.labels" . | nindent 4 }}
+spec:
+  # Stable pod name is required: the bootstrap Job does `kubectl exec
+  # <fullname>-0` to generate mTLS material and create k3s-internal
+  # Secrets. Single replica only — OpenShell is stateful (k3s) and does
+  # not horizontally scale.
+  replicas: 1
+  serviceName: {{ include "openshell.fullname" . }}
+  selector:
+    matchLabels:
+      {{- include "openshell.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "openshell.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        # Seed the /var/lib/rancher PVC from the image's own content on
+        # first boot. k8s PVC mounts shadow the image layer (unlike
+        # docker-compose named volumes, which get pre-populated by
+        # Docker), so without this init the image's entrypoint hits
+        # "cp: cannot create regular file /var/lib/rancher/k3s/server/
+        # static/charts/: No such file or directory" and crashloops.
+        # The PVC is mounted at /rancher-pvc (NOT /var/lib/rancher) so
+        # the init container can read the image-baked state unshadowed.
+        - name: seed-rancher
+          image: {{ include "openshell.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              if [ ! -f /rancher-pvc/.seeded ]; then
+                echo "[seed] first boot — copying image /var/lib/rancher → PVC"
+                cp -a /var/lib/rancher/. /rancher-pvc/
+                touch /rancher-pvc/.seeded
+                echo "[seed] done"
+              else
+                echo "[seed] PVC already seeded, skipping"
+              fi
+          volumeMounts:
+            - name: rancher
+              mountPath: /rancher-pvc
+      containers:
+        - name: openshell
+          image: {{ include "openshell.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: rancher
+              mountPath: /var/lib/rancher
+          # No http probes — k3s does not expose one on this port. The
+          # bootstrap Job is the real readiness gate (it polls `kubectl
+          # get nodes` from inside the pod).
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: rancher
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- if .Values.persistence.storageClassName }}
+        storageClassName: {{ .Values.persistence.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}

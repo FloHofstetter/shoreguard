@@ -5,9 +5,47 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.30.1] — unreleased (M10 + M11 — helm chart distribution story)
+## [0.30.1] — unreleased (M10 + M11 + M12 — helm chart distribution + federation story)
 
-### Added
+### Added (M12)
+
+- **`charts/openshell-cluster/` sibling chart (M12).** Runs the upstream
+  `ghcr.io/nvidia/openshell/cluster:0.0.26` k3s-in-container image as a
+  privileged StatefulSet so the helm-deployed ShoreGuard can federate
+  multiple gateways entirely in k8s. A post-install bootstrap Job
+  (weight 5, `bitnami/kubectl`) `kubectl exec`'s into the cluster pod,
+  generates a CA + server + client mTLS set inside `/certs`, creates
+  the k3s-internal secrets `openshell-server-tls`,
+  `openshell-server-client-ca`, `openshell-client-tls`, and
+  `openshell-ssh-handshake` (idempotent via `kubectl apply
+  --dry-run=client`), then exports the client material as an outer-ns
+  Secret `<release>-openshell-cluster-client-tls`. `helm test` ships a
+  busybox `nc -zv` TCP probe. Chart-time validation fails rendering
+  when `label.env` is empty.
+- **`scripts/m12_demo.py` — in-k8s federation end-to-end demo.** k8s
+  analog of `scripts/m8_demo.py`: reads each gateway's client mTLS
+  Secret via `kubectl`, registers both clusters via
+  `POST /api/gateway/register` with `auth_mode=mtls` /
+  `scheme=https`, then drives the same Phase A–J federation assertions
+  (label filter, per-gateway audit attribution, unfiltered audit
+  coalescence, `/api/gateway/list` with labels + `status=connected`).
+  Sandbox exec steps (Phases F + G) route through ShoreGuard's
+  `/api/gateways/{gw}/sandboxes/{sb}/exec` LRO instead of shelling to
+  `openshell` CLI, so the host running the demo only needs `kubectl`,
+  `helm`, and `uv`.
+- **`scripts/m12-federation.md`** — runbook for the M12 demo: kind
+  cluster, privileged namespace, two `helm install
+  cluster-{dev,staging}`, one `helm install sg`, `kubectl
+  port-forward`, the Phase-A-J walk-through, and Phase K (`kubectl
+  rollout restart statefulset/cluster-dev-openshell-cluster` while
+  driving `cluster-staging` traffic, proving gateway-independence of
+  the control plane).
+- **CI openshell-cluster render matrix.** `.github/workflows/ci.yml`
+  now runs `helm lint charts/openshell-cluster` plus a positive render
+  matrix (`label.env=dev` + `label.env=staging`) and a negative test
+  asserting empty `label.env` must fail rendering.
+
+### Added (M10 + M11)
 
 - **Helm chart MVP at `charts/shoreguard/`** (M10). Single-replica,
   SQLite-in-emptyDir, no Ingress by default — gets ShoreGuard running on

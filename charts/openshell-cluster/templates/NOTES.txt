@@ -1,0 +1,34 @@
+openshell-cluster {{ .Chart.AppVersion }} installed as release "{{ .Release.Name }}"
+in namespace "{{ .Release.Namespace }}".
+
+Gateway Service DNS (pass to ShoreGuard's /api/gateway/register):
+
+  {{ include "openshell.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+The post-install bootstrap Job (Helm hook) generates mTLS material
+inside the cluster pod and exports the client cert/key/CA into:
+
+  Secret: {{ .Release.Namespace }}/{{ include "openshell.clientSecretName" . }}
+  Keys:   ca.crt, client.crt, client.key  (all base64-encoded)
+
+Read it with:
+
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "openshell.clientSecretName" . }} \
+    -o jsonpath='{.data.ca\.crt}'      # base64, ready for /api/gateway/register
+
+Register the gateway in ShoreGuard:
+
+  scripts/m12_demo.py does this automatically. It reads the client
+  material from {{ include "openshell.clientSecretName" . }} and calls
+  POST /api/gateway/register with auth_mode=mtls, scheme=https,
+  labels: {env: "{{ .Values.label.env }}"}.
+
+{{- if .Values.tests.enabled }}
+
+Run the bundled TCP smoke test:
+
+  helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}
+{{- end }}
+
+See charts/openshell-cluster/README.md and scripts/m12-federation.md
+for the full runbook.
