@@ -40,7 +40,11 @@ report and the half-dozen smaller bugs surfaced along the way.
   filter input. (`d88fd82`)
 - `scripts/m7-demo.md` — canonical step-by-step runbook for the M7
   end-to-end demo, with the first-run findings inline. (`b4be86d`,
-  `a40fcdc`)
+  `a40fcdc`, `5d78054`)
+- `scripts/m7_demo.py` — single-file Python automation of the same
+  flow over the HTTP API + `openshell sandbox exec`. Idempotent,
+  ~30s wall time, exit 0 on success. Includes the wait-for-loaded
+  poll that fixes the approve→reload race. (`e9c3ea0`)
 
 ### Fixed
 
