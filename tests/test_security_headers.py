@@ -54,18 +54,41 @@ async def test_custom_csp(monkeypatch):
     assert resp.headers["Content-Security-Policy"] == "default-src 'none'"
 
 
+def _csp_directives(csp: str) -> dict[str, list[str]]:
+    """Split a CSP header into ``{directive: [tokens]}`` for assertion."""
+    out: dict[str, list[str]] = {}
+    for chunk in csp.split(";"):
+        parts = chunk.strip().split()
+        if parts:
+            out[parts[0]] = parts[1:]
+    return out
+
+
 async def test_csp_default_is_strict(api_client: AsyncClient):
     """As of v0.27.0, the default CSP is strict: nonce-gated, no 'unsafe-inline'.
 
     'unsafe-eval' is retained because Alpine.js uses Function() internally;
     the @alpinejs/csp build was evaluated but its expression parser was too
     restrictive for this UI. See alpine_loader.html for the rationale.
+
+    ``style-src-attr 'unsafe-inline'`` (added in 45129f4) is intentionally
+    permitted — Alpine's x-show / x-cloak / x-transition emit inline ``style``
+    attributes that the strict ``style-src 'self'`` directive otherwise blocks.
+    The narrower ``-attr`` directive scopes this to attributes only, not
+    ``<style>`` blocks or stylesheets.
     """
     resp = await api_client.get("/healthz")
     csp = resp.headers["Content-Security-Policy"]
+    directives = _csp_directives(csp)
+
     assert "nonce-" in csp
-    assert "'unsafe-inline'" not in csp
     assert "'unsafe-eval'" in csp  # required for Alpine.js Function() constructor
+    # Source directives that govern script + style content must NOT carry
+    # 'unsafe-inline'. style-src-attr is allowed (see docstring).
+    for d in ("default-src", "script-src", "style-src"):
+        assert "'unsafe-inline'" not in directives.get(d, []), (
+            f"{d} unexpectedly carries 'unsafe-inline': {directives.get(d)}"
+        )
     assert "frame-ancestors 'none'" in csp
     assert "base-uri 'self'" in csp
     assert "form-action 'self'" in csp
@@ -110,10 +133,14 @@ async def test_csp_strict_mode_emits_nonce(monkeypatch):
         resp = await client.get("/healthz")
 
     csp = resp.headers["Content-Security-Policy"]
+    directives = _csp_directives(csp)
     assert "nonce-" in csp
-    assert "'unsafe-inline'" not in csp
     assert "'unsafe-eval'" in csp  # retained for Alpine.js Function() constructor
     assert "{nonce}" not in csp  # placeholder must be interpolated
+    for d in ("default-src", "script-src", "style-src"):
+        assert "'unsafe-inline'" not in directives.get(d, []), (
+            f"{d} unexpectedly carries 'unsafe-inline': {directives.get(d)}"
+        )
 
 
 async def test_csp_strict_nonce_differs_per_request(monkeypatch):
