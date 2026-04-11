@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### M7 progress — end-to-end vision demo (proven in substance)
+
+The post-v0.29 milestone M7 ("can we run the whole story end-to-end?")
+got its first real run on 2026-04-11. The flow — register gateway →
+configure inference provider → launch sandboxed agent → call routed
+inference → trigger L7 denial → approve in UI → audit shows full
+sequence — completed successfully against a real Anthropic API key
+on a base+claude-code sandbox. The "no real draft chunks to test"
+blocker from the v0.29 e2e walk is closed: the demo produced an
+actual draft chunk (`allow_example_com_443`, confidence 0.65) from
+a real outbound denial. Two follow-ups are tracked but neither
+blocks closeout: Phase H response-path retry resets after the
+policy update, and the local-mode auto-register-with-mtls bug.
+See [scripts/m7-demo.md](scripts/m7-demo.md) for the full report.
+
+### Added
+
+- `gateway` query parameter on `/api/audit` and `/api/audit/export` —
+  filter audit entries by the gateway they happened on, used by the M7
+  demo to reconstruct the full launch → call → deny → approve sequence
+  for one gateway in chronological order. Audit page UI gets a matching
+  filter input. (`d88fd82`)
+- `scripts/m7-demo.md` — canonical step-by-step runbook for the M7
+  end-to-end demo, with the first-run findings inline. (`b4be86d`,
+  `a40fcdc`)
+
+### Fixed
+
+- Gateway-route audit entries (`gateway.register`, `unregister`,
+  `setting_update`/`delete`, `update_metadata`, `start`/`stop`/
+  `restart`/`destroy`) were landing with `gateway_name=NULL`,
+  invisible to the new `?gateway=<name>` filter. Now they pass
+  `gateway=name` to `audit_log()`. Discovered while dry-running
+  the M7 demo. (`09f2b5b`)
+- `GET /api/gateway/{name}/info` returned 500 on a connected
+  gateway: `GatewayService.get_info()` injects `configured` and
+  `version` into the dict, but `GatewayResponse` was
+  `extra="forbid"`. Schema now accepts both fields. (`485bf71`)
+
 ## [0.29.0] — 2026-04-11
 
 This release closes **M1 OpenShell v0.0.26 Alignment**, **M2 OCSF
