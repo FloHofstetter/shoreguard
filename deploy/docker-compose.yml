@@ -1,4 +1,19 @@
-# ShoreGuard Stack — modular deployment with optional integrations
+# ShoreGuard Stack — local dev / homelab quickstart (single-VM scale)
+#
+# Audience: developers trying ShoreGuard on a laptop, homelab operators
+# running a single VM, CI pipelines spinning up a full stack for
+# integration tests. NOT a scale-out production deployment pattern.
+#
+# The `openshell` service here runs NVIDIA's k3s-in-container image
+# (`ghcr.io/nvidia/openshell/cluster`). ShoreGuard does not own or
+# version that image; this compose file just wires it up with mTLS
+# init-containers so that a single `docker compose up` gets you a
+# working stack. For production k8s installs, install NVIDIA's upstream
+# OpenShell Helm chart directly into your cluster and install
+# `charts/shoreguard` alongside it — see the project README.
+#
+# For a standalone ShoreGuard install without OpenShell (connecting to
+# a remote gateway instead), use `docker-compose.standalone.yml`.
 #
 # Core (always active):
 #   - caddy:         Reverse proxy with auto-TLS → https://<host>

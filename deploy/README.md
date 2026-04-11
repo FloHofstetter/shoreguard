@@ -1,11 +1,17 @@
 # ShoreGuard Deployment
 
-This directory contains two deployment variants:
+This directory contains two **docker-compose** deployment variants for
+single-VM / homelab / laptop installs. For **Kubernetes** deployments,
+see [`../charts/shoreguard`](../charts/shoreguard) instead — install
+that chart alongside NVIDIA's upstream OpenShell Helm chart and wire
+them up via the ShoreGuard UI or API. ShoreGuard does not ship an
+umbrella chart that bundles NVIDIA's OpenShell chart; that split is
+intentional (see `memory/project_roadmap.md` scope boundary decision).
 
 | File | What it runs | Use case |
 |------|-------------|----------|
-| `docker-compose.yml` + `Caddyfile` | Full stack: ShoreGuard + OpenShell + Paperclip + OpenClaw | Demo / dev with real sandboxes |
-| `docker-compose.standalone.yml` + `Caddyfile.standalone` | ShoreGuard + PostgreSQL + Caddy | Production without OpenShell on same host |
+| `docker-compose.yml` + `Caddyfile` | Full stack: ShoreGuard + OpenShell + Paperclip + OpenClaw | Local dev / homelab / CI with real sandboxes (single-VM scale) |
+| `docker-compose.standalone.yml` + `Caddyfile.standalone` | ShoreGuard + PostgreSQL + Caddy | ShoreGuard-only install connecting to a remote gateway |
 
 ## Full Stack (default)
 
