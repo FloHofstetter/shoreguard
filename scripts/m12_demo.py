@@ -3,8 +3,10 @@
 
 k8s analog of ``scripts/m8_demo.py`` — proves that the Helm-deployed
 ShoreGuard (``charts/shoreguard``) can federate two in-cluster OpenShell
-gateways deployed via ``charts/openshell-cluster``, all via service-DNS
-mTLS, inside a single kind cluster.
+gateways deployed via the internal test fixture
+``tests/fixtures/charts/openshell-cluster`` (NOT a supported production
+install path — see that chart's README), all via service-DNS mTLS,
+inside a single kind cluster.
 
 Differences from the M8 host-process demo:
 
@@ -24,10 +26,10 @@ Differences from the M8 host-process demo:
 Prereqs:
 
 * A k8s cluster with:
-    - ``charts/openshell-cluster`` installed as release ``cluster-dev``
-      with ``label.env=dev``
-    - ``charts/openshell-cluster`` installed as release ``cluster-staging``
-      with ``label.env=staging``
+    - ``tests/fixtures/charts/openshell-cluster`` installed as release
+      ``cluster-dev`` with ``label.env=dev``
+    - ``tests/fixtures/charts/openshell-cluster`` installed as release
+      ``cluster-staging`` with ``label.env=staging``
     - Both bootstrap Jobs completed (``kubectl -n <ns> get jobs -l
       openshell.io/bootstrap=true``)
     - ``charts/shoreguard`` installed in the same namespace
@@ -142,7 +144,7 @@ def _fetch_cert_material(release: str) -> tuple[str, str, str]:
     except subprocess.CalledProcessError as e:
         fail(
             f"kubectl get secret {NAMESPACE}/{secret} failed: {e.stderr[:200]}\n"
-            f"  → The charts/openshell-cluster bootstrap Job did not finish. "
+            f"  → The tests/fixtures/charts/openshell-cluster bootstrap Job did not finish. "
             f"Check: kubectl -n {NAMESPACE} get jobs -l openshell.io/bootstrap=true"
         )
     data = json.loads(raw)["data"]

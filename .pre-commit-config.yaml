@@ -22,7 +22,7 @@ repos:
         args: [--unsafe]  # mkdocs.yml uses !!python/name: custom tags
         # Helm templates contain Go-template directives ({{- ... -}}) that
         # are not valid YAML. `helm lint` covers them in CI instead.
-        exclude: ^charts/.*/templates/
+        exclude: ^(charts/.*/templates/|tests/fixtures/charts/.*/templates/)
       - id: check-json
       - id: check-toml
       - id: check-merge-conflict

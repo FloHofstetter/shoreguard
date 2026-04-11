@@ -7,9 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.30.1] — unreleased (M10 + M11 + M12 — helm chart distribution + federation story)
 
+### Changed
+
+- **Moved `charts/openshell-cluster` → `tests/fixtures/charts/openshell-cluster`.**
+  The chart was never a supported production install path — it wraps
+  NVIDIA's `ghcr.io/nvidia/openshell/cluster` all-in-one image
+  (privileged k3s-in-container, ~10-15% network overhead from double
+  iptables NAT) so that `scripts/m12_demo.py` can exercise the M12
+  federation code path in local/kind/CI without requiring NVIDIA's
+  upstream OpenShell Helm chart at test time. Keeping it under
+  `charts/` misled readers into thinking it was a production option.
+  The fixture is now clearly scoped as internal test infrastructure:
+  its README leads with a "not a supported install path" banner and
+  points at the real production pattern (install NVIDIA's upstream
+  OpenShell chart separately, then `charts/shoreguard` alongside it).
+  CI renames the lint/render block into a dedicated `m12-fixture-lint`
+  job so fixture status is tracked distinctly from the supported
+  `helm-lint` job. `scripts/m12_demo.py` and `scripts/m12-federation.md`
+  reference the new path and carry the same positioning notice.
+
 ### Added (M12)
 
-- **`charts/openshell-cluster/` sibling chart (M12).** Runs the upstream
+- **Internal M12 federation test fixture at
+  `tests/fixtures/charts/openshell-cluster/`.** Runs the upstream
   `ghcr.io/nvidia/openshell/cluster:0.0.26` k3s-in-container image as a
   privileged StatefulSet so the helm-deployed ShoreGuard can federate
   multiple gateways entirely in k8s. A post-install bootstrap Job
@@ -40,10 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   rollout restart statefulset/cluster-dev-openshell-cluster` while
   driving `cluster-staging` traffic, proving gateway-independence of
   the control plane).
-- **CI openshell-cluster render matrix.** `.github/workflows/ci.yml`
-  now runs `helm lint charts/openshell-cluster` plus a positive render
-  matrix (`label.env=dev` + `label.env=staging`) and a negative test
-  asserting empty `label.env` must fail rendering.
+- **CI `m12-fixture-lint` job.** `.github/workflows/ci.yml` now runs
+  `helm lint tests/fixtures/charts/openshell-cluster` plus a positive
+  render matrix (`label.env=dev` + `label.env=staging`) and a negative
+  test asserting empty `label.env` must fail rendering. Job is named
+  and scoped separately from the supported `helm-lint` job so fixture
+  status never gets mistaken for production chart status.
 
 ### Added (M10 + M11)
 

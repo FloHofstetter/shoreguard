@@ -94,17 +94,30 @@ jobs:
             echo "::error::expected helm template to fail (replicaCount=3 without secretKey)"
             exit 1
           fi
-      - run: helm lint charts/openshell-cluster --set label.env=dev
-      - name: Render openshell-cluster (positive)
+
+  # Internal test fixture for M12 federation — wraps NVIDIA's OpenShell
+  # cluster image, NOT a user-facing chart. Kept in a separate job so
+  # its lint/render status is tracked distinctly from the production
+  # `charts/shoreguard` chart above, and so it can't be mistaken for
+  # part of the supported install surface. See
+  # tests/fixtures/charts/openshell-cluster/README.md for the scope
+  # decision.
+  m12-fixture-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint tests/fixtures/charts/openshell-cluster --set label.env=dev
+      - name: Render openshell-cluster fixture (positive)
         run: |
-          helm template cluster-dev charts/openshell-cluster \
+          helm template cluster-dev tests/fixtures/charts/openshell-cluster \
             --set label.env=dev > /dev/null
-          helm template cluster-staging charts/openshell-cluster \
+          helm template cluster-staging tests/fixtures/charts/openshell-cluster \
             --set label.env=staging > /dev/null
-      - name: Render openshell-cluster missing label.env guard fires
+      - name: Render openshell-cluster fixture missing label.env guard fires
         # Negative test: label.env empty must fail to render.
         run: |
-          if helm template cluster-dev charts/openshell-cluster > /dev/null 2>&1; then
-            echo "::error::expected helm template to fail (openshell-cluster without label.env)"
+          if helm template cluster-dev tests/fixtures/charts/openshell-cluster > /dev/null 2>&1; then
+            echo "::error::expected helm template to fail (openshell-cluster fixture without label.env)"
             exit 1
           fi
