@@ -56,6 +56,15 @@ def _validate_endpoint_format(endpoint: str) -> None:
     port = int(port_str)
     if port < 1 or port > 65535:
         raise ValueError("endpoint port must be between 1 and 65535")
+    # Kubernetes Service DNS (*.svc.cluster.local) is authoritative inside
+    # the cluster and always resolves to a ClusterIP in a RFC1918 range.
+    # When ShoreGuard itself is deployed via Helm (M12 federation), any
+    # co-located OpenShell gateway will be reachable only via this suffix,
+    # so the private-IP rejection below would make in-cluster federation
+    # impossible. The suffix is not user-controllable (only kube-dns /
+    # CoreDNS owns it), so this bypass is safe against DNS-rebinding.
+    if host.lower().endswith(".svc.cluster.local"):
+        return
     if is_private_ip(host) and not get_settings().server.local_mode:
         raise ValueError(
             "endpoint must not point to a private/loopback address; use a routable IP or hostname"

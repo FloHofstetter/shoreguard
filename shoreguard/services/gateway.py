@@ -207,7 +207,11 @@ class GatewayService:
         """
         endpoint = str(creds["endpoint"])
         host = endpoint.rsplit(":", 1)[0] if ":" in endpoint else endpoint
-        if is_private_ip(host) and not get_settings().server.local_mode:
+        # Mirror the register-time bypass: trust *.svc.cluster.local
+        # (kube-dns / CoreDNS is authoritative, not user-controllable,
+        # so DNS-rebinding is not possible against this suffix).
+        is_cluster_dns = host.lower().endswith(".svc.cluster.local")
+        if not is_cluster_dns and is_private_ip(host) and not get_settings().server.local_mode:
             logger.warning(
                 "Gateway '%s' endpoint '%s' resolves to a private IP — blocking connection",
                 name,
