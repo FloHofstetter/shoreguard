@@ -71,7 +71,7 @@ jobs:
       # ignore-unfixed = skip CVEs upstream has not released a fix for yet.
       # Fails the release only on CRITICAL/HIGH findings to stay noise-free.
       - name: Scan image for CRITICAL/HIGH CVEs
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: table
