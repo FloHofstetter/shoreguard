@@ -14,7 +14,8 @@ function sandboxList() {
             this.loading = true;
             this.error = '';
             try {
-                this.sandboxes = await apiFetch(`${API}/sandboxes`);
+                const resp = await apiFetch(`${API}/sandboxes`);
+                this.sandboxes = Array.isArray(resp) ? resp : (resp.items || []);
             } catch (e) {
                 this.error = e.message;
             } finally {

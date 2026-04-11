@@ -748,8 +748,28 @@ app.include_router(
 app.include_router(ws_router)
 app.include_router(pages_router)
 
+
+class NoCacheStaticFiles(StaticFiles):
+    """StaticFiles that asks browsers to revalidate on every request."""
+
+    async def get_response(self, path: str, scope: Any) -> Any:
+        """Serve the static asset with a no-cache directive.
+
+        Args:
+            path: Filesystem-relative path of the requested asset.
+            scope: ASGI scope for the current request.
+
+        Returns:
+            Any: The underlying StaticFiles response with a ``Cache-Control``
+            ``no-cache`` header applied.
+        """
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Serve static files (CSS, JS, images)
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+app.mount("/static", NoCacheStaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
 if __name__ == "__main__":

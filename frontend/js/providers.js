@@ -39,7 +39,8 @@ async function loadProvidersPage() {
     await _ensureProviderTypes();
 
     try {
-        const providers = await apiFetch(`${API}/providers`);
+        const resp = await apiFetch(`${API}/providers`);
+        const providers = Array.isArray(resp) ? resp : (resp.items || []);
         _providerCache = providers;
 
         if (providers.length === 0) {
@@ -141,7 +142,8 @@ function providerForm(mode, providerName) {
             await _ensureProviderTypes();
             if (this.mode === 'edit' && this.providerName) {
                 try {
-                    const providers = await apiFetch(`${API}/providers`);
+                    const resp = await apiFetch(`${API}/providers`);
+                    const providers = Array.isArray(resp) ? resp : (resp.items || []);
                     const provider = providers.find(p => p.name === this.providerName);
                     if (provider) {
                         this.fName = provider.name;

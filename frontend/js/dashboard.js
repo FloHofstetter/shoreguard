@@ -26,7 +26,8 @@ function dashboardPage() {
                 if (GW) {
                     try {
                         const sbs = await apiFetch(`${API}/sandboxes`);
-                        this.sandboxCount = (sbs || []).length;
+                        const items = Array.isArray(sbs) ? sbs : (sbs && sbs.items) || [];
+                        this.sandboxCount = items.length;
                     } catch { /* no gateway */ }
                 }
 

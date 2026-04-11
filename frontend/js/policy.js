@@ -643,7 +643,8 @@ function presetDetail(presetName) {
         async _loadSandboxes() {
             if (!GW) return;
             try {
-                const all = await apiFetch(`${API}/sandboxes`);
+                const resp = await apiFetch(`${API}/sandboxes`);
+                const all = Array.isArray(resp) ? resp : (resp.items || []);
                 this.sandboxes = all.filter(sb => sb.phase === 'ready');
             } catch {
                 this.sandboxes = [];

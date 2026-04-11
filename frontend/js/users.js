@@ -223,18 +223,18 @@ async function openGatewayRolesModal(entityType, entityId, entityLabel) {
             // Add override form
             const availableGws = gwNames.filter(n => !roles.some(r => r.gateway_name === n));
             if (availableGws.length > 0) {
-                html += `<div class="card bg-dark border-secondary">
+                html += `<div class="card sg-card-themed">
                     <div class="card-body py-2">
                         <div class="row g-2 align-items-end">
                             <div class="col">
                                 <label class="form-label small text-muted mb-1">Gateway</label>
-                                <select id="gw-role-gw" class="form-select form-select-sm bg-dark text-light border-secondary">
+                                <select id="gw-role-gw" class="form-select form-select-sm">
                                     ${availableGws.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
                                 </select>
                             </div>
                             <div class="col">
                                 <label class="form-label small text-muted mb-1">Role</label>
-                                <select id="gw-role-role" class="form-select form-select-sm bg-dark text-light border-secondary">
+                                <select id="gw-role-role" class="form-select form-select-sm">
                                     <option value="admin">admin</option>
                                     <option value="operator">operator</option>
                                     <option value="viewer" selected>viewer</option>

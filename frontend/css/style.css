@@ -114,6 +114,20 @@ body {
     font-size: 0.85rem;
     background: transparent;
     flex-grow: 1;
+    flex-wrap: nowrap;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.topbar .breadcrumb-item {
+    flex-shrink: 0;
+}
+
+.topbar .breadcrumb-item.active {
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .topbar .breadcrumb-item a {

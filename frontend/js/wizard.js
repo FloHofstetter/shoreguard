@@ -194,7 +194,8 @@ async function loadWizardProviders() {
     if (!container) return;
     container.innerHTML = '<div class="text-muted small"><div class="spinner-border spinner-border-sm me-1"></div></div>';
     try {
-        const providers = await apiFetch(`${API}/providers`);
+        const resp = await apiFetch(`${API}/providers`);
+        const providers = Array.isArray(resp) ? resp : (resp.items || []);
         if (providers.length === 0) {
             container.innerHTML = `
                 <div class="text-muted small py-1">
