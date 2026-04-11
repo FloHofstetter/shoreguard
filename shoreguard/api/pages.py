@@ -2110,6 +2110,35 @@ async def users_page(request: Request) -> TemplateResponse | RedirectResponse | 
     )
 
 
+@router.get("/webhooks", response_model=None)
+async def webhooks_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
+    """Webhook subscription management page (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse | HTMLResponse: Rendered webhooks
+            management page or access denied error.
+    """
+    redirect = _require_page_auth(request)
+    if redirect:
+        return redirect
+    if getattr(request.state, "role", None) != "admin":
+        return _render_error(
+            request,
+            403,
+            "Access Denied",
+            "You need admin privileges to manage webhooks.",
+            icon="shield-lock",
+        )
+    return templates.TemplateResponse(
+        request,
+        "pages/webhooks.html",
+        {"active_page": "webhooks"},
+    )
+
+
 @router.get("/users/new", response_model=None)
 async def user_new_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
     """Invite user form page (admin only).

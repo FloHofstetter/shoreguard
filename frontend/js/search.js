@@ -41,6 +41,7 @@ function searchPalette() {
                 { name: 'Audit Log', url: '/audit', icon: 'bi-journal-text' },
                 { name: 'Groups', url: '/groups', icon: 'bi-collection' },
                 { name: 'Users', url: '/users', icon: 'bi-people' },
+                { name: 'Webhooks', url: '/webhooks', icon: 'bi-broadcast' },
             ];
 
             // Fetch dynamic data

@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% block title %}Webhooks — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item active">Webhooks</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div x-data="webhooksPage" x-init="load()">
+    <!-- Loading -->
+    <div x-show="loading" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading webhooks...
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-danger" x-text="error"></div>
+
+    <!-- Content -->
+    <template x-if="!loading && !error">
+        <div>
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0"><i class="bi bi-broadcast me-2"></i>Webhooks</h5>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary" @click="load()" title="Refresh" aria-label="Refresh">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    <button class="btn btn-outline-success" @click="showCreate = !showCreate">
+                        <i class="bi bi-plus-lg me-1"></i>New Webhook
+                    </button>
+                </div>
+            </div>
+
+            <!-- Secret reveal callout (shown once after create) -->
+            <div x-show="lastCreated" x-cloak class="alert alert-warning border-warning">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <strong><i class="bi bi-key me-1"></i>Webhook signing secret — copy now</strong>
+                        <div class="small text-muted mt-1">
+                            Webhook <code x-text="lastCreated && lastCreated.id"></code>
+                            (<span x-text="lastCreated && lastCreated.url"></span>)
+                            uses HMAC-SHA256 signatures. The secret is shown
+                            <strong>only once</strong>; ShoreGuard cannot recover it later.
+                        </div>
+                        <pre class="bg-dark text-warning p-2 rounded mt-2 mb-0 sg-fs-sm"
+                             x-text="lastCreated && lastCreated.secret"></pre>
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary"
+                            @click="lastCreated = null" title="Dismiss">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Inline create form -->
+            <div x-show="showCreate" x-cloak class="card sg-card-themed mb-3">
+                <div class="card-body">
+                    <div x-show="createError" class="alert alert-danger py-1 small" x-text="createError"></div>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label small text-muted mb-1">Target URL</label>
+                            <input type="text" class="form-control form-control-sm"
+                                   x-model="newUrl" placeholder="https://hooks.slack.com/...">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">Channel</label>
+                            <select class="form-select form-select-sm" x-model="newChannel">
+                                <option value="generic">generic</option>
+                                <option value="slack">slack</option>
+                                <option value="discord">discord</option>
+                                <option value="email">email</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button class="btn btn-sm btn-success w-100" @click="createWebhook()">
+                                <i class="bi bi-plus-lg me-1"></i>Create
+                            </button>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small text-muted mb-1">
+                                Event types <span class="text-muted">(comma-separated)</span>
+                            </label>
+                            <input type="text" class="form-control form-control-sm"
+                                   x-model="newEvents"
+                                   placeholder="sandbox.created, gateway.registered, approval.approved">
+                            <div class="form-text small">
+                                Known events: <code>sandbox.created</code>,
+                                <code>sandbox.deleted</code>, <code>gateway.registered</code>,
+                                <code>gateway.unregistered</code>, <code>policy.updated</code>,
+                                <code>inference.updated</code>, <code>approval.approved</code>,
+                                <code>approval.rejected</code>, <code>webhook.test</code>.
+                                Use <code>*</code> to subscribe to everything.
+                            </div>
+                        </div>
+                        <template x-if="newChannel === 'email'">
+                            <div class="col-12">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted mb-1">SMTP host</label>
+                                        <input type="text" class="form-control form-control-sm"
+                                               x-model="newSmtpHost" placeholder="smtp.example.com:587">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted mb-1">
+                                            To addresses (comma-separated)
+                                        </label>
+                                        <input type="text" class="form-control form-control-sm"
+                                               x-model="newToAddrs" placeholder="ops@example.com">
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter -->
+            <template x-if="$notEmpty(webhooks)">
+                <div class="mb-2">
+                    <input type="text" class="form-control form-control-sm sg-mw-300"
+                           placeholder="Filter webhooks..." x-model="_filterText">
+                </div>
+            </template>
+
+            <!-- Webhooks table -->
+            <template x-if="$notEmpty(webhooks)">
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th :class="sortClass('id')" @click="sortBy('id')">ID</th>
+                                <th :class="sortClass('channel_type')" @click="sortBy('channel_type')">Channel</th>
+                                <th>URL</th>
+                                <th>Events</th>
+                                <th>Active</th>
+                                <th class="d-none d-md-table-cell"
+                                    :class="sortClass('created_at')" @click="sortBy('created_at')">Created</th>
+                                <th class="text-end sg-w-160">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="wh in sorted(filtered(webhooks, 'url', 'channel_type'))" :key="wh.id">
+                                <tr>
+                                    <td><strong x-text="wh.id"></strong></td>
+                                    <td>
+                                        <span class="badge text-bg-info" x-text="wh.channel_type"></span>
+                                    </td>
+                                    <td class="font-monospace small text-truncate sg-mw-300"
+                                        x-text="wh.url" :title="wh.url"></td>
+                                    <td>
+                                        <template x-for="et in (wh.event_types || [])" :key="et">
+                                            <span class="badge text-bg-secondary me-1 sg-fs-sm" x-text="et"></span>
+                                        </template>
+                                    </td>
+                                    <td>
+                                        <span class="badge"
+                                              :class="wh.is_active ? 'text-bg-success' : 'text-bg-secondary'"
+                                              x-text="wh.is_active ? 'active' : 'paused'"></span>
+                                    </td>
+                                    <td class="d-none d-md-table-cell small text-muted"
+                                        x-text="formatDate(wh.created_at)"></td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm text-muted" @click="testWebhook(wh)" title="Send test event">
+                                            <i class="bi bi-send"></i>
+                                        </button>
+                                        <button class="btn btn-sm text-muted" @click="showDeliveries(wh)" title="Delivery log">
+                                            <i class="bi bi-list-check"></i>
+                                        </button>
+                                        <button class="btn btn-sm text-muted" @click="toggleActive(wh)"
+                                                :title="wh.is_active ? 'Pause' : 'Resume'">
+                                            <i class="bi" :class="wh.is_active ? 'bi-pause-circle' : 'bi-play-circle'"></i>
+                                        </button>
+                                        <button class="btn btn-sm text-muted" @click="startEdit(wh)" title="Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-sm text-muted delete-btn"
+                                                @click="deleteWebhook(wh)" title="Delete">
+                                            <i class="bi bi-trash3"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+
+            <!-- Empty -->
+            <template x-if="$empty(webhooks)">
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-broadcast fs-1 d-block mb-3"></i>
+                    <p>No webhooks registered.</p>
+                    <button class="btn btn-success btn-sm" @click="showCreate = true">
+                        <i class="bi bi-plus me-1"></i>Create Webhook
+                    </button>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <!-- Edit modal -->
+    <div class="modal fade" id="editWebhookModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content sg-modal-themed">
+                <div class="modal-header border-bottom">
+                    <h5 class="modal-title">
+                        <i class="bi bi-pencil me-2"></i>Edit Webhook
+                        <code class="ms-2 small text-muted" x-text="editingId"></code>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div x-show="editError" class="alert alert-danger py-1 small" x-text="editError"></div>
+                    <div class="mb-2">
+                        <label class="form-label small text-muted mb-1">Target URL</label>
+                        <input type="text" class="form-control form-control-sm" x-model="editUrl">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small text-muted mb-1">Channel</label>
+                        <select class="form-select form-select-sm" x-model="editChannel">
+                            <option value="generic">generic</option>
+                            <option value="slack">slack</option>
+                            <option value="discord">discord</option>
+                            <option value="email">email</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small text-muted mb-1">
+                            Event types (comma-separated)
+                        </label>
+                        <input type="text" class="form-control form-control-sm" x-model="editEvents">
+                    </div>
+                </div>
+                <div class="modal-footer border-top">
+                    <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-sm btn-success" @click="submitEdit()">
+                        <i class="bi bi-check-lg me-1"></i>Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deliveries modal -->
+    <div class="modal fade" id="deliveriesModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content sg-modal-themed">
+                <div class="modal-header border-bottom">
+                    <h5 class="modal-title">
+                        <i class="bi bi-list-check me-2"></i>Delivery log
+                        <code class="ms-2 small text-muted" x-text="deliveriesFor && deliveriesFor.id"></code>
+                        <span class="text-muted small ms-1" x-text="deliveriesFor && deliveriesFor.url"></span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div x-show="deliveriesLoading" class="text-center text-muted py-3">
+                        <span class="spinner-border spinner-border-sm me-1"></span>Loading…
+                    </div>
+                    <template x-if="!deliveriesLoading && $notEmpty(deliveries)">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Event</th>
+                                        <th>Code</th>
+                                        <th>Attempt</th>
+                                        <th>Created</th>
+                                        <th>Delivered</th>
+                                        <th>Error</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="d in deliveries" :key="d.id">
+                                        <tr>
+                                            <td>
+                                                <span class="badge"
+                                                      :class="d.status === 'success' ? 'text-bg-success' : (d.status === 'failed' ? 'text-bg-danger' : 'text-bg-warning')"
+                                                      x-text="d.status"></span>
+                                            </td>
+                                            <td><code class="small" x-text="d.event_type || '\u2014'"></code></td>
+                                            <td x-text="d.response_code || '\u2014'"></td>
+                                            <td x-text="d.attempt || '\u2014'"></td>
+                                            <td class="small text-muted" x-text="formatDate(d.created_at)"></td>
+                                            <td class="small text-muted" x-text="formatDate(d.delivered_at)"></td>
+                                            <td class="small text-danger text-truncate sg-mw-200"
+                                                x-text="d.error_message || '\u2014'" :title="d.error_message"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+                    <template x-if="!deliveriesLoading && $empty(deliveries)">
+                        <p class="text-muted small mb-0">No delivery attempts recorded yet.</p>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/webhooks.js"></script>
+{% endblock %}
