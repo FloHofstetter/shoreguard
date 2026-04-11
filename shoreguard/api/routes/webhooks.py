@@ -23,6 +23,7 @@ from shoreguard.api.validation import (
     validate_smtp_host,
     validate_webhook_url,
 )
+from shoreguard.services.audit import audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +202,17 @@ async def create_webhook(body: WebhookCreateRequest, request: Request) -> dict[s
         body.url,
         actor,
     )
+    await audit_log(
+        request,
+        "webhook.create",
+        "webhook",
+        str(result["id"]),
+        detail={
+            "channel_type": body.channel_type,
+            "url": body.url,
+            "event_types": body.event_types,
+        },
+    )
     return result
 
 
@@ -260,15 +272,28 @@ async def update_webhook(
     )
     if result is None:
         raise HTTPException(404, "Webhook not found")
+    await audit_log(
+        request,
+        "webhook.update",
+        "webhook",
+        str(webhook_id),
+        detail={
+            "url": body.url,
+            "event_types": body.event_types,
+            "is_active": body.is_active,
+            "channel_type": body.channel_type,
+        },
+    )
     return result
 
 
 @router.delete("/{webhook_id}", status_code=204)
-async def delete_webhook(webhook_id: int) -> None:
+async def delete_webhook(webhook_id: int, request: Request) -> None:
     """Delete a webhook by ID.
 
     Args:
         webhook_id: Primary key of the webhook.
+        request: The incoming HTTP request.
 
     Raises:
         HTTPException: If webhook is not found.
@@ -277,14 +302,16 @@ async def delete_webhook(webhook_id: int) -> None:
     deleted = await asyncio.to_thread(svc.delete, webhook_id)
     if not deleted:
         raise HTTPException(404, "Webhook not found")
+    await audit_log(request, "webhook.delete", "webhook", str(webhook_id))
 
 
 @router.post("/{webhook_id}/test", response_model=MessageResponse)
-async def test_webhook(webhook_id: int) -> dict[str, str]:
+async def test_webhook(webhook_id: int, request: Request) -> dict[str, str]:
     """Send a test event to a specific webhook.
 
     Args:
         webhook_id: Primary key of the webhook.
+        request: The incoming HTTP request.
 
     Returns:
         dict[str, str]: Confirmation message.
@@ -300,6 +327,7 @@ async def test_webhook(webhook_id: int) -> dict[str, str]:
         "webhook.test",
         {"webhook_id": wh["id"], "message": "Test event from Shoreguard"},
     )
+    await audit_log(request, "webhook.test", "webhook", str(webhook_id))
     return {"status": "Test event sent"}
 
 

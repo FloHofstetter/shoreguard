@@ -272,6 +272,71 @@ class TestRoleEnforcement:
             assert resp.status_code == 401
 
 
+class TestAuditHookup:
+    """Webhook CRUD must land in the audit log (M9 closeout)."""
+
+    @pytest.fixture
+    async def audit_admin_client(self, db, _with_admin):
+        import shoreguard.services.audit as audit_mod
+
+        audit_mod.audit_service = audit_mod.AuditService(db)
+        from shoreguard.api.main import app
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            resp = await client.post(
+                "/api/auth/login",
+                json={"email": ADMIN_EMAIL, "password": ADMIN_PASS},
+            )
+            assert resp.status_code == 200
+            yield client
+        audit_mod.audit_service = None
+
+    async def _audit_actions(
+        self, client: AsyncClient, resource_type: str = "webhook"
+    ) -> list[str]:
+        resp = await client.get(f"/api/audit?resource_type={resource_type}&limit=200")
+        assert resp.status_code == 200
+        return [e["action"] for e in resp.json().get("entries", [])]
+
+    async def test_create_writes_audit(self, audit_admin_client):
+        data = await _create_webhook(audit_admin_client)
+        actions = await self._audit_actions(audit_admin_client)
+        assert "webhook.create" in actions
+        # detail should carry url + event_types so the row is reconstructible
+        resp = await audit_admin_client.get("/api/audit?resource_type=webhook&limit=10")
+        entry = next(e for e in resp.json()["entries"] if e["action"] == "webhook.create")
+        assert entry["resource_id"] == str(data["id"])
+        assert entry["detail"]["url"] == "https://example.com/hook"
+        assert entry["detail"]["channel_type"] == "generic"
+
+    async def test_update_writes_audit(self, audit_admin_client):
+        data = await _create_webhook(audit_admin_client)
+        resp = await audit_admin_client.put(
+            f"/api/webhooks/{data['id']}",
+            json={"is_active": False},
+        )
+        assert resp.status_code == 200
+        actions = await self._audit_actions(audit_admin_client)
+        assert "webhook.update" in actions
+
+    async def test_delete_writes_audit(self, audit_admin_client):
+        data = await _create_webhook(audit_admin_client)
+        resp = await audit_admin_client.delete(f"/api/webhooks/{data['id']}")
+        assert resp.status_code == 204
+        actions = await self._audit_actions(audit_admin_client)
+        assert "webhook.delete" in actions
+
+    async def test_test_endpoint_writes_audit(self, audit_admin_client):
+        data = await _create_webhook(audit_admin_client)
+        resp = await audit_admin_client.post(f"/api/webhooks/{data['id']}/test")
+        assert resp.status_code == 200
+        actions = await self._audit_actions(audit_admin_client)
+        assert "webhook.test" in actions
+
+
 class TestServiceNotInitialised:
     async def test_503_when_service_missing(self, db, _with_admin):
         webhook_mod.webhook_service = None
