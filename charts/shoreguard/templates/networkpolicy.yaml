@@ -6,9 +6,18 @@ metadata:
   labels:
     {{- include "shoreguard.labels" . | nindent 4 }}
 spec:
+  # Match the long-lived shoreguard workload pods but NOT the ephemeral
+  # helm-test Pod. The test pod uses `shoreguard.labels` so it inherits
+  # name + instance and would otherwise be bound by this policy, which
+  # blocks its egress to the Service (port 8888 is not in the egress
+  # allow-list — it is only opened as ingress from matched sources).
   podSelector:
     matchLabels:
       {{- include "shoreguard.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: NotIn
+        values: ["helm-test"]
   policyTypes:
     - Ingress
     - Egress
