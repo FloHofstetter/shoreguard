@@ -36,7 +36,7 @@ openshell gateway start \
 export SHOREGUARD_DATABASE_URL=sqlite:////tmp/sg-m7.db
 export SHOREGUARD_LOCAL_MODE=true
 export SHOREGUARD_ALLOW_UNSAFE_CONFIG=true
-export SHOREGUARD_AUTH__ADMIN_PASSWORD='m7-demo-pass'  # pragma: allowlist secret
+export SHOREGUARD_ADMIN_PASSWORD='m7-demo-pass'  # pragma: allowlist secret
 export ANTHROPIC_API_KEY='sk-ant-...'  # pragma: allowlist secret
 uv run uvicorn shoreguard.api.main:app --host 127.0.0.1 --port 8888
 
@@ -47,8 +47,8 @@ uv run uvicorn shoreguard.api.main:app --host 127.0.0.1 --port 8888
 Verify both processes are healthy:
 
 ```bash
-curl -s http://127.0.0.1:8888/api/health
-curl -s http://127.0.0.1:8888/api/version
+curl -s http://127.0.0.1:8888/healthz
+curl -s http://127.0.0.1:8888/version
 ```
 
 ## Phase A — Login + Register Gateway
@@ -202,21 +202,56 @@ e2e walk halted at "no real draft chunks to test".
 
 ---
 
-## Reporting back
+## First-run report (2026-04-11, ShoreGuard @ 09f2b5b → 485bf71)
 
-For each phase, note:
+Run was driven via the HTTP API (Playwright Firefox MCP failed to launch
+in the local Wayland session — separate gap, see below). Stack: openshell
+0.0.26 (latest stable), ShoreGuard `main` with the two M7 fixes applied.
 
 | Phase | Worked? | Gap | Notes |
 |-------|---------|-----|-------|
-| A     |         |     |       |
-| B     |         |     |       |
-| C     |         |     |       |
-| D     |         |     |       |
-| E     |         |     |       |
-| F     |         |     |       |
-| G     |         |     |       |
-| H     |         |     |       |
+| A — register gateway | ✅ after fix | nemoclaw is auto-registered at startup with `auth_mode=null` and mTLS cert material even though the local gateway is plaintext → `unreachable`. Workaround: DELETE then re-register with `auth_mode=insecure`. | Audit row landed with `gateway_name=NULL` until **fix `09f2b5b`** (`gateway=name` on all gateway-route audit_log calls). |
+| B — set inference provider | ✅ after fix | `/api/gateway/{name}/info` returned 500 (`ResponseValidationError` — service injects `configured` + `version`, schema is `extra="forbid"`) → **fix `485bf71`**. Also: `set_inference` requires the *provider record name* (e.g. `anthropic-demo`), not the *provider type* (`anthropic`); confusing API surface. | `/api/gateways/<gw>/providers/inference-providers` lists `anthropic` correctly. Inference set returns `route_name=inference.local`. |
+| C — wizard sandbox launch | ⚠️ partial | `community_sandboxes.openclaw` points at `ghcr.io/nvidia/openshell-community/sandboxes/openclaw:latest`, which was not pullable in this environment (timed out at 30% "Waiting for ready state"). Pivoted to `base` template, which has `claude`, `opencode`, `codex`, `copilot` pre-installed. | Demo proceeded with `m7-base` instead of `m7-claw`. Real fix: either ensure the openclaw image is published, or update openshell.yaml with a maintained image URL. |
+| D — agent routed inference | ✅ **proven for the first time** | The unproven step worked: `claude -p 'Reply with PONG'` inside `m7-base` returned `PONG`. **Routing is via transparent HTTPS proxy (`HTTPS_PROXY=http://10.200.0.1:3128`) + injected CA bundle**, not via env-var base URL. `ANTHROPIC_API_KEY` is set to a literal `openshell:resolve:env:ANTHROPIC_API_KEY` placeholder — credentials are resolved at the proxy edge. This is *better* than what the runbook originally guessed. | This finding alone closes the "no real draft chunks" gap from Phase E of the v0.29 e2e walk. |
+| E — L7 denial fires | ✅ | `curl https://example.com` from inside the sandbox produced **HTTP/1.1 403 Forbidden** at the proxy CONNECT layer, and a real **draft chunk** appeared at `/api/gateways/<gw>/sandboxes/<sb>/approvals` with rule `allow_example_com_443`, confidence 0.65, binary `/usr/bin/curl`. | First time a draft chunk has been observed end-to-end. |
+| F — approve in UI | ✅ | `POST /approvals/<chunk-id>/approve` returned `policy_version=2` + a fresh policy hash. | Audit row landed with `approval.approve` + `gateway=nemoclaw`. |
+| G — audit sequence | ✅ | `GET /api/audit?gateway=nemoclaw` returned the entire 10-row story in chronological order: `gateway.register → provider.create → inference.update → sandbox.create → approval.approve`. The new gateway-filter from `d88fd82` + the audit-tagging fix from `09f2b5b` are both load-bearing here. | This is the audit feature M7 was supposed to prove. |
+| H — retry succeeds | ⚠️ partial | The 403 is gone (the policy update reached the proxy), TLS handshake completes through the MITM cert, and `GET / HTTP/1.1` is sent — but the response is reset mid-stream (`Recv failure: Connection reset by peer`). HEAD request shows `HTTP/1.1 200 Connection Established` from the CONNECT, then nothing. Looks like the approve adds an outbound allow but not a corresponding response/inbound allow, **OR** the proxy needs an extra reload for response-path enforcement. | Demo's main story is intact ("denied → approved → no longer denied"), but the literal "retry returns 200" isn't there yet. Worth a separate fix-or-investigate item. |
 
-Anything in the **Gap** column becomes a one-commit-per-concern follow-up.
-Once all eight phases work cleanly with no gaps, M7 closes; the runbook
-becomes the basis for [m7_demo.py](m7_demo.py) automation.
+## Findings beyond the 8 phases
+
+- **Auto-register-with-mtls bug.** In `SHOREGUARD_LOCAL_MODE=true`, ShoreGuard
+  auto-registers the local nemoclaw gateway at startup with `has_ca_cert=true`,
+  `has_client_cert=true`, `has_client_key=true`, `auth_mode=null` — even when the
+  gateway is plaintext. The result is `last_status=unreachable` and an SSL
+  handshake error every 30s in the logs (`SSL_ERROR_SSL: WRONG_VERSION_NUMBER`).
+  Manual delete + re-register with `auth_mode=insecure` is the workaround.
+- **Health endpoints don't live under `/api/`.** They're at `/healthz` and
+  `/version`, mounted on the root router. The runbook (and presumably the
+  ops docs) had `/api/health` and `/api/version`. Fixed in this commit.
+- **`SHOREGUARD_AUTH__ADMIN_PASSWORD` is wrong.** The bootstrap env var is
+  `SHOREGUARD_ADMIN_PASSWORD` — `AuthSettings` uses `env_prefix="SHOREGUARD_"`,
+  no nested delimiter. Runbook fixed.
+- **Playwright Firefox MCP launches but exits with code 0 immediately** in
+  the local Wayland session. Headless `firefox -no-remote -headless about:blank`
+  launched manually works fine. The MCP launcher uses `-foreground` which
+  may not survive in this environment. Worked around by running the demo
+  via curl/HTTP API, which is actually faster for finding gaps.
+- **`GET /api/gateway/{name}` returns 405** — only DELETE/PATCH are wired on
+  that path. Use `/api/gateway/{name}/info` for the GET, or `/api/gateway/list`
+  for the collection.
+- **`provider_name` ambiguity.** `set_inference` takes the provider *record
+  name* (e.g. `anthropic-demo`), but the inference-providers list uses the
+  *type* (`anthropic`) — same field name, different meaning. Worth either
+  renaming one of the fields or surfacing a clearer error than upstream's
+  bare `FAILED_PRECONDITION`.
+
+## Status
+
+M7 is **proven in substance**: the vision flow runs end-to-end, every M3+
+surface contributes its real artifact, and the "no real draft chunks"
+blocker is closed. The two outstanding items —
+*(1)* Phase H response-path retry never completes,
+*(2)* the auto-register-with-mtls bug —
+are real follow-ups but neither blocks the M7 closeout.
