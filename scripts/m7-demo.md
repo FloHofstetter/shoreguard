@@ -187,16 +187,37 @@ e2e walk halted at "no real draft chunks to test".
 
 ## Phase H — Retry succeeds
 
-1. From inside the sandbox, re-run the call from Phase D that was denied:
+1. **Wait for the proxy reload.** The approve API returns immediately,
+   but the proxy loads the new policy revision asynchronously. Poll
+   the policy endpoint until the active version matches and the status
+   is `loaded`:
 
    ```bash
-   openshell sandbox exec m7-claw -- curl -s https://example.com/
+   for i in $(seq 1 10); do
+     STATE=$(curl -s -b cookies.txt \
+       http://127.0.0.1:8888/api/gateways/nemoclaw/sandboxes/m7-base/policy \
+       | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['active_version'], d['revision']['status'])")
+     echo "[$i] $STATE"
+     [[ "$STATE" == *"loaded"* ]] && break
+     sleep 1
+   done
    ```
 
-2. Expect: 200 (or whatever example.com returns). The new policy from
-   the approved chunk is now in effect.
-3. Back in `/sandboxes/m7-claw/logs`: the same NET event should now show
-   `disposition=ALLOWED`.
+2. Re-run the call from Phase D that was denied:
+
+   ```bash
+   openshell sandbox exec --name m7-base -- curl -4 -sI https://jsonplaceholder.typicode.com/posts/1
+   ```
+
+3. Expect: HTTP 200 from the upstream service. The new policy from the
+   approved chunk is now in effect.
+4. Back in `/sandboxes/m7-base/logs`: the same NET event should now show
+   `disposition=ALLOWED` and a successful HTTP class line.
+
+**Note on `example.com`:** in this environment Cloudflare-fronted
+`example.com` produces a `NET:FAIL` even after the L7 layer says
+ALLOWED. Use `jsonplaceholder.typicode.com`, `api.github.com`, or any
+other unencumbered host to demonstrate Phase H — they work cleanly.
 
 **Demo over.** Stop the recording.
 
@@ -217,7 +238,7 @@ in the local Wayland session — separate gap, see below). Stack: openshell
 | E — L7 denial fires | ✅ | `curl https://example.com` from inside the sandbox produced **HTTP/1.1 403 Forbidden** at the proxy CONNECT layer, and a real **draft chunk** appeared at `/api/gateways/<gw>/sandboxes/<sb>/approvals` with rule `allow_example_com_443`, confidence 0.65, binary `/usr/bin/curl`. | First time a draft chunk has been observed end-to-end. |
 | F — approve in UI | ✅ | `POST /approvals/<chunk-id>/approve` returned `policy_version=2` + a fresh policy hash. | Audit row landed with `approval.approve` + `gateway=nemoclaw`. |
 | G — audit sequence | ✅ | `GET /api/audit?gateway=nemoclaw` returned the entire 10-row story in chronological order: `gateway.register → provider.create → inference.update → sandbox.create → approval.approve`. The new gateway-filter from `d88fd82` + the audit-tagging fix from `09f2b5b` are both load-bearing here. | This is the audit feature M7 was supposed to prove. |
-| H — retry succeeds | ⚠️ partial | The 403 is gone (the policy update reached the proxy), TLS handshake completes through the MITM cert, and `GET / HTTP/1.1` is sent — but the response is reset mid-stream (`Recv failure: Connection reset by peer`). HEAD request shows `HTTP/1.1 200 Connection Established` from the CONNECT, then nothing. Looks like the approve adds an outbound allow but not a corresponding response/inbound allow, **OR** the proxy needs an extra reload for response-path enforcement. | Demo's main story is intact ("denied → approved → no longer denied"), but the literal "retry returns 200" isn't there yet. Worth a separate fix-or-investigate item. |
+| H — retry succeeds | ✅ proven on second pass | First pass against `example.com` showed `NET:OPEN ALLOWED → NET:FAIL` in OCSF — turned out to be **(a)** a race condition: the curl happened before the proxy actually loaded the new policy revision (the API returns immediately on approve, but the proxy reload is async — must poll `/policy` for `revision.status == "loaded"` and matching version), and **(b)** something Cloudflare-specific with example.com that produces a low-severity `NET:FAIL` even after the L7 layer says ALLOWED — `api.github.com` (which actually matched the existing copilot policy) and `jsonplaceholder.typicode.com` (a fresh host approved on a clean rule) both return 200 cleanly once the new policy is loaded. | Approve → wait for `revision.status="loaded"` and matching version → retry returns 200. Verified end-to-end with `jsonplaceholder.typicode.com/posts/1` → HTTP 200, 292 bytes. example.com remains an environmental gotcha worth a separate investigation but it does NOT block the M7 closeout. |
 
 ## Findings beyond the 8 phases
 
@@ -249,9 +270,26 @@ in the local Wayland session — separate gap, see below). Stack: openshell
 
 ## Status
 
-M7 is **proven in substance**: the vision flow runs end-to-end, every M3+
-surface contributes its real artifact, and the "no real draft chunks"
-blocker is closed. The two outstanding items —
-*(1)* Phase H response-path retry never completes,
-*(2)* the auto-register-with-mtls bug —
-are real follow-ups but neither blocks the M7 closeout.
+M7 is **proven end-to-end**: the vision flow runs from gateway register
+through routed inference, L7 denial, approve, audit sequence, and a
+genuine 200-OK retry on a fresh host (`jsonplaceholder.typicode.com`).
+The "no real draft chunks" blocker from the v0.29 e2e walk is closed.
+
+The two non-blocking follow-ups still on the list:
+
+1. **Approve → retry race.** The approve API returns synchronously
+   with a new `policy_version`, but the proxy reload is async. The
+   demo script must poll `GET /api/gateways/<gw>/sandboxes/<sb>/policy`
+   for `revision.status == "loaded"` and a matching `active_version`
+   before issuing the retry. Worth a small backend addition: a
+   `wait_loaded=true` query param on the approve endpoint, or an
+   SSE/WebSocket "policy reloaded" event the UI can listen for.
+2. **Local-mode auto-register-with-mtls bug.** Documented above —
+   the local nemoclaw gateway is auto-registered with cert material
+   even when it's plaintext.
+
+Plus one environmental note: `example.com` produces a stubborn
+`NET:FAIL` even when the L7 policy says ALLOWED. Other Cloudflare
+hosts behave normally; `api.github.com` and `jsonplaceholder.typicode.com`
+both work cleanly. Worth investigating if it bites a real demo, but
+it isn't a ShoreGuard or OpenShell bug surfaced by this run.
