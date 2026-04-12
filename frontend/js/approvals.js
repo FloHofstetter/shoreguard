@@ -32,6 +32,12 @@ function approvalsPage(name) {
         sortPersistentFirst: false,
         filterSecurityFlagged: false,
 
+        // M19 multi-stage approvals (quorum workflow)
+        workflow: null,          // null when no workflow configured
+        decisionsByChunk: {},    // chunk_id → list of decision dicts
+        actorId: (window.sgCurrentUser && window.sgCurrentUser.id) || '',
+        actorRole: (window.sgCurrentUser && window.sgCurrentUser.role) || '',
+
         // After a Logs → Approvals navigation via hash fragment
         // (#binary=X&host=Y), the matching chunk is scrolled into view and
         // temporarily highlighted; non-matching chunks stay visible.
@@ -59,6 +65,7 @@ function approvalsPage(name) {
         },
 
         async init() {
+            await this.loadWorkflow();
             await this.load();
 
             // Live-refresh: websocket.js dispatches this custom event when a
@@ -88,11 +95,54 @@ function approvalsPage(name) {
                 this.chunks = data.chunks || [];
                 this.rollingSummary = data.rolling_summary || '';
                 this.lastAnalyzedAtMs = data.last_analyzed_at_ms || 0;
+                if (this.workflow) {
+                    await this.refreshDecisions();
+                }
             } catch (e) {
                 this.error = e.message;
             } finally {
                 this.loading = false;
             }
+        },
+
+        async loadWorkflow() {
+            try {
+                const data = await apiFetch(`${API}/sandboxes/${name}/approval-workflow`);
+                this.workflow = (data && data.required_approvals) ? data : null;
+            } catch (e) {
+                this.workflow = null;
+            }
+        },
+
+        async refreshDecisions() {
+            if (!this.workflow) return;
+            const pending = this.chunks.filter(c => c.status === 'pending');
+            const next = {};
+            await Promise.all(pending.map(async c => {
+                try {
+                    const r = await apiFetch(
+                        `${API}/sandboxes/${name}/approvals/${c.id}/decisions`
+                    );
+                    next[c.id] = r.decisions || [];
+                } catch {
+                    next[c.id] = [];
+                }
+            }));
+            this.decisionsByChunk = next;
+        },
+
+        voteCount(chunkId) {
+            const list = this.decisionsByChunk[chunkId] || [];
+            return list.filter(d => d.decision === 'approve').length;
+        },
+
+        hasVoted(chunkId) {
+            const list = this.decisionsByChunk[chunkId] || [];
+            return list.some(d => d.actor === this.actorId);
+        },
+
+        voterLabel(d) {
+            return `${d.actor}${d.role ? ' (' + d.role + ')' : ''}`;
         },
 
         toggleDetail(chunkId) {
@@ -201,8 +251,20 @@ function approvalsPage(name) {
 
         async approve(chunkId) {
             try {
-                await apiFetch(`${API}/sandboxes/${name}/approvals/${chunkId}/approve`, { method: 'POST' });
-                showToast('Chunk approved.', 'success');
+                const result = await apiFetch(
+                    `${API}/sandboxes/${name}/approvals/${chunkId}/approve`,
+                    { method: 'POST' }
+                );
+                if (result && result.status === 'pending') {
+                    const remaining = Math.max(0, result.needed - result.votes);
+                    showToast(
+                        `Vote cast — ${result.votes}/${result.needed} approvals `
+                        + `(${remaining} more needed).`,
+                        'info'
+                    );
+                } else {
+                    showToast('Chunk approved.', 'success');
+                }
                 await this.load();
             } catch (e) {
                 showToast(`Approve failed: ${e.message}`, 'danger');
@@ -345,7 +407,118 @@ function approvalsPage(name) {
         async showHistory() {
             await showApprovalHistory(name);
         },
+
+        async openWorkflowConfig() {
+            const updated = await openWorkflowConfigModal(name, this.workflow);
+            if (updated === undefined) return;
+            this.workflow = updated;
+            await this.load();
+        },
     };
+}
+
+// ─── Approval Workflow Modal (imperative, Bootstrap modal) ─────────────────
+
+async function openWorkflowConfigModal(sandboxName, current) {
+    const existing = document.getElementById('workflowConfigModal');
+    if (existing) existing.remove();
+
+    const cfg = current || {
+        required_approvals: 2,
+        required_roles: [],
+        distinct_actors: true,
+        escalation_timeout_minutes: null,
+    };
+
+    document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="workflowConfigModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content sg-modal-themed">
+                    <div class="modal-header border-bottom">
+                        <h5 class="modal-title"><i class="bi bi-people-fill me-2"></i>Multi-Stage Approval Workflow</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small">Configure how many distinct approvals are required before a draft chunk is approved upstream.</p>
+                        <div class="mb-3">
+                            <label class="form-label">Required approvals</label>
+                            <input type="number" min="1" max="20" class="form-control" id="wf-required" value="${cfg.required_approvals}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Allowed voter roles (comma-separated, empty = any)</label>
+                            <input type="text" class="form-control" id="wf-roles" value="${escapeHtml((cfg.required_roles || []).join(', '))}" placeholder="admin, operator">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="wf-distinct" ${cfg.distinct_actors ? 'checked' : ''}>
+                            <label class="form-check-label" for="wf-distinct">Distinct actors (same user cannot vote twice)</label>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Escalation timeout (minutes, empty = off)</label>
+                            <input type="number" min="1" max="10080" class="form-control" id="wf-escalate" value="${cfg.escalation_timeout_minutes ?? ''}">
+                        </div>
+                        <div id="wf-output"></div>
+                    </div>
+                    <div class="modal-footer border-0">
+                        ${current ? `<button class="btn btn-outline-danger me-auto" id="wf-delete"><i class="bi bi-trash me-1"></i>Disable workflow</button>` : ''}
+                        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-primary" id="wf-save"><i class="bi bi-check me-1"></i>Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `);
+
+    const modal = new bootstrap.Modal(document.getElementById('workflowConfigModal'));
+    modal.show();
+
+    return new Promise(resolve => {
+        let result;
+        document.getElementById('workflowConfigModal').addEventListener('hidden.bs.modal', () => {
+            document.getElementById('workflowConfigModal')?.remove();
+            resolve(result);
+        });
+
+        document.getElementById('wf-save').addEventListener('click', async () => {
+            const body = {
+                required_approvals: parseInt(document.getElementById('wf-required').value, 10),
+                required_roles: document.getElementById('wf-roles').value
+                    .split(',').map(s => s.trim()).filter(Boolean),
+                distinct_actors: document.getElementById('wf-distinct').checked,
+                escalation_timeout_minutes: document.getElementById('wf-escalate').value
+                    ? parseInt(document.getElementById('wf-escalate').value, 10)
+                    : null,
+            };
+            try {
+                result = await apiFetch(`${API}/sandboxes/${sandboxName}/approval-workflow`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                showToast('Workflow saved.', 'success');
+                modal.hide();
+            } catch (e) {
+                document.getElementById('wf-output').innerHTML =
+                    `<div class="text-danger small">${escapeHtml(e.message)}</div>`;
+            }
+        });
+
+        const delBtn = document.getElementById('wf-delete');
+        if (delBtn) {
+            delBtn.addEventListener('click', async () => {
+                try {
+                    await apiFetch(`${API}/sandboxes/${sandboxName}/approval-workflow`, {
+                        method: 'DELETE',
+                    });
+                    result = null;
+                    showToast('Workflow disabled.', 'warning');
+                    modal.hide();
+                } catch (e) {
+                    document.getElementById('wf-output').innerHTML =
+                        `<div class="text-danger small">${escapeHtml(e.message)}</div>`;
+                }
+            });
+        }
+    });
 }
 
 

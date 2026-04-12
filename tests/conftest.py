@@ -46,6 +46,7 @@ async def _init_gateway_service():
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
 
+    import shoreguard.services.approval_workflow as wf_mod
     import shoreguard.services.audit as audit_mod
     import shoreguard.services.gateway as gw_mod
     import shoreguard.services.operations as ops_mod
@@ -68,6 +69,7 @@ async def _init_gateway_service():
     audit_mod.audit_service = audit_mod.AuditService(sync_factory)
     sandbox_meta_mod.sandbox_meta_store = sandbox_meta_mod.SandboxMetaStore(sync_factory)
     pin_mod.policy_pin_service = pin_mod.PolicyPinService(sync_factory)
+    wf_mod.approval_workflow_service = wf_mod.ApprovalWorkflowService(sync_factory)
 
     # Async engine for AsyncOperationService — the prod class (see api/main.py).
     async_engine = create_async_engine(
@@ -97,6 +99,7 @@ async def _init_gateway_service():
     sandbox_meta_mod.sandbox_meta_store = None
     ops_mod.operation_service = None
     pin_mod.policy_pin_service = None
+    wf_mod.approval_workflow_service = None
     sync_engine.dispose()
     await async_engine.dispose()
 

@@ -399,6 +399,88 @@ class PolicyPin(Base):
     expires_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ApprovalWorkflow(Base):
+    """A multi-stage approval (quorum) configuration for a sandbox.
+
+    When a workflow exists, ``POST .../approvals/{chunk_id}/approve`` records
+    a vote rather than calling the upstream gateway directly. The upstream
+    approve fires only when the configured quorum is reached.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway_name: Gateway the sandbox belongs to.
+        sandbox_name: Sandbox this workflow applies to.
+        required_approvals: Number of distinct approve votes needed.
+        required_roles_json: JSON array of roles eligible to vote (empty = any).
+        distinct_actors: If true, the same actor cannot vote twice.
+        escalation_timeout_minutes: Fire ``approval.escalated`` webhook after
+            this many minutes since the first vote on a chunk; ``None`` = off.
+        created_by: Identity of the admin who configured the workflow.
+        created_at: When the workflow was created.
+        updated_at: When the workflow was last updated.
+    """
+
+    __tablename__ = "approval_workflows"
+    __table_args__ = (UniqueConstraint("gateway_name", "sandbox_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway_name: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox_name: Mapped[str] = mapped_column(String(253), nullable=False)
+    required_approvals: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    required_roles_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    distinct_actors: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    escalation_timeout_minutes: Mapped[int | None] = mapped_column(Integer)
+    created_by: Mapped[str] = mapped_column(String(254), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ApprovalDecision(Base):
+    """A single vote cast against an approval chunk under a workflow.
+
+    Append-only log; pending/approved/rejected state is derived from the row
+    set. Rows are cleared once the upstream gateway approve fires (on quorum
+    met) or the chunk is rejected.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        workflow_id: FK to the active workflow configuration.
+        gateway_name: Gateway the sandbox belongs to (denormalised for lookup).
+        sandbox_name: Sandbox the chunk belongs to (denormalised for lookup).
+        chunk_id: The draft chunk being voted on.
+        actor: Identity of the voting user.
+        role: Role the voter held at vote time.
+        decision: ``approve`` or ``reject``.
+        comment: Optional free-text comment.
+        created_at: When the vote was cast.
+    """
+
+    __tablename__ = "approval_decisions"
+    __table_args__ = (
+        Index(
+            "ix_approval_decisions_chunk",
+            "gateway_name",
+            "sandbox_name",
+            "chunk_id",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workflow_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("approval_workflows.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    gateway_name: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox_name: Mapped[str] = mapped_column(String(253), nullable=False)
+    chunk_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor: Mapped[str] = mapped_column(String(254), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class OperationRecord(Base):
     """A tracked long-running operation with DB persistence.
 

@@ -154,6 +154,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pin_mod.policy_pin_service = pin_mod.PolicyPinService(session_factory)
     logger.info("Policy pin service initialised")
 
+    # ── Approval workflow service (M19) ───────────────────────────────
+    import shoreguard.services.approval_workflow as wf_mod
+
+    wf_mod.approval_workflow_service = wf_mod.ApprovalWorkflowService(session_factory)
+    logger.info("Approval workflow service initialised")
+
     # ── Denial context cache (M16) ─────────────────────────────────────
     import shoreguard.services.denial_context as dc_mod
 

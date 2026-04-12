@@ -24,6 +24,23 @@
     <!-- Approvals table -->
     <template x-if="!loading && !error && $notEmpty(chunks)">
         <div>
+            <!-- Multi-stage approval banner (M19) -->
+            <div x-show="workflow" x-cloak class="alert alert-primary d-flex align-items-center py-2 mb-3">
+                <i class="bi bi-people-fill me-2"></i>
+                <span>
+                    Multi-stage approval active —
+                    <strong x-text="workflow && workflow.required_approvals"></strong> distinct vote(s) required
+                    <template x-if="workflow && workflow.required_roles && workflow.required_roles.length">
+                        <span> (roles: <span x-text="workflow.required_roles.join(', ')"></span>)</span>
+                    </template>
+                </span>
+                <template x-if="$isAdmin">
+                    <button class="btn btn-sm btn-outline-primary ms-auto" @click="openWorkflowConfig()">
+                        <i class="bi bi-gear me-1"></i>Configure
+                    </button>
+                </template>
+            </div>
+
             <!-- Security-flagged warning banner -->
             <div x-show="securityFlaggedPendingCount > 0" x-cloak class="alert alert-warning d-flex align-items-center py-2 mb-3">
                 <i class="bi bi-shield-exclamation me-2"></i>
@@ -50,6 +67,11 @@
                     <button class="btn btn-outline-secondary" @click="showHistory()" title="History">
                         <i class="bi bi-clock-history me-1"></i>History
                     </button>
+                    <template x-if="$isAdmin && !workflow">
+                        <button class="btn btn-outline-primary" @click="openWorkflowConfig()" title="Configure workflow">
+                            <i class="bi bi-people-fill me-1"></i>Workflow
+                        </button>
+                    </template>
                     <template x-if="$isOperator">
                         <button class="btn btn-success" @click="approveAll()">
                             <i class="bi bi-check-all me-1"></i>Approve All
@@ -189,12 +211,24 @@
                                     <span x-show="!chunk.confidence" class="text-muted">&mdash;</span>
                                 </td>
                                 <td class="text-end">
+                                    <!-- Vote progress badge (M19, shown only under an active workflow) -->
+                                    <template x-if="workflow && $eq(chunk.status, 'pending')">
+                                        <div class="small text-muted mb-1"
+                                             :title="(decisionsByChunk[chunk.id] || []).map(d => voterLabel(d) + ': ' + d.decision).join('\\n')">
+                                            <i class="bi bi-people-fill me-1"></i>
+                                            <span x-text="voteCount(chunk.id) + '/' + workflow.required_approvals"></span>
+                                            <span x-show="hasVoted(chunk.id)" class="badge text-bg-info ms-1">voted</span>
+                                        </div>
+                                    </template>
                                     <template x-if="$eq(chunk.status, 'pending') && $isOperator">
                                         <div class="btn-group btn-group-sm">
                                             <button class="btn btn-outline-secondary" @click.stop="openEdit(chunk.id)" title="Edit">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <button class="btn btn-success" @click.stop="approve(chunk.id)" title="Approve">
+                                            <button class="btn btn-success"
+                                                    @click.stop="approve(chunk.id)"
+                                                    :disabled="workflow && hasVoted(chunk.id)"
+                                                    :title="workflow ? 'Vote to approve' : 'Approve'">
                                                 <i class="bi bi-check"></i>
                                             </button>
                                             <button class="btn btn-outline-danger" @click.stop="reject(chunk.id)" title="Reject">
