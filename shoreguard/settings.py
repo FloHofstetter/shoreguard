@@ -599,6 +599,33 @@ class ProverSettings(BaseSettings):
     )
 
 
+class DriftDetectionSettings(BaseSettings):
+    """GitOps policy drift detection (M23).
+
+    Off by default. When enabled, ShoreGuard periodically polls every
+    registered sandbox's policy hash and fires a ``policy.drift_detected``
+    webhook when a sandbox's hash changes between scans (i.e. someone
+    edited the policy outside the GitOps pipeline).
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Enable the drift detection background task.
+        interval_seconds (int): Background re-scan interval (>= 60).
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_DRIFT_DETECTION_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable the policy drift detection background loop",
+    )
+    interval_seconds: int = Field(
+        default=300,
+        ge=60,
+        description="Re-scan interval in seconds (>= 60)",
+    )
+
+
 class DiscoverySettings(BaseSettings):
     """MicroVM gateway discovery via DNS SRV (M22).
 
@@ -786,6 +813,7 @@ class Settings(BaseSettings):
         cors (CORSSettings): Cross-Origin Resource Sharing policy.
         prover (ProverSettings): Z3 policy prover settings.
         discovery (DiscoverySettings): MicroVM gateway DNS-SRV discovery (M22).
+        drift_detection (DriftDetectionSettings): GitOps policy drift detection (M23).
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -804,6 +832,7 @@ class Settings(BaseSettings):
     cors: CORSSettings = Field(default_factory=CORSSettings)
     prover: ProverSettings = Field(default_factory=ProverSettings)
     discovery: DiscoverySettings = Field(default_factory=DiscoverySettings)
+    drift_detection: DriftDetectionSettings = Field(default_factory=DriftDetectionSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

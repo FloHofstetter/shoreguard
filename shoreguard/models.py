@@ -481,6 +481,38 @@ class ApprovalDecision(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class PolicyApplyProposal(Base):
+    """A pending YAML policy apply waiting for workflow quorum (M23).
+
+    Created on the first vote of an apply under an active M19 workflow,
+    deleted on terminal state (quorum met / rejected / superseded). Lets
+    subsequent vote-only calls reference the same proposal by its synthetic
+    chunk_id without requiring the second runner to resubmit the YAML body.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway_name: Gateway the sandbox belongs to.
+        sandbox_name: Sandbox the apply targets.
+        chunk_id: Synthetic chunk id ``policy.apply:<sha16>`` derived from yaml.
+        yaml_text: Raw YAML document body.
+        expected_hash: Optimistic-lock etag captured at proposal time.
+        proposed_by: Identity of the actor that opened the proposal.
+        proposed_at: When the proposal was created.
+    """
+
+    __tablename__ = "policy_apply_proposals"
+    __table_args__ = (UniqueConstraint("gateway_name", "sandbox_name", "chunk_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway_name: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox_name: Mapped[str] = mapped_column(String(253), nullable=False)
+    chunk_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    yaml_text: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_hash: Mapped[str | None] = mapped_column(String(80))
+    proposed_by: Mapped[str] = mapped_column(String(254), nullable=False)
+    proposed_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class SBOMSnapshot(Base):
     """A CycloneDX SBOM uploaded for a sandbox (M21).
 

@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.30.2] — unreleased
 
+### Added (M23)
+
+- **GitOps Policy Sync.** Declarative YAML policy management for sandboxes,
+  driven from CI/CD. Two new endpoints under
+  `/api/gateways/{gw}/sandboxes/{name}/policy/`:
+  - `GET /export` returns a deterministic YAML document with a metadata
+    block (`gateway`, `sandbox`, `version`, `policy_hash`, `exported_at`)
+    plus the full policy. Round-trip stable: re-export of a parsed export
+    yields the same `policy` block.
+  - `POST /apply` accepts `{yaml, dry_run, expected_version}`. Status
+    codes: `200 up_to_date`, `200 dry_run`, `200 applied`,
+    `202 vote_recorded`, `409` version mismatch, `423` pinned, `400`
+    malformed YAML.
+- **Optimistic locking.** `expected_version` falls back to
+  `metadata.policy_hash` from the YAML document. Mismatch → HTTP 409 with
+  the live `current_hash` in the body so CI can refetch + retry.
+- **M18 pin guard reuse.** Apply (and dry-run) on a pinned sandbox returns
+  HTTP 423 — CI sees the pin instead of silently planning a change that
+  cannot apply. Export remains allowed (read-only).
+- **M19 workflow gating.** When an active multi-stage approval workflow
+  exists for the sandbox, the first apply records one approve-vote on a
+  synthetic chunk id `policy.apply:<sha16>` and returns 202. Subsequent
+  votes (same YAML body → same chunk id) accumulate until quorum, at
+  which point the upstream `UpdateConfig` fires once. New table
+  `policy_apply_proposals` (Alembic 017) caches the pending YAML body so
+  the second voter does not need to resubmit bytes.
+- **`shoreguard policy` CLI.** Three Typer subcommands wrapping the new
+  endpoints: `export` (stdout/file), `diff` (dry-run, exits 1 on drift),
+  `apply` (writes, exits 1 if a vote was recorded but quorum not yet
+  met, exit 2 on errors). Reads `SHOREGUARD_URL` + `SHOREGUARD_TOKEN`
+  from env or `--url` / `--token` flags.
+- **Drift detection (optional).** New `DriftDetectionService` background
+  loop, off by default behind `SHOREGUARD_DRIFT_DETECTION_ENABLED`. Polls
+  every registered sandbox every interval and fires
+  `policy.drift_detected` webhook on any hash change between scans
+  (someone edited the policy outside the GitOps pipeline). The first
+  scan after restart bootstraps the snapshot silently. Failures per
+  sandbox are logged + swallowed — one broken sandbox does not kill the
+  loop.
+- **New webhook events.** `policy.applied` (now also fires from apply),
+  `policy.drift_detected`. Existing `approval.vote_cast` /
+  `approval.quorum_met` are reused when apply hits the quorum path with
+  a `scope: policy.apply` field added to the payload.
+- **New audit events.** `policy.exported`, `policy.apply.dry_run`,
+  `policy.apply.noop`, `policy.apply.voted`, `policy.applied` (apply
+  variant), `policy.drift_detected`.
+- **Demo + runbook.** `scripts/m23_demo.py` runs an 8-phase walk against a
+  live local stack (export → no-op → drift → write → vote → quorum →
+  pin → drift hint). Detailed runbook at `scripts/m23-gitops.md`.
+- **Tests.** 49 new tests across `test_policy_diff_service.py`,
+  `test_policy_yaml_service.py`, `test_policy_apply_proposal_service.py`,
+  `test_drift_detection_service.py`, `test_policy_gitops_api.py`, and
+  `test_cli_policy.py`.
+
 ### Added (M22)
 
 - **Sandbox Boot Hooks.** Operators can attach pre/post-create hooks to a

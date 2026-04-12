@@ -600,6 +600,62 @@ class PolicyDiffResponse(BaseModel):
     # extra="allow": structure depends on gateway protocol version
 
 
+class PolicyExportResponse(BaseModel):
+    """Response body for GET /sandboxes/{name}/policy/export.
+
+    Attributes:
+        yaml: YAML document with metadata + policy blocks.
+        gateway: Gateway name (mirrors metadata.gateway).
+        sandbox: Sandbox name.
+        version: Active policy version (may be 0 if no revision exists).
+        policy_hash: OpenShell-computed policy hash (etag for optimistic locking).
+    """
+
+    yaml: str
+    gateway: str
+    sandbox: str
+    version: int
+    policy_hash: str
+
+
+class PolicyApplyRequest(BaseModel):
+    """Request body for POST /sandboxes/{name}/policy/apply.
+
+    Attributes:
+        yaml: YAML document body (with optional metadata block).
+        dry_run: When true, compute diff without writing.
+        expected_version: Optional optimistic-lock etag (overrides metadata).
+    """
+
+    yaml: str
+    dry_run: bool = False
+    expected_version: str | None = None
+
+
+class PolicyApplyResponse(BaseModel):
+    """Response body for POST /sandboxes/{name}/policy/apply.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+        status (str): One of ``up_to_date``, ``dry_run``, ``applied``,
+            ``vote_recorded``, ``rejected``.
+        current_hash (str): Server policy hash before this call.
+        diff (dict): Structured policy diff.
+        applied_version (str | None): Hash after the apply (only on ``applied``).
+        votes_needed (int | None): Required approval count if under workflow.
+        votes_cast (int | None): Approve votes already recorded if under workflow.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    status: str
+    current_hash: str
+    diff: dict
+    applied_version: str | None = None
+    votes_needed: int | None = None
+    votes_cast: int | None = None
+
+
 class PolicyAnalysisRequest(BaseModel):
     """Request body for POST /sandboxes/{name}/policy/analysis.
 

@@ -31,9 +31,11 @@ cli = typer.Typer(
 # Register subcommand groups
 from shoreguard.api.cli_audit import audit_app  # noqa: E402
 from shoreguard.api.cli_config import config_app  # noqa: E402
+from shoreguard.api.cli_policy import policy_app  # noqa: E402
 
 cli.add_typer(config_app)
 cli.add_typer(audit_app)
+cli.add_typer(policy_app)
 
 
 def _version_callback(value: bool) -> None:

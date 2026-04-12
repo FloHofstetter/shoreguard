@@ -51,6 +51,7 @@ async def _init_gateway_service():
     import shoreguard.services.boot_hooks as boot_hooks_mod
     import shoreguard.services.gateway as gw_mod
     import shoreguard.services.operations as ops_mod
+    import shoreguard.services.policy_apply_proposal as apply_mod
     import shoreguard.services.policy_pin as pin_mod
     import shoreguard.services.sandbox_meta as sandbox_meta_mod
     import shoreguard.services.sbom as sbom_mod
@@ -74,6 +75,7 @@ async def _init_gateway_service():
     wf_mod.approval_workflow_service = wf_mod.ApprovalWorkflowService(sync_factory)
     sbom_mod.sbom_service = sbom_mod.SBOMService(sync_factory)
     boot_hooks_mod.boot_hook_service = boot_hooks_mod.BootHookService(sync_factory)
+    apply_mod.policy_apply_proposal_service = apply_mod.PolicyApplyProposalService(sync_factory)
 
     # Async engine for AsyncOperationService — the prod class (see api/main.py).
     async_engine = create_async_engine(
@@ -106,6 +108,7 @@ async def _init_gateway_service():
     wf_mod.approval_workflow_service = None
     sbom_mod.sbom_service = None
     boot_hooks_mod.boot_hook_service = None
+    apply_mod.policy_apply_proposal_service = None
     sync_engine.dispose()
     await async_engine.dispose()
 

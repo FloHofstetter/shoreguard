@@ -7,15 +7,21 @@ import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+import shoreguard.services.approval_workflow as _wf_mod
+import shoreguard.services.policy_apply_proposal as _apply_mod
 import shoreguard.services.policy_pin as _pin_mod
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.api.schemas import (
     PolicyAnalysisRequest,
     PolicyAnalysisResponse,
+    PolicyApplyRequest,
+    PolicyApplyResponse,
     PolicyDiffResponse,
+    PolicyExportResponse,
     PolicyPinRequest,
     PolicyPinResponse,
     PolicyResponse,
@@ -28,6 +34,14 @@ from shoreguard.presets import get_preset as _get_preset
 from shoreguard.presets import list_presets as _list_presets
 from shoreguard.services.audit import audit_log
 from shoreguard.services.policy import PolicyService
+from shoreguard.services.policy_diff import diff_policy, is_empty
+from shoreguard.services.policy_diff import summary as diff_summary
+from shoreguard.services.policy_yaml import (
+    PolicyYamlError,
+    parse_yaml,
+    render_yaml,
+    yaml_fingerprint,
+)
 from shoreguard.services.webhooks import fire_webhook
 
 logger = logging.getLogger(__name__)
@@ -207,6 +221,284 @@ async def submit_policy_analysis(
         },
     )
     return result
+
+
+# ─── M23 GitOps: export + apply ──────────────────────────────────────────────
+
+
+def _extract_hash(snapshot: dict[str, Any]) -> str:
+    """Pull the policy_hash out of a PolicyManager.get() snapshot.
+
+    Args:
+        snapshot: PolicyManager.get() return value.
+
+    Returns:
+        str: policy_hash, or empty string if absent.
+    """
+    revision = snapshot.get("revision") or {}
+    return revision.get("policy_hash") or ""
+
+
+def _extract_version(snapshot: dict[str, Any]) -> int:
+    """Pull the active_version out of a snapshot.
+
+    Args:
+        snapshot: PolicyManager.get() return value.
+
+    Returns:
+        int: active_version, or 0 if absent.
+    """
+    return int(snapshot.get("active_version") or 0)
+
+
+@router.get(
+    "/sandboxes/{name}/policy/export",
+    response_model=PolicyExportResponse,
+)
+async def export_policy(
+    name: str,
+    request: Request,
+    svc: PolicyService = Depends(_get_policy_service),
+) -> dict[str, Any]:
+    """Export a sandbox policy as deterministic YAML (M23).
+
+    Returns a metadata + policy YAML document. Pin status does NOT block
+    export — read-only operation. The ``policy_hash`` field is the etag
+    used by ``POST /policy/apply``'s optimistic locking.
+
+    Args:
+        name: Sandbox name.
+        request: Incoming HTTP request.
+        svc: Injected policy service.
+
+    Returns:
+        dict[str, Any]: ``PolicyExportResponse`` payload.
+    """
+    snapshot = await asyncio.to_thread(svc.get, name)
+    policy = snapshot.get("policy") or {}
+    gw = get_gateway_name(request)
+    yaml_text = render_yaml(
+        policy,
+        gateway=gw,
+        sandbox=name,
+        version=_extract_version(snapshot),
+        policy_hash=_extract_hash(snapshot),
+    )
+    await audit_log(request, "policy.exported", "policy", name, gateway=gw)
+    return {
+        "yaml": yaml_text,
+        "gateway": gw,
+        "sandbox": name,
+        "version": _extract_version(snapshot),
+        "policy_hash": _extract_hash(snapshot),
+    }
+
+
+@router.post(
+    "/sandboxes/{name}/policy/apply",
+    response_model=PolicyApplyResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
+async def apply_policy(
+    name: str,
+    body: PolicyApplyRequest,
+    request: Request,
+    svc: PolicyService = Depends(_get_policy_service),
+) -> Any:
+    """Apply a YAML policy document to a sandbox (M23).
+
+    Body fields: ``yaml`` (required), ``dry_run`` (default false),
+    ``expected_version`` (optional optimistic-lock etag).
+
+    Status codes / response ``status`` field: 200 up_to_date /
+    dry_run / applied, 202 vote_recorded under M19 workflow, 400 on
+    malformed YAML, 409 on version mismatch, 423 on pinned sandbox.
+
+    Args:
+        name: Sandbox name.
+        body: Apply request body.
+        request: Incoming HTTP request.
+        svc: Injected policy service.
+
+    Returns:
+        Any: ``PolicyApplyResponse`` dict, or ``JSONResponse`` for 202/409.
+
+    Raises:
+        HTTPException: 400 malformed YAML, 403 role not allowed,
+            409 reject vote, 423 pinned.
+    """
+    check_write_rate_limit(request)
+    _check_policy_pin(request, name)
+
+    try:
+        new_policy, metadata = parse_yaml(body.yaml)
+    except PolicyYamlError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    expected_version = body.expected_version or metadata.get("policy_hash")
+
+    snapshot = await asyncio.to_thread(svc.get, name)
+    current_policy = snapshot.get("policy") or {}
+    current_hash = _extract_hash(snapshot)
+
+    if expected_version and expected_version != current_hash:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "status": "version_mismatch",
+                "current_hash": current_hash,
+                "expected_version": expected_version,
+            },
+        )
+
+    diff = diff_policy(current_policy, new_policy)
+    diff_is_empty = is_empty(diff)
+    gw = get_gateway_name(request)
+
+    if body.dry_run:
+        await audit_log(
+            request,
+            "policy.apply.dry_run",
+            "policy",
+            name,
+            gateway=gw,
+            detail={"diff_summary": diff_summary(diff), "drift": not diff_is_empty},
+        )
+        return {
+            "status": "dry_run",
+            "current_hash": current_hash,
+            "diff": diff,
+        }
+
+    if diff_is_empty:
+        await audit_log(request, "policy.apply.noop", "policy", name, gateway=gw, detail={})
+        return {
+            "status": "up_to_date",
+            "current_hash": current_hash,
+            "diff": diff,
+        }
+
+    actor = get_actor(request)
+    role = getattr(request.state, "role", None) or "viewer"
+    chunk_id = f"policy.apply:{yaml_fingerprint(body.yaml)}"
+    diff_summary_payload = diff_summary(diff)
+
+    # ── Workflow gate (M19) ──────────────────────────────────────────────
+    wf_svc = _wf_mod.approval_workflow_service
+    workflow = wf_svc.get_workflow(gw, name) if wf_svc is not None else None
+    if wf_svc is not None and workflow is not None:
+        proposal_svc = _apply_mod.policy_apply_proposal_service
+        if proposal_svc is not None:
+            await asyncio.to_thread(
+                proposal_svc.upsert,
+                gw,
+                name,
+                chunk_id,
+                yaml_text=body.yaml,
+                expected_hash=current_hash,
+                proposed_by=actor,
+            )
+        try:
+            vote = await asyncio.to_thread(
+                wf_svc.record_decision,
+                gw,
+                name,
+                chunk_id,
+                actor=actor,
+                role=role,
+                decision="approve",
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        if not vote.quorum_met:
+            await audit_log(
+                request,
+                "policy.apply.voted",
+                "policy",
+                name,
+                gateway=gw,
+                detail={
+                    "chunk_id": chunk_id,
+                    "votes_needed": vote.votes_needed,
+                    "diff_summary": diff_summary_payload,
+                },
+            )
+            await fire_webhook(
+                "approval.vote_cast",
+                {
+                    "sandbox": name,
+                    "gateway": gw,
+                    "actor": actor,
+                    "chunk_id": chunk_id,
+                    "scope": "policy.apply",
+                },
+            )
+            approve_votes = sum(1 for d in vote.decisions if d["decision"] == "approve")
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "status": "vote_recorded",
+                    "current_hash": current_hash,
+                    "diff": diff,
+                    "votes_needed": vote.votes_needed,
+                    "votes_cast": approve_votes,
+                    "chunk_id": chunk_id,
+                },
+            )
+
+        # Quorum met — clear proposal, fall through to write
+        if proposal_svc is not None:
+            await asyncio.to_thread(proposal_svc.delete, gw, name, chunk_id)
+        await fire_webhook(
+            "approval.quorum_met",
+            {
+                "sandbox": name,
+                "gateway": gw,
+                "chunk_id": chunk_id,
+                "scope": "policy.apply",
+                "votes_needed": workflow["required_approvals"],
+            },
+        )
+
+    # ── Write branch ─────────────────────────────────────────────────────
+    result = await asyncio.to_thread(svc.update, name, new_policy)
+    new_hash = ""
+    if isinstance(result, dict):
+        rev = result.get("revision") or {}
+        new_hash = rev.get("policy_hash") or ""
+    await audit_log(
+        request,
+        "policy.applied",
+        "policy",
+        name,
+        gateway=gw,
+        detail={
+            "chunk_id": chunk_id,
+            "expected_version": expected_version,
+            "applied_version": new_hash,
+            "diff_summary": diff_summary_payload,
+            "via_workflow": workflow is not None,
+        },
+    )
+    await fire_webhook(
+        "policy.applied",
+        {
+            "sandbox": name,
+            "gateway": gw,
+            "actor": actor,
+            "applied_version": new_hash,
+            "diff_summary": diff_summary_payload,
+        },
+    )
+    return {
+        "status": "applied",
+        "current_hash": current_hash,
+        "applied_version": new_hash,
+        "diff": diff,
+    }
 
 
 @router.put(

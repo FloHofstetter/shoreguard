@@ -213,6 +213,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     wf_mod.approval_workflow_service = wf_mod.ApprovalWorkflowService(session_factory)
     logger.info("Approval workflow service initialised")
 
+    # ── GitOps apply proposals (M23) ──────────────────────────────────
+    import shoreguard.services.policy_apply_proposal as apply_mod
+
+    apply_mod.policy_apply_proposal_service = apply_mod.PolicyApplyProposalService(session_factory)
+    logger.info("Policy apply proposal service initialised")
+
+    # ── Drift detection (M23) ─────────────────────────────────────────
+    import shoreguard.services.drift_detection as drift_mod
+
+    drift_mod.drift_detection_service = drift_mod.DriftDetectionService(
+        gw_mod.gateway_service,
+        settings.drift_detection,
+    )
+    logger.info(
+        "Drift detection service initialised (enabled=%s)",
+        settings.drift_detection.enabled,
+    )
+
     # ── Denial context cache (M16) ─────────────────────────────────────
     import shoreguard.services.denial_context as dc_mod
 
@@ -371,6 +389,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     health_task.add_done_callback(_make_done_cb("health_monitor"))
     discovery_task = asyncio.create_task(_discovery_loop())
     discovery_task.add_done_callback(_make_done_cb("discovery"))
+
+    async def _drift_detection_loop() -> None:
+        """Periodically run M23 policy drift detection if enabled."""
+        if not settings.drift_detection.enabled:
+            return
+        interval = settings.drift_detection.interval_seconds
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                svc = drift_mod.drift_detection_service
+                if svc is None:
+                    continue
+                await svc.run_once()
+            except Exception:
+                logger.exception("Drift detection loop error")
+
+    drift_task = asyncio.create_task(_drift_detection_loop())
+    drift_task.add_done_callback(_make_done_cb("drift_detection"))
     yield
 
     # ── Graceful shutdown ──────────────────────────────────────────
@@ -380,6 +416,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cleanup_task.cancel()
     health_task.cancel()
     discovery_task.cancel()
+    drift_task.cancel()
 
     # 2. Cancel LRO tasks (CancelledError handler marks ops as failed)
     from shoreguard.api.lro import shutdown_lros
