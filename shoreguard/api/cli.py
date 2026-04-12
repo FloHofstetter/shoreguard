@@ -312,7 +312,7 @@ def _import_filesystem_gateways(
         client_key = None
         _max_cert = get_settings().limits.max_cert_bytes
         mtls_dir = entry / "mtls"
-        if mtls_dir.exists():
+        if scheme == "https" and mtls_dir.exists():
             ca_file = mtls_dir / "ca.crt"
             cert_file = mtls_dir / "tls.crt"
             key_file = mtls_dir / "tls.key"

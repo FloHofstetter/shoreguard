@@ -519,6 +519,28 @@ class TestImportMetadataFields:
         assert gw["metadata"]["remote_host"] == "10.0.0.1"
 
 
+class TestImportPlaintextSkipsMtls:
+    def test_http_gateway_ignores_mtls_certs(self, registry, tmp_path, monkeypatch):
+        """Plaintext (http) gateways must not import mTLS certs even if present."""
+        monkeypatch.setattr("shoreguard.config.openshell_config_dir", lambda: tmp_path)
+        monkeypatch.setenv("SHOREGUARD_LOCAL_MODE", "1")
+        gateways_dir = tmp_path / "gateways"
+        gw_dir = _make_gateway(gateways_dir, "plain-gw", "http://127.0.0.1:30051")
+        mtls_dir = gw_dir / "mtls"
+        mtls_dir.mkdir()
+        (mtls_dir / "ca.crt").write_bytes(b"ca-data")
+        (mtls_dir / "tls.crt").write_bytes(b"cert-data")
+        (mtls_dir / "tls.key").write_bytes(b"key-data")
+
+        imported, skipped = _import_filesystem_gateways(registry)
+
+        assert imported == 1
+        creds = registry.get_credentials("plain-gw")
+        assert creds["ca_cert"] is None
+        assert creds["client_cert"] is None
+        assert creds["client_key"] is None
+
+
 class TestImportMtlsPartial:
     def test_only_ca_cert(self, registry, tmp_path, monkeypatch):
         """Import with only ca.crt file."""
