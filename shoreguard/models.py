@@ -369,6 +369,36 @@ class WebhookDelivery(Base):
     delivered_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class PolicyPin(Base):
+    """A policy pin that locks a sandbox's policy at a specific version.
+
+    When a pin is active, policy updates and draft approvals are blocked
+    until the pin is removed or expires.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway_name: Name of the gateway the sandbox belongs to.
+        sandbox_name: Name of the pinned sandbox.
+        pinned_version: The policy version that is locked.
+        pinned_by: Email or service principal name of the actor who set the pin.
+        reason: Optional human-readable reason for pinning.
+        pinned_at: Timestamp when the pin was created.
+        expires_at: Optional expiry timestamp; ``None`` means pin never expires.
+    """
+
+    __tablename__ = "policy_pins"
+    __table_args__ = (UniqueConstraint("gateway_name", "sandbox_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway_name: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox_name: Mapped[str] = mapped_column(String(253), nullable=False)
+    pinned_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    pinned_by: Mapped[str] = mapped_column(String(254), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    pinned_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class OperationRecord(Base):
     """A tracked long-running operation with DB persistence.
 

@@ -49,6 +49,7 @@ async def _init_gateway_service():
     import shoreguard.services.audit as audit_mod
     import shoreguard.services.gateway as gw_mod
     import shoreguard.services.operations as ops_mod
+    import shoreguard.services.policy_pin as pin_mod
     import shoreguard.services.sandbox_meta as sandbox_meta_mod
     from shoreguard.models import Base
     from shoreguard.services.gateway import _reset_clients
@@ -66,6 +67,7 @@ async def _init_gateway_service():
     gw_mod.gateway_service = gw_mod.GatewayService(registry)
     audit_mod.audit_service = audit_mod.AuditService(sync_factory)
     sandbox_meta_mod.sandbox_meta_store = sandbox_meta_mod.SandboxMetaStore(sync_factory)
+    pin_mod.policy_pin_service = pin_mod.PolicyPinService(sync_factory)
 
     # Async engine for AsyncOperationService — the prod class (see api/main.py).
     async_engine = create_async_engine(
@@ -94,6 +96,7 @@ async def _init_gateway_service():
     audit_mod.audit_service = None
     sandbox_meta_mod.sandbox_meta_store = None
     ops_mod.operation_service = None
+    pin_mod.policy_pin_service = None
     sync_engine.dispose()
     await async_engine.dispose()
 

@@ -56,5 +56,9 @@ class ConflictError(ShoreGuardError):
     """A write operation conflicts with existing state."""
 
 
+class PolicyLockedError(ShoreGuardError):
+    """A policy modification was rejected because the policy is pinned."""
+
+
 class ValidationError(ShoreGuardError):
     """Input validation failed (e.g. malformed command syntax)."""

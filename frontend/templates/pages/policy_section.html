@@ -17,8 +17,14 @@
 
     <template x-if="!loading && !error">
         <div>
+            <!-- Pin banner -->
+            <div x-show="isPinned" x-cloak class="alert alert-warning d-flex align-items-center mb-3 py-2">
+                <i class="bi bi-lock-fill me-2"></i>
+                <span>Policy pinned at v<span x-text="pin?.pinned_version"></span>. Editing disabled.</span>
+            </div>
             <div class="d-flex justify-content-end mb-3">
-                <a :href="gwUrl('/sandboxes/' + sandboxName + '/rules/_new')" class="btn btn-outline-success btn-sm">
+                <a :href="gwUrl('/sandboxes/' + sandboxName + '/rules/_new')"
+                   class="btn btn-outline-success btn-sm" :class="{'disabled': isPinned}">
                     <i class="bi bi-plus me-1"></i>Add Rule
                 </a>
             </div>
@@ -74,10 +80,15 @@
 
     <template x-if="!loading && !error">
         <div>
+            <!-- Pin banner -->
+            <div x-show="isPinned" x-cloak class="alert alert-warning d-flex align-items-center mb-3 py-2">
+                <i class="bi bi-lock-fill me-2"></i>
+                <span>Policy pinned at v<span x-text="pin?.pinned_version"></span>. Editing disabled.</span>
+            </div>
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Add or remove filesystem paths.</span>
                 <button class="btn btn-outline-success btn-sm" @click="openAddForm()"
-                        x-show="$isOperator" x-cloak>
+                        x-show="$isOperator" x-cloak :disabled="isPinned">
                     <i class="bi bi-plus me-1"></i>Add Path
                 </button>
             </div>
@@ -156,10 +167,15 @@
 
     <template x-if="!loading && !error">
         <div>
+            <!-- Pin banner -->
+            <div x-show="isPinned" x-cloak class="alert alert-warning d-flex align-items-center mb-3 py-2">
+                <i class="bi bi-lock-fill me-2"></i>
+                <span>Policy pinned at v<span x-text="pin?.pinned_version"></span>. Editing disabled.</span>
+            </div>
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <span class="text-muted small"><i class="bi bi-cpu me-1"></i>Process and Landlock settings</span>
                 <button class="btn btn-outline-secondary btn-sm" @click="editing = !editing"
-                        x-show="$isOperator" x-cloak>
+                        x-show="$isOperator" x-cloak :disabled="isPinned">
                     <i class="bi me-1" :class="editing ? 'bi-x' : 'bi-pencil'"></i>
                     <span x-text="editing ? 'Cancel' : 'Edit'"></span>
                 </button>
@@ -244,6 +260,12 @@
         <p>No presets available.</p>
     </div>
 
+    <!-- Pin banner -->
+    <div x-show="isPinned" x-cloak class="alert alert-warning d-flex align-items-center mb-3 py-2">
+        <i class="bi bi-lock-fill me-2"></i>
+        <span>Policy pinned at v<span x-text="pin?.pinned_version"></span>. Preset application disabled.</span>
+    </div>
+
     <!-- Presets grid -->
     <div x-show="!loading && !error && $notEmpty(presets)" x-cloak class="row g-3">
         <template x-for="p in presets" :key="p.name">
@@ -254,7 +276,7 @@
                         <p class="text-muted small mb-0" x-text="p.description || ''"></p>
                     </div>
                     <div class="card-footer border-0 pt-0 bg-transparent">
-                        <button class="btn btn-outline-success btn-sm" @click="apply(p.name)">
+                        <button class="btn btn-outline-success btn-sm" @click="apply(p.name)" :disabled="isPinned">
                             <i class="bi bi-plus me-1"></i>Apply
                         </button>
                     </div>

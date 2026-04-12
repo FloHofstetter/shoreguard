@@ -24,9 +24,27 @@
     <!-- Approvals table -->
     <template x-if="!loading && !error && $notEmpty(chunks)">
         <div>
+            <!-- Security-flagged warning banner -->
+            <div x-show="securityFlaggedPendingCount > 0" x-cloak class="alert alert-warning d-flex align-items-center py-2 mb-3">
+                <i class="bi bi-shield-exclamation me-2"></i>
+                <span x-text="securityFlaggedPendingCount + ' security-flagged chunk(s) require review'"></span>
+                <button class="btn btn-sm btn-outline-warning ms-auto" @click="filterSecurityFlagged = true">
+                    Show only flagged
+                </button>
+            </div>
+
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <div>
+                <div class="d-flex align-items-center gap-2">
                     <span class="text-muted" x-text="pendingCount + ' pending of ' + chunks.length + ' total'"></span>
+                    <!-- Security-flagged filter chip -->
+                    <button class="btn btn-sm"
+                            :class="filterSecurityFlagged ? 'btn-warning' : 'btn-outline-secondary'"
+                            @click="filterSecurityFlagged = !filterSecurityFlagged"
+                            x-show="chunks.some(c => c.security_notes && c.security_notes.trim())"
+                            x-cloak>
+                        <i class="bi bi-shield-exclamation me-1"></i>Security-flagged
+                        <span class="badge bg-dark ms-1" x-text="securityFlaggedPendingCount"></span>
+                    </button>
                 </div>
                 <div class="btn-group btn-group-sm">
                     <button class="btn btn-outline-secondary" @click="showHistory()" title="History">
@@ -76,6 +94,10 @@
                                 <!-- Main row -->
                                 <td>
                                     <span class="badge" :class="SG.badges.approval[chunk.status] || 'text-bg-secondary'" x-text="chunk.status"></span>
+                                    <span x-show="chunk.security_notes && chunk.security_notes.trim()" x-cloak
+                                          class="badge text-bg-danger ms-1" title="Security flagged">
+                                        <i class="bi bi-shield-exclamation"></i>
+                                    </span>
                                 </td>
                                 <td @click="hasDetail(chunk) && toggleDetail(chunk.id)" class="sg-cursor-pointer" :class="hasDetail(chunk) ? 'table-clickable' : ''">
                                     <strong x-text="chunk.rule_name"></strong>

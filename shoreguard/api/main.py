@@ -148,6 +148,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     bypass_mod.bypass_service = bypass_mod.BypassService()
     logger.info("Bypass detection service initialised")
 
+    # ── Policy pin service (M18) ─────────────────────────────────────
+    import shoreguard.services.policy_pin as pin_mod
+
+    pin_mod.policy_pin_service = pin_mod.PolicyPinService(session_factory)
+    logger.info("Policy pin service initialised")
+
     # ── Denial context cache (M16) ─────────────────────────────────────
     import shoreguard.services.denial_context as dc_mod
 

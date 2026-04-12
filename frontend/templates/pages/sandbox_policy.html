@@ -23,11 +23,32 @@
     <!-- Policy content -->
     <template x-if="!loading && !error && policy">
         <div>
+            <!-- Pin banner -->
+            <div x-show="isPinned" x-cloak class="alert alert-warning d-flex align-items-center mb-3">
+                <i class="bi bi-lock-fill me-2 fs-5"></i>
+                <div class="flex-grow-1">
+                    <strong>Policy pinned</strong> at version <span x-text="pin?.pinned_version"></span>
+                    by <span x-text="pin?.pinned_by"></span>.
+                    <span x-show="pin?.reason" class="ms-1" x-text="pin?.reason"></span>
+                    <span x-show="pin?.expires_at" class="ms-1 text-muted small">
+                        (expires <span x-text="pin?.expires_at ? new Date(pin.expires_at).toLocaleString() : ''"></span>)
+                    </span>
+                </div>
+                <button class="btn btn-sm btn-outline-warning ms-2" @click="unpinPolicy()">
+                    <i class="bi bi-unlock me-1"></i>Unpin
+                </button>
+            </div>
+
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <span class="text-muted">Policy v<span x-text="policy.version || '?'"></span></span>
-                <button class="btn btn-outline-secondary btn-sm" @click="showRevisions()">
-                    <i class="bi bi-clock-history me-1"></i>Revisions
-                </button>
+                <div class="d-flex gap-2">
+                    <button x-show="!isPinned" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#pinModal">
+                        <i class="bi bi-lock me-1"></i>Pin
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" @click="showRevisions()">
+                        <i class="bi bi-clock-history me-1"></i>Revisions
+                    </button>
+                </div>
             </div>
 
             <div class="row g-3 mb-4">
@@ -97,6 +118,38 @@
             </div>
         </div>
     </template>
+
+    <!-- Pin Policy Modal -->
+    <div class="modal fade" id="pinModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content sg-modal-themed">
+                <div class="modal-header border-bottom">
+                    <h5 class="modal-title"><i class="bi bi-lock me-2"></i>Pin Policy</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">
+                        Pinning locks the current policy version. All modifications (rule edits, approvals, presets) will be blocked until unpinned.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label">Reason <span class="text-muted">(optional)</span></label>
+                        <input type="text" class="form-control" x-model="pinReason" placeholder="e.g. deploy freeze, audit window">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Expires at <span class="text-muted">(optional)</span></label>
+                        <input type="datetime-local" class="form-control" x-model="pinExpiresAt">
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-warning" @click="pinPolicy()" :disabled="pinning">
+                        <span x-show="pinning" class="spinner-border spinner-border-sm me-1"></span>
+                        <i x-show="!pinning" class="bi bi-lock me-1"></i>Pin Policy
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 

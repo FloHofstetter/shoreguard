@@ -9,17 +9,21 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+import shoreguard.services.policy_pin as _pin_mod
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.api.schemas import (
     PolicyAnalysisRequest,
     PolicyAnalysisResponse,
     PolicyDiffResponse,
+    PolicyPinRequest,
+    PolicyPinResponse,
     PolicyResponse,
     PresetSummaryResponse,
 )
 from shoreguard.api.validation import check_write_rate_limit
 from shoreguard.client import ShoreGuardClient
+from shoreguard.exceptions import PolicyLockedError
 from shoreguard.presets import get_preset as _get_preset
 from shoreguard.presets import list_presets as _list_presets
 from shoreguard.services.audit import audit_log
@@ -29,6 +33,25 @@ from shoreguard.services.webhooks import fire_webhook
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _check_policy_pin(request: Request, sandbox_name: str) -> None:
+    """Raise HTTP 423 if the sandbox's policy is pinned.
+
+    Args:
+        request: Incoming HTTP request (for gateway name).
+        sandbox_name: Sandbox to check.
+
+    Raises:
+        HTTPException: 423 Locked if an active pin exists.
+    """
+    svc = _pin_mod.policy_pin_service
+    if svc is None:
+        return
+    try:
+        svc.check_pin(get_gateway_name(request), sandbox_name)
+    except PolicyLockedError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
 
 
 def _get_policy_service(client: ShoreGuardClient = Depends(get_client)) -> PolicyService:
@@ -208,6 +231,7 @@ async def update_policy(
     Returns:
         dict[str, Any]: Updated policy record.
     """
+    _check_policy_pin(request, name)
     result = await asyncio.to_thread(svc.update, name, body)
     logger.info(
         "Policy updated (sandbox=%s, actor=%s)",
@@ -296,6 +320,7 @@ async def add_network_rule(
         dict[str, Any]: Updated policy after rule addition.
     """
     check_write_rate_limit(request)
+    _check_policy_pin(request, name)
     result = await asyncio.to_thread(
         svc.add_network_rule,
         name,
@@ -340,6 +365,7 @@ async def delete_network_rule(
     Returns:
         dict[str, Any]: Updated policy after rule deletion.
     """
+    _check_policy_pin(request, name)
     result = await asyncio.to_thread(svc.delete_network_rule, name, key)
     logger.info(
         "Network rule deleted (sandbox=%s, key=%s, actor=%s)",
@@ -384,6 +410,7 @@ async def add_filesystem_path(
         dict[str, Any]: Updated policy after path addition.
     """
     check_write_rate_limit(request)
+    _check_policy_pin(request, name)
     result = await asyncio.to_thread(
         svc.add_filesystem_path,
         name,
@@ -428,6 +455,7 @@ async def delete_filesystem_path(
     Returns:
         dict[str, Any]: Updated policy after path deletion.
     """
+    _check_policy_pin(request, name)
     result = await asyncio.to_thread(svc.delete_filesystem_path, name, path)
     logger.info(
         "Filesystem path deleted (sandbox=%s, actor=%s)",
@@ -471,6 +499,7 @@ async def update_process_policy(
         dict[str, Any]: Updated policy record.
     """
     check_write_rate_limit(request)
+    _check_policy_pin(request, name)
     result = await asyncio.to_thread(
         svc.update_process_policy,
         name,
@@ -491,6 +520,141 @@ async def update_process_policy(
         gateway=get_gateway_name(request),
     )
     return result
+
+
+# ─── Policy Pinning (M18) ────────────────────────────────────────────────────
+
+
+@router.get("/sandboxes/{name}/policy/pin", response_model=PolicyPinResponse)
+async def get_policy_pin(
+    name: str,
+    request: Request,
+) -> dict[str, Any]:
+    """Get the active policy pin for a sandbox.
+
+    Args:
+        name: Sandbox name.
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: Pin data.
+
+    Raises:
+        HTTPException: 404 if no active pin exists.
+    """
+    if _pin_mod.policy_pin_service is None:
+        raise HTTPException(status_code=503, detail="Policy pin service not initialised")
+    pin = _pin_mod.policy_pin_service.get_pin(get_gateway_name(request), name)
+    if pin is None:
+        raise HTTPException(status_code=404, detail="No active pin for this sandbox")
+    return pin
+
+
+@router.post(
+    "/sandboxes/{name}/policy/pin",
+    response_model=PolicyPinResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
+async def pin_policy(
+    name: str,
+    request: Request,
+    body: PolicyPinRequest | None = None,
+    svc: PolicyService = Depends(_get_policy_service),
+) -> dict[str, Any]:
+    """Pin the sandbox's current policy version.
+
+    Reads the active policy version from the gateway and locks it.
+    While pinned, all policy updates and draft approvals are blocked.
+
+    Args:
+        name: Sandbox name.
+        request: Incoming HTTP request.
+        body: Optional pin metadata (reason, expiry).
+        svc: Injected policy service.
+
+    Returns:
+        dict[str, Any]: Created pin data.
+
+    Raises:
+        HTTPException: 503 if service not initialised, 400 if version unreadable.
+    """
+    import datetime
+
+    if _pin_mod.policy_pin_service is None:
+        raise HTTPException(status_code=503, detail="Policy pin service not initialised")
+
+    # Read current version from gateway
+    current = await asyncio.to_thread(svc.get, name)
+    version = current.get("active_version")
+    if version is None:
+        raise HTTPException(status_code=400, detail="Could not read active policy version")
+
+    actor = get_actor(request)
+    gw = get_gateway_name(request)
+
+    expires_at = None
+    reason = None
+    if body:
+        reason = body.reason
+        if body.expires_at:
+            expires_at = datetime.datetime.fromisoformat(body.expires_at)
+
+    pin = _pin_mod.policy_pin_service.pin(
+        gw, name, version, actor, reason=reason, expires_at=expires_at
+    )
+    logger.info("Policy pinned (sandbox=%s, version=%d, actor=%s)", name, version, actor)
+    await audit_log(
+        request,
+        "policy.pinned",
+        "policy",
+        name,
+        gateway=gw,
+        detail={"pinned_version": version, "reason": reason},
+    )
+    await fire_webhook(
+        "policy.pinned",
+        {"sandbox": name, "gateway": gw, "version": version, "actor": actor},
+    )
+    return pin
+
+
+@router.delete(
+    "/sandboxes/{name}/policy/pin",
+    status_code=204,
+    dependencies=[Depends(require_role("operator"))],
+)
+async def unpin_policy(
+    name: str,
+    request: Request,
+) -> None:
+    """Remove the policy pin for a sandbox.
+
+    Args:
+        name: Sandbox name.
+        request: Incoming HTTP request.
+
+    Raises:
+        HTTPException: 404 if no active pin exists.
+    """
+    if _pin_mod.policy_pin_service is None:
+        raise HTTPException(status_code=503, detail="Policy pin service not initialised")
+    gw = get_gateway_name(request)
+    removed = _pin_mod.policy_pin_service.unpin(gw, name)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No active pin for this sandbox")
+    actor = get_actor(request)
+    logger.info("Policy unpinned (sandbox=%s, actor=%s)", name, actor)
+    await audit_log(
+        request,
+        "policy.unpinned",
+        "policy",
+        name,
+        gateway=gw,
+    )
+    await fire_webhook(
+        "policy.unpinned",
+        {"sandbox": name, "gateway": gw, "actor": actor},
+    )
 
 
 # ─── Presets (global, not gateway-scoped) ────────────────────────────────────
@@ -555,6 +719,7 @@ async def apply_preset(
     Returns:
         dict[str, Any]: Updated policy after preset application.
     """
+    _check_policy_pin(request, name)
     result = await asyncio.to_thread(svc.apply_preset, name, preset_name)
     logger.info(
         "Preset applied (sandbox=%s, preset=%s, actor=%s)",

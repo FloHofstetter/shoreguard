@@ -16,6 +16,10 @@ const _HISTORY_EVENT_TYPES = [
     { type: 'cleared', label: 'Cleared', badge: 'text-bg-secondary' },
 ];
 
+function _isSecurityFlagged(chunk) {
+    return !!(chunk.security_notes && chunk.security_notes.trim());
+}
+
 function approvalsPage(name) {
     return {
         sandboxName: name,
@@ -26,6 +30,7 @@ function approvalsPage(name) {
         lastAnalyzedAtMs: 0,
         expandedChunks: {},
         sortPersistentFirst: false,
+        filterSecurityFlagged: false,
 
         // After a Logs → Approvals navigation via hash fragment
         // (#binary=X&host=Y), the matching chunk is scrolled into view and
@@ -36,9 +41,17 @@ function approvalsPage(name) {
             return this.chunks.filter(c => c.status === 'pending').length;
         },
 
+        get securityFlaggedPendingCount() {
+            return this.chunks.filter(c => c.status === 'pending' && _isSecurityFlagged(c)).length;
+        },
+
         get sortedChunks() {
-            if (!this.sortPersistentFirst) return this.chunks;
-            return [...this.chunks].sort((a, b) => {
+            let result = this.chunks;
+            if (this.filterSecurityFlagged) {
+                result = result.filter(c => _isSecurityFlagged(c));
+            }
+            if (!this.sortPersistentFirst) return result;
+            return [...result].sort((a, b) => {
                 const ap = a.denial_context && a.denial_context.persistent ? 1 : 0;
                 const bp = b.denial_context && b.denial_context.persistent ? 1 : 0;
                 return bp - ap;
@@ -217,22 +230,95 @@ function approvalsPage(name) {
         },
 
         async approveAll() {
-            const confirmed = await showConfirm(
-                'Approve all pending recommendations?',
-                { icon: 'check-all', iconColor: 'text-success', btnClass: 'btn-success', btnLabel: 'Approve All' }
-            );
-            if (!confirmed) return;
+            const flaggedCount = this.securityFlaggedPendingCount;
+            let includeSecurityFlagged = false;
+
+            if (flaggedCount > 0) {
+                // Show the security-flagged confirm modal
+                includeSecurityFlagged = await this._showApproveAllConfirm(flaggedCount);
+                if (includeSecurityFlagged === null) return; // cancelled
+            } else {
+                const confirmed = await showConfirm(
+                    'Approve all pending recommendations?',
+                    { icon: 'check-all', iconColor: 'text-success', btnClass: 'btn-success', btnLabel: 'Approve All' }
+                );
+                if (!confirmed) return;
+            }
+
             try {
                 await apiFetch(`${API}/sandboxes/${name}/approvals/approve-all`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ include_security_flagged: false }),
+                    body: JSON.stringify({ include_security_flagged: includeSecurityFlagged }),
                 });
-                showToast('All pending chunks approved.', 'success');
+                const msg = includeSecurityFlagged
+                    ? 'All pending chunks approved (including security-flagged).'
+                    : 'All pending chunks approved (security-flagged excluded).';
+                showToast(msg, 'success');
                 await this.load();
             } catch (e) {
                 showToast(`Approve all failed: ${e.message}`, 'danger');
             }
+        },
+
+        /**
+         * Show a confirm dialog listing security-flagged chunks.
+         * Returns true (include flagged), false (exclude flagged), or null (cancelled).
+         */
+        _showApproveAllConfirm(flaggedCount) {
+            return new Promise(resolve => {
+                const flagged = this.chunks.filter(c => c.status === 'pending' && _isSecurityFlagged(c));
+                const listHtml = flagged.map(c =>
+                    `<li class="mb-1"><strong>${escapeHtml(c.rule_name)}</strong>: <span class="text-danger small">${escapeHtml(c.security_notes)}</span></li>`
+                ).join('');
+
+                const existing = document.getElementById('approveAllConfirmModal');
+                if (existing) existing.remove();
+
+                document.body.insertAdjacentHTML('beforeend', `
+                    <div class="modal fade" id="approveAllConfirmModal" tabindex="-1">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content sg-modal-themed">
+                                <div class="modal-header border-bottom">
+                                    <h5 class="modal-title"><i class="bi bi-shield-exclamation text-warning me-2"></i>Security-Flagged Chunks</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="mb-2">${flaggedCount} security-flagged chunk(s) require review:</p>
+                                    <ul class="small mb-3">${listHtml}</ul>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="includeSecFlagged">
+                                        <label class="form-check-label" for="includeSecFlagged">
+                                            Include security-flagged chunks in approval
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="modal-footer border-0">
+                                    <button class="btn btn-outline-secondary" data-bs-dismiss="modal" id="approveAllCancel">Cancel</button>
+                                    <button class="btn btn-success" id="approveAllConfirm">
+                                        <i class="bi bi-check-all me-1"></i>Approve All
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `);
+
+                const modal = new bootstrap.Modal(document.getElementById('approveAllConfirmModal'));
+                modal.show();
+
+                let resolved = false;
+                document.getElementById('approveAllConfirm').addEventListener('click', () => {
+                    resolved = true;
+                    const include = document.getElementById('includeSecFlagged').checked;
+                    modal.hide();
+                    resolve(include);
+                });
+                document.getElementById('approveAllConfirmModal').addEventListener('hidden.bs.modal', () => {
+                    document.getElementById('approveAllConfirmModal')?.remove();
+                    if (!resolved) resolve(null);
+                });
+            });
         },
 
         async clearAll() {

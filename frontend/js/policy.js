@@ -34,6 +34,13 @@ function policyPage(name) {
         networkCount: 0,
         fsCount: 0,
         procCount: 0,
+        // Policy pin state (M18)
+        pin: null,
+        pinning: false,
+        pinReason: '',
+        pinExpiresAt: '',
+
+        get isPinned() { return this.pin !== null; },
 
         async init() {
             await this.load();
@@ -43,18 +50,68 @@ function policyPage(name) {
             this.loading = true;
             this.error = '';
             try {
-                const data = await apiFetch(`${API}/sandboxes/${name}/policy`);
-                this.policy = data.policy;
+                const [policyData, pinData] = await Promise.allSettled([
+                    apiFetch(`${API}/sandboxes/${name}/policy`),
+                    apiFetch(`${API}/sandboxes/${name}/policy/pin`),
+                ]);
 
-                if (this.policy) {
-                    this.networkCount = Object.keys(this.policy.network_policies || {}).length;
-                    this.fsCount = countFilesystemPaths(this.policy.filesystem);
-                    this.procCount = countProcessRows(this.policy);
+                if (policyData.status === 'fulfilled') {
+                    this.policy = policyData.value.policy;
+                    if (this.policy) {
+                        this.networkCount = Object.keys(this.policy.network_policies || {}).length;
+                        this.fsCount = countFilesystemPaths(this.policy.filesystem);
+                        this.procCount = countProcessRows(this.policy);
+                    }
+                } else {
+                    this.error = policyData.reason?.message || 'Failed to load policy';
                 }
+
+                // Pin: 404 = not pinned (expected), anything else is an error
+                this.pin = pinData.status === 'fulfilled' ? pinData.value : null;
             } catch (e) {
                 this.error = e.message;
             } finally {
                 this.loading = false;
+            }
+        },
+
+        async pinPolicy() {
+            this.pinning = true;
+            try {
+                const body = {};
+                if (this.pinReason.trim()) body.reason = this.pinReason.trim();
+                if (this.pinExpiresAt.trim()) body.expires_at = new Date(this.pinExpiresAt).toISOString();
+
+                this.pin = await apiFetch(`${API}/sandboxes/${name}/policy/pin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                showToast('Policy pinned.', 'success');
+                this.pinReason = '';
+                this.pinExpiresAt = '';
+                // Close the modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('pinModal'));
+                if (modal) modal.hide();
+            } catch (e) {
+                showToast(`Failed to pin: ${e.message}`, 'danger');
+            } finally {
+                this.pinning = false;
+            }
+        },
+
+        async unpinPolicy() {
+            const confirmed = await showConfirm(
+                'Remove the policy pin? This will allow policy modifications again.',
+                { icon: 'unlock', iconColor: 'text-warning', btnClass: 'btn-warning', btnLabel: 'Unpin' }
+            );
+            if (!confirmed) return;
+            try {
+                await apiFetch(`${API}/sandboxes/${name}/policy/pin`, { method: 'DELETE' });
+                this.pin = null;
+                showToast('Policy unpinned.', 'success');
+            } catch (e) {
+                showToast(`Failed to unpin: ${e.message}`, 'danger');
             }
         },
 
@@ -83,6 +140,8 @@ function networkPoliciesPage(name) {
         loading: true,
         error: '',
         rules: [],
+        pin: null,
+        get isPinned() { return this.pin !== null; },
 
         async init() {
             await this.load();
@@ -92,17 +151,25 @@ function networkPoliciesPage(name) {
             this.loading = true;
             this.error = '';
             try {
-                const data = await apiFetch(`${API}/sandboxes/${name}/policy`);
-                const networkRules = data.policy?.network_policies || {};
-                this.rules = Object.entries(networkRules).map(([key, rule]) => ({
-                    key,
-                    name: rule.name || key,
-                    showKey: key !== rule.name && key !== (rule.name || '').replace(/-/g, '_'),
-                    endpoints: rule.endpoints || [],
-                    binaries: rule.binaries || [],
-                    topHosts: (rule.endpoints || []).slice(0, 2).map(ep => ep.host).join(', '),
-                    moreCount: (rule.endpoints || []).length > 2 ? ` +${(rule.endpoints || []).length - 2}` : '',
-                }));
+                const [data, pinData] = await Promise.allSettled([
+                    apiFetch(`${API}/sandboxes/${name}/policy`),
+                    apiFetch(`${API}/sandboxes/${name}/policy/pin`),
+                ]);
+                if (data.status === 'fulfilled') {
+                    const networkRules = data.value.policy?.network_policies || {};
+                    this.rules = Object.entries(networkRules).map(([key, rule]) => ({
+                        key,
+                        name: rule.name || key,
+                        showKey: key !== rule.name && key !== (rule.name || '').replace(/-/g, '_'),
+                        endpoints: rule.endpoints || [],
+                        binaries: rule.binaries || [],
+                        topHosts: (rule.endpoints || []).slice(0, 2).map(ep => ep.host).join(', '),
+                        moreCount: (rule.endpoints || []).length > 2 ? ` +${(rule.endpoints || []).length - 2}` : '',
+                    }));
+                } else {
+                    this.error = data.reason?.message || 'Failed to load policy';
+                }
+                this.pin = pinData.status === 'fulfilled' ? pinData.value : null;
             } catch (e) {
                 this.error = e.message;
             } finally {
@@ -124,12 +191,15 @@ function filesystemPolicyPage(name) {
         showAddForm: false,
         newPath: '',
         newAccess: 'ro',
+        pin: null,
+        get isPinned() { return this.pin !== null; },
 
         async init() {
             await this.load();
         },
 
         openAddForm() {
+            if (this.isPinned) { showToast('Policy is pinned. Unpin to edit.', 'warning'); return; }
             this.showAddForm = true;
             this.$nextTick(() => this.$refs.newPathInput?.focus());
         },
@@ -138,17 +208,25 @@ function filesystemPolicyPage(name) {
             this.loading = true;
             this.error = '';
             try {
-                const data = await apiFetch(`${API}/sandboxes/${name}/policy`);
-                const fs = data.policy?.filesystem;
-                this.rows = [];
-                if (fs) {
-                    for (const path of (fs.read_only || [])) {
-                        this.rows.push({ path, access: 'ro', label: 'Read Only', badge: 'text-bg-warning' });
+                const [policyRes, pinRes] = await Promise.allSettled([
+                    apiFetch(`${API}/sandboxes/${name}/policy`),
+                    apiFetch(`${API}/sandboxes/${name}/policy/pin`),
+                ]);
+                if (policyRes.status === 'fulfilled') {
+                    const fs = policyRes.value.policy?.filesystem;
+                    this.rows = [];
+                    if (fs) {
+                        for (const path of (fs.read_only || [])) {
+                            this.rows.push({ path, access: 'ro', label: 'Read Only', badge: 'text-bg-warning' });
+                        }
+                        for (const path of (fs.read_write || [])) {
+                            this.rows.push({ path, access: 'rw', label: 'Read / Write', badge: 'text-bg-success' });
+                        }
                     }
-                    for (const path of (fs.read_write || [])) {
-                        this.rows.push({ path, access: 'rw', label: 'Read / Write', badge: 'text-bg-success' });
-                    }
+                } else {
+                    this.error = policyRes.reason?.message || 'Failed to load policy';
                 }
+                this.pin = pinRes.status === 'fulfilled' ? pinRes.value : null;
             } catch (e) {
                 this.error = e.message;
             } finally {
@@ -205,6 +283,8 @@ function processPolicyPage(name) {
         runAsUser: '',
         runAsGroup: '',
         landlockCompat: '',
+        pin: null,
+        get isPinned() { return this.pin !== null; },
 
         async init() {
             await this.load();
@@ -214,11 +294,19 @@ function processPolicyPage(name) {
             this.loading = true;
             this.error = '';
             try {
-                const data = await apiFetch(`${API}/sandboxes/${name}/policy`);
-                const policy = data.policy || {};
-                this.runAsUser = policy.process?.run_as_user || '';
-                this.runAsGroup = policy.process?.run_as_group || '';
-                this.landlockCompat = policy.landlock?.compatibility || '';
+                const [policyRes, pinRes] = await Promise.allSettled([
+                    apiFetch(`${API}/sandboxes/${name}/policy`),
+                    apiFetch(`${API}/sandboxes/${name}/policy/pin`),
+                ]);
+                if (policyRes.status === 'fulfilled') {
+                    const policy = policyRes.value.policy || {};
+                    this.runAsUser = policy.process?.run_as_user || '';
+                    this.runAsGroup = policy.process?.run_as_group || '';
+                    this.landlockCompat = policy.landlock?.compatibility || '';
+                } else {
+                    this.error = policyRes.reason?.message || 'Failed to load policy';
+                }
+                this.pin = pinRes.status === 'fulfilled' ? pinRes.value : null;
             } catch (e) {
                 this.error = e.message;
             } finally {
@@ -256,6 +344,8 @@ function presetsPage(sandboxName) {
         loading: true,
         error: '',
         presets: [],
+        pin: null,
+        get isPinned() { return this.pin !== null; },
 
         async init() {
             await this.load();
@@ -265,7 +355,15 @@ function presetsPage(sandboxName) {
             this.loading = true;
             this.error = '';
             try {
-                this.presets = await apiFetch(`${API_GLOBAL}/policies/presets`);
+                const [presetsRes, pinRes] = await Promise.allSettled([
+                    apiFetch(`${API_GLOBAL}/policies/presets`),
+                    apiFetch(`${API}/sandboxes/${sandboxName}/policy/pin`),
+                ]);
+                this.presets = presetsRes.status === 'fulfilled' ? presetsRes.value : [];
+                this.pin = pinRes.status === 'fulfilled' ? pinRes.value : null;
+                if (presetsRes.status === 'rejected') {
+                    this.error = presetsRes.reason?.message || 'Failed to load presets';
+                }
             } catch (e) {
                 this.error = e.message;
             } finally {
@@ -274,6 +372,7 @@ function presetsPage(sandboxName) {
         },
 
         async apply(presetName) {
+            if (this.isPinned) { showToast('Policy is pinned. Unpin to apply presets.', 'warning'); return; }
             const confirmed = await showConfirm(
                 `Apply "${presetName}" preset to ${this.sandboxName}?`,
                 { icon: 'shield-plus', iconColor: 'text-success', btnClass: 'btn-success', btnLabel: 'Apply' }

@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+import shoreguard.services.policy_pin as _pin_mod
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.api.schemas import (
@@ -20,6 +21,7 @@ from shoreguard.api.schemas import (
     MessageResponse,
 )
 from shoreguard.client import ShoreGuardClient
+from shoreguard.exceptions import PolicyLockedError
 from shoreguard.services.approvals import ApprovalService
 from shoreguard.services.audit import audit_log
 from shoreguard.services.webhooks import fire_webhook
@@ -27,6 +29,25 @@ from shoreguard.services.webhooks import fire_webhook
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _check_policy_pin(request: Request, sandbox_name: str) -> None:
+    """Raise HTTP 423 if the sandbox's policy is pinned.
+
+    Args:
+        request: Incoming HTTP request (for gateway name).
+        sandbox_name: Sandbox to check.
+
+    Raises:
+        HTTPException: 423 Locked if an active pin exists.
+    """
+    svc = _pin_mod.policy_pin_service
+    if svc is None:
+        return
+    try:
+        svc.check_pin(get_gateway_name(request), sandbox_name)
+    except PolicyLockedError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
 
 
 _POLICY_POLL_INTERVAL = 1  # seconds
@@ -171,6 +192,7 @@ async def approve_chunk(
     Returns:
         dict[str, Any]: Updated chunk status.
     """
+    _check_policy_pin(request, name)
     actor = get_actor(request)
     logger.info("Chunk approved (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
     result = await asyncio.to_thread(svc.approve, name, chunk_id)
@@ -272,6 +294,7 @@ async def approve_all(
     Returns:
         dict[str, Any]: Bulk approval result with counts.
     """
+    _check_policy_pin(request, name)
     actor = get_actor(request)
     logger.info("All chunks approved (sandbox=%s, actor=%s)", name, actor)
     include_flagged = body.include_security_flagged if body else False
