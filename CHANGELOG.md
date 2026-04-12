@@ -5,7 +5,7 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.30.2] — unreleased
+## [0.30.2] — 2026-04-13
 
 ### Added (M24)
 
