@@ -1,5 +1,9 @@
 # Deployment
 
+!!! tip "Kubernetes?"
+    For production Kubernetes deployments, see the
+    [Production Kubernetes runbook](../deploy/production-k8s.md).
+
 ## Development mode
 
 By default, ShoreGuard starts with auto-reload enabled — the server restarts

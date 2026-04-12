@@ -107,6 +107,7 @@ nav:
       - Service Principals: admin/service-principals.md
       - Gateway-Scoped Roles: admin/gateway-roles.md
       - Deployment: admin/deployment.md
+      - Production Kubernetes: deploy/production-k8s.md
       - Local Mode: admin/local-mode.md
       - Database Migrations: admin/database-migrations.md
       - Rollback Runbook: admin/rollback.md

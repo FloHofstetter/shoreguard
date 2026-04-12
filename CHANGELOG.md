@@ -5,7 +5,7 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.30.1] — unreleased (M10 + M11 + M12 — helm chart distribution + federation story)
+## [0.30.1] — 2026-04-12
 
 ### Changed
 
@@ -66,6 +66,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   test asserting empty `label.env` must fail rendering. Job is named
   and scoped separately from the supported `helm-lint` job so fixture
   status never gets mistaken for production chart status.
+
+### Added (docs)
+
+- **Production Kubernetes deployment runbook at
+  `docs/deploy/production-k8s.md`.** End-to-end walkable guide for ops
+  teams deploying ShoreGuard alongside NVIDIA's upstream OpenShell Helm
+  chart on a real k8s cluster. Covers prerequisites (CNI with
+  NetworkPolicy enforcement, cert-manager, ingress-nginx), BYO Secret
+  pattern, `helm install` with the production preset and all required
+  overrides, gateway registration with mTLS material extracted from
+  NVIDIA's chart-created Secrets, a post-deploy verification checklist,
+  and day-2 operations (multi-replica scaling, secret rotation). Cross-linked
+  from `docs/admin/deployment.md`, `charts/shoreguard/README.md`, and
+  the MkDocs nav.
 
 ### Added (chart)
 

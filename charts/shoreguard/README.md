@@ -11,6 +11,9 @@ Helm chart for deploying ShoreGuard on Kubernetes. Ships two usage modes:
 The chart has been exercised against kind v1.32 with calico (for
 NetworkPolicy enforcement), cert-manager v1.16, and ingress-nginx.
 
+For a full production walkthrough including OpenShell federation, see
+[Production Kubernetes](../../docs/deploy/production-k8s.md).
+
 ## Quickstart (kind, default values)
 
 ```bash
