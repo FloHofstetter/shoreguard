@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.30.2] — unreleased
 
+### Added (M24)
+
+- **Terraform Provider v0.30.0.** Released separately at
+  [`FloHofstetter/terraform-provider-shoreguard`](https://github.com/FloHofstetter/terraform-provider-shoreguard).
+  Provider versioning now mirrors the ShoreGuard server (jump from
+  v0.1.0 straight to v0.30.0) so operators can pin provider + server
+  together. New resources:
+  - `shoreguard_group`, `shoreguard_group_membership`,
+    `shoreguard_group_gateway_role` — RBAC as code.
+  - `shoreguard_approval_workflow` — M19 quorum + escalation config.
+  - `shoreguard_policy_pin` — M18 pin (locks active policy version,
+    server returns HTTP 423 on any subsequent edit or approval while
+    the pin is active).
+  - `shoreguard_sandbox_boot_hook` — M22 pre/post-create hooks.
+- **Breaking change.** `shoreguard_sandbox_policy` has been removed.
+  Policy *content* belongs in the M23 GitOps flow
+  (`shoreguard policy export/apply`), not Terraform state which would
+  drift on every denial flow. Migration snippet in the provider
+  CHANGELOG: `terraform state rm shoreguard_sandbox_policy.<name>`
+  followed by `shoreguard policy export …`.
+- **Build.** Thin REST wrapper built on
+  `terraform-plugin-framework` v1.19 (Go 1.25). Acceptance tests are
+  skeletons that skip without `SHOREGUARD_BASE_URL` + `GATEWAY_NAME`.
+
 ### Added (M23)
 
 - **GitOps Policy Sync.** Declarative YAML policy management for sandboxes,
@@ -170,7 +194,156 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     deploying. A future milestone can add a gateway-pull path once the
     upstream `feat/237-sbom-tooling` branch ships.
 
-### Fixed
+### Added (M20)
+
+- **RPC Parity.** `ShoreGuardClient` grew two new thin wrappers around
+  OpenShell RPCs that were previously unreachable from the UI: a
+  `get_inference_bundle()` that returns the fully resolved inference
+  config (cluster default + route list + per-route credential state)
+  and `SandboxManager.get_config()` / `get_provider_environment()` for
+  inspecting live sandbox config + provider env projection. API keys
+  are redacted to `has_api_key: bool` at the wrapper boundary so the
+  UI can render a shield badge without handling secrets.
+- **New endpoint.** `GET /api/gateways/{gw}/inference/bundle` (viewer,
+  audit-logged). Surfaces the resolved bundle as a table on the
+  gateway detail page with a per-route credential shield badge.
+- **Push-based policy-status wait.** `approve_chunk` / `approve_all`
+  no longer busy-poll via `_poll_policy_loaded`. New
+  `PolicyStatusBroker` (`shoreguard/services/policy_status.py`) opens
+  a short-lived `WatchSandbox` stream in a worker thread, sets an
+  `asyncio.Event` on every `draft_policy_update`, confirms the new
+  version via `GetSandboxPolicyStatus`, and falls back to a 2 s slow
+  poll if the stream fails. The stream is always cancelled cleanly
+  on success, timeout, or cancellation. Browser receives the same
+  updates over the existing `/ws` channel via a new
+  `sg:policy-status-update` DOM event, so any open page reacts
+  without a hard refresh. The persistent-first sort toggle state is
+  now persisted per browser via `localStorage`.
+- **Tests.** 8 new tests covering broker happy-path, wake on draft
+  update, timeout fallback, cancel cleanup, upstream watch failure,
+  and `api_key → has_api_key` redaction.
+
+### Added (M19)
+
+- **Multi-Stage Approval Workflows (Quorum).** Per-sandbox approval
+  workflows let teams require multiple sign-offs before a policy
+  change takes effect. New models `ApprovalWorkflow` +
+  `ApprovalDecision` (Alembic 014) and
+  `ApprovalWorkflowService` with `upsert`, `delete`, `record_decision`,
+  `check_quorum`, and reactive `escalation` on each vote (no
+  background scheduler — escalation fires on the next vote after the
+  deadline).
+- **Endpoints.** `GET|PUT|DELETE
+  /api/gateways/{gw}/sandboxes/{name}/approval-workflow` (admin for
+  writes, viewer for reads). `GET
+  /api/gateways/{gw}/approvals/{chunk_id}/decisions` returns the
+  running tally + voter list. `POST .../approve` under an active
+  workflow returns HTTP 202 `vote_recorded` until quorum is reached,
+  at which point the upstream `ApproveChunk` fires exactly once. A
+  single reject is unanimous and kills the proposal immediately.
+  `POST .../approve-all` is admin-only when a workflow is active and
+  returns HTTP 409 to non-admins (emergency override path).
+- **Webhook events.** `approval.vote_cast`, `approval.quorum_met`,
+  `approval.escalated` — all carry the workflow ID, sandbox, voter,
+  and current tally.
+- **Frontend.** Workflow banner + vote-count badge + voter list on
+  the approval detail modal, "Vote to Approve" button (disabled after
+  the current user has voted), and an admin-only workflow config
+  modal on the sandbox detail page.
+- **Tests.** 37 new service + API tests covering upsert, quorum,
+  rejection, escalation, admin override, and webhook firing paths.
+
+### Added (M18)
+
+- **Policy Pinning.** Operators can pin the active policy version of
+  a sandbox to prevent accidental edits during an incident or change
+  freeze. New `PolicyPin` model (Alembic 013) + `PolicyPinService`
+  with `pin`, `unpin`, `get`, `check`, and auto-expiry. All seven
+  policy-write endpoints (`PUT /policy`, network/filesystem/process
+  CRUD, preset apply) plus `POST .../approve` and `.../approve-all`
+  now raise `PolicyLockedError` → HTTP 423 when a pin is active.
+  Export (M23) remains allowed; discovery + read paths are
+  unaffected.
+- **Endpoints.** `GET|POST|DELETE
+  /api/gateways/{gw}/sandboxes/{name}/policy/pin`. `POST` accepts
+  `{reason, expires_at}` (operator+, audit-logged as
+  `policy_pin.created` / `policy_pin.deleted`).
+- **Security-Flagged Rules UI.** Rule chunks that OpenShell marks as
+  security-flagged now render a red shield badge per chunk, a
+  dedicated filter chip, and a warning banner on the approval page.
+  The "Approve All" confirmation dialog carries an explicit
+  "include flagged" checkbox so flagged rules cannot be bulk-approved
+  by accident.
+- **Frontend.** Pin banner + lock/unlock button + pin modal (reason +
+  expiry picker) on the sandbox detail page. All policy sub-pages
+  (network, filesystem, process, presets, approvals) disable their
+  edit buttons when the sandbox is pinned.
+- **Tests.** 43 new tests covering service CRUD, auto-expiry,
+  guard-by-endpoint coverage, and UI state.
+
+### Added (M17)
+
+- **Policy Prover (Z3 Formal Verification).** New optional
+  dependency on `z3-solver`. `ProverService`
+  (`shoreguard/services/prover.py`) ships four query templates
+  encoded as Z3 constraints over the sandbox policy:
+  - `can_exfiltrate` — is there a writable egress path to a
+    non-whitelisted destination?
+  - `unrestricted_egress` — does any network rule allow `0.0.0.0/0`
+    on an unbounded port range?
+  - `binary_bypass` — can a binary hash outside the allowlist be
+    executed?
+  - `write_despite_readonly` — can any filesystem write succeed
+    despite a readonly root?
+  Each template returns SAT / UNSAT plus a witness model on SAT so
+  operators can see *why* a policy fails.
+- **Endpoints.** `POST
+  /api/gateways/{gw}/sandboxes/{name}/policy/verify` (operator+) runs
+  one or more templates. `GET
+  /api/gateways/{gw}/policies/presets/verify` lists the available
+  templates + default parameters.
+- **Frontend.** New "Verify" tab on the sandbox detail page with a
+  preset picker, run-button, and a result panel that renders the
+  witness model as a table on SAT or a green "property holds"
+  banner on UNSAT.
+- **Tests.** 30 new unit tests covering each template happy path,
+  malformed policy input, and Z3 timeout handling.
+- **Demo.** `scripts/m17_demo.py` walks the four templates against a
+  purposefully misconfigured sandbox.
+
+### Added (M16)
+
+- **Binary-Context Approvals.** Approval chunks now carry binary +
+  process context so reviewers can decide with full evidence.
+  `DenialContextService` caches the denial context at
+  `submit_analysis` time (in-memory TTL cache) and enriches it at
+  `get_draft`:
+  - Process ancestry breadcrumb (parent → grandparent → …)
+  - Binary SHA-256 badge
+  - Persistent-context badge (flagged when the same binary has
+    requested approval before)
+  - L7 request samples table (up to 10 recent requests with method,
+    path, status, source)
+- **Frontend.** Approval detail modal renders the new context block
+  with collapsible sections and a "Persistent first" sort toggle on
+  the pending-approvals list.
+
+### Added (M15)
+
+- **Bypass Detection Dashboard.** OCSF events classified as potential
+  policy bypasses (denials followed by success, egress via unusual
+  ports, DNS exfiltration signatures) are streamed into a new
+  `BypassService` ring buffer (last 1 000 events, in-memory) and
+  exposed both as an API and a UI tab.
+- **Endpoints.** `GET /api/gateways/{gw}/bypass` (paginated event
+  list with severity filter) and `GET
+  /api/gateways/{gw}/bypass/summary` (per-severity counts + top
+  offending sandboxes).
+- **Frontend.** New "Bypass" tab on the gateway detail page with a
+  severity filter, event timeline, and a MITRE ATT&CK technique
+  mapping per event.
+
+### Fixed (M14)
 
 - **Approve → reload race.** The `POST /approve` and `POST /approve-all`
   endpoints now accept a `?wait_loaded=true` query parameter. When set,
