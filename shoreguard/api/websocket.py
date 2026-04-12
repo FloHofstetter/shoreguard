@@ -98,6 +98,15 @@ async def sandbox_events(
                                 ocsf = parse_ocsf_log(data)
                                 if ocsf is not None:
                                     data["ocsf"] = ocsf
+                                    # Feed bypass detection service.
+                                    from shoreguard.services.bypass import bypass_service
+
+                                    if bypass_service is not None:
+                                        bypass_service.ingest_log(
+                                            data,
+                                            sandbox_name=sandbox_name,
+                                            gateway_name=gw,
+                                        )
                         try:
                             queue.put_nowait(event)
                             consecutive_drops = 0

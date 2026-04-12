@@ -34,6 +34,7 @@ from .pages import router as pages_router
 from .routes import (
     approvals,
     audit,
+    bypass,
     gateway,
     operations,
     policies,
@@ -139,6 +140,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     webhook_mod.webhook_service = webhook_mod.WebhookService(session_factory)
     logger.info("Webhook service initialised")
+
+    # ── Bypass detection ────────────────────────────────────────────────
+    import shoreguard.services.bypass as bypass_mod
+
+    bypass_mod.bypass_service = bypass_mod.BypassService()
+    logger.info("Bypass detection service initialised")
 
     # ── Metrics ─────────────────────────────────────────────────────────
     shoreguard_info.info(
@@ -566,6 +573,7 @@ gw_api = APIRouter(
 gw_api.include_router(sandboxes.router, prefix="/sandboxes", tags=["sandboxes"])
 gw_api.include_router(policies.router, tags=["policies"])
 gw_api.include_router(approvals.router, prefix="/sandboxes", tags=["approvals"])
+gw_api.include_router(bypass.router, prefix="/sandboxes", tags=["bypass"])
 gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
 
 

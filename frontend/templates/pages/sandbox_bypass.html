@@ -1,0 +1,118 @@
+{% extends "pages/sandbox_base.html" %}
+{% block title %}Bypass Detection — {{ sandbox_name }} — Shoreguard{% endblock %}
+
+{% block breadcrumb_tail %}
+<li class="breadcrumb-item active">Bypass Detection</li>
+{% endblock %}
+
+{% block content %}
+<div x-data='bypassPage({{ gateway_name|tojson }}, {{ sandbox_name|tojson }})' x-init="init()">
+    <!-- Summary cards -->
+    <div class="row g-3 mb-3">
+        <div class="col-sm-3">
+            <div class="card text-center" :class="summary.total > 0 ? 'border-danger' : ''">
+                <div class="card-body py-2">
+                    <div class="fs-3 fw-bold" :class="summary.total > 0 ? 'text-danger' : 'text-success'"
+                         x-text="summary.total"></div>
+                    <div class="text-muted small">Total Events</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-9">
+            <div class="card">
+                <div class="card-body py-2">
+                    <div class="d-flex gap-3 flex-wrap">
+                        <template x-for="[tech, count] in Object.entries(summary.by_technique || {})" :key="tech">
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="badge bg-danger" x-text="count"></span>
+                                <span class="small fw-medium" x-text="tech"></span>
+                                <span class="text-muted small" x-show="mitreLookup[tech]"
+                                      x-text="'(' + (mitreLookup[tech] || '') + ')'"></span>
+                            </div>
+                        </template>
+                        <div x-show="Object.keys(summary.by_technique || {}).length === 0"
+                             class="text-success small">
+                            <i class="bi bi-check-circle me-1"></i>No bypass attempts detected
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="d-flex gap-2 align-items-center">
+            <span class="text-muted small">Severity:</span>
+            <template x-for="sev in severityLevels" :key="sev">
+                <button type="button"
+                        class="btn btn-sm"
+                        :class="sevFilter[sev] ? severityBtnClass(sev) : 'btn-outline-secondary'"
+                        @click="sevFilter[sev] = !sevFilter[sev]"
+                        x-text="sev"></button>
+            </template>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" @click="load()" title="Refresh">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <label class="form-check form-switch mb-0 d-flex align-items-center">
+                <input class="form-check-input" type="checkbox" x-model="autoRefresh">
+                <span class="form-check-label ms-1 small">Auto</span>
+            </label>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading && events.length === 0" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading bypass events...
+    </div>
+
+    <!-- Events table -->
+    <div x-show="!loading || events.length > 0" x-cloak>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th style="width:160px">Time</th>
+                        <th style="width:80px">Severity</th>
+                        <th style="width:120px">Technique</th>
+                        <th style="width:100px">MITRE</th>
+                        <th>Binary</th>
+                        <th>Summary</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="(evt, i) in filteredEvents" :key="i">
+                        <tr>
+                            <td class="text-muted small font-monospace" x-text="formatTime(evt.timestamp_ms)"></td>
+                            <td><span class="badge" :class="severityBadge(evt.event.severity)" x-text="evt.event.severity"></span></td>
+                            <td><span class="badge bg-dark" x-text="evt.event.technique"></span></td>
+                            <td>
+                                <span x-show="evt.event.mitre_id" class="small font-monospace" x-text="evt.event.mitre_id"></span>
+                            </td>
+                            <td class="small font-monospace text-truncate" style="max-width:200px"
+                                x-text="evt.event.binary || '—'" :title="evt.event.binary || ''"></td>
+                            <td class="small text-truncate" style="max-width:300px"
+                                x-text="evt.event.summary" :title="evt.event.summary"></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+        <div x-show="filteredEvents.length === 0 && events.length > 0"
+             class="text-muted text-center py-3">
+            No events match the current severity filter.
+        </div>
+        <div x-show="events.length === 0 && !loading"
+             class="text-center py-5">
+            <i class="bi bi-shield-check fs-1 text-success"></i>
+            <p class="text-muted mt-2">No bypass attempts detected for this sandbox.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block sandbox_js %}
+<script src="/static/js/bypass.js"></script>
+{% endblock %}

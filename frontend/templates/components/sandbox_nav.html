@@ -3,6 +3,7 @@
     <a class="nav-link {{ 'active' if active_tab == 'policy' }}" href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/policy"><i class="bi bi-shield-lock me-1"></i>Policy</a>
     <a class="nav-link {{ 'active' if active_tab == 'approvals' }}" href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/approvals"><i class="bi bi-check-circle me-1"></i>Approvals</a>
     <a class="nav-link {{ 'active' if active_tab == 'logs' }}" href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/logs"><i class="bi bi-journal-text me-1"></i>Logs</a>
+    <a class="nav-link {{ 'active' if active_tab == 'bypass' }}" href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/bypass"><i class="bi bi-shield-exclamation me-1"></i>Bypass</a>
     <a class="nav-link {{ 'active' if active_tab == 'terminal' }}" href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/terminal"><i class="bi bi-terminal me-1"></i>Terminal</a>
     <span class="subnav-spacer"></span>
     <button class="btn btn-sm text-muted" data-sg-min-role="operator" @click="del()" title="Delete sandbox">

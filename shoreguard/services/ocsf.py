@@ -16,7 +16,7 @@ Pure functions, no state, no I/O — mirror of ``shoreguard.services.formatters`
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, TypedDict
 
 # Upstream class prefixes emitted by openshell-ocsf/src/format/shorthand.rs
 # (v0.0.26). ``EVENT`` is the generic fallback class without a suffix.
@@ -239,3 +239,129 @@ def parse_log_line(log: dict[str, Any]) -> dict[str, Any] | None:
     result["binary"] = _extract_binary(result["summary"], bracket_fields)
 
     return result
+
+
+# ─── Bypass detection ────────────────────────────────────────────────────────
+#
+# OpenShell's ``bypass_monitor`` emits ``FINDING:BLOCKED`` or
+# ``FINDING:DENIED`` events when iptables LOG rules detect traffic that
+# bypassed the HTTP CONNECT proxy. These events carry ``[HIGH]`` or
+# ``[CRIT]`` severity and typically include ``bypass`` in the summary or
+# bracket fields.
+#
+# Additionally, ``NET:OPEN`` denials with ``engine:iptables`` (as opposed to
+# ``engine:opa``) indicate a kernel-level rejection — the sandbox tried to
+# reach a destination without going through the proxy at all.
+
+# Patterns that strongly indicate a bypass attempt (case-insensitive).
+_BYPASS_KEYWORDS: frozenset[str] = frozenset(
+    {"bypass", "iptables", "nftables", "nsenter", "unshare", "ip_route", "netns"}
+)
+
+# MITRE ATT&CK mapping for bypass techniques.
+_MITRE_TECHNIQUES: dict[str, str] = {
+    "iptables": "T1562.004",  # Impair Defenses: Disable or Modify System Firewall
+    "nftables": "T1562.004",
+    "nsenter": "T1611",  # Escape to Host
+    "unshare": "T1611",
+    "netns": "T1611",
+    "ip_route": "T1562.004",
+    "bypass": "T1562.004",  # Generic bypass
+}
+
+
+class BypassEvent(TypedDict):
+    """A classified bypass detection event.
+
+    Attributes:
+        severity: OCSF severity level (HIGH, CRIT, FATAL, ...).
+        technique: Bypass technique identifier (iptables, nsenter, ...).
+        mitre_id: MITRE ATT&CK technique ID if mapped, else ``None``.
+        binary: Absolute path of the triggering binary, or ``None``.
+        summary: Human-readable event summary.
+        bracket_fields: Key-value pairs from the OCSF trailing bracket.
+        raw_class: Original OCSF class prefix (FINDING, NET, ...).
+        raw_disposition: Original disposition (BLOCKED, DENIED, ...).
+    """
+
+    severity: str
+    technique: str
+    mitre_id: str | None
+    binary: str | None
+    summary: str
+    bracket_fields: dict[str, str]
+    raw_class: str | None
+    raw_disposition: str | None
+
+
+def classify_bypass(parsed: dict[str, Any]) -> BypassEvent | None:
+    """Classify a parsed OCSF event as a bypass attempt if applicable.
+
+    A bypass event is detected when:
+
+    1. The event is a ``FINDING`` with ``BLOCKED`` or ``DENIED`` disposition
+       and severity >= HIGH, OR
+    2. The event is a ``NET`` denial where the ``engine`` bracket field is
+       ``iptables`` (kernel-level rejection, not OPA), OR
+    3. The event summary or bracket fields contain bypass indicator keywords.
+
+    Args:
+        parsed: A parsed OCSF dict as returned by :func:`parse_log_line`.
+
+    Returns:
+        BypassEvent | None: A structured bypass event if the parsed log
+        qualifies, else ``None``.
+    """
+    if parsed is None:
+        return None
+
+    cls = parsed.get("class_prefix")
+    disp = parsed.get("disposition")
+    sev = parsed.get("severity")
+    summary = str(parsed.get("summary") or "").lower()
+    bracket = parsed.get("bracket_fields") or {}
+
+    # Build searchable text from summary + bracket values.
+    search_text = summary + " " + " ".join(bracket.values()).lower()
+
+    # Strategy 1: FINDING with high severity + deny/block disposition.
+    is_finding_bypass = (
+        cls == "FINDING" and disp in ("BLOCKED", "DENIED") and sev in ("HIGH", "CRIT", "FATAL")
+    )
+
+    # Strategy 2: NET denial via iptables engine (kernel-level, not OPA).
+    is_iptables_deny = (
+        cls == "NET" and disp in ("DENIED", "BLOCKED") and bracket.get("engine") == "iptables"
+    )
+
+    # Strategy 3: Any event with bypass keywords in text.
+    matched_keyword: str | None = None
+    for kw in _BYPASS_KEYWORDS:
+        if kw in search_text:
+            matched_keyword = kw
+            break
+
+    if not (is_finding_bypass or is_iptables_deny or matched_keyword):
+        return None
+
+    # Determine the technique label and MITRE ID.
+    technique = "bypass"
+    mitre_id: str | None = _MITRE_TECHNIQUES.get("bypass")
+
+    if matched_keyword:
+        technique = matched_keyword
+        mitre_id = _MITRE_TECHNIQUES.get(matched_keyword)
+    elif is_iptables_deny:
+        technique = "iptables"
+        mitre_id = _MITRE_TECHNIQUES["iptables"]
+
+    return BypassEvent(
+        severity=sev or "HIGH",
+        technique=technique,
+        mitre_id=mitre_id,
+        binary=parsed.get("binary"),
+        summary=parsed.get("summary") or "",
+        bracket_fields=bracket,
+        raw_class=cls,
+        raw_disposition=disp,
+    )
