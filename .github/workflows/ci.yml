@@ -83,6 +83,15 @@ jobs:
             --set existingSecret=sg-secrets \
             --set ingress.host=ci.example.com \
             > /dev/null
+      - name: Render production preset with inClusterGateways egress
+        run: |  # pragma: allowlist secret
+          helm template sg charts/shoreguard \
+            -f charts/shoreguard/values.production.yaml \
+            --set existingSecret=sg-secrets \
+            --set ingress.host=ci.example.com \
+            --set networkPolicy.egress.inClusterGateways.enabled=true \
+            --set networkPolicy.egress.inClusterGateways.podSelector.matchLabels.app=openshell \
+            > /dev/null
       - name: Render multi-replica footgun guard fires
         # Negative test: replicaCount=3 without secretKey must fail to render.
         run: |  # pragma: allowlist secret

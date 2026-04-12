@@ -67,6 +67,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and scoped separately from the supported `helm-lint` job so fixture
   status never gets mistaken for production chart status.
 
+### Added (chart)
+
+- **`networkPolicy.egress.inClusterGateways` chart value.** First-class
+  egress rule for in-cluster OpenShell gateways (TCP 30051 to private Pod
+  IPs). The existing LLM-providers block only allows 443/tcp to
+  non-RFC1918 CIDRs, so federated gateways running inside the cluster
+  were unreachable unless patched via the `egress.extra` escape hatch.
+  New value: `enabled: false` (default off), `port: 30051`,
+  `podSelector: {}`, `namespaceSelector: {}`. Point the selectors at
+  NVIDIA's upstream OpenShell Helm chart pod labels and flip `enabled:
+  true` for in-k8s federation deploys. CI render test added.
+
 ### Added (M10 + M11)
 
 - **Helm chart MVP at `charts/shoreguard/`** (M10). Single-replica,

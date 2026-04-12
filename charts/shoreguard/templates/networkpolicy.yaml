@@ -80,6 +80,24 @@ spec:
         - protocol: TCP
           port: {{ .Values.networkPolicy.egress.postgres.port }}
     {{- end }}
+    {{- if .Values.networkPolicy.egress.inClusterGateways.enabled }}
+    # In-cluster OpenShell gateways (e.g. NVIDIA's upstream OpenShell
+    # Helm chart running in the same cluster). The LLM-providers block
+    # above only permits 443/tcp to non-RFC1918 CIDRs, so private
+    # gateway Pod IPs need their own allow-rule.
+    - to:
+        {{- with .Values.networkPolicy.egress.inClusterGateways.podSelector }}
+        - podSelector:
+            {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- with .Values.networkPolicy.egress.inClusterGateways.namespaceSelector }}
+        - namespaceSelector:
+            {{- toYaml . | nindent 12 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.egress.inClusterGateways.port }}
+    {{- end }}
     {{- with .Values.networkPolicy.egress.extra }}
     {{- toYaml . | nindent 4 }}
     {{- end }}

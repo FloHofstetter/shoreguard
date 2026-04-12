@@ -147,6 +147,17 @@ networkPolicy:
       port: 5432
       podSelector: {}
       namespaceSelector: {}
+    # In-cluster OpenShell gateway egress. ShoreGuard's LLM-provider block
+    # above only allows 443/tcp to *non-RFC1918* destinations, so gateways
+    # running inside the cluster (private ClusterIPs / Pod IPs on 30051)
+    # are blocked. Flip this on for federated in-k8s deploys and point the
+    # selectors at NVIDIA's upstream OpenShell Helm chart's pod labels.
+    # Default off so non-federated installs do not widen egress.
+    inClusterGateways:
+      enabled: false
+      port: 30051
+      podSelector: {}
+      namespaceSelector: {}
     # Escape hatch: extra egress rules appended verbatim to the policy.
     extra: []
 
