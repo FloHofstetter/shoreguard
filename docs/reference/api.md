@@ -75,6 +75,28 @@ These endpoints are **unauthenticated** and designed for container orchestration
 | `POST` | `/api/gateway/{name}/stop` | Stop gateway (local mode only) |
 | `POST` | `/api/gateway/{name}/restart` | Restart gateway (local mode only) |
 | `GET` | `/api/gateways/{gw}/health` | Gateway health status |
+| `POST` | `/api/gateway/discover` | Discover gateways via DNS SRV records (operator+, M22) |
+| `GET` | `/api/gateway/discovery/status` | Discovery loop status + last scan results (viewer, M22) |
+
+### Discovery (M22, v0.30.2+)
+
+`POST /api/gateway/discover` resolves `_openshell._tcp.<domain>` SRV
+records for every configured discovery domain and, when
+`auto_register=true`, registers any new endpoints that pass the
+existing `_validate_endpoint_format` guard (same `*.svc.cluster.local`
+whitelist as manual registration). Pass an optional
+`{"domains": ["cluster.local"]}` body to override the configured list
+for this scan only. Audit-logged as `gateway.discovered`.
+
+```http
+POST /api/gateway/discover
+Content-Type: application/json
+
+{"domains": ["svc.cluster.local"]}
+```
+
+Configure the background loop via `SHOREGUARD_DISCOVERY_*` environment
+variables — see [Settings Reference](settings.md).
 
 ### Gateway metadata
 
@@ -133,6 +155,30 @@ All sandbox endpoints are scoped to a gateway via the `{gw}` path parameter.
 | `DELETE` | `/api/gateways/{gw}/sandboxes/{name}/ssh` | Revoke SSH session |
 | `GET` | `/api/gateways/{gw}/sandboxes/{name}/logs` | Get sandbox logs |
 
+## Boot Hooks (M22, v0.30.2+)
+
+Pre- and post-create hooks that run as part of sandbox creation.
+Pre-create hooks execute in the ShoreGuard process via `subprocess.run`
+with a whitelisted env (`SG_SANDBOX_NAME`, `SG_SANDBOX_IMAGE`,
+`SG_SANDBOX_POLICY_ID`, plus user-defined env). A failing pre-create
+hook aborts `CreateSandbox` with `BootHookError`. Post-create hooks
+run inside the sandbox via the existing `ExecSandbox` RPC — intended
+for warm-up tasks like `apt update`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/hooks` | List hooks (viewer) |
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/hooks/{id}` | Get a hook |
+| `POST` | `/api/gateways/{gw}/sandboxes/{name}/hooks` | Create a hook (admin) |
+| `PUT` | `/api/gateways/{gw}/sandboxes/{name}/hooks/{id}` | Update a hook (admin) |
+| `DELETE` | `/api/gateways/{gw}/sandboxes/{name}/hooks/{id}` | Delete a hook (admin) |
+| `POST` | `/api/gateways/{gw}/sandboxes/{name}/hooks/reorder` | Reorder hooks (admin) |
+| `POST` | `/api/gateways/{gw}/sandboxes/{name}/hooks/{id}/run` | Manually trigger a hook (operator+) |
+
+Admin-only `skip_hooks: true` on `POST .../sandboxes` bypasses both
+phases for recovery scenarios. Audit events:
+`boot_hook.created|updated|deleted|reordered|manual_run`.
+
 ## Policies
 
 | Method | Path | Description |
@@ -149,12 +195,121 @@ All sandbox endpoints are scoped to a gateway via the `{gw}` path parameter.
 | `PUT` | `/api/gateways/{gw}/sandboxes/{name}/policy/process` | Update process/Landlock settings |
 | `POST` | `/api/gateways/{gw}/sandboxes/{name}/policy/presets/{preset}` | Apply a preset |
 
+All policy *write* endpoints — plus `POST .../approve` and
+`.../approve-all` — return **HTTP 423** when a policy pin (M18) is
+active on the sandbox.
+
+### Policy Pinning (M18, v0.30.2+)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy/pin` | Get active pin, if any |
+| `POST` | `/api/gateways/{gw}/sandboxes/{name}/policy/pin` | Pin active version (operator+) |
+| `DELETE` | `/api/gateways/{gw}/sandboxes/{name}/policy/pin` | Remove pin (operator+) |
+
+```http
+POST /api/gateways/dev/sandboxes/agent-a/policy/pin
+Content-Type: application/json
+
+{
+  "reason": "Change freeze for release-2026-04",
+  "expires_at": "2026-04-20T00:00:00Z"
+}
+```
+
+Audit-logged as `policy_pin.created` / `policy_pin.deleted`. Pins
+auto-expire server-side. Read endpoints (`GET /policy`, `/export`)
+remain allowed.
+
+### Policy Prover (M17, v0.30.2+)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/gateways/{gw}/sandboxes/{name}/policy/verify` | Run Z3 formal verification on the active policy (operator+) |
+| `GET` | `/api/gateways/{gw}/policies/presets/verify` | List available verification templates |
+
+Four built-in query templates: `can_exfiltrate`,
+`unrestricted_egress`, `binary_bypass`, `write_despite_readonly`. Each
+returns SAT (with a witness model) or UNSAT (property holds).
+
+```http
+POST /api/gateways/dev/sandboxes/agent-a/policy/verify
+Content-Type: application/json
+
+{"template": "can_exfiltrate", "params": {}}
+```
+
+See the [Policy Prover guide](../guides/policy-prover.md) for
+template semantics and example witness models.
+
+### GitOps (M23, v0.30.2+)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/policy/export` | Export policy as deterministic YAML |
+| `POST` | `/api/gateways/{gw}/sandboxes/{name}/policy/apply` | Apply a YAML policy (dry-run or write) |
+
+`POST /apply` accepts `{yaml, dry_run, expected_version}`. Response
+status codes: `200 up_to_date` / `200 dry_run` / `200 applied` /
+`202 vote_recorded` (M19 workflow active) / `409` version mismatch /
+`423` pinned / `400` malformed YAML. `expected_version` falls back to
+`metadata.policy_hash` in the YAML body. Under an active M19 workflow
+the first apply records one approve-vote on a synthetic chunk id
+`policy.apply:<sha16>` and returns 202; subsequent apply calls with
+the same YAML body accumulate votes until quorum, at which point
+`UpdateConfig` fires upstream exactly once.
+
+Paired with the `shoreguard policy export|diff|apply` CLI —
+see the [GitOps guide](../guides/gitops.md).
+
 ## Approvals
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/gateways/{gw}/approvals/pending` | List pending approval requests |
 | `POST` | `/api/gateways/{gw}/approvals/{chunk_id}/approve` | Approve a pending request |
+| `GET` | `/api/gateways/{gw}/approvals/{chunk_id}/decisions` | Running tally + voter list under an active workflow (M19) |
+
+Both `POST /approve` and `POST /approve-all` accept
+`?wait_loaded=true` (M14): the server polls the gateway's policy
+status internally (up to 30 s) and only returns once the new policy
+version is reported as `loaded`, eliminating the client-side polling
+loop. Returns 504 on timeout.
+
+### Approval Workflows (M19, v0.30.2+)
+
+Per-sandbox multi-stage approvals. Configure a required voter count
+(quorum) + voter set + optional escalation deadline; `POST .../approve`
+under an active workflow returns **HTTP 202 `vote_recorded`** until
+quorum is reached, at which point the upstream `ApproveChunk` fires
+exactly once. A single reject is unanimous and kills the proposal.
+`POST .../approve-all` is admin-only when a workflow is active
+(returns HTTP 409 to non-admins).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/approval-workflow` | Get workflow config (viewer) |
+| `PUT` | `/api/gateways/{gw}/sandboxes/{name}/approval-workflow` | Upsert workflow (admin) |
+| `DELETE` | `/api/gateways/{gw}/sandboxes/{name}/approval-workflow` | Remove workflow (admin) |
+
+Webhook events: `approval.vote_cast`, `approval.quorum_met`,
+`approval.escalated` (fires reactively on the next vote after the
+escalation deadline — no background scheduler).
+
+## Bypass Detection (M15, v0.30.2+)
+
+OCSF events classified as potential policy bypasses (denial followed
+by success, egress via unusual ports, DNS exfiltration signatures)
+are streamed into an in-memory ring buffer (last 1 000 events per
+gateway).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/gateways/{gw}/bypass` | Paginated event list with `?severity=` filter |
+| `GET` | `/api/gateways/{gw}/bypass/summary` | Per-severity counts + top offending sandboxes |
+
+Each event carries a MITRE ATT&CK technique mapping for downstream
+SIEM correlation. See the [Bypass Detection guide](../guides/bypass-detection.md).
 
 ## Providers
 
@@ -180,6 +335,13 @@ debugging agent misconfiguration without exposing secrets.
 |--------|------|-------------|
 | `GET` | `/api/gateways/{gw}/inference` | Get cluster inference configuration (accepts `?route_name=` since v0.29.0) |
 | `PUT` | `/api/gateways/{gw}/inference` | Set inference config (provider, model, timeout, optional `route_name`) |
+| `GET` | `/api/gateways/{gw}/inference/bundle` | Resolved inference bundle: cluster default + route list + per-route credential state (M20) |
+
+`GET /inference/bundle` (M20) returns the fully resolved inference
+configuration as a single payload, with API keys redacted to
+`has_api_key: bool` at the wrapper boundary. The gateway detail page
+renders this as a route table with a shield badge per route that
+carries credentials. Audit-logged as `inference.bundle.read`.
 
 Since v0.29.0, `GET /inference` accepts an optional `?route_name=` query
 parameter. An empty value (the default) returns the cluster's default
