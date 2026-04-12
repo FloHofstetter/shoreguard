@@ -157,21 +157,32 @@ PyPI wheels ship with [PEP 740 attestations](https://peps.python.org/pep-0740/) 
 
 - **Sandbox wizard** — step-by-step creation with community images, GPU support, and policy presets
 - **Visual policy editor** — network rules, filesystem paths, process settings with revision history and diff viewer
-- **Approval flow** — agents request endpoint access, operators approve or deny in real-time
+- **[Approval flow](https://flohofstetter.github.io/shoreguard/guides/approvals/)** — agents request endpoint access, operators approve or deny in real-time, with binary SHA-256 + process ancestry + L7 request samples for full context
+- **[Multi-stage approvals](https://flohofstetter.github.io/shoreguard/guides/approval-workflows/)** — per-sandbox quorum with escalation deadlines
+- **[Policy pinning](https://flohofstetter.github.io/shoreguard/guides/policy-pinning/)** — freeze the active policy version during incidents or change freezes; all writes return HTTP 423
+- **[Boot hooks](https://flohofstetter.github.io/shoreguard/guides/boot-hooks/)** — pre/post-create validation gates and warm-up tasks attached to each sandbox
 - **Templates** — pre-configured sandboxes for data science, web development, and secure coding
 
-### Infrastructure
+### Policy & Verification
+
+- **[Policy Prover](https://flohofstetter.github.io/shoreguard/guides/policy-prover/)** — Z3 formal verification with built-in templates (`can_exfiltrate`, `unrestricted_egress`, `binary_bypass`, `write_despite_readonly`) that return a SAT witness when a property fails
+- **[GitOps policy sync](https://flohofstetter.github.io/shoreguard/guides/gitops/)** — declarative YAML policies via `shoreguard policy export|diff|apply`, optimistic-locked via `policy_hash` etag, CI apply counts as one quorum vote under an active workflow
+- **[Bypass Detection](https://flohofstetter.github.io/shoreguard/guides/bypass-detection/)** — OCSF events classified as policy bypass attempts, with MITRE ATT&CK mapping
+
+### Infrastructure & Supply Chain
 
 - **Multi-gateway** — manage dev, staging, and production OpenShell clusters from one dashboard
+- **[Gateway discovery](https://flohofstetter.github.io/shoreguard/guides/gateway-discovery/)** — auto-register gateways from `_openshell._tcp.<domain>` DNS SRV records
 - **RBAC** — Admin, Operator, Viewer roles with gateway-scoped overrides
 - **Audit log** — persistent, filterable, exportable trail of all state changes
 - **Health monitoring** — automatic gateway probing with status indicators
+- **[SBOM / Supply-Chain Viewer](https://flohofstetter.github.io/shoreguard/guides/sbom/)** — per-sandbox CycloneDX ingestion with component search, severity filter, and offline CVE browsing
 
 ### Integrations
 
-- **REST API** — full CRUD for gateways, sandboxes, policies, providers, and inference
-- **Terraform provider** — declarative infrastructure as code
-- **Webhooks** — Slack, Discord, Email, and generic webhooks with HMAC-SHA256 signing
+- **REST API** — full CRUD for gateways, sandboxes, policies, providers, and inference (see the [API reference](https://flohofstetter.github.io/shoreguard/reference/api/))
+- **[Terraform provider](https://github.com/FloHofstetter/terraform-provider-shoreguard)** — declarative infrastructure as code (gateways, groups, approval workflows, policy pins, boot hooks); policy content lives in the GitOps flow, not Terraform state
+- **Webhooks** — Slack, Discord, Email, and generic webhooks with HMAC-SHA256 signing, including quorum events (`approval.vote_cast` / `quorum_met` / `escalated`) and drift detection (`policy.drift_detected`)
 - **Prometheus metrics** — `/metrics` endpoint for Grafana and standard monitoring
 
 <details>
@@ -209,14 +220,22 @@ PyPI wheels ship with [PEP 740 attestations](https://peps.python.org/pep-0740/) 
 
 **Shipped:**
 
-- Multi-gateway management with health monitoring
+- Multi-gateway management with health monitoring + DNS SRV auto-discovery
+- Multi-region federation (in-k8s via `tests/fixtures/charts/openshell-cluster`, host-to-host via `scripts/m8_demo.py`)
 - RBAC with gateway-scoped overrides
-- Sandbox wizard with community images and presets
+- Sandbox wizard with community images, presets, and pre/post-create boot hooks
 - Visual policy editor with revision history
-- Real-time approval flow
-- Terraform provider
+- Real-time approval flow with binary SHA-256, process ancestry, and L7 request samples
+- Multi-stage approval workflows (quorum + escalation)
+- Policy pinning (HTTP 423 on all writes while active)
+- Z3 policy prover with four built-in verification templates
+- GitOps policy sync (YAML export/apply + `shoreguard policy` CLI + optional drift detection)
+- Bypass Detection dashboard with MITRE ATT&CK mapping
+- SBOM / Supply-Chain Viewer (CycloneDX ingestion, offline CVE browse)
+- Terraform provider (v0.30.0 mirroring server version)
+- Helm chart (`charts/shoreguard`) with production preset + NetworkPolicy + PDB + helm test
 - Persistent audit log with export
-- Webhooks (Slack, Discord, Email) with HMAC signing
+- Webhooks (Slack, Discord, Email) with HMAC signing and quorum/drift events
 - Prometheus metrics
 - Paperclip adapter ([`@shoreguard/paperclip-plugin`](https://www.npmjs.com/package/@shoreguard/paperclip-plugin) + [`@shoreguard/paperclip-adapter`](https://www.npmjs.com/package/@shoreguard/paperclip-adapter))
 - Docker Compose stack with Caddy auto-TLS
@@ -230,7 +249,6 @@ PyPI wheels ship with [PEP 740 attestations](https://peps.python.org/pep-0740/) 
 
 **Planned:**
 
-- Multi-region gateway federation
 - DigitalOcean Marketplace integration
 
 ---
