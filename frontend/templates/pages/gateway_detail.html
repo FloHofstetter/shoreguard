@@ -228,6 +228,64 @@
                     </div>
                 </fieldset>
 
+                <!-- ── Resolved inference bundle (M20) ── -->
+                <fieldset x-show="gwConnected" x-cloak class="sg-fieldset mb-3"
+                          x-data="inferenceBundle" x-effect="maybeLoad(gw)">
+                    <legend class="sg-legend d-flex align-items-center justify-content-between">
+                        <span>Resolved Inference Bundle</span>
+                        <button class="btn btn-sm btn-outline-secondary" @click="reload()" :disabled="loading">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </legend>
+                    <div x-show="loading" class="text-muted small">
+                        <div class="spinner-border spinner-border-sm me-2"></div>Loading bundle…
+                    </div>
+                    <div x-show="error" x-cloak class="text-danger small" x-text="error"></div>
+                    <div x-show="!loading && !error" x-cloak>
+                        <div class="small text-muted mb-2">
+                            Revision <code x-text="bundle.revision || '—'"></code>
+                            · generated <span x-text="formatTs(bundle.generated_at_ms)"></span>
+                        </div>
+                        <div x-show="(bundle.routes || []).length === 0" class="small text-muted">
+                            No routes in bundle.
+                        </div>
+                        <div x-show="(bundle.routes || []).length > 0" x-cloak class="table-responsive">
+                            <table class="table table-sm table-borderless align-middle mb-0">
+                                <thead class="small text-muted">
+                                    <tr>
+                                        <th>Route</th>
+                                        <th>Provider</th>
+                                        <th>Model</th>
+                                        <th>Base URL</th>
+                                        <th>Protocols</th>
+                                        <th>Timeout</th>
+                                        <th>API key</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="r in (bundle.routes || [])" :key="r.name">
+                                        <tr>
+                                            <td><code x-text="r.name"></code></td>
+                                            <td x-text="r.provider_type || '—'"></td>
+                                            <td><code x-text="r.model_id || '—'"></code></td>
+                                            <td class="text-truncate" style="max-width: 18rem"
+                                                :title="r.base_url" x-text="r.base_url || '—'"></td>
+                                            <td x-text="(r.protocols || []).join(', ') || '—'"></td>
+                                            <td x-text="r.timeout_secs ? (r.timeout_secs + 's') : '—'"></td>
+                                            <td>
+                                                <span x-show="r.has_api_key" class="badge bg-success-subtle text-success-emphasis">
+                                                    <i class="bi bi-shield-lock-fill me-1"></i>set
+                                                </span>
+                                                <span x-show="!r.has_api_key" class="text-muted">—</span>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </fieldset>
+
                 <!-- ── Observability / OCSF toggle (only when connected) ── -->
                 <fieldset x-show="gwConnected" x-cloak class="sg-fieldset mb-3"
                           x-data="gatewaySettings" x-effect="maybeLoad(gw)">

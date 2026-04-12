@@ -175,6 +175,38 @@ class ShoreGuardClient:
         status_names = {0: "unspecified", 1: "healthy", 2: "degraded", 3: "unhealthy"}
         return {"status": status_names.get(resp.status, "unknown"), "version": resp.version}
 
+    def get_inference_bundle(self) -> dict:
+        """Get the resolved inference bundle (routes after policy overlay).
+
+        API keys are redacted: each route exposes only ``has_api_key`` (bool),
+        never the secret value.
+
+        Returns:
+            dict: ``{revision, generated_at_ms, routes: [...]}`` where each
+                route contains name, base_url, protocols, model_id,
+                provider_type, timeout_secs, has_api_key.
+        """
+        resp = self._inference_stub.GetInferenceBundle(
+            inference_pb2.GetInferenceBundleRequest(),
+            timeout=self._timeout,
+        )
+        return {
+            "revision": resp.revision,
+            "generated_at_ms": resp.generated_at_ms,
+            "routes": [
+                {
+                    "name": r.name,
+                    "base_url": r.base_url,
+                    "protocols": list(r.protocols),
+                    "model_id": r.model_id,
+                    "provider_type": r.provider_type,
+                    "timeout_secs": r.timeout_secs,
+                    "has_api_key": bool(r.api_key),
+                }
+                for r in resp.routes
+            ],
+        }
+
     def get_cluster_inference(self, *, route_name: str = "") -> dict:
         """Get current cluster inference configuration.
 

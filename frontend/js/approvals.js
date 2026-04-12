@@ -29,7 +29,10 @@ function approvalsPage(name) {
         rollingSummary: '',
         lastAnalyzedAtMs: 0,
         expandedChunks: {},
-        sortPersistentFirst: false,
+        sortPersistentFirst: (() => {
+            try { return localStorage.getItem('sg-approvals-sort-persistent') === '1'; }
+            catch { return false; }
+        })(),
         filterSecurityFlagged: false,
 
         // M19 multi-stage approvals (quorum workflow)
@@ -65,6 +68,11 @@ function approvalsPage(name) {
         },
 
         async init() {
+            this.$watch('sortPersistentFirst', (v) => {
+                try { localStorage.setItem('sg-approvals-sort-persistent', v ? '1' : '0'); }
+                catch {}
+            });
+
             await this.loadWorkflow();
             await this.load();
 

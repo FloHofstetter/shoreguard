@@ -496,6 +496,49 @@ function inferenceConfig() {
     };
 }
 
+// ─── Resolved Inference Bundle (M20) ───────────────────────────────────────
+
+function inferenceBundle() {
+    return {
+        loading: false,
+        loaded: false,
+        error: '',
+        gwName: '',
+        bundle: { revision: '', generated_at_ms: 0, routes: [] },
+
+        maybeLoad(gw) {
+            if (gw && gw.connected && !this.loaded) {
+                this.gwName = gw.name;
+                this.load();
+            }
+        },
+
+        async reload() {
+            this.loaded = false;
+            await this.load();
+        },
+
+        async load() {
+            this.loading = true;
+            this.loaded = true;
+            this.error = '';
+            try {
+                this.bundle = await apiFetch(`${API}/inference/bundle`);
+            } catch (e) {
+                this.error = e.message || 'Failed to load bundle';
+                this.bundle = { revision: '', generated_at_ms: 0, routes: [] };
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        formatTs(ms) {
+            if (!ms) return '—';
+            try { return new Date(ms).toLocaleString(); } catch { return String(ms); }
+        },
+    };
+}
+
 // ─── Gateway Settings Component ────────────────────────────────────────────
 
 function gatewaySettings() {
@@ -560,6 +603,7 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('gatewayRegisterPage', gatewayRegisterPage);
     Alpine.data('gatewayDetail', gatewayDetail);
     Alpine.data('inferenceConfig', inferenceConfig);
+    Alpine.data('inferenceBundle', inferenceBundle);
     Alpine.data('gatewaySettings', gatewaySettings);
     // Spread-merge factory replacing inline `{ ...gatewayList(), ...sortableTable('name') }`.
     Alpine.data('gatewaysList', () => ({ ...gatewayList(), ...sortableTable('name') }));

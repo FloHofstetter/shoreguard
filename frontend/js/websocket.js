@@ -120,12 +120,18 @@ function handleWebSocketEvent(sandboxName, event) {
     }
 
     // Draft policy updates
-    if (event.type === 'draft_policy_update' && event.data.total_pending > 0) {
-        showApprovalToast(sandboxName, event.data);
-        // Dispatch Alpine event for approvals page to auto-refresh
-        document.dispatchEvent(new CustomEvent('sg:approvals-update', {
-            detail: { sandboxName, ...event.data },
+    if (event.type === 'draft_policy_update') {
+        // Always notify policy-version listeners (independent of pending count)
+        // so M20 wait_loaded UX feedback can react on every reload signal.
+        document.dispatchEvent(new CustomEvent('sg:policy-status-update', {
+            detail: { sandboxName, draft_version: event.data.draft_version },
         }));
+        if (event.data.total_pending > 0) {
+            showApprovalToast(sandboxName, event.data);
+            document.dispatchEvent(new CustomEvent('sg:approvals-update', {
+                detail: { sandboxName, ...event.data },
+            }));
+        }
     }
 
     // Live log streaming

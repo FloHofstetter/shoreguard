@@ -9,7 +9,8 @@ from typing import Any
 from shoreguard.exceptions import SandboxError
 
 from ._converters import _dict_to_policy
-from ._proto import datamodel_pb2, openshell_pb2, openshell_pb2_grpc
+from ._proto import datamodel_pb2, openshell_pb2, openshell_pb2_grpc, sandbox_pb2
+from .policies import _policy_to_dict
 
 PHASE_NAMES = {
     0: "unspecified",
@@ -161,6 +162,61 @@ class SandboxManager:
                 raise SandboxError(f"Sandbox {name} entered error phase")
             time.sleep(1)
         raise TimeoutError(f"Sandbox {name} was not ready within {timeout_seconds}s")
+
+    def get_config(self, sandbox_id: str) -> dict[str, Any]:
+        """Fetch the effective sandbox config (policy + settings + revision).
+
+        Args:
+            sandbox_id: Sandbox identifier (proto field accepts the name).
+
+        Returns:
+            dict[str, Any]: ``{policy, version, policy_hash, settings,
+                config_revision, policy_source, global_policy_version}``.
+                ``settings`` is a flat ``{key: {value, scope}}`` map.
+        """
+        resp = self._stub.GetSandboxConfig(
+            sandbox_pb2.GetSandboxConfigRequest(sandbox_id=sandbox_id),
+            timeout=self._timeout,
+        )
+        settings: dict[str, dict[str, Any]] = {}
+        for key, eff in resp.settings.items():
+            field = eff.value.WhichOneof("value")
+            value: Any
+            if field == "string_value":
+                value = eff.value.string_value
+            elif field == "bool_value":
+                value = eff.value.bool_value
+            elif field == "int_value":
+                value = eff.value.int_value
+            elif field == "bytes_value":
+                value = eff.value.bytes_value
+            else:
+                value = None
+            settings[key] = {"value": value, "scope": int(eff.scope)}
+        return {
+            "policy": _policy_to_dict(resp.policy) if resp.HasField("policy") else None,
+            "version": resp.version,
+            "policy_hash": resp.policy_hash,
+            "settings": settings,
+            "config_revision": resp.config_revision,
+            "policy_source": resp.policy_source,
+            "global_policy_version": resp.global_policy_version,
+        }
+
+    def get_provider_environment(self, sandbox_id: str) -> dict[str, str]:
+        """Fetch the resolved provider environment variables for a sandbox.
+
+        Args:
+            sandbox_id: Sandbox identifier (proto field accepts the name).
+
+        Returns:
+            dict[str, str]: Environment variables map.
+        """
+        resp = self._stub.GetSandboxProviderEnvironment(
+            openshell_pb2.GetSandboxProviderEnvironmentRequest(sandbox_id=sandbox_id),
+            timeout=self._timeout,
+        )
+        return dict(resp.environment)
 
     def exec(
         self,

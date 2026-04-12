@@ -53,6 +53,33 @@ class _FakeInferenceStub:
             timeout_secs=30,
         )
 
+    def GetInferenceBundle(self, req, timeout=None):
+        self.request = req
+        return SimpleNamespace(
+            revision="rev-42",
+            generated_at_ms=1700000000000,
+            routes=[
+                SimpleNamespace(
+                    name="default",
+                    base_url="https://api.anthropic.com",
+                    protocols=["https"],
+                    api_key="sk-ant-secret",  # pragma: allowlist secret
+                    model_id="claude-sonnet-4",
+                    provider_type="anthropic",
+                    timeout_secs=60,
+                ),
+                SimpleNamespace(
+                    name="cheap",
+                    base_url="https://api.openai.com",
+                    protocols=["https"],
+                    api_key="",
+                    model_id="gpt-4o-mini",
+                    provider_type="openai",
+                    timeout_secs=30,
+                ),
+            ],
+        )
+
     def SetClusterInference(self, req, timeout=None):
         self.request = req
         resp = SimpleNamespace(
@@ -201,6 +228,29 @@ def test_health(client):
     result = client.health()
     assert result["status"] == "healthy"
     assert result["version"] == "1.2.3"
+
+
+def test_get_inference_bundle(client):
+    """get_inference_bundle() returns redacted routes + revision."""
+    result = client.get_inference_bundle()
+    assert result["revision"] == "rev-42"
+    assert result["generated_at_ms"] == 1700000000000
+    assert len(result["routes"]) == 2
+
+    secret_route = result["routes"][0]
+    assert secret_route["name"] == "default"
+    assert secret_route["base_url"] == "https://api.anthropic.com"
+    assert secret_route["protocols"] == ["https"]
+    assert secret_route["model_id"] == "claude-sonnet-4"
+    assert secret_route["provider_type"] == "anthropic"
+    assert secret_route["timeout_secs"] == 60
+    assert secret_route["has_api_key"] is True
+    # Critical: raw secret never crosses the wrapper boundary.
+    assert "api_key" not in secret_route
+
+    empty_route = result["routes"][1]
+    assert empty_route["has_api_key"] is False
+    assert "api_key" not in empty_route
 
 
 def test_get_cluster_inference(client):

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -30,6 +29,7 @@ from shoreguard.exceptions import PolicyLockedError
 from shoreguard.services.approval_workflow import VoteResult
 from shoreguard.services.approvals import ApprovalService
 from shoreguard.services.audit import audit_log
+from shoreguard.services.policy_status import policy_status_broker
 from shoreguard.services.webhooks import fire_webhook
 
 logger = logging.getLogger(__name__)
@@ -56,39 +56,7 @@ def _check_policy_pin(request: Request, sandbox_name: str) -> None:
         raise HTTPException(status_code=423, detail=str(exc)) from exc
 
 
-_POLICY_POLL_INTERVAL = 1  # seconds
-_POLICY_POLL_TIMEOUT = 30  # seconds
-
-
-def _poll_policy_loaded(client: ShoreGuardClient, sandbox_name: str, target_version: int) -> None:
-    """Block until the proxy reports *target_version* as loaded.
-
-    Runs in a worker thread (called via ``asyncio.to_thread``) so
-    ``time.sleep`` does not block the event loop.
-
-    Args:
-        client: gRPC client for the active gateway.
-        sandbox_name: Sandbox whose policy is being waited on.
-        target_version: Policy version that must reach ``loaded``.
-
-    Raises:
-        HTTPException: 504 if the policy does not load within the timeout.
-    """
-    deadline = time.monotonic() + _POLICY_POLL_TIMEOUT
-    while time.monotonic() < deadline:
-        status = client.policies.get(sandbox_name)
-        if (
-            status.get("active_version") == target_version
-            and status.get("revision", {}).get("status") == "loaded"
-        ):
-            return
-        time.sleep(_POLICY_POLL_INTERVAL)
-    raise HTTPException(
-        status_code=504,
-        detail=(
-            f"Policy v{target_version} did not reach 'loaded' state within {_POLICY_POLL_TIMEOUT}s"
-        ),
-    )
+_POLICY_LOAD_TIMEOUT = 30.0
 
 
 def _get_actor_role(request: Request) -> str:
@@ -351,7 +319,9 @@ async def approve_chunk(
             },
         )
     if wait_loaded and (target := result.get("policy_version")):
-        await asyncio.to_thread(_poll_policy_loaded, client, name, target)
+        await policy_status_broker.wait_for_loaded(
+            client, name, target, timeout=_POLICY_LOAD_TIMEOUT
+        )
     return result
 
 
@@ -496,7 +466,9 @@ async def approve_all(
         {"sandbox": name, "bulk": True, "actor": actor, "gateway": get_gateway_name(request)},
     )
     if wait_loaded and (target := result.get("policy_version")):
-        await asyncio.to_thread(_poll_policy_loaded, client, name, target)
+        await policy_status_broker.wait_for_loaded(
+            client, name, target, timeout=_POLICY_LOAD_TIMEOUT
+        )
     return result
 
 

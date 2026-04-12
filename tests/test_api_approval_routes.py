@@ -149,39 +149,44 @@ async def test_get_approval_history(api_client, mock_client):
 # ─── wait_loaded ─────────────────────────────────────────────────────────────
 
 
-async def test_approve_chunk_wait_loaded(api_client, mock_client):
-    """Approve with ?wait_loaded=true polls until policy is loaded."""
+async def test_approve_chunk_wait_loaded(api_client, mock_client, monkeypatch):
+    """Approve with ?wait_loaded=true awaits the policy-status broker."""
+    from shoreguard.services import policy_status as ps_mod
+
+    calls: list[tuple] = []
+
+    async def fake_wait(client, sandbox_name, target_version, *, timeout=30.0, slow_poll=2.0):
+        calls.append((sandbox_name, target_version))
+
+    monkeypatch.setattr(ps_mod.policy_status_broker, "wait_for_loaded", fake_wait)
+
     mock_client.approvals.approve.return_value = {
         "id": CHUNK,
         "status": "approved",
         "policy_version": 5,
-    }
-    mock_client.policies.get.return_value = {
-        "active_version": 5,
-        "revision": {"status": "loaded"},
     }
 
     resp = await api_client.post(f"{BASE}/{CHUNK}/approve?wait_loaded=true")
 
     assert resp.status_code == 200
-    mock_client.policies.get.assert_called_with(SB)
+    assert calls == [(SB, 5)]
 
 
 async def test_approve_chunk_wait_loaded_timeout(api_client, mock_client, monkeypatch):
-    """Approve with ?wait_loaded=true returns 504 on timeout."""
-    from shoreguard.api.routes import approvals as approvals_mod
+    """Approve with ?wait_loaded=true returns 504 when broker times out."""
+    from fastapi import HTTPException
 
-    monkeypatch.setattr(approvals_mod, "_POLICY_POLL_TIMEOUT", 2)
-    monkeypatch.setattr(approvals_mod, "_POLICY_POLL_INTERVAL", 0.1)
+    from shoreguard.services import policy_status as ps_mod
+
+    async def fake_wait(client, sandbox_name, target_version, *, timeout=30.0, slow_poll=2.0):
+        raise HTTPException(status_code=504, detail="timeout")
+
+    monkeypatch.setattr(ps_mod.policy_status_broker, "wait_for_loaded", fake_wait)
 
     mock_client.approvals.approve.return_value = {
         "id": CHUNK,
         "status": "approved",
         "policy_version": 5,
-    }
-    mock_client.policies.get.return_value = {
-        "active_version": 4,
-        "revision": {"status": "pending"},
     }
 
     resp = await api_client.post(f"{BASE}/{CHUNK}/approve?wait_loaded=true")
@@ -189,8 +194,18 @@ async def test_approve_chunk_wait_loaded_timeout(api_client, mock_client, monkey
     assert resp.status_code == 504
 
 
-async def test_approve_chunk_without_wait_loaded_skips_poll(api_client, mock_client):
-    """Approve without wait_loaded does not poll policy status."""
+async def test_approve_chunk_without_wait_loaded_skips_broker(api_client, mock_client, monkeypatch):
+    """Approve without wait_loaded does not invoke the policy-status broker."""
+    from shoreguard.services import policy_status as ps_mod
+
+    called = False
+
+    async def fake_wait(*args, **kwargs):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(ps_mod.policy_status_broker, "wait_for_loaded", fake_wait)
+
     mock_client.approvals.approve.return_value = {
         "id": CHUNK,
         "status": "approved",
@@ -200,22 +215,27 @@ async def test_approve_chunk_without_wait_loaded_skips_poll(api_client, mock_cli
     resp = await api_client.post(f"{BASE}/{CHUNK}/approve")
 
     assert resp.status_code == 200
-    mock_client.policies.get.assert_not_called()
+    assert called is False
 
 
-async def test_approve_all_wait_loaded(api_client, mock_client):
-    """Approve-all with ?wait_loaded=true polls until policy is loaded."""
+async def test_approve_all_wait_loaded(api_client, mock_client, monkeypatch):
+    """Approve-all with ?wait_loaded=true awaits the policy-status broker."""
+    from shoreguard.services import policy_status as ps_mod
+
+    calls: list[tuple] = []
+
+    async def fake_wait(client, sandbox_name, target_version, *, timeout=30.0, slow_poll=2.0):
+        calls.append((sandbox_name, target_version))
+
+    monkeypatch.setattr(ps_mod.policy_status_broker, "wait_for_loaded", fake_wait)
+
     mock_client.approvals.approve_all.return_value = {
         "approved": 3,
         "skipped": 0,
         "policy_version": 7,
     }
-    mock_client.policies.get.return_value = {
-        "active_version": 7,
-        "revision": {"status": "loaded"},
-    }
 
     resp = await api_client.post(f"{BASE}/approve-all?wait_loaded=true")
 
     assert resp.status_code == 200
-    mock_client.policies.get.assert_called_with(SB)
+    assert calls == [(SB, 7)]

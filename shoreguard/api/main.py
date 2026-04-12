@@ -44,7 +44,12 @@ from .routes import (
     templates,
     webhooks,
 )
-from .schemas import HealthResponse, InferenceConfigResponse, VersionResponse
+from .schemas import (
+    HealthResponse,
+    InferenceBundleResponse,
+    InferenceConfigResponse,
+    VersionResponse,
+)
 from .security_headers import security_headers_middleware
 from .websocket import router as ws_router
 
@@ -657,6 +662,39 @@ async def get_inference(
         dict[str, Any]: Current inference provider and model settings.
     """
     return await asyncio.to_thread(client.get_cluster_inference, route_name=route_name)
+
+
+@gw_api.get("/inference/bundle", response_model=InferenceBundleResponse)
+async def get_inference_bundle(
+    gw: str,
+    request: Request,
+    client: ShoreGuardClient = Depends(get_client),
+) -> dict[str, Any]:
+    """Return the resolved inference bundle for this gateway.
+
+    The bundle exposes the routes the gateway is currently serving after
+    policy overlay (M20).  API keys are redacted: each route only carries
+    ``has_api_key`` (bool), never the secret value.
+
+    Args:
+        gw: The gateway name.
+        request: The incoming HTTP request (for audit logging).
+        client: The ShoreGuardClient for this gateway.
+
+    Returns:
+        dict[str, Any]: Bundle with revision, timestamp, and routes.
+    """
+    result = await asyncio.to_thread(client.get_inference_bundle)
+    from shoreguard.services.audit import audit_log
+
+    await audit_log(
+        request,
+        "gateway.inference_bundle.viewed",
+        "inference_bundle",
+        gw,
+        gateway=gw,
+    )
+    return result
 
 
 @gw_api.put(
