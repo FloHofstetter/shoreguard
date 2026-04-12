@@ -1895,6 +1895,9 @@ async def gateway_detail_or_sub(
         if sb_rest == "bypass":
             ctx["active_tab"] = "bypass"
             return templates.TemplateResponse(request, "pages/sandbox_bypass.html", ctx)
+        if sb_rest == "verify":
+            ctx["active_tab"] = "prover"
+            return templates.TemplateResponse(request, "pages/sandbox_prover.html", ctx)
         if sb_rest == "network-policies":
             return templates.TemplateResponse(
                 request,

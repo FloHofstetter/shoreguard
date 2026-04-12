@@ -573,6 +573,32 @@ class OIDCSettings(BaseSettings):
     )
 
 
+class ProverSettings(BaseSettings):
+    """Z3 policy prover settings.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        timeout_ms (int): Z3 solver timeout per query in milliseconds.
+        max_queries_per_request (int): Maximum queries per verify request.
+        enabled (bool): Enable/disable the prover feature.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_PROVER_")
+
+    timeout_ms: int = Field(
+        default=5000,
+        description="Z3 solver timeout per query in milliseconds",
+    )
+    max_queries_per_request: int = Field(
+        default=10,
+        description="Maximum queries per verify request",
+    )
+    enabled: bool = Field(
+        default=True,
+        description="Enable/disable the prover feature",
+    )
+
+
 class CORSSettings(BaseSettings):
     """Cross-Origin Resource Sharing policy.
 
@@ -711,6 +737,7 @@ class Settings(BaseSettings):
         limits (LimitSettings): Input size and validation limits.
         oidc (OIDCSettings): OpenID Connect provider configuration.
         cors (CORSSettings): Cross-Origin Resource Sharing policy.
+        prover (ProverSettings): Z3 policy prover settings.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -727,6 +754,7 @@ class Settings(BaseSettings):
     limits: LimitSettings = Field(default_factory=LimitSettings)
     oidc: OIDCSettings = Field(default_factory=OIDCSettings)
     cors: CORSSettings = Field(default_factory=CORSSettings)
+    prover: ProverSettings = Field(default_factory=ProverSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

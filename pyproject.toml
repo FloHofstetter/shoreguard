@@ -41,6 +41,7 @@ dependencies = [
     "aiosqlite>=0.22.1",
     "pydantic-settings>=2.0",
     "PyJWT[crypto]>=2.9",
+    "z3-solver>=4.13",
 ]
 
 [dependency-groups]

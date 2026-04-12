@@ -38,6 +38,7 @@ from .routes import (
     gateway,
     operations,
     policies,
+    prover,
     providers,
     sandboxes,
     templates,
@@ -580,6 +581,7 @@ gw_api.include_router(sandboxes.router, prefix="/sandboxes", tags=["sandboxes"])
 gw_api.include_router(policies.router, tags=["policies"])
 gw_api.include_router(approvals.router, prefix="/sandboxes", tags=["approvals"])
 gw_api.include_router(bypass.router, prefix="/sandboxes", tags=["bypass"])
+gw_api.include_router(prover.router, prefix="/sandboxes", tags=["prover"])
 gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
 
 
