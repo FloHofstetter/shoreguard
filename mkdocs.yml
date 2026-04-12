@@ -96,8 +96,16 @@ nav:
   - Guides:
       - Gateways: guides/gateways.md
       - Sandboxes: guides/sandboxes.md
+      - Boot Hooks: guides/boot-hooks.md
+      - Gateway Discovery: guides/gateway-discovery.md
       - Policies: guides/policies.md
+      - Policy Pinning: guides/policy-pinning.md
+      - Policy Prover: guides/policy-prover.md
+      - GitOps: guides/gitops.md
       - Approvals: guides/approvals.md
+      - Approval Workflows: guides/approval-workflows.md
+      - Bypass Detection: guides/bypass-detection.md
+      - SBOM: guides/sbom.md
       - Webhooks: guides/webhooks.md
       - Monitoring & Logs: guides/monitoring.md
       - Audit Log: guides/audit.md

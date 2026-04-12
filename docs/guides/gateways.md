@@ -104,3 +104,28 @@ The **Inference Provider** card lets you configure which LLM provider and model
 the gateway uses for agent inference. You can also set a per-route **timeout**
 in seconds (0 uses the default of 60s) — useful for large models with long
 response times.
+
+### Resolved Inference Bundle (M20)
+
+Since v0.30.2, the gateway detail page includes a **Resolved Inference
+Bundle** panel that renders the fully resolved inference config in
+one place: the cluster default, every route (including the
+`sandbox-system` route OpenShell v0.0.25+ uses for sandbox system-level
+calls), and a per-route credential shield badge so you can see at a
+glance which routes carry an API key. API keys are redacted to a
+boolean (`has_api_key`) at the ShoreGuardClient boundary — the UI
+never handles secret material.
+
+Scrape the same view programmatically:
+
+```
+GET /api/gateways/dev/inference/bundle
+```
+
+The endpoint is viewer-accessible and audit-logged. See the
+[API reference](../reference/api.md#inference).
+
+### Auto-registering via DNS SRV
+
+Gateways can also be auto-discovered via `_openshell._tcp.<domain>`
+SRV records — see [Gateway Discovery](gateway-discovery.md).
