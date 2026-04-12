@@ -5,6 +5,26 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.30.2] — unreleased
+
+### Fixed
+
+- **Approve → reload race.** The `POST /approve` and `POST /approve-all`
+  endpoints now accept a `?wait_loaded=true` query parameter. When set,
+  the server polls the gateway's policy status internally (up to 30 s)
+  and only returns once the new policy version is reported as `loaded` —
+  or 504 on timeout. This eliminates the client-side polling loop that
+  was previously required to avoid spurious 403s from the proxy still
+  running the old policy. All three demo scripts
+  (`m7_demo.py`, `m8_demo.py`, `m12_demo.py`) have been updated to use
+  the server-side wait.
+- **Local-mode plaintext gateway auto-register.** When
+  `SHOREGUARD_LOCAL_MODE=true`, the filesystem gateway importer now skips
+  mTLS certificate material for `http://` (plaintext) endpoints. Previously,
+  if the OpenShell data directory contained cert files alongside a plaintext
+  gateway, they were imported and the connection attempt used TLS against
+  a plaintext endpoint, resulting in a permanent `unreachable` status.
+
 ## [0.30.1] — 2026-04-12
 
 ### Changed

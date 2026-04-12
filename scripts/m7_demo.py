@@ -310,35 +310,12 @@ def approve_chunk(client: httpx.Client, chunk_id: str) -> int:
     banner(f"Phase F — approve chunk {chunk_id[:8]}")
     r = client.post(
         f"/api/gateways/{GW}/sandboxes/{SB}/approvals/{chunk_id}/approve",
+        params={"wait_loaded": "true"},
     )
     if r.status_code != 200:
         fail(f"approve failed: {r.status_code} {r.text[:200]}")
     version = int(r.json().get("policy_version", 0))
-    ok(f"chunk approved → policy_version={version}")
-    return version
-
-
-def wait_policy_loaded(client: httpx.Client, target_version: int) -> None:
-    """Poll the policy endpoint until the target version is reported as ``loaded``.
-
-    This is the fix for the race that bit the first dry-run: ``/approve``
-    returns synchronously with a new version, but the proxy loads it
-    asynchronously. Retrying before the load completes hits the proxy
-    under the old policy and produces a fresh 403.
-    """
-    deadline = time.time() + 30
-    while time.time() < deadline:
-        r = client.get(f"/api/gateways/{GW}/sandboxes/{SB}/policy")
-        if r.status_code == 200:
-            d = r.json()
-            if (
-                d.get("active_version") == target_version
-                and d.get("revision", {}).get("status") == "loaded"
-            ):
-                ok(f"policy v{target_version} loaded on the proxy")
-                return
-        time.sleep(1)
-    fail(f"policy v{target_version} did not reach 'loaded' state within 30s")
+    ok(f"chunk approved → policy_version={version} (server waited for proxy load)")
 
 
 def show_audit_sequence(client: httpx.Client) -> None:
@@ -402,8 +379,7 @@ def main() -> int:
         routed_inference_call()
         provoke_denial()
         chunk_id = find_pending_chunk(client, DEMO_HOST)
-        version = approve_chunk(client, chunk_id)
-        wait_policy_loaded(client, version)
+        approve_chunk(client, chunk_id)
         show_audit_sequence(client)
         retry_call()
 

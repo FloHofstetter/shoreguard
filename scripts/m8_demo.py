@@ -392,29 +392,12 @@ def approve_chunk(client: httpx.Client, gw: str, chunk_id: str) -> int:
     """Approve a chunk on ``gw`` and return the resulting policy version."""
     r = client.post(
         f"/api/gateways/{gw}/sandboxes/{SB}/approvals/{chunk_id}/approve",
+        params={"wait_loaded": "true"},
     )
     if r.status_code != 200:
         fail(f"{gw}: approve failed: {r.status_code} {r.text[:200]}")
     version = int(r.json().get("policy_version", 0))
-    ok(f"{gw}: chunk {chunk_id[:8]} approved → policy_version={version}")
-    return version
-
-
-def wait_policy_loaded(client: httpx.Client, gw: str, target_version: int) -> None:
-    """Poll ``gw``'s policy endpoint until ``target_version`` is reported as loaded."""
-    deadline = time.time() + 30
-    while time.time() < deadline:
-        r = client.get(f"/api/gateways/{gw}/sandboxes/{SB}/policy")
-        if r.status_code == 200:
-            d = r.json()
-            if (
-                d.get("active_version") == target_version
-                and d.get("revision", {}).get("status") == "loaded"
-            ):
-                ok(f"{gw}: policy v{target_version} loaded on the proxy")
-                return
-        time.sleep(1)
-    fail(f"{gw}: policy v{target_version} did not reach 'loaded' state within 30s")
+    ok(f"{gw}: chunk {chunk_id[:8]} approved → policy_version={version} (waited)")
 
 
 def retry_call(gw: str, host: str, path: str) -> None:
@@ -463,8 +446,7 @@ def phase_g_denial_approve_retry(client: httpx.Client) -> None:
     ):
         provoke_denial(gw, host)
         chunk_id = find_pending_chunk(client, gw, host)
-        version = approve_chunk(client, gw, chunk_id)
-        wait_policy_loaded(client, gw, version)
+        approve_chunk(client, gw, chunk_id)
         retry_call(gw, host, path)
 
 

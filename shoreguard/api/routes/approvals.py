@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from shoreguard.api.auth import require_role
@@ -26,6 +27,41 @@ from shoreguard.services.webhooks import fire_webhook
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+_POLICY_POLL_INTERVAL = 1  # seconds
+_POLICY_POLL_TIMEOUT = 30  # seconds
+
+
+def _poll_policy_loaded(client: ShoreGuardClient, sandbox_name: str, target_version: int) -> None:
+    """Block until the proxy reports *target_version* as loaded.
+
+    Runs in a worker thread (called via ``asyncio.to_thread``) so
+    ``time.sleep`` does not block the event loop.
+
+    Args:
+        client: gRPC client for the active gateway.
+        sandbox_name: Sandbox whose policy is being waited on.
+        target_version: Policy version that must reach ``loaded``.
+
+    Raises:
+        HTTPException: 504 if the policy does not load within the timeout.
+    """
+    deadline = time.monotonic() + _POLICY_POLL_TIMEOUT
+    while time.monotonic() < deadline:
+        status = client.policies.get(sandbox_name)
+        if (
+            status.get("active_version") == target_version
+            and status.get("revision", {}).get("status") == "loaded"
+        ):
+            return
+        time.sleep(_POLICY_POLL_INTERVAL)
+    raise HTTPException(
+        status_code=504,
+        detail=(
+            f"Policy v{target_version} did not reach 'loaded' state within {_POLICY_POLL_TIMEOUT}s"
+        ),
+    )
 
 
 def _get_approval_service(client: ShoreGuardClient = Depends(get_client)) -> ApprovalService:
@@ -115,7 +151,9 @@ async def approve_chunk(
     request: Request,
     name: str,
     chunk_id: str,
+    wait_loaded: bool = Query(default=False),
     svc: ApprovalService = Depends(_get_approval_service),
+    client: ShoreGuardClient = Depends(get_client),
 ) -> dict[str, Any]:
     """Approve a single draft policy chunk.
 
@@ -123,7 +161,12 @@ async def approve_chunk(
         request: Incoming HTTP request.
         name: Sandbox name.
         chunk_id: Chunk identifier.
+        wait_loaded: When true, block until the proxy has loaded the new
+            policy version (up to 30 s).  Eliminates the client-side
+            polling that would otherwise be needed before retrying a
+            request under the new policy.
         svc: Injected approval service.
+        client: gRPC client for the active gateway.
 
     Returns:
         dict[str, Any]: Updated chunk status.
@@ -148,6 +191,8 @@ async def approve_chunk(
             "gateway": get_gateway_name(request),
         },
     )
+    if wait_loaded and (target := result.get("policy_version")):
+        await asyncio.to_thread(_poll_policy_loaded, client, name, target)
     return result
 
 
@@ -209,7 +254,9 @@ async def approve_all(
     request: Request,
     name: str,
     body: ApproveAllRequest | None = None,
+    wait_loaded: bool = Query(default=False),
     svc: ApprovalService = Depends(_get_approval_service),
+    client: ShoreGuardClient = Depends(get_client),
 ) -> dict[str, Any]:
     """Approve all pending draft chunks for a sandbox.
 
@@ -217,7 +264,10 @@ async def approve_all(
         request: Incoming HTTP request.
         name: Sandbox name.
         body: Optional payload controlling security-flagged inclusion.
+        wait_loaded: When true, block until the proxy has loaded the new
+            policy version (up to 30 s).
         svc: Injected approval service.
+        client: gRPC client for the active gateway.
 
     Returns:
         dict[str, Any]: Bulk approval result with counts.
@@ -240,6 +290,8 @@ async def approve_all(
         "approval.approved",
         {"sandbox": name, "bulk": True, "actor": actor, "gateway": get_gateway_name(request)},
     )
+    if wait_loaded and (target := result.get("policy_version")):
+        await asyncio.to_thread(_poll_policy_loaded, client, name, target)
     return result
 
 

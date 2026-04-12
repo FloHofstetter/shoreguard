@@ -144,3 +144,78 @@ async def test_get_approval_history(api_client, mock_client):
 
     assert resp.status_code == 200
     assert len(resp.json()) == 1
+
+
+# ─── wait_loaded ─────────────────────────────────────────────────────────────
+
+
+async def test_approve_chunk_wait_loaded(api_client, mock_client):
+    """Approve with ?wait_loaded=true polls until policy is loaded."""
+    mock_client.approvals.approve.return_value = {
+        "id": CHUNK,
+        "status": "approved",
+        "policy_version": 5,
+    }
+    mock_client.policies.get.return_value = {
+        "active_version": 5,
+        "revision": {"status": "loaded"},
+    }
+
+    resp = await api_client.post(f"{BASE}/{CHUNK}/approve?wait_loaded=true")
+
+    assert resp.status_code == 200
+    mock_client.policies.get.assert_called_with(SB)
+
+
+async def test_approve_chunk_wait_loaded_timeout(api_client, mock_client, monkeypatch):
+    """Approve with ?wait_loaded=true returns 504 on timeout."""
+    from shoreguard.api.routes import approvals as approvals_mod
+
+    monkeypatch.setattr(approvals_mod, "_POLICY_POLL_TIMEOUT", 2)
+    monkeypatch.setattr(approvals_mod, "_POLICY_POLL_INTERVAL", 0.1)
+
+    mock_client.approvals.approve.return_value = {
+        "id": CHUNK,
+        "status": "approved",
+        "policy_version": 5,
+    }
+    mock_client.policies.get.return_value = {
+        "active_version": 4,
+        "revision": {"status": "pending"},
+    }
+
+    resp = await api_client.post(f"{BASE}/{CHUNK}/approve?wait_loaded=true")
+
+    assert resp.status_code == 504
+
+
+async def test_approve_chunk_without_wait_loaded_skips_poll(api_client, mock_client):
+    """Approve without wait_loaded does not poll policy status."""
+    mock_client.approvals.approve.return_value = {
+        "id": CHUNK,
+        "status": "approved",
+        "policy_version": 5,
+    }
+
+    resp = await api_client.post(f"{BASE}/{CHUNK}/approve")
+
+    assert resp.status_code == 200
+    mock_client.policies.get.assert_not_called()
+
+
+async def test_approve_all_wait_loaded(api_client, mock_client):
+    """Approve-all with ?wait_loaded=true polls until policy is loaded."""
+    mock_client.approvals.approve_all.return_value = {
+        "approved": 3,
+        "skipped": 0,
+        "policy_version": 7,
+    }
+    mock_client.policies.get.return_value = {
+        "active_version": 7,
+        "revision": {"status": "loaded"},
+    }
+
+    resp = await api_client.post(f"{BASE}/approve-all?wait_loaded=true")
+
+    assert resp.status_code == 200
+    mock_client.policies.get.assert_called_with(SB)
