@@ -5,14 +5,21 @@ from __future__ import annotations
 import logging
 import shlex
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import grpc
 
 from shoreguard.client import ShoreGuardClient
-from shoreguard.exceptions import SandboxError, ValidationError, friendly_grpc_error
+from shoreguard.exceptions import (
+    SandboxError,
+    ValidationError,
+    friendly_grpc_error,
+)
 from shoreguard.services.policy import PolicyService
 from shoreguard.services.sandbox_meta import _UNSET, SandboxMetaStore
+
+if TYPE_CHECKING:
+    from shoreguard.services.boot_hooks import BootHookService
 
 logger = logging.getLogger(__name__)
 
@@ -26,16 +33,26 @@ class SandboxService:
     Args:
         client: OpenShell gRPC client instance.
         meta_store: Optional metadata store for labels/description.
+        boot_hooks: Optional ``BootHookService`` to invoke pre/post-create
+            hooks during ``create()``.
+        gateway_name: Gateway name this service is bound to (used for
+            boot-hook lookups when ``create()`` is called without an
+            explicit ``gateway_name`` argument).
     """
 
     def __init__(  # noqa: D107
         self,
         client: ShoreGuardClient,
         meta_store: SandboxMetaStore | None = None,
+        *,
+        boot_hooks: BootHookService | None = None,
+        gateway_name: str | None = None,
     ) -> None:
         self._client = client
         self._policy = PolicyService(client)
         self._meta = meta_store
+        self._boot_hooks = boot_hooks
+        self._gateway_name = gateway_name
 
     def list(
         self,
@@ -102,6 +119,8 @@ class SandboxService:
         deleted = self._client.sandboxes.delete(name)
         if deleted and self._meta and gateway_name:
             self._meta.delete(gateway_name, name)
+        if deleted and self._boot_hooks and gateway_name:
+            self._boot_hooks.delete_for_sandbox(gateway_name, name)
         return deleted
 
     def exec(
@@ -244,6 +263,7 @@ class SandboxService:
         gateway_name: str | None = None,
         description: str | None = None,
         labels: dict[str, str] | None = None,
+        skip_hooks: bool = False,
     ) -> dict[str, Any]:
         """Create a sandbox and optionally apply presets.
 
@@ -264,10 +284,36 @@ class SandboxService:
             gateway_name: Gateway name for metadata storage.
             description: Optional sandbox description.
             labels: Optional sandbox labels.
+            skip_hooks: If true, bypass pre/post boot hook execution
+                (admin override for cases where a broken hook would
+                block recreation).
 
         Returns:
-            dict[str, Any]: Created sandbox record with preset status.
+            dict[str, Any]: Created sandbox record with preset status
+            and (when hooks ran) ``boot_hooks`` result lists. Pre-create
+            hook failures bubble up as ``BootHookError`` from the boot
+            hook service.
         """
+        effective_gateway = gateway_name or self._gateway_name
+        run_hooks = (
+            not skip_hooks and self._boot_hooks is not None and effective_gateway is not None
+        )
+
+        pre_results: list[dict[str, Any]] = []
+        if run_hooks:
+            pre_spec: dict[str, Any] = {
+                "name": name,
+                "image": image,
+                "policy_id": "",
+                "providers": providers or [],
+                "gpu": gpu,
+            }
+            pre_results = self._boot_hooks.run_pre_create(  # type: ignore[union-attr]
+                effective_gateway,  # type: ignore[arg-type]
+                name,
+                pre_spec,
+            )
+
         result = self._client.sandboxes.create(
             name=name,
             image=image,
@@ -291,6 +337,14 @@ class SandboxService:
             result["labels"] = meta["labels"] if meta else {}
 
         if not presets:
+            if run_hooks:
+                result["boot_hooks"] = {
+                    "pre_create": pre_results,
+                    "post_create": self._boot_hooks.run_post_create(  # type: ignore[union-attr]
+                        effective_gateway,  # type: ignore[arg-type]
+                        sandbox_name,
+                    ),
+                }
             return result
 
         # Wait for sandbox to become ready
@@ -332,5 +386,16 @@ class SandboxService:
         result["presets_applied"] = applied
         if failed:
             result["presets_failed"] = failed
+
+        if run_hooks:
+            result["boot_hooks"] = {
+                "pre_create": pre_results,
+                "post_create": self._boot_hooks.run_post_create(  # type: ignore[union-attr]
+                    effective_gateway,  # type: ignore[arg-type]
+                    sandbox_name,
+                ),
+            }
+        elif pre_results:
+            result["boot_hooks"] = {"pre_create": pre_results, "post_create": []}
 
         return result

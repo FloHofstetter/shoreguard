@@ -1,0 +1,218 @@
+{% extends "pages/sandbox_base.html" %}
+{% block title %}Boot Hooks — {{ sandbox_name }} — Shoreguard{% endblock %}
+
+{% block breadcrumb_tail %}
+<li class="breadcrumb-item active">Hooks</li>
+{% endblock %}
+
+{% block content %}
+<div x-data='hooksPage({{ gateway_name|tojson }}, {{ sandbox_name|tojson }})' x-init="init()">
+    <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+        <div>
+            <h5 class="mb-1"><i class="bi bi-lightning-charge me-1"></i>Boot Hooks</h5>
+            <div class="text-muted small">
+                Pre-create hooks run as ShoreGuard-side validation gates before the
+                sandbox is created. Post-create hooks run inside the new sandbox via
+                <code>ExecSandbox</code> once it is up.
+            </div>
+        </div>
+        <button class="btn btn-primary btn-sm" data-sg-min-role="admin"
+                @click="openCreate('pre_create')">
+            <i class="bi bi-plus-lg me-1"></i>Add hook
+        </button>
+    </div>
+
+    <div x-show="loading && !loaded" class="text-center text-muted py-4">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading hooks…
+    </div>
+
+    <template x-for="phase in phases" :key="phase">
+        <div class="card mb-3" x-show="loaded">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>
+                    <i class="bi" :class="phase === 'pre_create' ? 'bi-shield-check' : 'bi-arrow-right-circle'"></i>
+                    <span class="ms-1" x-text="phaseLabel(phase)"></span>
+                </strong>
+                <button class="btn btn-outline-primary btn-sm" data-sg-min-role="admin"
+                        @click="openCreate(phase)">
+                    <i class="bi bi-plus-lg me-1"></i>New
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div x-show="grouped[phase].length === 0" class="text-muted small p-3">
+                    No <span x-text="phaseLabel(phase).toLowerCase()"></span> hooks defined.
+                </div>
+                <table class="table table-sm mb-0 align-middle" x-show="grouped[phase].length > 0">
+                    <thead>
+                        <tr class="text-muted small">
+                            <th style="width:32px"></th>
+                            <th style="width:36px">#</th>
+                            <th>Name</th>
+                            <th>Command</th>
+                            <th style="width:90px">Timeout</th>
+                            <th style="width:120px">Last run</th>
+                            <th style="width:200px" class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="hook in grouped[phase]" :key="hook.id">
+                            <tr :class="!hook.enabled ? 'text-muted' : ''">
+                                <td>
+                                    <input type="checkbox" class="form-check-input"
+                                           :checked="hook.enabled"
+                                           data-sg-min-role="admin"
+                                           @change="toggleEnabled(hook)">
+                                </td>
+                                <td class="text-muted small" x-text="hook.order"></td>
+                                <td>
+                                    <span class="font-monospace small" x-text="hook.name"></span>
+                                    <span class="badge bg-warning text-dark ms-1"
+                                          x-show="hook.continue_on_failure"
+                                          title="continue on failure">soft</span>
+                                </td>
+                                <td>
+                                    <code class="small text-truncate d-inline-block"
+                                          style="max-width: 360px;"
+                                          :title="hook.command" x-text="hook.command"></code>
+                                </td>
+                                <td class="small font-monospace">
+                                    <span x-text="hook.timeout_seconds"></span>s
+                                </td>
+                                <td class="small">
+                                    <template x-if="hook.last_status">
+                                        <span class="badge"
+                                              :class="hook.last_status === 'success' ? 'bg-success' : 'bg-danger'"
+                                              x-text="hook.last_status"></span>
+                                    </template>
+                                    <template x-if="!hook.last_status">
+                                        <span class="text-muted">—</span>
+                                    </template>
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @click="runHook(hook)" data-sg-min-role="operator"
+                                            title="Run now">
+                                        <i class="bi bi-play"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @click="openEdit(hook)" data-sg-min-role="admin"
+                                            title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @click="moveUp(hook)" data-sg-min-role="admin"
+                                            :disabled="hook.order === 0" title="Move up">
+                                        <i class="bi bi-arrow-up"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @click="moveDown(hook)" data-sg-min-role="admin"
+                                            :disabled="hook.order === grouped[phase].length - 1" title="Move down">
+                                        <i class="bi bi-arrow-down"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            @click="deleteHook(hook)" data-sg-min-role="admin"
+                                            title="Delete">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-for="hook in grouped[phase]" :key="`out-${hook.id}`">
+                            <tr x-show="hook.last_output && hook.last_status">
+                                <td colspan="7" class="bg-light small">
+                                    <pre class="mb-0" style="white-space:pre-wrap; max-height:160px; overflow:auto;"
+                                         x-text="hook.last_output"></pre>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <!-- Editor modal -->
+    <div class="modal fade" tabindex="-1" x-ref="editorModal">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <span x-text="editing.id ? 'Edit hook' : 'New hook'"></span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small">Name</label>
+                            <input type="text" class="form-control form-control-sm"
+                                   x-model="editing.name" :disabled="!!editing.id">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Phase</label>
+                            <select class="form-select form-select-sm"
+                                    x-model="editing.phase" :disabled="!!editing.id">
+                                <option value="pre_create">pre_create</option>
+                                <option value="post_create">post_create</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small">Command</label>
+                            <input type="text" class="form-control form-control-sm font-monospace"
+                                   x-model="editing.command"
+                                   placeholder="e.g. apt update && apt install -y curl">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small">Working directory (post-create only)</label>
+                            <input type="text" class="form-control form-control-sm font-monospace"
+                                   x-model="editing.workdir" placeholder="/workspace">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">Timeout (seconds)</label>
+                            <input type="number" class="form-control form-control-sm"
+                                   min="1" max="600" x-model.number="editing.timeout_seconds">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small">Environment (KEY=VALUE per line)</label>
+                            <textarea class="form-control form-control-sm font-monospace"
+                                      rows="3" x-model="editing.envText"
+                                      placeholder="FOO=bar&#10;TOKEN=secret"></textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       x-model="editing.enabled" id="hookEnabled">
+                                <label class="form-check-label small" for="hookEnabled">Enabled</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       x-model="editing.continue_on_failure" id="hookSoft">
+                                <label class="form-check-label small" for="hookSoft">
+                                    Continue on failure (post-create only)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div x-show="editorError" class="alert alert-danger mt-3 small mb-0" x-text="editorError"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm"
+                            @click="saveEditing()" :disabled="saving">
+                        <span x-show="saving" class="spinner-border spinner-border-sm me-1"></span>
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block sandbox_js %}
+<script src="/static/js/boot_hooks.js"></script>
+{% endblock %}

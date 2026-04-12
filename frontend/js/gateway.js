@@ -58,6 +58,26 @@ function gatewayList() {
             this.load();
         },
 
+        // M22: trigger DNS-SRV gateway discovery
+        discoverResult: null,
+        async discover() {
+            try {
+                const result = await apiFetch(`${API_GLOBAL}/gateway/discover`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+                this.discoverResult = result;
+                showToast(
+                    `Discovery: ${result.registered.length} new, ${result.skipped.length} skipped`,
+                    result.errors.length ? 'warning' : 'success',
+                );
+                this.load();
+            } catch (e) {
+                showToast(`Discovery failed: ${e.message}`, 'danger');
+            }
+        },
+
         async unregister(name) {
             const confirmed = await showConfirm(
                 `Unregister gateway "${name}"? This removes it from Shoreguard but does not affect the running gateway.`,

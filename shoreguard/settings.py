@@ -599,6 +599,53 @@ class ProverSettings(BaseSettings):
     )
 
 
+class DiscoverySettings(BaseSettings):
+    """MicroVM gateway discovery via DNS SRV (M22).
+
+    Off by default. When enabled, ShoreGuard periodically queries DNS for
+    ``_openshell._tcp.<domain>`` SRV records and auto-registers any newly
+    discovered endpoints in the gateway registry.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Enable the discovery background task.
+        domains (list[str]): Base domains to scan (comma-separated via env).
+        interval_seconds (int): Background re-scan interval.
+        default_scheme (str): Scheme assigned to auto-registered gateways.
+        auto_register (bool): If false, discovery only lists endpoints.
+        resolver_timeout_seconds (float): Per-query DNS timeout.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_DISCOVERY_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable the gateway discovery background loop",
+    )
+    domains: list[str] = Field(
+        default_factory=list,
+        description="Base domains to scan for `_openshell._tcp` SRV records",
+    )
+    interval_seconds: int = Field(
+        default=300,
+        ge=30,
+        description="Background re-scan interval in seconds (>= 30)",
+    )
+    default_scheme: str = Field(
+        default="grpc+tls",
+        description="Connection scheme assigned to auto-registered gateways",
+    )
+    auto_register: bool = Field(
+        default=True,
+        description="If false, discovery only lists endpoints without registering",
+    )
+    resolver_timeout_seconds: float = Field(
+        default=5.0,
+        ge=0.5,
+        description="Per-query DNS resolver timeout in seconds",
+    )
+
+
 class CORSSettings(BaseSettings):
     """Cross-Origin Resource Sharing policy.
 
@@ -738,6 +785,7 @@ class Settings(BaseSettings):
         oidc (OIDCSettings): OpenID Connect provider configuration.
         cors (CORSSettings): Cross-Origin Resource Sharing policy.
         prover (ProverSettings): Z3 policy prover settings.
+        discovery (DiscoverySettings): MicroVM gateway DNS-SRV discovery (M22).
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -755,6 +803,7 @@ class Settings(BaseSettings):
     oidc: OIDCSettings = Field(default_factory=OIDCSettings)
     cors: CORSSettings = Field(default_factory=CORSSettings)
     prover: ProverSettings = Field(default_factory=ProverSettings)
+    discovery: DiscoverySettings = Field(default_factory=DiscoverySettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

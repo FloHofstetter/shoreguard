@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.30.2] — unreleased
 
+### Added (M22)
+
+- **Sandbox Boot Hooks.** Operators can attach pre/post-create hooks to a
+  sandbox. Pre-create hooks act as ShoreGuard-side validation gates that
+  run *before* `CreateSandbox` reaches the gateway: their command executes
+  via `subprocess.run` in the ShoreGuard process with a whitelisted
+  environment (`SG_SANDBOX_NAME`, `SG_SANDBOX_IMAGE`, `SG_SANDBOX_POLICY_ID`,
+  plus user-defined env). A failure raises `BootHookError` and aborts
+  sandbox creation. Post-create hooks run *after* `CreateSandbox` succeeds,
+  executing inside the new sandbox via the existing `ExecSandbox` RPC —
+  intended for warm-up tasks (`apt update`, telemetry init). The execution
+  surface is intentionally ShoreGuard-side because OpenShell v0.0.26 has no
+  native hook RPC; once upstream ships one, `BootHookService` will detect
+  it and delegate.
+  - **Storage.** New table `sandbox_boot_hooks` (Alembic 016) with
+    `phase`, `command`, `workdir`, `env_json`, `timeout_seconds`, `order`,
+    `enabled`, `continue_on_failure`, plus run state (`last_run_at`,
+    `last_status`, `last_output` truncated to 4 KiB).
+  - **REST API** under `/api/gateways/{gw}/sandboxes/{name}/hooks`:
+    `GET` (list, viewer), `GET /{id}` (single), `POST` (admin),
+    `PUT /{id}` (admin), `DELETE /{id}` (admin), `POST /reorder` (admin),
+    `POST /{id}/run` (operator, manual trigger). Audit events:
+    `boot_hook.created`, `boot_hook.updated`, `boot_hook.deleted`,
+    `boot_hook.reordered`, `boot_hook.manual_run`.
+  - **`SandboxService.create()` integration.** When the boot hook service
+    is wired in, `create()` runs the pre-create gate before
+    `CreateSandbox` and the post-create chain after. The new admin-only
+    `skip_hooks` flag on `POST .../sandboxes` bypasses both phases for
+    recovery scenarios. Failures from continue-on-failure hooks are
+    surfaced in the response under `boot_hooks.post_create` rather than
+    rolled back.
+  - **Frontend.** New "Hooks" tab on the sandbox detail page
+    (`frontend/templates/pages/sandbox_hooks.html` +
+    `frontend/js/boot_hooks.js`) with separate Pre-create / Post-create
+    sections, in-place toggle, reorder buttons, an editor modal (command,
+    workdir, env KEY=VALUE, timeout, continue_on_failure), and a one-click
+    "Run" button that surfaces the captured output inline.
+
+- **MicroVM Gateway Discovery.** ShoreGuard can now auto-register
+  OpenShell gateways announced via DNS SRV records
+  (`_openshell._tcp.<domain>`). Discovery runs both as a manual trigger
+  (`POST /api/gateway/discover` — operator+) and as a configurable
+  background loop in the application lifespan (analogous to the existing
+  `_health_monitor`). Discovered endpoints flow through the same
+  `_validate_endpoint_format` guard as manual registration, so the
+  `*.svc.cluster.local` whitelist still applies and other private IPs are
+  still rejected unless `local_mode` is enabled.
+  - **New dependency.** `dnspython >= 2.6` (MIT licensed).
+  - **Settings.** New `DiscoverySettings` block (`SHOREGUARD_DISCOVERY_*`):
+    `enabled`, `domains`, `interval_seconds`, `default_scheme`,
+    `auto_register`, `resolver_timeout_seconds`. Off by default.
+  - **Service.** `shoreguard/services/discovery.py` exposes
+    `discover_domain`, `discover_all`, `auto_register`, `run_once`, and
+    `status`. Names are derived from the SRV target host (sanitised, max
+    253 chars), with the port appended when not 443/30051.
+  - **REST API.** `POST /api/gateway/discover` (operator+, optional
+    `{domains: [...]}` override; audit-logged as `gateway.discovered`)
+    and `GET /api/gateway/discovery/status` (viewer).
+  - **Frontend.** "Discover" button on the gateways list page that
+    triggers `POST /api/gateway/discover`, surfaces the result counts in
+    a dismissable banner + toast, and refreshes the table.
+
+- **Demo + tests.** `scripts/m22_demo.py` walks the boot-hook + discovery
+  flow end-to-end against a live ShoreGuard. New test files
+  (`tests/test_boot_hooks_service.py`, `tests/test_api_boot_hooks_routes.py`,
+  `tests/test_discovery_service.py`, `tests/test_api_discovery_routes.py`)
+  add ~80 unit + integration tests; total suite remains green.
+
 ### Added (M21)
 
 - **SBOM / Supply-Chain Viewer.** Operators can upload a CycloneDX JSON

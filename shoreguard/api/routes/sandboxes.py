@@ -40,16 +40,27 @@ _VALID_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 router = APIRouter()
 
 
-def _get_sandbox_service(client: ShoreGuardClient = Depends(get_client)) -> SandboxService:
+def _get_sandbox_service(
+    client: ShoreGuardClient = Depends(get_client),
+    gateway_name: str = Depends(get_gateway_name),
+) -> SandboxService:
     """Build a SandboxService from the injected client.
 
     Args:
         client: gRPC client for the active gateway.
+        gateway_name: Name of the active gateway (for boot hook lookups).
 
     Returns:
         SandboxService: Service instance bound to the client.
     """
-    return SandboxService(client, meta_store=_sandbox_meta_mod.sandbox_meta_store)
+    from shoreguard.services import boot_hooks as _boot_hooks_mod
+
+    return SandboxService(
+        client,
+        meta_store=_sandbox_meta_mod.sandbox_meta_store,
+        boot_hooks=_boot_hooks_mod.boot_hook_service,
+        gateway_name=gateway_name,
+    )
 
 
 class CreateSandboxRequest(BaseModel):
@@ -65,6 +76,7 @@ class CreateSandboxRequest(BaseModel):
         presets: Policy presets to apply.
         description: Optional free-text description.
         labels: Optional key-value labels.
+        skip_hooks: Admin-only flag to bypass pre/post-create boot hooks.
     """
 
     name: str = Field(default="", max_length=253)
@@ -76,6 +88,7 @@ class CreateSandboxRequest(BaseModel):
     presets: list[str] = Field(default_factory=list, max_length=20)
     description: str | None = None
     labels: dict[str, str] | None = None
+    skip_hooks: bool = Field(default=False)
 
     @field_validator("environment")
     @classmethod
@@ -240,6 +253,8 @@ async def create_sandbox(
         raise HTTPException(400, "Invalid sandbox name: must match [a-zA-Z0-9][a-zA-Z0-9._-]*")
     validate_description(body.description)
     validate_labels(body.labels)
+    if body.skip_hooks and getattr(request.state, "role", None) != "admin":
+        raise HTTPException(403, "skip_hooks requires admin role")
     sandbox_name = body.name or "unnamed"
     actor = get_actor(request)
     gw = get_gateway_name(request)
@@ -257,6 +272,7 @@ async def create_sandbox(
             gateway_name=gw,
             description=body.description,
             labels=body.labels,
+            skip_hooks=body.skip_hooks,
         )
         sb_name = result.get("name", body.name)
         assert _ops_mod.operation_service is not None

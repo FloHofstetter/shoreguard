@@ -34,6 +34,7 @@ from .pages import router as pages_router
 from .routes import (
     approvals,
     audit,
+    boot_hooks,
     bypass,
     gateway,
     operations,
@@ -62,6 +63,7 @@ logger = logging.getLogger(__name__)
 _task_health: dict[str, dict[str, Any]] = {
     "cleanup": {"last_success": None, "consecutive_failures": 0, "alive": False},
     "health_monitor": {"last_success": None, "consecutive_failures": 0, "alive": False},
+    "discovery": {"last_success": None, "consecutive_failures": 0, "alive": False},
 }
 
 
@@ -159,6 +161,45 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     sbom_mod.sbom_service = sbom_mod.SBOMService(session_factory)
     logger.info("SBOM service initialised")
+
+    # ── Boot hooks (M22) ────────────────────────────────────────────────
+    import shoreguard.services.boot_hooks as boot_hooks_mod
+
+    def _resolve_sandbox_service(gateway_name: str):  # type: ignore[no-untyped-def]  # noqa: D103
+        # Build a SandboxService for post-create hook dispatch.
+        from shoreguard.services.sandbox import SandboxService
+
+        gw_svc = gw_mod.gateway_service
+        if gw_svc is None:
+            return None
+        client = gw_svc.get_client(gateway_name)
+        if client is None:
+            return None
+        return SandboxService(
+            client,
+            meta_store=sandbox_meta_mod.sandbox_meta_store,
+            gateway_name=gateway_name,
+        )
+
+    boot_hooks_mod.boot_hook_service = boot_hooks_mod.BootHookService(
+        session_factory,
+        sandbox_service_provider=_resolve_sandbox_service,
+    )
+    logger.info("Boot hook service initialised")
+
+    # ── Gateway discovery (M22) ─────────────────────────────────────────
+    import shoreguard.services.discovery as discovery_mod
+
+    discovery_mod.discovery_service = discovery_mod.DiscoveryService(
+        registry,
+        gw_mod.gateway_service,
+        settings.discovery,
+    )
+    logger.info(
+        "Discovery service initialised (enabled=%s, domains=%s)",
+        settings.discovery.enabled,
+        settings.discovery.domains,
+    )
 
     # ── Policy pin service (M18) ─────────────────────────────────────
     import shoreguard.services.policy_pin as pin_mod
@@ -292,10 +333,44 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         return _cb
 
+    async def _discovery_loop() -> None:
+        """Periodically run DNS-SRV gateway discovery if enabled."""
+        if not settings.discovery.enabled:
+            _task_health["discovery"]["alive"] = False
+            return
+        base_interval = settings.discovery.interval_seconds
+        max_interval = max(base_interval * 8, base_interval)
+        consecutive_failures = 0
+        interval = base_interval
+        _task_health["discovery"]["alive"] = True
+        _task_health["discovery"]["last_success"] = time.time()
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                svc = discovery_mod.discovery_service
+                if svc is None:
+                    continue
+                await asyncio.to_thread(svc.run_once)
+                consecutive_failures = 0
+                interval = base_interval
+                _task_health["discovery"]["last_success"] = time.time()
+                _task_health["discovery"]["consecutive_failures"] = 0
+            except Exception:
+                consecutive_failures += 1
+                _task_health["discovery"]["consecutive_failures"] = consecutive_failures
+                logger.exception(
+                    "Discovery loop error (consecutive failures: %d)",
+                    consecutive_failures,
+                )
+                if consecutive_failures >= 3:
+                    interval = min(interval * 2, max_interval)
+
     cleanup_task = asyncio.create_task(_cleanup_operations())
     cleanup_task.add_done_callback(_make_done_cb("cleanup"))
     health_task = asyncio.create_task(_health_monitor())
     health_task.add_done_callback(_make_done_cb("health_monitor"))
+    discovery_task = asyncio.create_task(_discovery_loop())
+    discovery_task.add_done_callback(_make_done_cb("discovery"))
     yield
 
     # ── Graceful shutdown ──────────────────────────────────────────
@@ -304,6 +379,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # 1. Stop background polling (fast)
     cleanup_task.cancel()
     health_task.cancel()
+    discovery_task.cancel()
 
     # 2. Cancel LRO tasks (CancelledError handler marks ops as failed)
     from shoreguard.api.lro import shutdown_lros
@@ -320,7 +396,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # 4. Await background task cancellation with a hard deadline so a
     #    task that swallows CancelledError cannot block shutdown forever.
-    bg_tasks = (cleanup_task, health_task)
+    bg_tasks = (cleanup_task, health_task, discovery_task)
     shutdown_timeout = float(settings.server.graceful_shutdown_timeout)
     _, pending = await asyncio.wait(bg_tasks, timeout=shutdown_timeout)
     if pending:
@@ -607,6 +683,7 @@ gw_api.include_router(approvals.router, prefix="/sandboxes", tags=["approvals"])
 gw_api.include_router(bypass.router, prefix="/sandboxes", tags=["bypass"])
 gw_api.include_router(prover.router, prefix="/sandboxes", tags=["prover"])
 gw_api.include_router(sbom.router, prefix="/sandboxes", tags=["sbom"])
+gw_api.include_router(boot_hooks.router, prefix="/sandboxes", tags=["boot_hooks"])
 gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
 
 

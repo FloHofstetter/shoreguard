@@ -66,3 +66,32 @@ class ValidationError(ShoreGuardError):
 
 class InvalidSBOMError(ShoreGuardError):
     """An uploaded SBOM document is malformed or unsupported (M21)."""
+
+
+class BootHookError(ShoreGuardError):
+    """A boot hook failed (M22).
+
+    Carries the failed hook's name + captured output so callers can surface
+    it to the user. Pre-create failures abort CreateSandbox; post-create
+    failures abort the sandbox warm-up only when ``continue_on_failure`` is
+    false.
+
+    Args:
+        message: Human-readable failure description.
+        hook_name: Name of the failing hook.
+        phase: ``pre_create`` or ``post_create``.
+        output: Captured stdout+stderr (already truncated by caller).
+    """
+
+    def __init__(  # noqa: D107
+        self,
+        message: str,
+        *,
+        hook_name: str = "",
+        phase: str = "",
+        output: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.hook_name = hook_name
+        self.phase = phase
+        self.output = output

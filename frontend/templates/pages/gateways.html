@@ -15,11 +15,23 @@
             <button class="btn btn-outline-secondary" @click="load()" title="Refresh" aria-label="Refresh">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
+            <button class="btn btn-outline-primary" @click="discover()"
+                    x-show="$isAdmin" x-cloak title="Run DNS-SRV discovery">
+                <i class="bi bi-broadcast me-1"></i>Discover
+            </button>
             <a class="btn btn-outline-success" href="/gateways/new"
                x-show="$isAdmin" x-cloak>
                 <i class="bi bi-plus-lg me-1"></i>Register
             </a>
         </div>
+    </div>
+
+    <div x-show="discoverResult" x-cloak class="alert alert-info py-2 small mb-2">
+        <i class="bi bi-broadcast me-1"></i>
+        Discovery: <strong x-text="discoverResult && discoverResult.registered.length"></strong> registered,
+        <strong x-text="discoverResult && discoverResult.skipped.length"></strong> skipped,
+        <strong x-text="discoverResult && discoverResult.errors.length"></strong> errors.
+        <button type="button" class="btn-close float-end" @click="discoverResult = null"></button>
     </div>
 
     <!-- Loading -->

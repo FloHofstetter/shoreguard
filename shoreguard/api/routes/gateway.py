@@ -194,6 +194,71 @@ class UpdateGatewayMetadataRequest(BaseModel):
 # ─── Gateway queries ──────────────────────────────────────────────────────
 
 
+class DiscoverRequest(BaseModel):
+    """Body for the manual discovery trigger.
+
+    Attributes:
+        domains: Optional explicit domain list overriding settings.
+    """
+
+    domains: list[str] | None = None
+
+
+@router.post("/discover", dependencies=[Depends(require_role("operator"))])
+async def discover_gateways(
+    body: DiscoverRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Run a one-shot DNS-SRV discovery scan and auto-register results.
+
+    Args:
+        body: Optional override for the domain list.
+        request: Incoming HTTP request (used for audit context).
+
+    Returns:
+        dict[str, Any]: ``{discovered, registered, skipped, errors}``.
+
+    Raises:
+        HTTPException: ``503`` if the service is not initialised.
+    """
+    from shoreguard.services import discovery as discovery_mod
+
+    svc = discovery_mod.discovery_service
+    if svc is None:
+        raise HTTPException(503, "DiscoveryService not initialised")
+    result = await asyncio.to_thread(svc.run_once, domains=body.domains)
+    await audit_log(
+        request,
+        "gateway.discovered",
+        "gateway",
+        ",".join(body.domains) if body.domains else "default",
+        detail={
+            "registered": len(result["registered"]),
+            "skipped": len(result["skipped"]),
+            "errors": len(result["errors"]),
+        },
+    )
+    return result
+
+
+@router.get("/discovery/status", dependencies=[Depends(require_role("viewer"))])
+async def discovery_status() -> dict[str, Any]:
+    """Return the discovery loop status (last run, configured domains).
+
+    Returns:
+        dict[str, Any]: Status object from ``DiscoveryService.status``.
+
+    Raises:
+        HTTPException: ``503`` if the service is not initialised.
+    """
+    from shoreguard.services import discovery as discovery_mod
+
+    svc = discovery_mod.discovery_service
+    if svc is None:
+        raise HTTPException(503, "DiscoveryService not initialised")
+    return svc.status()
+
+
 @router.get("/list", response_model=PaginatedResponse)
 async def gateway_list(
     label: list[str] | None = Query(None),
