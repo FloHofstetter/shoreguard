@@ -93,6 +93,7 @@ nav:
   - Concepts:
       - Architecture: concepts/architecture.md
       - Security Model: concepts/security.md
+      - Migrating from NemoClaw: guides/nemoclaw-migration.md
   - Guides:
       - Gateways: guides/gateways.md
       - Sandboxes: guides/sandboxes.md
