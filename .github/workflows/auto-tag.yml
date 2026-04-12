@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     if: "startsWith(github.event.head_commit.message, 'release: ShoreGuard v')"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0  # full history so we can push a tag
 
