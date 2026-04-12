@@ -42,6 +42,12 @@
                             Clear All
                         </button>
                     </template>
+                    <button class="btn btn-outline-secondary"
+                            :class="sortPersistentFirst ? 'active' : ''"
+                            @click="sortPersistentFirst = !sortPersistentFirst"
+                            title="Sort persistent denials first">
+                        <i class="bi bi-arrow-repeat me-1"></i>Persistent first
+                    </button>
                 </div>
             </div>
 
@@ -64,7 +70,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <template x-for="chunk in chunks" :key="chunk.id">
+                        <template x-for="chunk in sortedChunks" :key="chunk.id">
                             <tr :id="'chunk-row-' + chunk.id"
                                 :class="highlightChunkId === chunk.id ? 'table-warning' : ''">
                                 <!-- Main row -->
@@ -92,6 +98,44 @@
                                             <template x-for="id in ($prop(chunk, 'denial_summary_ids') || [])" :key="id">
                                                 <code class="me-1 px-1 bg-body-secondary rounded small" x-text="id"></code>
                                             </template>
+                                        </div>
+                                        <!-- M16: Denial context enrichment -->
+                                        <div x-show="chunk.denial_context && chunk.denial_context.ancestors && chunk.denial_context.ancestors.length > 0" class="small text-muted mb-1">
+                                            <span class="fw-semibold">Process chain:</span>
+                                            <code x-text="ancestryBreadcrumb(chunk.denial_context)"></code>
+                                        </div>
+                                        <div x-show="chunk.denial_context && chunk.denial_context.binary_sha256" class="small text-muted mb-1">
+                                            <span class="fw-semibold">SHA256:</span>
+                                            <code class="font-monospace px-1 bg-body-secondary rounded small sg-cursor-pointer"
+                                                  :title="chunk.denial_context && chunk.denial_context.binary_sha256"
+                                                  @click.stop="navigator.clipboard.writeText(chunk.denial_context ? chunk.denial_context.binary_sha256 : '')"
+                                                  x-text="truncatedSha(chunk.denial_context)"></code>
+                                            <i class="bi bi-clipboard ms-1 small text-muted"></i>
+                                        </div>
+                                        <div x-show="chunk.denial_context && chunk.denial_context.persistent" class="small mb-1">
+                                            <span class="badge text-bg-warning"><i class="bi bi-arrow-repeat me-1"></i>Persistent</span>
+                                        </div>
+                                        <div x-show="chunk.denial_context && chunk.denial_context.l7_request_samples && chunk.denial_context.l7_request_samples.length > 0" class="small mb-2">
+                                            <span class="fw-semibold text-muted">L7 Request Samples:</span>
+                                            <table class="table table-sm table-bordered mt-1 mb-0" style="max-width:500px">
+                                                <thead>
+                                                    <tr class="small text-muted">
+                                                        <th>Method</th><th>Path</th><th>Decision</th><th class="text-end">Count</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <template x-for="sample in (chunk.denial_context ? chunk.denial_context.l7_request_samples : [])" :key="sample.path + sample.method">
+                                                        <tr class="small">
+                                                            <td><code x-text="sample.method"></code></td>
+                                                            <td class="font-monospace" x-text="sample.path"></td>
+                                                            <td>
+                                                                <span class="badge" :class="sample.decision === 'allow' ? 'text-bg-success' : 'text-bg-danger'" x-text="sample.decision"></span>
+                                                            </td>
+                                                            <td class="text-end" x-text="sample.count"></td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
                                         </div>
                                         <div>
                                             <button class="btn btn-sm btn-outline-secondary"

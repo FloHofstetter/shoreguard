@@ -25,6 +25,7 @@ function approvalsPage(name) {
         rollingSummary: '',
         lastAnalyzedAtMs: 0,
         expandedChunks: {},
+        sortPersistentFirst: false,
 
         // After a Logs → Approvals navigation via hash fragment
         // (#binary=X&host=Y), the matching chunk is scrolled into view and
@@ -33,6 +34,15 @@ function approvalsPage(name) {
 
         get pendingCount() {
             return this.chunks.filter(c => c.status === 'pending').length;
+        },
+
+        get sortedChunks() {
+            if (!this.sortPersistentFirst) return this.chunks;
+            return [...this.chunks].sort((a, b) => {
+                const ap = a.denial_context && a.denial_context.persistent ? 1 : 0;
+                const bp = b.denial_context && b.denial_context.persistent ? 1 : 0;
+                return bp - ap;
+            });
         },
 
         async init() {
@@ -86,8 +96,19 @@ function approvalsPage(name) {
                 chunk.security_notes ||
                 chunk.stage ||
                 (chunk.denial_summary_ids && chunk.denial_summary_ids.length > 0) ||
-                chunk.binary
+                chunk.binary ||
+                chunk.denial_context
             );
+        },
+
+        ancestryBreadcrumb(ctx) {
+            if (!ctx || !ctx.ancestors || ctx.ancestors.length === 0) return '';
+            return ctx.ancestors.join(' \u2192 ');
+        },
+
+        truncatedSha(ctx) {
+            if (!ctx || !ctx.binary_sha256) return '';
+            return ctx.binary_sha256.slice(0, 16) + '\u2026';
         },
 
         confidencePercent(chunk) {

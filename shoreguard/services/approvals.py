@@ -25,9 +25,16 @@ class ApprovalService:
             status_filter: Optional status to filter by.
 
         Returns:
-            dict[str, Any]: Draft policy data.
+            dict[str, Any]: Draft policy data with denial context enrichment.
         """
-        return self._client.approvals.get_draft(sandbox_name, status_filter=status_filter)
+        result = self._client.approvals.get_draft(sandbox_name, status_filter=status_filter)
+
+        from shoreguard.services.denial_context import denial_context_service
+
+        if denial_context_service is not None:
+            denial_context_service.enrich_chunks(sandbox_name, result.get("chunks", []))
+
+        return result
 
     def get_pending(self, sandbox_name: str) -> list[dict[str, Any]]:
         """Get only pending (unapproved) draft chunks.
@@ -36,9 +43,16 @@ class ApprovalService:
             sandbox_name: Name of the sandbox.
 
         Returns:
-            list[dict[str, Any]]: Pending draft chunks.
+            list[dict[str, Any]]: Pending draft chunks with denial context.
         """
-        return self._client.approvals.get_pending(sandbox_name)
+        chunks = self._client.approvals.get_pending(sandbox_name)
+
+        from shoreguard.services.denial_context import denial_context_service
+
+        if denial_context_service is not None:
+            denial_context_service.enrich_chunks(sandbox_name, chunks)
+
+        return chunks
 
     def approve(self, sandbox_name: str, chunk_id: str) -> dict[str, Any]:
         """Approve a single draft policy chunk.

@@ -102,6 +102,13 @@ class PolicyService:
             len(proposed_chunks),
             analysis_mode,
         )
+
+        # Cache denial summaries for approval-chunk enrichment (M16).
+        from shoreguard.services.denial_context import denial_context_service
+
+        if denial_context_service is not None:
+            denial_context_service.ingest_summaries(sandbox_name, summaries)
+
         return self._client.policies.submit_analysis(
             sandbox_name,
             summaries=summaries,

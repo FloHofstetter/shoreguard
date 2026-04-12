@@ -147,6 +147,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     bypass_mod.bypass_service = bypass_mod.BypassService()
     logger.info("Bypass detection service initialised")
 
+    # ── Denial context cache (M16) ─────────────────────────────────────
+    import shoreguard.services.denial_context as dc_mod
+
+    dc_mod.denial_context_service = dc_mod.DenialContextService()
+    logger.info("Denial context cache initialised")
+
     # ── Metrics ─────────────────────────────────────────────────────────
     shoreguard_info.info(
         {"version": __version__, "git_sha": __git_sha__, "build_time": __build_time__}
