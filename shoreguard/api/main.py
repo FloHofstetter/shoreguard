@@ -41,6 +41,7 @@ from .routes import (
     prover,
     providers,
     sandboxes,
+    sbom,
     templates,
     webhooks,
 )
@@ -152,6 +153,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     bypass_mod.bypass_service = bypass_mod.BypassService()
     logger.info("Bypass detection service initialised")
+
+    # ── SBOM viewer (M21) ───────────────────────────────────────────────
+    import shoreguard.services.sbom as sbom_mod
+
+    sbom_mod.sbom_service = sbom_mod.SBOMService(session_factory)
+    logger.info("SBOM service initialised")
 
     # ── Policy pin service (M18) ─────────────────────────────────────
     import shoreguard.services.policy_pin as pin_mod
@@ -599,6 +606,7 @@ gw_api.include_router(policies.router, tags=["policies"])
 gw_api.include_router(approvals.router, prefix="/sandboxes", tags=["approvals"])
 gw_api.include_router(bypass.router, prefix="/sandboxes", tags=["bypass"])
 gw_api.include_router(prover.router, prefix="/sandboxes", tags=["prover"])
+gw_api.include_router(sbom.router, prefix="/sandboxes", tags=["sbom"])
 gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
 
 

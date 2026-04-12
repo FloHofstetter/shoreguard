@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.30.2] — unreleased
 
+### Added (M21)
+
+- **SBOM / Supply-Chain Viewer.** Operators can upload a CycloneDX JSON
+  SBOM per sandbox (typically from CI) and browse components, licenses,
+  and known vulnerabilities directly in the ShoreGuard UI. Vulnerabilities
+  are read offline from the CycloneDX `vulnerabilities` array — no online
+  NVD/OSV lookup.
+  - **Storage.** Two new tables (Alembic 015): `sbom_snapshots` (one per
+    `(gateway, sandbox)`, holds metadata + the original CycloneDX payload)
+    and `sbom_components` (denormalised rows for fast paginated search).
+    A new upload replaces the prior snapshot — historical snapshots are
+    deliberately out of scope.
+  - **Service.** `shoreguard/services/sbom.py` parses CycloneDX 1.5,
+    aggregates per-component `vuln_count` + `max_severity` via `bom-ref`
+    join, and exposes `ingest`, `get_snapshot`, `get_raw_json`,
+    `delete_snapshot`, `search_components`, `get_vulnerabilities`. No new
+    Python dependency — the parser is self-contained (~280 LoC).
+  - **REST API** under `/api/gateways/{gw}/sandboxes/{name}/sbom`:
+    `POST` (upload, admin, max 10 MiB, audit-logged as `sbom.uploaded`),
+    `GET` (snapshot metadata), `GET /components` (paginated search by
+    `?search=` + `?severity=`, including `severity=CLEAN` for vuln-free
+    components), `GET /vulnerabilities` (sorted highest-severity first),
+    `GET /raw` (original payload as `application/vnd.cyclonedx+json`),
+    `DELETE` (admin, audit-logged as `sbom.deleted`).
+  - **Frontend.** New `SBOM` tab in the sandbox sub-nav. Empty-state
+    upload flow with cURL example for CI; component table with debounced
+    search + severity-filter chips + pagination; vulnerabilities tab with
+    severity-coloured CVE cards and reference links; admin-only Replace +
+    Delete actions; raw download.
+  - **Tests.** 46 new service tests covering parser happy + failure
+    paths, ingest replace + cascade, search/filter combinations,
+    pagination clamping; 20 new API route tests covering upload/get/list/
+    delete + edge cases. Full suite: 2805 passed, 1 skipped.
+  - **Demo script.** `scripts/m21_demo.py` walks 8 phases against a
+    running ShoreGuard, using the bundled CycloneDX fixture
+    `scripts/fixtures/sample_cyclonedx.json` (10 components, 2 CVEs).
+  - **Ingestion model.** v0.0.26 OpenShell exposes no SBOM RPC, so M21 is
+    upload-only. CI is the right source anyway — it knows which build is
+    deploying. A future milestone can add a gateway-pull path once the
+    upstream `feat/237-sbom-tooling` branch ships.
+
 ### Fixed
 
 - **Approve → reload race.** The `POST /approve` and `POST /approve-all`

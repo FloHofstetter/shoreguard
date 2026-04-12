@@ -1,0 +1,124 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:m21-demo-fixture",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-04-12T00:00:00Z",
+    "tools": [
+      {"vendor": "shoreguard", "name": "m21_demo", "version": "0.1.0"}
+    ],
+    "component": {
+      "type": "application",
+      "name": "shoreguard-m21-demo",
+      "version": "0.1.0"
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:pypi/requests@2.31.0",
+      "type": "library",
+      "name": "requests",
+      "version": "2.31.0",
+      "purl": "pkg:pypi/requests@2.31.0",
+      "licenses": [{"license": {"id": "Apache-2.0"}}]
+    },
+    {
+      "bom-ref": "pkg:pypi/urllib3@1.26.18",
+      "type": "library",
+      "name": "urllib3",
+      "version": "1.26.18",
+      "purl": "pkg:pypi/urllib3@1.26.18",
+      "licenses": [{"license": {"id": "MIT"}}]
+    },
+    {
+      "bom-ref": "pkg:pypi/charset-normalizer@3.3.2",
+      "type": "library",
+      "name": "charset-normalizer",
+      "version": "3.3.2",
+      "purl": "pkg:pypi/charset-normalizer@3.3.2",
+      "licenses": [{"license": {"id": "MIT"}}]
+    },
+    {
+      "bom-ref": "pkg:pypi/idna@3.6",
+      "type": "library",
+      "name": "idna",
+      "version": "3.6",
+      "purl": "pkg:pypi/idna@3.6",
+      "licenses": [{"license": {"id": "BSD-3-Clause"}}]
+    },
+    {
+      "bom-ref": "pkg:pypi/certifi@2024.2.2",
+      "type": "library",
+      "name": "certifi",
+      "version": "2024.2.2",
+      "purl": "pkg:pypi/certifi@2024.2.2",
+      "licenses": [{"license": {"id": "MPL-2.0"}}]
+    },
+    {
+      "bom-ref": "pkg:npm/lodash@4.17.20",
+      "type": "library",
+      "name": "lodash",
+      "version": "4.17.20",
+      "purl": "pkg:npm/lodash@4.17.20",
+      "licenses": [{"license": {"id": "MIT"}}]
+    },
+    {
+      "bom-ref": "pkg:npm/express@4.17.1",
+      "type": "library",
+      "name": "express",
+      "version": "4.17.1",
+      "purl": "pkg:npm/express@4.17.1",
+      "licenses": [{"license": {"id": "MIT"}}]
+    },
+    {
+      "bom-ref": "pkg:deb/debian/libssl3@3.0.11",
+      "type": "library",
+      "name": "libssl3",
+      "version": "3.0.11",
+      "purl": "pkg:deb/debian/libssl3@3.0.11",
+      "licenses": [{"license": {"id": "OpenSSL"}}]
+    },
+    {
+      "bom-ref": "pkg:golang/github.com/gin-gonic/gin@1.9.0",
+      "type": "library",
+      "name": "gin",
+      "version": "1.9.0",
+      "purl": "pkg:golang/github.com/gin-gonic/gin@1.9.0",
+      "licenses": [{"license": {"id": "MIT"}}]
+    },
+    {
+      "bom-ref": "pkg:cargo/serde@1.0.190",
+      "type": "library",
+      "name": "serde",
+      "version": "1.0.190",
+      "purl": "pkg:cargo/serde@1.0.190",
+      "licenses": [{"expression": "MIT OR Apache-2.0"}]
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "id": "CVE-2021-23337",
+      "ratings": [
+        {"severity": "critical", "score": 9.8, "source": {"name": "NVD"}}
+      ],
+      "affects": [{"ref": "pkg:npm/lodash@4.17.20"}],
+      "description": "Command injection in lodash template",
+      "advisories": [
+        {"url": "https://nvd.nist.gov/vuln/detail/CVE-2021-23337"}
+      ]
+    },
+    {
+      "id": "CVE-2023-32681",
+      "ratings": [
+        {"severity": "medium", "score": 5.4, "source": {"name": "NVD"}},
+        {"severity": "high", "score": 7.5, "source": {"name": "GitHub"}}
+      ],
+      "affects": [{"ref": "pkg:pypi/requests@2.31.0"}],
+      "description": "Proxy-Authorization header leak in requests",
+      "advisories": [
+        {"url": "https://github.com/advisories/GHSA-j8r2-6x86-q33q"}
+      ]
+    }
+  ]
+}

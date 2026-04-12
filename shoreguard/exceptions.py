@@ -62,3 +62,7 @@ class PolicyLockedError(ShoreGuardError):
 
 class ValidationError(ShoreGuardError):
     """Input validation failed (e.g. malformed command syntax)."""
+
+
+class InvalidSBOMError(ShoreGuardError):
+    """An uploaded SBOM document is malformed or unsupported (M21)."""

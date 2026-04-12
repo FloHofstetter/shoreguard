@@ -1,0 +1,222 @@
+{% extends "pages/sandbox_base.html" %}
+{% block title %}SBOM — {{ sandbox_name }} — Shoreguard{% endblock %}
+
+{% block breadcrumb_tail %}
+<li class="breadcrumb-item active">SBOM</li>
+{% endblock %}
+
+{% block content %}
+<div x-data='sbomPage({{ gateway_name|tojson }}, {{ sandbox_name|tojson }})' x-init="init()">
+    <!-- Loading spinner -->
+    <div x-show="loading && !snapshot" class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading SBOM…
+    </div>
+
+    <!-- Empty state — no snapshot uploaded yet -->
+    <div x-show="!loading && !snapshot" x-cloak class="text-center py-5">
+        <i class="bi bi-box-seam fs-1 text-muted"></i>
+        <h5 class="mt-3">No SBOM uploaded</h5>
+        <p class="text-muted">
+            Upload a CycloneDX JSON SBOM from your CI pipeline to see components,
+            licenses, and known vulnerabilities for this sandbox.
+        </p>
+        <div class="mx-auto mt-3" style="max-width: 720px;">
+            <p class="small text-muted mb-2">From CI:</p>
+            <pre class="bg-light p-3 small text-start"><code x-text="curlExample()"></code></pre>
+        </div>
+        <button class="btn btn-primary mt-2" data-sg-min-role="admin"
+                @click="$refs.fileInput.click()">
+            <i class="bi bi-upload me-1"></i>Upload CycloneDX JSON
+        </button>
+        <input type="file" x-ref="fileInput" accept="application/json,.json,.cdx.json"
+               class="d-none" @change="uploadFromInput($event)">
+    </div>
+
+    <!-- Snapshot view -->
+    <div x-show="snapshot" x-cloak>
+        <!-- Header card -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div>
+                        <h5 class="card-title mb-1">
+                            <i class="bi bi-box-seam me-1"></i>SBOM Snapshot
+                            <span class="badge ms-2"
+                                  :class="severityBadge(snapshot && snapshot.max_severity)"
+                                  x-text="snapshot && snapshot.max_severity ? snapshot.max_severity : 'CLEAN'"></span>
+                        </h5>
+                        <div class="text-muted small">
+                            <span x-text="snapshot && snapshot.bom_format"></span>
+                            <span x-text="snapshot && snapshot.spec_version"></span>
+                            · uploaded <span x-text="formatTime(snapshot && snapshot.uploaded_at)"></span>
+                            by <span class="font-monospace" x-text="snapshot && snapshot.uploaded_by"></span>
+                        </div>
+                        <div class="small mt-1">
+                            <span class="me-3"><strong x-text="snapshot && snapshot.component_count"></strong> components</span>
+                            <span><strong x-text="snapshot && snapshot.vulnerability_count"></strong> vulnerabilities</span>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-outline-secondary btn-sm" @click="downloadRaw()">
+                            <i class="bi bi-download me-1"></i>Download
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" data-sg-min-role="admin"
+                                @click="$refs.replaceInput.click()">
+                            <i class="bi bi-arrow-repeat me-1"></i>Replace
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" data-sg-min-role="admin"
+                                @click="confirmDelete()">
+                            <i class="bi bi-trash3 me-1"></i>Delete
+                        </button>
+                        <input type="file" x-ref="replaceInput" accept="application/json,.json,.cdx.json"
+                               class="d-none" @change="uploadFromInput($event)">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <a class="nav-link" :class="tab === 'components' ? 'active' : ''"
+                   href="#" @click.prevent="tab = 'components'">
+                    Components <span class="badge bg-secondary ms-1" x-text="snapshot && snapshot.component_count"></span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" :class="tab === 'vulnerabilities' ? 'active' : ''"
+                   href="#" @click.prevent="loadVulns(); tab = 'vulnerabilities'">
+                    Vulnerabilities <span class="badge bg-danger ms-1" x-text="snapshot && snapshot.vulnerability_count"></span>
+                </a>
+            </li>
+        </ul>
+
+        <!-- Components tab -->
+        <div x-show="tab === 'components'">
+            <div class="d-flex gap-2 mb-2 flex-wrap align-items-center">
+                <input type="text" class="form-control form-control-sm" style="max-width: 280px;"
+                       placeholder="Search name or purl…"
+                       x-model="search"
+                       @input.debounce.300ms="offset = 0; loadComponents()">
+                <span class="text-muted small ms-2">Severity:</span>
+                <template x-for="sev in severityFilters" :key="sev">
+                    <button type="button" class="btn btn-sm"
+                            :class="severity === sev ? severityBtnClass(sev) : 'btn-outline-secondary'"
+                            @click="severity = (severity === sev ? '' : sev); offset = 0; loadComponents()"
+                            x-text="sev"></button>
+                </template>
+                <button type="button" class="btn btn-sm btn-link ms-auto"
+                        x-show="search || severity"
+                        @click="search = ''; severity = ''; offset = 0; loadComponents()">
+                    Clear filters
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th style="width:120px">Version</th>
+                            <th style="width:90px">Type</th>
+                            <th>License</th>
+                            <th style="width:120px">Vulnerabilities</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="c in components" :key="c.id">
+                            <tr>
+                                <td>
+                                    <span class="font-monospace small" x-text="c.name"></span>
+                                    <div class="text-muted small text-truncate" style="max-width: 360px;"
+                                         x-show="c.purl" x-text="c.purl" :title="c.purl"></div>
+                                </td>
+                                <td class="font-monospace small" x-text="c.version || '—'"></td>
+                                <td><span class="badge bg-light text-dark" x-text="c.type || '—'"></span></td>
+                                <td class="small" x-text="c.licenses || '—'"></td>
+                                <td>
+                                    <template x-if="c.vuln_count > 0">
+                                        <span class="badge" :class="severityBadge(c.max_severity)">
+                                            <span x-text="c.vuln_count"></span> ·
+                                            <span x-text="c.max_severity"></span>
+                                        </span>
+                                    </template>
+                                    <template x-if="c.vuln_count === 0">
+                                        <span class="text-success small"><i class="bi bi-check-circle"></i></span>
+                                    </template>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+
+            <div x-show="components.length === 0 && !loading" class="text-muted text-center py-3">
+                No components match the current filters.
+            </div>
+
+            <!-- Pagination -->
+            <div class="d-flex justify-content-between align-items-center mt-2"
+                 x-show="total > limit">
+                <div class="text-muted small">
+                    Showing <strong x-text="offset + 1"></strong>–<strong x-text="Math.min(offset + limit, total)"></strong>
+                    of <strong x-text="total"></strong>
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary" :disabled="offset === 0"
+                            @click="offset = Math.max(0, offset - limit); loadComponents()">
+                        <i class="bi bi-chevron-left"></i> Prev
+                    </button>
+                    <button class="btn btn-outline-secondary" :disabled="offset + limit >= total"
+                            @click="offset = offset + limit; loadComponents()">
+                        Next <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vulnerabilities tab -->
+        <div x-show="tab === 'vulnerabilities'">
+            <div x-show="vulnsLoading" class="text-muted text-center py-3">
+                <div class="spinner-border spinner-border-sm me-2"></div>Loading vulnerabilities…
+            </div>
+            <div x-show="!vulnsLoading && vulns.length === 0" class="text-success text-center py-4">
+                <i class="bi bi-shield-check fs-3"></i>
+                <p class="mt-2 mb-0">No vulnerabilities declared in this SBOM.</p>
+            </div>
+            <div x-show="!vulnsLoading && vulns.length > 0">
+                <template x-for="v in vulns" :key="v.id">
+                    <div class="card mb-2">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <div>
+                                    <span class="badge me-2" :class="severityBadge(v.severity)" x-text="v.severity"></span>
+                                    <span class="font-monospace fw-bold" x-text="v.id"></span>
+                                    <span class="text-muted small ms-2" x-show="v.cvss_score !== null"
+                                          x-text="'CVSS ' + v.cvss_score"></span>
+                                </div>
+                            </div>
+                            <p class="small text-muted mt-1 mb-1" x-show="v.description" x-text="v.description"></p>
+                            <div class="small" x-show="v.affects && v.affects.length > 0">
+                                <span class="text-muted">Affects:</span>
+                                <template x-for="ref in v.affects" :key="ref">
+                                    <span class="font-monospace ms-1" x-text="ref"></span>
+                                </template>
+                            </div>
+                            <div class="small" x-show="v.references && v.references.length > 0">
+                                <template x-for="url in v.references" :key="url">
+                                    <a class="me-2" :href="url" target="_blank" rel="noopener" x-text="url"></a>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block sandbox_js %}
+<script src="/static/js/sbom.js"></script>
+{% endblock %}

@@ -186,6 +186,22 @@ parameter. An empty value (the default) returns the cluster's default
 inference route; passing a name like `sandbox-system` returns the route
 that OpenShell v0.0.25+ uses for sandbox system-level model calls.
 
+## SBOM (M21, v0.30.2+)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/gateways/{gw}/sandboxes/{name}/sbom` | Upload a CycloneDX JSON SBOM (admin, replaces prior snapshot, max 10 MiB) |
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/sbom` | Get snapshot metadata |
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/sbom/components` | Paginated component list with `?search=`, `?severity=` (CRITICAL/HIGH/MEDIUM/LOW/INFO/UNKNOWN/CLEAN), `?offset=`, `?limit=` (max 500) |
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/sbom/vulnerabilities` | Structured vulnerability list, sorted highest-severity first |
+| `GET` | `/api/gateways/{gw}/sandboxes/{name}/sbom/raw` | Original CycloneDX payload as `application/vnd.cyclonedx+json` |
+| `DELETE` | `/api/gateways/{gw}/sandboxes/{name}/sbom` | Delete the snapshot (admin) |
+
+Vulnerabilities are read offline from the CycloneDX `vulnerabilities` array
+(no online NVD/OSV lookup). One snapshot per `(gateway, sandbox)` — uploads
+replace the prior snapshot. Both write paths are audit-logged as
+`sbom.uploaded` / `sbom.deleted`.
+
 ## Policy presets
 
 | Method | Path | Description |

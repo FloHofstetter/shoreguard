@@ -1898,6 +1898,9 @@ async def gateway_detail_or_sub(
         if sb_rest == "verify":
             ctx["active_tab"] = "prover"
             return templates.TemplateResponse(request, "pages/sandbox_prover.html", ctx)
+        if sb_rest == "sbom":
+            ctx["active_tab"] = "sbom"
+            return templates.TemplateResponse(request, "pages/sandbox_sbom.html", ctx)
         if sb_rest == "network-policies":
             return templates.TemplateResponse(
                 request,
