@@ -11,7 +11,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.14"
@@ -23,7 +23,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.14"
@@ -33,7 +33,7 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.14"
@@ -46,7 +46,7 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.14"
@@ -59,7 +59,7 @@ jobs:
       matrix:
         python-version: ["3.14"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
@@ -69,7 +69,7 @@ jobs:
   helm-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: azure/setup-helm@v4
       - run: helm lint charts/shoreguard
       # `helm template` catches rendering errors that `helm lint` misses
@@ -114,7 +114,7 @@ jobs:
   m12-fixture-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: azure/setup-helm@v4
       - run: helm lint tests/fixtures/charts/openshell-cluster --set label.env=dev
       - name: Render openshell-cluster fixture (positive)
