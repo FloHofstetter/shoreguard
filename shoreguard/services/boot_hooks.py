@@ -28,6 +28,7 @@ import json
 import logging
 import shlex
 import subprocess
+import time
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, select
@@ -42,6 +43,28 @@ if TYPE_CHECKING:
     from shoreguard.services.sandbox import SandboxService
 
 logger = logging.getLogger(__name__)
+
+
+def _record_hook_metric(hook: dict[str, Any], status: str, duration_s: float) -> None:
+    """Record a boot-hook outcome in Prometheus, swallowing import errors.
+
+    Args:
+        hook: Hook record dict.
+        status: ``success`` or ``failure``.
+        duration_s: Wall-clock duration of the hook in seconds.
+    """
+    try:
+        from shoreguard.api.metrics import record_boot_hook_run
+
+        record_boot_hook_run(
+            gateway=str(hook.get("gateway_name", "unknown")),
+            phase=str(hook.get("phase", "unknown")),
+            status=status,
+            duration_s=duration_s,
+        )
+    except Exception:  # noqa: BLE001 - metrics must not break execution
+        logger.debug("boot_hooks: failed to record hook metric", exc_info=True)
+
 
 # Module-level singleton populated during app lifespan startup.
 boot_hook_service: BootHookService | None = None
@@ -492,6 +515,29 @@ class BootHookService:
         Returns:
             dict[str, Any]: ``HookResult`` capturing status + output.
         """
+        start = time.monotonic()
+        result = self._run_local_impl(hook, spec)
+        _record_hook_metric(
+            hook,
+            status=("success" if result.get("status") == "success" else "failure"),
+            duration_s=time.monotonic() - start,
+        )
+        return result
+
+    def _run_local_impl(
+        self,
+        hook: dict[str, Any],
+        spec: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Body of :meth:`_run_local`, separated to let the wrapper emit metrics.
+
+        Args:
+            hook: Hook record dict.
+            spec: Resolved sandbox spec.
+
+        Returns:
+            dict[str, Any]: ``HookResult``.
+        """
         try:
             argv = shlex.split(hook["command"])
         except ValueError as exc:
@@ -578,6 +624,29 @@ class BootHookService:
 
         Returns:
             dict[str, Any]: ``HookResult`` capturing status + output.
+        """
+        start = time.monotonic()
+        result = self._run_in_sandbox_impl(hook, sandbox_service)
+        _record_hook_metric(
+            hook,
+            status=("success" if result.get("status") == "success" else "failure"),
+            duration_s=time.monotonic() - start,
+        )
+        return result
+
+    def _run_in_sandbox_impl(
+        self,
+        hook: dict[str, Any],
+        sandbox_service: SandboxService,
+    ) -> dict[str, Any]:
+        """Body of :meth:`_run_in_sandbox`, separated to let the wrapper emit metrics.
+
+        Args:
+            hook: Hook record dict.
+            sandbox_service: Per-gateway ``SandboxService``.
+
+        Returns:
+            dict[str, Any]: ``HookResult``.
         """
         try:
             exec_result = sandbox_service.exec(

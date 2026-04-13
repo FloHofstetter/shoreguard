@@ -54,6 +54,23 @@ def _reset_clients() -> None:
         _clients.clear()
 
 
+def _publish_cert_expiry_gauge(name: str, client: ShoreGuardClient) -> None:
+    """Best-effort: publish the cert expiry gauge after a successful connect.
+
+    Args:
+        name: Gateway name.
+        client: Freshly connected client with optional :attr:`cert_info`.
+    """
+    if client.cert_info is None:
+        return
+    try:
+        from shoreguard.api.metrics import record_gateway_cert_expiry
+
+        record_gateway_cert_expiry(name, client.cert_info.seconds_until_expiry)
+    except Exception:  # noqa: BLE001
+        logger.debug("cert-expiry gauge update failed for '%s'", name, exc_info=True)
+
+
 def _derive_status(connected: bool, last_status: str | None) -> str:
     """Derive a single status string from connection and health state.
 
@@ -247,6 +264,7 @@ class GatewayService:
         try:
             client.health()
             logger.info("Connected to OpenShell gateway '%s'", name)
+            _publish_cert_expiry_gauge(name, client)
             return client
         except (grpc.RpcError, OSError, ConnectionError, TimeoutError) as e:
             logger.debug(

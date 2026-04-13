@@ -13,6 +13,7 @@ warm-up commands inside a sandbox once it has been created.
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -23,6 +24,24 @@ from ._converters import _dict_to_policy
 from ._proto import datamodel_pb2, openshell_pb2, openshell_pb2_grpc, sandbox_pb2
 from ._resilience import DEFAULT_POLICY, RetryPolicy, call_with_retry, stream_with_retry
 from .policies import _policy_to_dict
+
+logger = logging.getLogger(__name__)
+
+
+def _lazy_metrics() -> tuple[Any, Any]:  # pragma: no cover - trivial
+    """Lazy handle to the metrics helpers to avoid an import cycle.
+
+    Returns:
+        tuple[Any, Any]: ``(record_grpc_attempt, record_grpc_duration)`` or
+            ``(None, None)`` if the metrics module cannot be imported.
+    """
+    try:
+        from shoreguard.api.metrics import record_grpc_attempt, record_grpc_duration
+
+        return record_grpc_attempt, record_grpc_duration
+    except Exception:  # noqa: BLE001
+        return None, None
+
 
 PHASE_NAMES = {
     0: "unspecified",
@@ -90,35 +109,49 @@ class SandboxManager:
         """Execute a unary gRPC call through the resilience wrapper.
 
         Args:
-            op_name: Logical-op label used for logs and future metrics.
+            op_name: Logical-op label used for logs and metrics.
             fn: Zero-arg callable that issues the gRPC call.
 
         Returns:
             Any: The result returned by ``fn``.
         """
-        return call_with_retry(
-            fn,
-            op_name=op_name,
-            policy=self._retry_policy,
-            deadline_s=self._retry_deadline,
-        )
+        record_attempt, record_duration = _lazy_metrics()
+        start = time.monotonic()
+        try:
+            return call_with_retry(
+                fn,
+                op_name=op_name,
+                policy=self._retry_policy,
+                deadline_s=self._retry_deadline,
+                on_attempt=record_attempt,
+            )
+        finally:
+            if record_duration is not None:
+                record_duration(op_name, time.monotonic() - start)
 
     def _open_stream(self, op_name: str, fn: Any) -> Any:
         """Open a gRPC server-stream; retry only the open, not in-flight reads.
 
         Args:
-            op_name: Logical-op label used for logs and future metrics.
+            op_name: Logical-op label used for logs and metrics.
             fn: Zero-arg callable that opens the stream.
 
         Returns:
             Any: The opened stream iterator.
         """
-        return stream_with_retry(
-            fn,
-            op_name=op_name,
-            policy=self._retry_policy,
-            deadline_s=self._retry_deadline,
-        )
+        record_attempt, record_duration = _lazy_metrics()
+        start = time.monotonic()
+        try:
+            return stream_with_retry(
+                fn,
+                op_name=op_name,
+                policy=self._retry_policy,
+                deadline_s=self._retry_deadline,
+                on_attempt=record_attempt,
+            )
+        finally:
+            if record_duration is not None:
+                record_duration(op_name, time.monotonic() - start)
 
     def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """List all sandboxes.

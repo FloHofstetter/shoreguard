@@ -52,6 +52,127 @@ http_request_duration_seconds = Histogram(
     buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
 )
 
+# ── M28 gRPC / sandbox hardening metrics ────────────────────────────────
+
+sg_grpc_call_total = Counter(
+    "sg_grpc_call_total",
+    "Total gRPC calls to OpenShell gateways by logical op and final status code",
+    ["op", "code"],
+)
+
+sg_grpc_call_duration_seconds = Histogram(
+    "sg_grpc_call_duration_seconds",
+    "gRPC call wall-clock duration including retries, in seconds",
+    ["op"],
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0),
+)
+
+sg_grpc_retry_total = Counter(
+    "sg_grpc_retry_total",
+    "gRPC call retries by logical op and observed status code",
+    ["op", "code"],
+)
+
+sg_sandbox_phase_transitions_total = Counter(
+    "sg_sandbox_phase_transitions_total",
+    "Observed sandbox phase transitions per gateway",
+    ["gateway", "from", "to"],
+)
+
+sg_boot_hook_runs_total = Counter(
+    "sg_boot_hook_runs_total",
+    "Boot hook executions by gateway, phase, and final status",
+    ["gateway", "phase", "status"],
+)
+
+sg_boot_hook_duration_seconds = Histogram(
+    "sg_boot_hook_duration_seconds",
+    "Boot hook execution duration in seconds",
+    ["phase"],
+    buckets=(0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 15.0, 30.0, 60.0, 300.0),
+)
+
+sg_gateway_cert_expiry_seconds = Gauge(
+    "sg_gateway_cert_expiry_seconds",
+    "Seconds until the registered gateway client certificate expires",
+    ["gateway"],
+)
+
+
+def record_grpc_attempt(*, op_name: str, attempt: int, code: object, outcome: str) -> None:
+    """Callback target for :func:`shoreguard.client._resilience.call_with_retry`.
+
+    Increments the retry counter for every intermediate retry and records the
+    final status code on success or give-up. Call duration is observed by the
+    caller via :func:`record_grpc_duration` since the resilience helper does
+    not know when the logical op started.
+
+    Args:
+        op_name: Logical-op label such as ``"sandboxes.create"``.
+        attempt: 1-based attempt number.
+        code: gRPC status code of the just-observed attempt or ``None`` on
+            success.
+        outcome: One of ``"ok"``, ``"retry"``, ``"giveup"``.
+    """
+    code_label = getattr(code, "name", "OK" if code is None else str(code))
+    if outcome == "retry":
+        sg_grpc_retry_total.labels(op=op_name, code=code_label).inc()
+    else:
+        sg_grpc_call_total.labels(op=op_name, code=code_label).inc()
+
+
+def record_grpc_duration(op_name: str, duration_s: float) -> None:
+    """Observe the wall-clock duration of a logical gRPC op.
+
+    Args:
+        op_name: Logical-op label such as ``"sandboxes.create"``.
+        duration_s: Wall-clock duration in seconds including any retries.
+    """
+    sg_grpc_call_duration_seconds.labels(op=op_name).observe(duration_s)
+
+
+def record_boot_hook_run(*, gateway: str, phase: str, status: str, duration_s: float) -> None:
+    """Record a boot-hook execution outcome.
+
+    Args:
+        gateway: Gateway name the sandbox belongs to.
+        phase: ``pre_create`` or ``post_create``.
+        status: ``success`` or ``failure``.
+        duration_s: Wall-clock duration of the hook in seconds.
+    """
+    sg_boot_hook_runs_total.labels(gateway=gateway, phase=phase, status=status).inc()
+    sg_boot_hook_duration_seconds.labels(phase=phase).observe(duration_s)
+
+
+def record_sandbox_phase_transition(*, gateway: str, from_phase: str, to_phase: str) -> None:
+    """Increment the phase transition counter for a sandbox.
+
+    Args:
+        gateway: Gateway name the sandbox belongs to.
+        from_phase: Previous phase string, or ``"none"`` for the first
+            observation after creation.
+        to_phase: New phase string.
+    """
+    sg_sandbox_phase_transitions_total.labels(
+        gateway=gateway, **{"from": from_phase, "to": to_phase}
+    ).inc()
+
+
+def record_gateway_cert_expiry(gateway: str, seconds_until_expiry: float | None) -> None:
+    """Publish the seconds-until-expiry gauge for a gateway's client cert.
+
+    Args:
+        gateway: Gateway name.
+        seconds_until_expiry: Remaining seconds until ``NotAfter`` of the
+            registered client certificate. ``None`` clears the gauge (e.g.
+            when the gateway was removed).
+    """
+    if seconds_until_expiry is None:
+        sg_gateway_cert_expiry_seconds.labels(gateway=gateway).set(0)
+        return
+    sg_gateway_cert_expiry_seconds.labels(gateway=gateway).set(seconds_until_expiry)
+
+
 # ── Router ───────────────────────────────────────────────────────────────
 
 router = APIRouter(tags=["metrics"])
