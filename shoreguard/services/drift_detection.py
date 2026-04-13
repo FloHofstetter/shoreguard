@@ -1,12 +1,18 @@
-"""Background policy drift detection (M23 GitOps).
+"""Background loop that detects out-of-band policy changes.
 
-Off by default. When enabled, the loop iterates every registered gateway,
-fetches each sandbox's policy hash, and fires ``policy.drift_detected``
-on every hash change between scans.
+Off by default. When enabled, iterates every registered sandbox on
+the configured interval, fetches its policy hash, and fires the
+``policy.drift_detected`` webhook on any hash change between
+consecutive scans. This catches edits made outside the GitOps
+pipeline — a direct API call, a manual UI edit during an incident,
+or an approval that was merged while CI was paused — and turns
+them into visible events rather than silent divergence.
 
-The "previous hash" snapshot is held in process memory only — a restart
-just means one tick with "no comparison available". Persistence would
-add complexity for ~zero benefit (the next real edit fires the next tick).
+The previous-hash snapshot is kept in process memory only. A
+restart means one tick with no comparison available, after which
+the next real edit fires the next event. Persisting the snapshot
+would add complexity with no upside: a missed tick at restart is
+not an incident, whereas flaky persistence would be.
 """
 
 from __future__ import annotations

@@ -223,7 +223,7 @@ async def submit_policy_analysis(
     return result
 
 
-# ─── M23 GitOps: export + apply ──────────────────────────────────────────────
+# ─── GitOps: YAML export + apply ─────────────────────────────────────────────
 
 
 def _extract_hash(snapshot: dict[str, Any]) -> str:
@@ -260,11 +260,15 @@ async def export_policy(
     request: Request,
     svc: PolicyService = Depends(_get_policy_service),
 ) -> dict[str, Any]:
-    """Export a sandbox policy as deterministic YAML (M23).
+    """Export a sandbox policy as a deterministic YAML document.
 
-    Returns a metadata + policy YAML document. Pin status does NOT block
-    export — read-only operation. The ``policy_hash`` field is the etag
-    used by ``POST /policy/apply``'s optimistic locking.
+    Returns a ``metadata`` + ``policy`` YAML body. Policy pins do
+    not block export — it is a pure read and the caller is expected
+    to check the result into Git or feed it back to ``POST
+    /policy/apply``. The ``policy_hash`` field in the metadata is
+    the etag used by apply's optimistic locking, so a round-trip
+    export → edit → apply cannot silently clobber a concurrent
+    change made through another path.
 
     Args:
         name: Sandbox name.
@@ -305,14 +309,19 @@ async def apply_policy(
     request: Request,
     svc: PolicyService = Depends(_get_policy_service),
 ) -> Any:
-    """Apply a YAML policy document to a sandbox (M23).
+    """Apply a YAML policy document to a sandbox.
 
     Body fields: ``yaml`` (required), ``dry_run`` (default false),
-    ``expected_version`` (optional optimistic-lock etag).
+    ``expected_version`` (optional optimistic-lock etag — falls
+    back to ``metadata.policy_hash`` in the YAML body).
 
-    Status codes / response ``status`` field: 200 up_to_date /
-    dry_run / applied, 202 vote_recorded under M19 workflow, 400 on
-    malformed YAML, 409 on version mismatch, 423 on pinned sandbox.
+    Response status values: ``up_to_date`` and ``dry_run`` return
+    HTTP 200 with the diff; a fresh write returns HTTP 200
+    ``applied``; when an approval workflow is active the first
+    call records a vote and returns HTTP 202 ``vote_recorded``; a
+    version mismatch returns HTTP 409 with the live hash so CI can
+    refetch + retry; a pinned sandbox returns HTTP 423; malformed
+    YAML returns HTTP 400.
 
     Args:
         name: Sandbox name.
@@ -383,7 +392,7 @@ async def apply_policy(
     chunk_id = f"policy.apply:{yaml_fingerprint(body.yaml)}"
     diff_summary_payload = diff_summary(diff)
 
-    # ── Workflow gate (M19) ──────────────────────────────────────────────
+    # ── Approval workflow gate ───────────────────────────────────────────
     wf_svc = _wf_mod.approval_workflow_service
     workflow = wf_svc.get_workflow(gw, name) if wf_svc is not None else None
     if wf_svc is not None and workflow is not None:
@@ -814,7 +823,7 @@ async def update_process_policy(
     return result
 
 
-# ─── Policy Pinning (M18) ────────────────────────────────────────────────────
+# ─── Policy Pinning ──────────────────────────────────────────────────────────
 
 
 @router.get("/sandboxes/{name}/policy/pin", response_model=PolicyPinResponse)

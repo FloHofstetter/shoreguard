@@ -1,4 +1,15 @@
-"""Deterministic YAML round-trip for sandbox policies (M23 GitOps)."""
+"""Deterministic YAML serialisation for sandbox policies.
+
+Round-trip stable: ``parse_yaml(render_yaml(p))`` yields the same
+``policy`` block that was passed in, and two calls to ``render_yaml``
+on identical inputs produce byte-identical output. That matters
+because the rendered documents are checked into Git and any
+non-determinism would show up as spurious diffs on every export.
+
+Keys are sorted, flow style is disabled, and the document carries a
+``managed-by`` banner comment so a human who finds the file in a
+repo can trace where it came from.
+"""
 
 from __future__ import annotations
 
@@ -80,7 +91,9 @@ def parse_yaml(text: str) -> tuple[dict[str, Any], dict[str, Any]]:
 def yaml_fingerprint(text: str) -> str:
     """Return a stable 16-char sha256 hex prefix of a YAML body.
 
-    Used as the synthetic chunk-id for apply proposals under M19 workflows.
+    Used as the deterministic tail of the synthetic chunk id that
+    ties repeated apply calls with the same payload to the same
+    pending proposal row.
 
     Args:
         text: YAML document body.

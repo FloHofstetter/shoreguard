@@ -1,16 +1,27 @@
-"""``shoreguard policy`` CLI subcommands (M23 GitOps).
+"""``shoreguard policy`` CLI subcommands for GitOps workflows.
 
-Three commands wrap the M23 REST endpoints so CI pipelines can drive
-policy changes from a Git repo:
+Thin HTTP wrapper around the policy export/apply REST endpoints so
+CI pipelines can drive sandbox policy changes from a Git repo
+without writing bespoke curl scripts.
 
-- ``shoreguard policy export``  — fetch deterministic YAML for a sandbox
-- ``shoreguard policy diff``    — dry-run apply, show structured drift
-- ``shoreguard policy apply``   — write the policy (or vote under M19)
+Commands:
+  * ``export`` — fetch a sandbox's policy as deterministic YAML.
+  * ``diff``   — dry-run apply, print a structured drift summary.
+  * ``apply``  — upload a YAML document; on a sandbox with an
+    active quorum workflow this records one vote instead of
+    writing directly.
 
-Exit codes:
-- ``0`` up-to-date / successful apply
-- ``1`` drift detected / vote recorded — CI step should fail loudly
-- ``2`` operational error (network, 4xx, 5xx, parse error)
+Exit codes are chosen so a plain ``&&``/``||`` chain in a CI script
+does the right thing:
+
+  * ``0`` policy is up-to-date, or apply wrote the change.
+  * ``1`` drift was detected, or a vote was recorded but quorum
+    has not yet been reached — the CI step should fail loudly so a
+    human sees it.
+  * ``2`` operational error (network, 4xx, 5xx, YAML parse).
+
+Credentials are read from ``SHOREGUARD_URL`` + ``SHOREGUARD_TOKEN``
+with ``--url`` / ``--token`` CLI overrides.
 """
 
 from __future__ import annotations

@@ -1,4 +1,14 @@
-"""Policy operations including atomic network rule CRUD."""
+"""High-level sandbox policy operations for UI and API callers.
+
+Wraps the gRPC ``ShoreGuardClient.policies`` surface with
+additional behavior the raw client does not offer: atomic
+add/delete of individual network rules and filesystem paths over
+a read-modify-write loop, eager preset resolution into the stored
+policy so the gateway's effective view matches the declared
+document, and submit-time capture of denial context so the
+approval detail modal can render binary ancestry and L7 samples
+without a round-trip.
+"""
 
 from __future__ import annotations
 
@@ -15,13 +25,18 @@ logger = logging.getLogger(__name__)
 
 
 class PolicyService:
-    """Policy management shared by Web UI and TUI.
+    """Policy management shared by the Web UI, TUI, and REST API.
 
-    Wraps client.policies with higher-level operations like
-    atomic add/delete of individual network rules.
+    Thin wrapper over ``ShoreGuardClient.policies`` that lifts a
+    few operations up from the raw gRPC surface: atomic single-rule
+    CRUD (against an API that only exposes replace-whole-policy),
+    preset application with server-side merge, and denial-context
+    capture for approvals. Everything is synchronous because the
+    gRPC client is synchronous; callers that need to avoid blocking
+    the event loop wrap individual methods in ``asyncio.to_thread``.
 
     Args:
-        client: OpenShell gRPC client instance.
+        client: OpenShell gRPC client scoped to the target gateway.
     """
 
     def __init__(self, client: ShoreGuardClient) -> None:  # noqa: D107
@@ -103,7 +118,8 @@ class PolicyService:
             analysis_mode,
         )
 
-        # Cache denial summaries for approval-chunk enrichment (M16).
+        # Cache denial summaries so the approval detail modal can
+        # render binary ancestry + L7 samples without a round-trip.
         from shoreguard.services.denial_context import denial_context_service
 
         if denial_context_service is not None:

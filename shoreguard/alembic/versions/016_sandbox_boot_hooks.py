@@ -1,8 +1,9 @@
-"""Add sandbox_boot_hooks table (M22 boot hooks).
+"""Add sandbox_boot_hooks table.
 
-Stores ShoreGuard-side pre/post-create hooks for a sandbox. Pre-create
-hooks act as validation gates evaluated locally before CreateSandbox;
-post-create hooks execute commands inside the sandbox via ExecSandbox.
+Stores pre- and post-create hooks attached to a sandbox. Pre-create
+hooks act as ShoreGuard-side validation gates evaluated before the
+gateway sees the ``CreateSandbox`` call; post-create hooks execute
+commands inside the new sandbox via ``ExecSandbox`` once it is up.
 
 Revision ID: 016
 Revises: 015

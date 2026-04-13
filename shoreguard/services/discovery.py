@@ -1,15 +1,23 @@
-"""MicroVM gateway discovery via DNS SRV (M22).
+"""Auto-register OpenShell gateways announced via DNS SRV records.
 
-Periodically queries DNS for ``_openshell._tcp.<domain>`` SRV records and
-auto-registers any newly seen endpoints in the gateway registry. Discovery
-runs both as an explicit ``POST /api/gateways/discover`` trigger and as a
-background loop driven from ``shoreguard.api.main`` (analogous to
-``_health_monitor``).
+Resolves ``_openshell._tcp.<domain>`` SRV records for every
+configured discovery domain and registers any new endpoint that
+passes the same ``_validate_endpoint_format`` guard manual
+registration uses — so the ``*.svc.cluster.local`` whitelist still
+applies and other private IPs are still rejected unless
+``local_mode`` is enabled.
 
-OpenShell does not advertise SRV records itself today; this is the
-ShoreGuard-side hook so a fleet of MicroVM gateways behind a DNS façade
-(or a CoreDNS plugin) can register without manual ``shoreguard gateway
-register`` calls.
+Two entry points share the same resolver code: an explicit
+``POST /api/gateway/discover`` trigger for ad-hoc scans, and an
+optional background loop driven from the FastAPI lifespan
+(structurally analogous to the gateway health monitor). The
+background loop is off by default — most deployments do not publish
+SRV records and do not want the extra DNS traffic.
+
+Derived gateway names come from the SRV target host, sanitised and
+capped at 253 characters, with the port appended when it is not a
+well-known default. Duplicates are detected by endpoint, so a
+re-scan is idempotent.
 """
 
 from __future__ import annotations

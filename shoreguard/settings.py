@@ -600,12 +600,13 @@ class ProverSettings(BaseSettings):
 
 
 class DriftDetectionSettings(BaseSettings):
-    """GitOps policy drift detection (M23).
+    """Settings for the background policy drift detection loop.
 
-    Off by default. When enabled, ShoreGuard periodically polls every
-    registered sandbox's policy hash and fires a ``policy.drift_detected``
-    webhook when a sandbox's hash changes between scans (i.e. someone
-    edited the policy outside the GitOps pipeline).
+    Off by default. When enabled, ShoreGuard periodically polls
+    every registered sandbox's policy hash and fires a
+    ``policy.drift_detected`` webhook when the hash changes between
+    scans — the signal that someone edited the policy outside the
+    GitOps pipeline.
 
     Attributes:
         model_config (SettingsConfigDict): Pydantic settings configuration.
@@ -627,11 +628,12 @@ class DriftDetectionSettings(BaseSettings):
 
 
 class DiscoverySettings(BaseSettings):
-    """MicroVM gateway discovery via DNS SRV (M22).
+    """Settings for the DNS SRV gateway auto-discovery loop.
 
-    Off by default. When enabled, ShoreGuard periodically queries DNS for
-    ``_openshell._tcp.<domain>`` SRV records and auto-registers any newly
-    discovered endpoints in the gateway registry.
+    Off by default. When enabled, ShoreGuard periodically queries
+    DNS for ``_openshell._tcp.<domain>`` SRV records and
+    auto-registers any newly discovered endpoints that pass the
+    standard endpoint validation guards.
 
     Attributes:
         model_config (SettingsConfigDict): Pydantic settings configuration.
@@ -812,8 +814,8 @@ class Settings(BaseSettings):
         oidc (OIDCSettings): OpenID Connect provider configuration.
         cors (CORSSettings): Cross-Origin Resource Sharing policy.
         prover (ProverSettings): Z3 policy prover settings.
-        discovery (DiscoverySettings): MicroVM gateway DNS-SRV discovery (M22).
-        drift_detection (DriftDetectionSettings): GitOps policy drift detection (M23).
+        discovery (DiscoverySettings): DNS-SRV gateway auto-discovery.
+        drift_detection (DriftDetectionSettings): Background policy drift detection.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)

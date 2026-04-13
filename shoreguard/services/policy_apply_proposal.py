@@ -1,4 +1,17 @@
-"""Pending YAML apply proposals waiting for workflow quorum (M23)."""
+"""Persist YAML policy-apply proposals across voter sessions.
+
+When a multi-stage approval workflow is configured for a sandbox, a
+``policy apply`` is not a single atomic action — the first caller
+records one vote and then has to wait for additional voters. This
+service caches the pending YAML payload in the database so the second
+voter does not need to resubmit the same body, and so a process
+restart between votes does not lose the in-flight proposal.
+
+Rows are keyed by ``(gateway_name, sandbox_name, chunk_id)`` and use
+the synthetic chunk id ``policy.apply:<sha16>`` so the existing
+approval machinery can record votes against them without special
+cases.
+"""
 
 from __future__ import annotations
 
@@ -20,10 +33,17 @@ policy_apply_proposal_service: PolicyApplyProposalService | None = None
 
 
 class PolicyApplyProposalService:
-    """DB-backed pending-apply cache used by M19-gated policy.apply.
+    """Database-backed cache of in-flight policy-apply proposals.
+
+    Used when a sandbox has an active quorum-approval workflow: the
+    first voter's YAML body is stored here so subsequent voters can
+    add their votes without having to resubmit the same payload, and
+    so a restart does not lose the proposal mid-vote. Idempotent on
+    ``upsert`` for the same chunk id.
 
     Args:
-        session_factory: SQLAlchemy sync session factory.
+        session_factory: SQLAlchemy sync session factory used to open
+            short-lived sessions for each call.
     """
 
     def __init__(self, session_factory: SessionMaker) -> None:  # noqa: D107

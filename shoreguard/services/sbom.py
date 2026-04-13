@@ -1,15 +1,17 @@
-"""SBOM ingestion + query service (M21).
+"""SBOM ingestion and query service for the Supply-Chain Viewer.
 
-Operators upload CycloneDX JSON SBOMs from their CI pipelines via the
-``POST /api/gateways/{gw}/sandboxes/{name}/sbom`` endpoint.  This service
-parses the document, persists a denormalised view in
-``sbom_snapshots`` + ``sbom_components``, and exposes paginated /
-filterable read APIs for the SBOM viewer page.
+Accepts CycloneDX JSON documents uploaded by CI pipelines, persists a
+denormalised view in ``sbom_snapshots`` + ``sbom_components``, and
+serves paginated, filterable reads for the SBOM viewer tab in the
+sandbox detail page.
 
-Vulnerabilities are read **only** from the CycloneDX ``vulnerabilities``
-array — there is no online lookup against NVD/OSV.  Keeping ingestion
-deterministic + offline avoids tying ShoreGuard to a third-party
-availability/rate-limit story.
+Vulnerabilities are read **only** from the CycloneDX
+``vulnerabilities`` array. There is no online lookup against NVD or
+OSV — keeping ingestion deterministic and offline avoids tying
+ShoreGuard's availability to a third-party rate-limit story, and
+matches the ingestion model where CI is already authoritative for
+both "what's in the image" and "what's known about it" in a single
+payload.
 """
 
 from __future__ import annotations

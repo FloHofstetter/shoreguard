@@ -590,7 +590,7 @@ async def get_approval_history(
     return await asyncio.to_thread(svc.get_history, name)
 
 
-# ─── Multi-stage approval workflow (M19) ─────────────────────────────
+# ─── Multi-stage approval workflows ──────────────────────────────────
 
 
 @router.get(

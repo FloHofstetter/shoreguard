@@ -65,16 +65,26 @@ class ValidationError(ShoreGuardError):
 
 
 class InvalidSBOMError(ShoreGuardError):
-    """An uploaded SBOM document is malformed or unsupported (M21)."""
+    """Raised when an uploaded SBOM is malformed or unsupported.
+
+    The SBOM parser accepts CycloneDX JSON 1.5 documents. Anything
+    else — a wrong schema version, invalid JSON, or a missing
+    required field — is rejected at ingest time with this error so
+    the upload route can translate it into a clean HTTP 400 rather
+    than let a half-parsed document reach the database.
+    """
 
 
 class BootHookError(ShoreGuardError):
-    """A boot hook failed (M22).
+    """Raised when a sandbox boot hook fails to execute.
 
-    Carries the failed hook's name + captured output so callers can surface
-    it to the user. Pre-create failures abort CreateSandbox; post-create
-    failures abort the sandbox warm-up only when ``continue_on_failure`` is
-    false.
+    Carries the failing hook's name, its phase, and the captured
+    output so callers can surface the failure to the user with
+    enough context to debug. A pre-create failure aborts
+    ``CreateSandbox`` unconditionally; a post-create failure only
+    aborts when the hook's ``continue_on_failure`` flag is false,
+    otherwise the failure is recorded but sandbox creation
+    completes.
 
     Args:
         message: Human-readable failure description.

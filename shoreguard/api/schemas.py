@@ -772,7 +772,7 @@ class ApprovalClearResponse(BaseModel):
 
 
 class ApprovalWorkflowConfig(BaseModel):
-    """Multi-stage approval workflow configuration (M19).
+    """Configuration for a multi-stage approval workflow.
 
     Attributes:
         required_approvals (int): Number of distinct approve votes needed.
@@ -799,7 +799,7 @@ class ApprovalWorkflowResponse(BaseModel):
 
 
 class ApprovalDecisionEntry(BaseModel):
-    """A single recorded approval vote (M19).
+    """A single recorded vote on an approval chunk.
 
     Attributes:
         actor (str): Voting user identity.
@@ -1103,7 +1103,7 @@ class GroupMemberResponse(BaseModel):
     user_email: str
 
 
-# ─── Policy Pin (M18) ────────────────────────────────────────────────────────
+# ─── Policy Pinning ──────────────────────────────────────────────────────────
 
 
 class PolicyPinRequest(BaseModel):

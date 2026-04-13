@@ -1,4 +1,12 @@
-"""Structural diff between two policy dicts (M23 GitOps)."""
+"""Structural diff between two sandbox policy dicts.
+
+Returns a typed summary describing which fields changed, rather than
+a raw text diff. This keeps the GitOps export/apply flow's
+``dry_run`` response machine-readable and stable across YAML
+formatting changes: two policies that serialise to different
+whitespace but carry the same semantic content produce an empty
+diff.
+"""
 
 from __future__ import annotations
 

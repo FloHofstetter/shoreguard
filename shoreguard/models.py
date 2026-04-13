@@ -482,12 +482,16 @@ class ApprovalDecision(Base):
 
 
 class PolicyApplyProposal(Base):
-    """A pending YAML policy apply waiting for workflow quorum (M23).
+    """A YAML policy apply proposal waiting for workflow quorum.
 
-    Created on the first vote of an apply under an active M19 workflow,
-    deleted on terminal state (quorum met / rejected / superseded). Lets
-    subsequent vote-only calls reference the same proposal by its synthetic
-    chunk_id without requiring the second runner to resubmit the YAML body.
+    Created on the first apply call for a sandbox with an active
+    quorum approval workflow, and deleted once the proposal reaches
+    a terminal state (quorum met, rejected, or superseded by a new
+    YAML body). Lets subsequent vote-only calls reference the same
+    proposal by its synthetic ``chunk_id`` without requiring the
+    second runner to resubmit the YAML body — useful when the
+    second voter is a human on the UI rather than the same CI
+    pipeline.
 
     Attributes:
         id: Auto-incremented primary key.
@@ -514,10 +518,14 @@ class PolicyApplyProposal(Base):
 
 
 class SBOMSnapshot(Base):
-    """A CycloneDX SBOM uploaded for a sandbox (M21).
+    """A CycloneDX SBOM uploaded for a sandbox.
 
-    One snapshot per (gateway, sandbox). A new upload replaces the previous
-    one — historical snapshots are intentionally out of scope for M21.
+    One snapshot per ``(gateway, sandbox)`` pair — a new upload
+    replaces the previous snapshot rather than appending. Historical
+    snapshots are intentionally out of scope; if you need them,
+    archive the raw CycloneDX in object storage from CI before
+    uploading, because the ``raw_json`` column reflects only the
+    latest upload.
 
     Attributes:
         id: Auto-incremented primary key.
@@ -559,11 +567,15 @@ class SBOMSnapshot(Base):
 
 
 class SBOMComponent(Base):
-    """A single component row denormalised from a CycloneDX SBOM (M21).
+    """A single component row denormalised from a CycloneDX SBOM.
 
-    Components are stored as flat rows so the components search endpoint
-    can paginate + filter via SQL without re-parsing the raw JSON on each
-    request.
+    Components are stored as flat rows so the components search
+    endpoint can paginate and filter via SQL without re-parsing the
+    raw CycloneDX JSON on each request. The ``vuln_count`` and
+    ``max_severity`` columns are maintained at ingest time by
+    joining through ``bom_ref`` against the document's
+    ``vulnerabilities`` array, so the search endpoint never has to
+    open the raw document.
 
     Attributes:
         id: Auto-incremented primary key.
@@ -601,21 +613,23 @@ class SBOMComponent(Base):
 
 
 class SandboxBootHook(Base):
-    """A pre/post-create boot hook for a sandbox (M22).
+    """A pre- or post-create boot hook attached to a sandbox.
 
-    Pre-create hooks run as ShoreGuard-side validation gates *before*
-    ``CreateSandbox`` reaches the gateway. Their commands execute via
-    ``subprocess.run`` in the ShoreGuard process with a whitelisted
-    environment (only ``SG_SANDBOX_NAME`` / ``SG_SANDBOX_IMAGE`` /
-    ``SG_SANDBOX_POLICY_ID`` exposed, plus user-defined ``env``).
+    Pre-create hooks act as ShoreGuard-side validation gates: their
+    commands execute via ``subprocess.run`` inside the ShoreGuard
+    process *before* ``CreateSandbox`` reaches the gateway, with a
+    whitelisted environment exposing only ``SG_SANDBOX_NAME``,
+    ``SG_SANDBOX_IMAGE``, ``SG_SANDBOX_POLICY_ID``, and the hook's
+    user-defined ``env`` entries.
 
-    Post-create hooks run *after* ``CreateSandbox`` succeeds, executing
-    inside the new sandbox via the existing ``ExecSandbox`` RPC. They
-    are intended for warm-up tasks (``apt update``, telemetry init).
+    Post-create hooks run *inside* the new sandbox via the existing
+    ``ExecSandbox`` RPC once creation succeeds, intended for warm-up
+    tasks like package updates or telemetry initialisation.
 
-    The execution surface is intentionally ShoreGuard-side because
-    OpenShell v0.0.26 has no native hook RPC; once upstream ships one,
-    ``BootHookService`` will detect it and delegate.
+    The execution surface is deliberately on the ShoreGuard side
+    because the upstream gRPC contract has no native hook RPC. Once
+    one exists, ``BootHookService`` can detect it and delegate
+    without the schema changing.
 
     Attributes:
         id: Auto-incremented primary key.

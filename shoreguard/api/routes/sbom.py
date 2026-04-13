@@ -1,11 +1,14 @@
-"""REST endpoints for the per-sandbox SBOM viewer (M21).
+"""REST endpoints for the per-sandbox Supply-Chain Viewer.
 
-CycloneDX JSON SBOMs are uploaded by operators (typically from CI), parsed +
-persisted by :class:`~shoreguard.services.sbom.SBOMService`, and exposed via
-paginated read endpoints for the SBOM viewer page.
+Routes let operators upload CycloneDX JSON documents (typically
+from a CI pipeline), browse components with debounced search and a
+severity filter, list vulnerabilities sorted by highest severity
+first, fetch the raw payload back, and delete a snapshot.
 
-There is no upstream OpenShell SBOM RPC at the v0.0.26 pin — the upload
-endpoint is the only ingestion path.
+Upload is the only ingestion path — there is no gateway-pull
+alternative. Parsing, storage, and query logic all live in
+:class:`~shoreguard.services.sbom.SBOMService`; this module only
+handles auth, validation, and response shaping.
 """
 
 from __future__ import annotations

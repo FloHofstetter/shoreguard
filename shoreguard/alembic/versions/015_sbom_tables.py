@@ -1,8 +1,10 @@
-"""Add sbom_snapshots and sbom_components tables (M21 SBOM viewer).
+"""Add sbom_snapshots and sbom_components tables.
 
-One snapshot per (gateway, sandbox) — uploads replace the prior snapshot.
-Components are denormalised into a separate table so the components search
-endpoint can paginate + filter via SQL without re-parsing the raw JSON.
+One snapshot per ``(gateway, sandbox)`` — uploads replace the
+prior snapshot rather than appending. Components are denormalised
+into a separate table so the component search endpoint can
+paginate and filter via SQL without re-parsing the raw CycloneDX
+JSON on each request.
 
 Revision ID: 015
 Revises: 014

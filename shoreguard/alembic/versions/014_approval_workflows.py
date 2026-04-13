@@ -1,8 +1,10 @@
-"""Add approval_workflows and approval_decisions tables (M19 quorum).
+"""Add approval_workflows and approval_decisions tables.
 
-Multi-stage approvals: a workflow row configures required_approvals per
-sandbox; decision rows accumulate votes and are cleared once quorum fires
-the upstream gateway approve.
+Supports multi-stage, quorum-based approval flows per sandbox.
+A ``workflow`` row configures ``required_approvals`` for a sandbox
+and optional escalation; ``decision`` rows accumulate votes and
+are cleared once quorum is reached and the upstream gateway
+``ApproveChunk`` call has fired.
 
 Revision ID: 014
 Revises: 013

@@ -1,9 +1,11 @@
-"""REST endpoints for sandbox boot hooks (M22).
+"""REST endpoints for managing sandbox boot hooks.
 
-CRUD + manual trigger + reorder for the per-sandbox boot hook table.
-The actual execution surface lives in
-:class:`~shoreguard.services.boot_hooks.BootHookService`; this module is
-only the HTTP wrapper.
+Exposes CRUD, reorder, and a manual-trigger action over the
+per-sandbox boot-hook table. All real behavior — phase-aware
+execution, env whitelisting, timeout handling, output capture —
+lives in :class:`~shoreguard.services.boot_hooks.BootHookService`;
+this module is a thin HTTP wrapper around that service, responsible
+for auth, request validation, audit logging, and response shaping.
 """
 
 from __future__ import annotations

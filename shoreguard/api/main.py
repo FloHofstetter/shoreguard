@@ -156,13 +156,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     bypass_mod.bypass_service = bypass_mod.BypassService()
     logger.info("Bypass detection service initialised")
 
-    # ── SBOM viewer (M21) ───────────────────────────────────────────────
+    # ── SBOM viewer ─────────────────────────────────────────────────────
     import shoreguard.services.sbom as sbom_mod
 
     sbom_mod.sbom_service = sbom_mod.SBOMService(session_factory)
     logger.info("SBOM service initialised")
 
-    # ── Boot hooks (M22) ────────────────────────────────────────────────
+    # ── Boot hooks ──────────────────────────────────────────────────────
     import shoreguard.services.boot_hooks as boot_hooks_mod
 
     def _resolve_sandbox_service(gateway_name: str):  # type: ignore[no-untyped-def]  # noqa: D103
@@ -187,7 +187,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     logger.info("Boot hook service initialised")
 
-    # ── Gateway discovery (M22) ─────────────────────────────────────────
+    # ── Gateway discovery ───────────────────────────────────────────────
     import shoreguard.services.discovery as discovery_mod
 
     discovery_mod.discovery_service = discovery_mod.DiscoveryService(
@@ -201,25 +201,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.discovery.domains,
     )
 
-    # ── Policy pin service (M18) ─────────────────────────────────────
+    # ── Policy pin service ────────────────────────────────────────────
     import shoreguard.services.policy_pin as pin_mod
 
     pin_mod.policy_pin_service = pin_mod.PolicyPinService(session_factory)
     logger.info("Policy pin service initialised")
 
-    # ── Approval workflow service (M19) ───────────────────────────────
+    # ── Approval workflow service ─────────────────────────────────────
     import shoreguard.services.approval_workflow as wf_mod
 
     wf_mod.approval_workflow_service = wf_mod.ApprovalWorkflowService(session_factory)
     logger.info("Approval workflow service initialised")
 
-    # ── GitOps apply proposals (M23) ──────────────────────────────────
+    # ── GitOps apply proposals ────────────────────────────────────────
     import shoreguard.services.policy_apply_proposal as apply_mod
 
     apply_mod.policy_apply_proposal_service = apply_mod.PolicyApplyProposalService(session_factory)
     logger.info("Policy apply proposal service initialised")
 
-    # ── Drift detection (M23) ─────────────────────────────────────────
+    # ── Drift detection ───────────────────────────────────────────────
     import shoreguard.services.drift_detection as drift_mod
 
     drift_mod.drift_detection_service = drift_mod.DriftDetectionService(
@@ -231,7 +231,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.drift_detection.enabled,
     )
 
-    # ── Denial context cache (M16) ─────────────────────────────────────
+    # ── Denial context cache ───────────────────────────────────────────
     import shoreguard.services.denial_context as dc_mod
 
     dc_mod.denial_context_service = dc_mod.DenialContextService()
@@ -391,7 +391,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     discovery_task.add_done_callback(_make_done_cb("discovery"))
 
     async def _drift_detection_loop() -> None:
-        """Periodically run M23 policy drift detection if enabled."""
+        """Periodically run policy drift detection if enabled."""
         if not settings.drift_detection.enabled:
             return
         interval = settings.drift_detection.interval_seconds
@@ -794,9 +794,12 @@ async def get_inference_bundle(
 ) -> dict[str, Any]:
     """Return the resolved inference bundle for this gateway.
 
-    The bundle exposes the routes the gateway is currently serving after
-    policy overlay (M20).  API keys are redacted: each route only carries
-    ``has_api_key`` (bool), never the secret value.
+    The bundle exposes the routes the gateway is currently serving
+    after policy overlay — the cluster default plus every named
+    route. API keys are redacted at the client-wrapper boundary:
+    each route carries ``has_api_key`` (bool) instead of the secret
+    value, so this endpoint can be read by non-admin operators
+    without exposing credentials.
 
     Args:
         gw: The gateway name.

@@ -1,9 +1,10 @@
-"""Add policy_apply_proposals table (M23 GitOps).
+"""Add policy_apply_proposals table.
 
-Stores pending YAML policy apply requests under an active M19 workflow.
-The row is keyed by a synthetic chunk_id derived from a sha256 prefix of
-the YAML body, so subsequent vote-only calls (potentially from different
-CI runners) can reference the same proposal without resubmitting bytes.
+Stores pending YAML policy apply requests for sandboxes that have an
+active quorum approval workflow. Rows are keyed by a synthetic
+``chunk_id`` derived from a sha256 prefix of the YAML body so
+subsequent vote-only calls (potentially from different runners) can
+reference the same proposal without having to resubmit the payload.
 
 Revision ID: 017
 Revises: 016

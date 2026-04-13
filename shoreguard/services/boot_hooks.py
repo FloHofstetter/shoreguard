@@ -1,13 +1,24 @@
-"""Sandbox boot hook service (M22).
+"""Pre/post-create hooks attached to sandbox lifecycle.
 
-Stores ShoreGuard-side pre/post-create hooks for sandboxes and runs
-them in the right phase. Pre-create hooks act as validation gates that
-execute via ``subprocess.run`` in the ShoreGuard process *before* the
-sandbox is created on the gateway. Post-create hooks execute commands
-inside the running sandbox via ``ExecSandbox`` once it is up.
+Stores hooks in the ``sandbox_boot_hooks`` table and runs them in the
+right phase around sandbox creation.
 
-OpenShell v0.0.26 has no native hook RPC; the surface here is
-ShoreGuard-side and will switch to delegation once upstream ships one.
+Pre-create hooks act as ShoreGuard-side validation gates: they run
+via ``subprocess.run`` inside the ShoreGuard process *before* the
+gateway sees the ``CreateSandbox`` call, with a whitelisted
+environment (sandbox name, image, policy id, plus user-defined
+entries). A non-zero exit aborts creation unless the hook is marked
+``continue_on_failure``.
+
+Post-create hooks run inside the new sandbox via ``ExecSandbox`` once
+creation succeeds and are intended for warm-up tasks where a failure
+is typically recoverable from inside the live sandbox rather than
+worth rolling creation back.
+
+The execution surface is deliberately on the ShoreGuard side because
+the upstream gRPC contract currently has no native hook RPC. Once
+one exists, this service can delegate its run loop to the gateway
+without the REST surface changing.
 """
 
 from __future__ import annotations
