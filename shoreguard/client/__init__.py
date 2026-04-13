@@ -38,6 +38,7 @@ from ._proto import (
     sandbox_pb2,
 )
 from ._resilience import RetryPolicy
+from ._tls import CertInfo, validate_bundle
 from .approvals import ApprovalManager
 from .policies import PolicyManager
 from .providers import ProviderManager
@@ -76,6 +77,44 @@ def _default_retry_deadline() -> float:
     return get_settings().gateway.grpc_retry_deadline
 
 
+def _default_require_mtls() -> bool:
+    """Return whether plaintext gateway channels should be rejected.
+
+    Returns:
+        bool: ``GatewaySettings.require_mtls``.
+    """
+    from shoreguard.settings import get_settings
+
+    return get_settings().gateway.require_mtls
+
+
+def _default_cert_warn_days() -> int:
+    """Return the configured cert-expiry warning window in days.
+
+    Returns:
+        int: ``GatewaySettings.cert_expiry_warn_days``.
+    """
+    from shoreguard.settings import get_settings
+
+    return get_settings().gateway.cert_expiry_warn_days
+
+
+def _endpoint_host(endpoint: str) -> str:
+    """Extract the hostname portion of a ``host:port`` endpoint string.
+
+    Args:
+        endpoint: Gateway endpoint as ``host:port``.
+
+    Returns:
+        str: The hostname, or the original string if no port separator is
+            present.
+    """
+    if ":" not in endpoint:
+        return endpoint
+    host, _, _ = endpoint.rpartition(":")
+    return host or endpoint
+
+
 class ShoreGuardClient:
     """Unified gRPC client bound to a single OpenShell gateway.
 
@@ -102,6 +141,18 @@ class ShoreGuardClient:
             :func:`_default_retry_policy`.
         retry_deadline: Optional total retry budget in seconds; defaults
             to :func:`_default_retry_deadline`.
+        require_mtls: Reject plaintext channels when ``True``. The direct
+            constructor defaults to ``False`` for local dev; the
+            ``from_credentials`` factory defaults to the configured
+            ``GatewaySettings.require_mtls``.
+
+    Attributes:
+        cert_info (CertInfo | None): Parsed metadata from the most recent
+            bundle validation, or ``None`` for plaintext channels.
+
+    Raises:
+        GatewayNotConnectedError: If ``require_mtls`` is set but no client
+            bundle is provided, or if eager bundle validation fails.
     """
 
     def __init__(  # noqa: D107
@@ -114,6 +165,7 @@ class ShoreGuardClient:
         timeout: float = 30.0,
         retry_policy: RetryPolicy | None = None,
         retry_deadline: float | None = None,
+        require_mtls: bool = False,
     ) -> None:
         self._endpoint = endpoint
         self._timeout = timeout
@@ -121,12 +173,30 @@ class ShoreGuardClient:
         self._retry_deadline = (
             retry_deadline if retry_deadline is not None else _default_retry_deadline()
         )
+        self._require_mtls = require_mtls
+        self._cert_info: CertInfo | None = None
 
-        if ca_path and cert_path and key_path:
+        has_bundle = bool(ca_path and cert_path and key_path)
+        if require_mtls and not has_bundle:
+            raise GatewayNotConnectedError(
+                f"mTLS required but no client bundle provided for {endpoint!r}"
+            )
+
+        if has_bundle:
+            ca_bytes = ca_path.read_bytes()  # type: ignore[union-attr]
+            cert_bytes = cert_path.read_bytes()  # type: ignore[union-attr]
+            key_bytes = key_path.read_bytes()  # type: ignore[union-attr]
+            self._cert_info = validate_bundle(
+                ca_cert=ca_bytes,
+                client_cert=cert_bytes,
+                client_key=key_bytes,
+                endpoint_host=_endpoint_host(endpoint),
+                warn_within_days=_default_cert_warn_days(),
+            )
             credentials = grpc.ssl_channel_credentials(
-                root_certificates=ca_path.read_bytes(),
-                private_key=key_path.read_bytes(),
-                certificate_chain=cert_path.read_bytes(),
+                root_certificates=ca_bytes,
+                private_key=key_bytes,
+                certificate_chain=cert_bytes,
             )
             self._channel = grpc.secure_channel(endpoint, credentials)
         else:
@@ -156,6 +226,7 @@ class ShoreGuardClient:
         timeout: float = 30.0,
         retry_policy: RetryPolicy | None = None,
         retry_deadline: float | None = None,
+        require_mtls: bool | None = None,
     ) -> ShoreGuardClient:
         """Connect using raw certificate bytes (from DB or registry).
 
@@ -169,9 +240,15 @@ class ShoreGuardClient:
                 :func:`_default_retry_policy`.
             retry_deadline: Optional total retry budget in seconds; defaults
                 to :func:`_default_retry_deadline`.
+            require_mtls: Enforce mTLS. ``None`` (default) reads the setting
+                from :class:`GatewaySettings`.
 
         Returns:
             ShoreGuardClient: Connected client instance.
+
+        Raises:
+            GatewayNotConnectedError: If mTLS is required but the bundle is
+                missing or fails eager validation.
         """
         instance = cls.__new__(cls)
         instance._endpoint = endpoint
@@ -180,12 +257,32 @@ class ShoreGuardClient:
         instance._retry_deadline = (
             retry_deadline if retry_deadline is not None else _default_retry_deadline()
         )
+        instance._require_mtls = (
+            require_mtls if require_mtls is not None else _default_require_mtls()
+        )
+        instance._cert_info = None
 
-        if ca_cert and client_cert and client_key:
+        has_bundle = bool(ca_cert and client_cert and client_key)
+        if instance._require_mtls and not has_bundle:
+            raise GatewayNotConnectedError(
+                f"mTLS required but no client bundle provided for {endpoint!r}"
+            )
+
+        if has_bundle:
+            ca_bytes: bytes = ca_cert  # type: ignore[assignment]
+            cert_bytes: bytes = client_cert  # type: ignore[assignment]
+            key_bytes: bytes = client_key  # type: ignore[assignment]
+            instance._cert_info = validate_bundle(
+                ca_cert=ca_bytes,
+                client_cert=cert_bytes,
+                client_key=key_bytes,
+                endpoint_host=_endpoint_host(endpoint),
+                warn_within_days=_default_cert_warn_days(),
+            )
             credentials = grpc.ssl_channel_credentials(
-                root_certificates=ca_cert,
-                private_key=client_key,
-                certificate_chain=client_cert,
+                root_certificates=ca_bytes,
+                private_key=key_bytes,
+                certificate_chain=cert_bytes,
             )
             instance._channel = grpc.secure_channel(endpoint, credentials)
             logger.debug("Creating secure gRPC channel to %s", endpoint)
@@ -440,6 +537,67 @@ class ShoreGuardClient:
                 for ve in resp.validated_endpoints
             ]
         return result
+
+    @property
+    def cert_info(self) -> CertInfo | None:
+        """Return the parsed client-cert metadata for the current channel.
+
+        Returns:
+            CertInfo | None: Metadata from the most recent successful bundle
+                validation, or ``None`` for plaintext channels.
+        """
+        return self._cert_info
+
+    def reload_credentials(
+        self,
+        *,
+        ca_cert: bytes,
+        client_cert: bytes,
+        client_key: bytes,
+    ) -> None:
+        """Rotate the mTLS bundle by rebuilding the channel and sub-managers.
+
+        Validates the new bundle eagerly (via :func:`validate_bundle`, which
+        raises :class:`GatewayNotConnectedError` on failure), closes the
+        existing channel, and rebuilds stubs plus every manager so subsequent
+        calls run over the fresh credentials. Callers must serialize
+        invocations: in-flight streams held by other callers will observe a
+        ``ChannelClosed`` error and should reconnect on their own iteration.
+
+        Args:
+            ca_cert: New CA certificate bytes.
+            client_cert: New client certificate bytes.
+            client_key: New client private key bytes.
+        """
+        self._cert_info = validate_bundle(
+            ca_cert=ca_cert,
+            client_cert=client_cert,
+            client_key=client_key,
+            endpoint_host=_endpoint_host(self._endpoint),
+            warn_within_days=_default_cert_warn_days(),
+        )
+        credentials = grpc.ssl_channel_credentials(
+            root_certificates=ca_cert,
+            private_key=client_key,
+            certificate_chain=client_cert,
+        )
+        old_channel = self._channel
+        self._channel = grpc.secure_channel(self._endpoint, credentials)
+        self._stub = openshell_pb2_grpc.OpenShellStub(self._channel)
+        self._inference_stub = inference_pb2_grpc.InferenceStub(self._channel)
+        self.sandboxes = SandboxManager(
+            self._stub,
+            timeout=self._timeout,
+            retry_policy=self._retry_policy,
+            retry_deadline=self._retry_deadline,
+        )
+        self.policies = PolicyManager(self._stub, timeout=self._timeout)
+        self.approvals = ApprovalManager(self._stub, timeout=self._timeout)
+        self.providers = ProviderManager(self._stub, timeout=self._timeout)
+        try:
+            old_channel.close()
+        except Exception:  # noqa: BLE001
+            logger.debug("old channel close raised during reload_credentials", exc_info=True)
 
     def close(self) -> None:
         """Close the underlying gRPC channel."""

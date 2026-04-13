@@ -328,6 +328,9 @@ class GatewaySettings(BaseSettings):
         grpc_retry_initial_backoff (float): Initial backoff between retries in seconds.
         grpc_retry_max_backoff (float): Maximum backoff between retries in seconds.
         grpc_retry_deadline (float): Total wall-clock budget including retries.
+        require_mtls (bool): Reject plaintext gateway channels when ``True``.
+        cert_expiry_warn_days (int): Warn when any gateway cert expires within
+            this many days.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_GATEWAY_")
@@ -357,6 +360,20 @@ class GatewaySettings(BaseSettings):
         description=(
             "Total wall-clock budget in seconds for a single logical RPC including all "
             "retries. Retries will not exceed this deadline."
+        ),
+    )
+    require_mtls: bool = Field(
+        default=True,
+        description=(
+            "Reject plaintext gRPC channels to gateways. Disable only for local "
+            "development against an insecure gateway."
+        ),
+    )
+    cert_expiry_warn_days: int = Field(
+        default=14,
+        description=(
+            "Warn (but do not reject) when a gateway certificate expires within this "
+            "many days. A structured log warning is emitted per affected channel."
         ),
     )
 

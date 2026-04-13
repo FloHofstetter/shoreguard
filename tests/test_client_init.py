@@ -11,6 +11,25 @@ import pytest
 from shoreguard.client import ShoreGuardClient, _resolve_active_cluster
 from shoreguard.exceptions import GatewayNotConnectedError
 
+
+@pytest.fixture(autouse=True)
+def _skip_mtls_validation(monkeypatch):
+    """Bypass the eager mTLS bundle validation introduced in M28 chunk 2.
+
+    These tests use placeholder cert bytes and are focused on the channel-
+    building plumbing, not certificate correctness.
+    """
+    monkeypatch.setattr(
+        "shoreguard.client.validate_bundle",
+        lambda **kw: SimpleNamespace(
+            not_after=None,
+            san_dns_names=(),
+            seconds_until_expiry=365 * 86400,
+        ),
+    )
+    monkeypatch.setattr("shoreguard.client._default_require_mtls", lambda: False)
+
+
 # ─── FakeStubs for gRPC methods ──────────────────────────────────────────────
 
 
@@ -127,7 +146,7 @@ def test_init_insecure(monkeypatch):
 
 
 def test_init_mtls(tmp_path, monkeypatch):
-    """Constructor with certs creates secure channel."""
+    """Constructor with certs validates the bundle and creates a secure channel."""
     ca = tmp_path / "ca.crt"
     cert = tmp_path / "tls.crt"
     key = tmp_path / "tls.key"
@@ -138,6 +157,10 @@ def test_init_mtls(tmp_path, monkeypatch):
     mock_channel = MagicMock()
     monkeypatch.setattr("grpc.ssl_channel_credentials", lambda **kw: MagicMock())
     monkeypatch.setattr("grpc.secure_channel", lambda ep, creds: mock_channel)
+    monkeypatch.setattr(
+        "shoreguard.client.validate_bundle",
+        lambda **kw: MagicMock(seconds_until_expiry=365 * 86400),
+    )
 
     c = ShoreGuardClient("localhost:443", ca_path=ca, cert_path=cert, key_path=key)
 
