@@ -1,4 +1,4 @@
-"""Tests for the DiscoveryService (M22)."""
+"""Unit tests for DiscoveryService — DNS-SRV record parsing and gateway registration."""
 
 from __future__ import annotations
 

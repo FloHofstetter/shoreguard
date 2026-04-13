@@ -1,7 +1,7 @@
-"""API tests for M23 GitOps policy export + apply (dry-run path).
+"""API tests for GitOps policy export and apply.
 
-The full apply write path lands in S23.2; here we cover export, dry-run,
-up-to-date, version mismatch, malformed YAML, and pin guard.
+Covers export, dry-run, up-to-date, version mismatch, malformed YAML,
+pin guard, and the quorum-gated write path.
 """
 
 from __future__ import annotations
@@ -155,7 +155,7 @@ class TestApplyValidation:
 
 
 class TestApplyWorkflowGate:
-    """M19 quorum gating: first call records vote, quorum call writes."""
+    """Quorum gating: first call records a vote, the quorum-reaching call writes."""
 
     DRIFT_YAML = (
         "metadata:\n  gateway: test\n  sandbox: sb1\n"

@@ -1,4 +1,4 @@
-"""Tests for the BootHookService (M22)."""
+"""Unit tests for BootHookService — pre/post hook registration, ordering, and execution."""
 
 from __future__ import annotations
 

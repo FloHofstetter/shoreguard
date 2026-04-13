@@ -1,4 +1,4 @@
-"""CLI tests for ``shoreguard policy`` (M23)."""
+"""CLI tests for ``shoreguard policy`` — export, apply, and diff subcommands."""
 
 from __future__ import annotations
 

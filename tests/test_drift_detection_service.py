@@ -1,4 +1,4 @@
-"""Unit tests for DriftDetectionService (M23)."""
+"""Unit tests for DriftDetectionService — comparing exported YAML against active policy state."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Integration tests for the boot hooks API routes (M22)."""
+"""Integration tests for the boot hook API routes — create, list, delete, and pre/post ordering."""
 
 from __future__ import annotations
 

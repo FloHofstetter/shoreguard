@@ -1,4 +1,4 @@
-"""Tests for M19 multi-stage approvals (quorum) — service + API."""
+"""Tests for multi-stage approval workflows (quorum voting) — service and API layers."""
 
 from __future__ import annotations
 

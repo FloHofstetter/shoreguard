@@ -1,4 +1,4 @@
-"""Unit tests for PolicyApplyProposalService (M23)."""
+"""Unit tests for PolicyApplyProposalService — YAML ingest, diff, and quorum proposals."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Tests for SBOMService (M21 — CycloneDX SBOM ingestion + queries)."""
+"""Unit tests for SBOMService — CycloneDX SBOM ingestion and component queries."""
 
 from __future__ import annotations
 

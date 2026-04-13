@@ -1,4 +1,4 @@
-"""Integration tests for the discovery API routes (M22)."""
+"""Integration tests for the DNS-SRV gateway discovery API routes."""
 
 from __future__ import annotations
 

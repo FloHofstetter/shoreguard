@@ -1,4 +1,4 @@
-"""Integration tests for SBOM API routes (M21)."""
+"""Integration tests for the CycloneDX SBOM upload and query API routes."""
 
 from __future__ import annotations
 

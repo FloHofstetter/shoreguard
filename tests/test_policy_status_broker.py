@@ -1,4 +1,4 @@
-"""Unit tests for PolicyStatusBroker (M20 push-based wait_loaded)."""
+"""Unit tests for PolicyStatusBroker — push-based ``wait_loaded`` notification fan-out."""
 
 from __future__ import annotations
 
