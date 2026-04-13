@@ -25,8 +25,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `m12-fixture-lint` job comment. The job name itself is
   preserved so branch-protection status checks don't break.
 
-No behavior changes, no schema changes, no new dependencies.
-Full test suite remains at 2933 passed / 1 skipped.
+### Fixed
+
+- **Test rate-limiter leak under serial pytest.** The
+  `_disable_auth` autouse fixture in `tests/conftest.py` reset
+  only the login rate limiter, not the global or write limiters.
+  Under `pytest-xdist` each worker has its own Python process so
+  every worker starts with fresh limiters and the leak was
+  invisible — the local `-n auto` runs stayed green. CI runs the
+  test job serially, all tests share one process, the global
+  limiter accumulates request counts, and tests late in
+  collection order started seeing HTTP 429 on reads that should
+  have been 200/404. The cascade failure looked like two distinct
+  problems in the CI log (14 tests failing with 429 plus one with
+  `KeyError: 'total'`), but the `KeyError` is the same bug: the
+  assertion read `data["total"]` without checking the status
+  code, so a 429 body without that field triggered it. Fix: call
+  `reset_limiters()` instead of `reset_login_limiter()`. Verified
+  with a full serial pytest run — 2933 passed, 1 skipped.
+
+No behavior changes at runtime, no schema changes, no new
+dependencies.
 
 ## [0.30.2] — 2026-04-13
 
