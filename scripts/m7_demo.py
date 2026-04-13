@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""End-to-end M7 vision demo script.
+"""End-to-end vision demo script.
 
-Drives the full M7 flow through the ShoreGuard HTTP API + ``openshell``
-CLI for the in-sandbox commands. Mirrors ``scripts/m7-demo.md`` step
-by step. Designed to be idempotent — re-running it deletes the
-previous demo sandbox and gateway-registration before starting.
+Drives the full gateway → sandbox → routed-inference flow through the
+ShoreGuard HTTP API + ``openshell`` CLI for the in-sandbox commands.
+Mirrors ``scripts/m7-demo.md`` step by step. Designed to be idempotent
+— re-running it deletes the previous demo sandbox and
+gateway-registration before starting.
 
 Prereqs:
     * OpenShell ``nemoclaw`` gateway already running locally on
@@ -110,7 +111,7 @@ def register_gateway(client: httpx.Client) -> None:
             "endpoint": GW_ENDPOINT,
             "scheme": "http",
             "auth_mode": "insecure",
-            "description": "M7 demo gateway (scripted)",
+            "description": "vision demo gateway (scripted)",
         },
     )
     if r.status_code not in (200, 201):
@@ -177,7 +178,7 @@ def launch_sandbox(client: httpx.Client) -> None:
         json={
             "name": SB,
             "providers": [PROVIDER],
-            "description": "M7 demo sandbox (scripted)",
+            "description": "vision demo sandbox (scripted)",
         },
     )
     if r.status_code != 202:
@@ -365,11 +366,11 @@ def retry_call() -> None:
 
 
 def main() -> int:
-    """Run the full M7 demo end-to-end."""
+    """Run the full vision demo end-to-end."""
     password = require_env("SHOREGUARD_ADMIN_PASSWORD")
     anthropic_key = require_env("ANTHROPIC_API_KEY")
 
-    print(f"\033[1mShoreGuard M7 vision demo\033[0m  ({SG} → {GW} → {SB})")
+    print(f"\033[1mShoreGuard vision demo\033[0m  ({SG} → {GW} → {SB})")
 
     with httpx.Client(base_url=SG, timeout=30.0) as client:
         login(client, password)
@@ -383,7 +384,7 @@ def main() -> int:
         show_audit_sequence(client)
         retry_call()
 
-    print("\n\033[1;32m✓ M7 demo complete — all 8 phases passed.\033[0m\n")
+    print("\n\033[1;32m✓ vision demo complete — all 8 phases passed.\033[0m\n")
     return 0
 
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""End-to-end M22 boot hooks + discovery demo script.
+"""End-to-end boot hooks + discovery demo script.
 
-Drives the new boot-hook CRUD/run endpoints and the gateway discovery
-trigger. Authenticates, picks the first gateway + sandbox, creates a
-post-create hook, runs it manually, lists it back, then exercises the
-discovery endpoint with a stubbed (empty) result.
+Drives the boot-hook CRUD/run endpoints and the DNS-SRV gateway
+discovery trigger. Authenticates, picks the first gateway + sandbox,
+creates a post-create hook, runs it manually, lists it back, then
+exercises the discovery endpoint with a stubbed (empty) result.
 
 Prereqs:
     * ShoreGuard running on ``http://127.0.0.1:8888`` with at least one
@@ -57,7 +57,7 @@ def require_env(name: str) -> str:
 
 
 def main() -> int:  # noqa: PLR0915
-    """Run the M22 demo end-to-end."""
+    """Run the boot hooks + discovery demo end-to-end."""
     password = require_env("SHOREGUARD_ADMIN_PASSWORD")
 
     with httpx.Client(base_url=SG, timeout=20.0) as client:
@@ -146,7 +146,7 @@ def main() -> int:  # noqa: PLR0915
         else:
             ok(f"status endpoint returned {s_resp.status_code}")
 
-    print("\n\033[1;32m✔ M22 demo completed.\033[0m")
+    print("\n\033[1;32m✔ boot hooks + discovery demo completed.\033[0m")
     return 0
 
 

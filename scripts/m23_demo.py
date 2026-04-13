@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""End-to-end M23 GitOps policy sync demo.
+"""End-to-end GitOps policy sync demo.
 
-Drives the new ``/policy/export`` and ``/policy/apply`` endpoints
-through the eight phases described in the plan: export, no-op, dry-run
-drift, write, workflow vote, workflow quorum, pin guard, drift webhook.
+Drives the ``/policy/export`` and ``/policy/apply`` endpoints through
+eight phases: export, no-op, dry-run drift, write, workflow vote,
+workflow quorum, pin guard, drift webhook.
 
 Prereqs:
     * ShoreGuard running on ``http://127.0.0.1:8888`` with at least one
@@ -57,7 +57,7 @@ def require_env(name: str) -> str:
 
 
 def main() -> int:  # noqa: PLR0915, PLR0912
-    """Run the M23 demo end-to-end."""
+    """Run the GitOps policy sync demo end-to-end."""
     password = require_env("SHOREGUARD_ADMIN_PASSWORD")
 
     with httpx.Client(base_url=SG, timeout=20.0) as client:
@@ -159,7 +159,7 @@ def main() -> int:  # noqa: PLR0915, PLR0912
             "see scripts/m23-gitops.md for the webhook walk."
         )
 
-    print("\n\033[1;32m✔ M23 demo completed.\033[0m")
+    print("\n\033[1;32m✔ GitOps policy sync demo completed.\033[0m")
     return 0
 
 

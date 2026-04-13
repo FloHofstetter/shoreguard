@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""End-to-end M8 federation demo script.
+"""End-to-end multi-gateway federation demo script.
 
-Drives the full M8 multi-gateway federation flow through the
-ShoreGuard HTTP API + ``openshell`` CLI. Operates on **two** real
+Drives the full federation flow (two gateways, labels, audit
+attribution) through the ShoreGuard HTTP API + ``openshell`` CLI.
+Operates on **two** real
 OpenShell gateways with different labels and asserts that the
 federation surfaces (label filter, audit attribution, gateway list)
 behave correctly.
@@ -46,7 +47,7 @@ import httpx
 
 SG = "http://127.0.0.1:8888"
 
-# Gateway #1 — dev cluster, the original M7-style workload.
+# Gateway #1 — dev cluster, a single-gateway vision-demo style workload.
 GW_DEV = "cluster-dev"
 GW_DEV_ENDPOINT = "127.0.0.1:8089"
 GW_DEV_LABELS = {"env": "dev"}
@@ -142,7 +143,7 @@ def register_gateway(
             "endpoint": endpoint,
             "scheme": "http",
             "auth_mode": "insecure",
-            "description": f"M8 federation demo — {name}",
+            "description": f"federation demo — {name}",
             "labels": labels,
         },
     )
@@ -232,7 +233,7 @@ def launch_sandbox(client: httpx.Client, gw: str) -> None:
         json={
             "name": SB,
             "providers": [PROVIDER],
-            "description": f"M8 federation demo sandbox on {gw}",
+            "description": f"federation demo sandbox on {gw}",
         },
     )
     if r.status_code != 202:
@@ -532,11 +533,11 @@ def _endpoint_for(gw: str) -> str:
 
 
 def main() -> int:
-    """Run the full M8 federation demo end-to-end."""
+    """Run the full federation demo end-to-end."""
     password = require_env("SHOREGUARD_ADMIN_PASSWORD")
     anthropic_key = require_env("ANTHROPIC_API_KEY")
 
-    print(f"\033[1mShoreGuard M8 federation demo\033[0m  ({SG} → {GW_DEV} + {GW_STAGING})")
+    print(f"\033[1mShoreGuard federation demo\033[0m  ({SG} → {GW_DEV} + {GW_STAGING})")
 
     with httpx.Client(base_url=SG, timeout=30.0) as client:
         phase_a_login(client, password)
@@ -550,7 +551,7 @@ def main() -> int:
         phase_j_gateway_list(client)
 
     print(
-        "\n\033[1;32m✓ M8 federation demo complete — all phases passed.\033[0m\n"
+        "\n\033[1;32m✓ federation demo complete — all phases passed.\033[0m\n"
         f"  Both gateways ({GW_DEV} + {GW_STAGING}) and their sandboxes ({SB}) are\n"
         f"  left running for manual UX inspection in the browser.\n"
     )

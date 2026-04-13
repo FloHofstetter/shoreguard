@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""End-to-end M17 policy prover demo script.
+"""End-to-end policy prover demo script.
 
 Drives the Z3 formal verification feature through the ShoreGuard HTTP
-API.  Authenticates, picks the first gateway + sandbox, then runs all
+API. Authenticates, picks the first gateway + sandbox, then runs all
 four preset verification queries plus a custom exfiltration check.
 
 Prereqs:
@@ -57,7 +57,7 @@ def require_env(name: str) -> str:
 
 
 def main() -> None:
-    """Run the M17 policy prover demo."""
+    """Run the policy prover demo."""
     password = require_env("SHOREGUARD_ADMIN_PASSWORD")
     client = httpx.Client(base_url=SG, timeout=30.0)
 
@@ -156,7 +156,7 @@ def main() -> None:
     ok("Custom query completed")
 
     banner("Done")
-    ok("M17 Policy Prover demo complete")
+    ok("Policy Prover demo complete")
 
 
 if __name__ == "__main__":

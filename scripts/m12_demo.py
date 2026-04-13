@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end M12 in-k8s federation demo script.
+"""End-to-end in-k8s federation demo script.
 
 k8s analog of ``scripts/m8_demo.py`` — proves that the Helm-deployed
 ShoreGuard (``charts/shoreguard``) can federate two in-cluster OpenShell
@@ -8,7 +8,7 @@ gateways deployed via the internal test fixture
 install path — see that chart's README), all via service-DNS mTLS,
 inside a single kind cluster.
 
-Differences from the M8 host-process demo:
+Differences from the host-process federation demo:
 
 * Both gateways are pods in the same namespace. Their endpoint is the
   in-cluster Service DNS (``<release>-openshell-cluster.<ns>.svc.cluster.local:30051``),
@@ -196,7 +196,7 @@ def register_gateway_mtls(
             "endpoint": endpoint,
             "scheme": "https",
             "auth_mode": "mtls",
-            "description": f"M12 in-k8s federation demo — {name}",
+            "description": f"in-k8s federation demo — {name}",
             "labels": labels,
             "ca_cert": ca,
             "client_cert": crt,
@@ -330,7 +330,7 @@ def launch_sandbox(client: httpx.Client, gw: str) -> None:
         json={
             "name": SB,
             "providers": [PROVIDER],
-            "description": f"M12 in-k8s federation demo sandbox on {gw}",
+            "description": f"in-k8s federation demo sandbox on {gw}",
         },
     )
     if r.status_code != 202:
@@ -535,7 +535,7 @@ def phase_j_gateway_list(client: httpx.Client) -> None:
 
 
 def main() -> int:
-    """Run the full M12 in-k8s federation demo end-to-end."""
+    """Run the full in-k8s federation demo end-to-end."""
     # Sanity-check the base64 encoding of the secrets once so we fail
     # loud and early rather than during gateway register.
     for rel in (GW_DEV_RELEASE, GW_STAGING_RELEASE):
@@ -550,7 +550,7 @@ def main() -> int:
     anthropic_key = require_env("ANTHROPIC_API_KEY")
 
     print(
-        f"\033[1mShoreGuard M12 in-k8s federation demo\033[0m  "
+        f"\033[1mShoreGuard in-k8s federation demo\033[0m  "
         f"({SG} → ns={NAMESPACE} → {GW_DEV} + {GW_STAGING})"
     )
 
@@ -566,7 +566,7 @@ def main() -> int:
         phase_j_gateway_list(client)
 
     print(
-        "\n\033[1;32m✓ M12 in-k8s federation demo complete — all phases passed.\033[0m\n"
+        "\n\033[1;32m✓ in-k8s federation demo complete — all phases passed.\033[0m\n"
         f"  Both in-cluster gateways ({GW_DEV} + {GW_STAGING}) and their sandboxes\n"
         f"  ({SB}) are left running. Inspect via port-forward in the browser.\n"
     )

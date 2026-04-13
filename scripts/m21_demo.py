@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""End-to-end M21 SBOM viewer demo script.
+"""End-to-end SBOM viewer demo script.
 
-Drives the SBOM upload + query endpoints through the ShoreGuard HTTP API.
-Authenticates, picks the first gateway + sandbox, uploads the bundled
-CycloneDX fixture, then walks every read endpoint and finally deletes the
-snapshot.
+Drives the CycloneDX SBOM upload + query endpoints through the
+ShoreGuard HTTP API. Authenticates, picks the first gateway + sandbox,
+uploads the bundled fixture, walks every read endpoint, and finally
+deletes the snapshot.
 
 Prereqs:
     * ShoreGuard running on ``http://127.0.0.1:8888`` with at least one
@@ -59,7 +59,7 @@ def require_env(name: str) -> str:
 
 
 def main() -> None:
-    """Run the M21 SBOM viewer demo."""
+    """Run the SBOM viewer demo."""
     password = require_env("SHOREGUARD_ADMIN_PASSWORD")
     if not FIXTURE.exists():
         fail(f"Fixture not found: {FIXTURE}")
@@ -175,7 +175,7 @@ def main() -> None:
     ok("Confirmed 404 after delete")
 
     banner("Done")
-    ok("M21 SBOM viewer demo complete")
+    ok("SBOM viewer demo complete")
 
 
 if __name__ == "__main__":
