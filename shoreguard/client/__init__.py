@@ -37,12 +37,43 @@ from ._proto import (
     openshell_pb2_grpc,
     sandbox_pb2,
 )
+from ._resilience import RetryPolicy
 from .approvals import ApprovalManager
 from .policies import PolicyManager
 from .providers import ProviderManager
 from .sandboxes import SandboxManager
 
 logger = logging.getLogger(__name__)
+
+
+def _default_retry_policy() -> RetryPolicy:
+    """Build a RetryPolicy from :class:`GatewaySettings`.
+
+    Imported lazily to avoid a settings import at module load time for code
+    paths (tests, proto-only usage) that do not need the full settings stack.
+
+    Returns:
+        RetryPolicy: Policy built from ``GatewaySettings.grpc_retry_*`` values.
+    """
+    from shoreguard.settings import get_settings
+
+    gw = get_settings().gateway
+    return RetryPolicy(
+        max_attempts=gw.grpc_retry_max_attempts,
+        initial_backoff=gw.grpc_retry_initial_backoff,
+        max_backoff=gw.grpc_retry_max_backoff,
+    )
+
+
+def _default_retry_deadline() -> float:
+    """Return the configured total retry budget in seconds.
+
+    Returns:
+        float: ``GatewaySettings.grpc_retry_deadline``.
+    """
+    from shoreguard.settings import get_settings
+
+    return get_settings().gateway.grpc_retry_deadline
 
 
 class ShoreGuardClient:
@@ -67,6 +98,10 @@ class ShoreGuardClient:
         key_path: Path to the client private key for mTLS.
             ``None`` for server-only TLS.
         timeout: Default gRPC call timeout in seconds.
+        retry_policy: Optional retry policy; defaults to
+            :func:`_default_retry_policy`.
+        retry_deadline: Optional total retry budget in seconds; defaults
+            to :func:`_default_retry_deadline`.
     """
 
     def __init__(  # noqa: D107
@@ -77,9 +112,15 @@ class ShoreGuardClient:
         cert_path: pathlib.Path | None = None,
         key_path: pathlib.Path | None = None,
         timeout: float = 30.0,
+        retry_policy: RetryPolicy | None = None,
+        retry_deadline: float | None = None,
     ) -> None:
         self._endpoint = endpoint
         self._timeout = timeout
+        self._retry_policy = retry_policy or _default_retry_policy()
+        self._retry_deadline = (
+            retry_deadline if retry_deadline is not None else _default_retry_deadline()
+        )
 
         if ca_path and cert_path and key_path:
             credentials = grpc.ssl_channel_credentials(
@@ -94,7 +135,12 @@ class ShoreGuardClient:
         self._stub = openshell_pb2_grpc.OpenShellStub(self._channel)
         self._inference_stub = inference_pb2_grpc.InferenceStub(self._channel)
 
-        self.sandboxes = SandboxManager(self._stub, timeout=timeout)
+        self.sandboxes = SandboxManager(
+            self._stub,
+            timeout=timeout,
+            retry_policy=self._retry_policy,
+            retry_deadline=self._retry_deadline,
+        )
         self.policies = PolicyManager(self._stub, timeout=timeout)
         self.approvals = ApprovalManager(self._stub, timeout=timeout)
         self.providers = ProviderManager(self._stub, timeout=timeout)
@@ -108,6 +154,8 @@ class ShoreGuardClient:
         client_cert: bytes | None = None,
         client_key: bytes | None = None,
         timeout: float = 30.0,
+        retry_policy: RetryPolicy | None = None,
+        retry_deadline: float | None = None,
     ) -> ShoreGuardClient:
         """Connect using raw certificate bytes (from DB or registry).
 
@@ -117,6 +165,10 @@ class ShoreGuardClient:
             client_cert: Client certificate bytes for mTLS.
             client_key: Client private key bytes for mTLS.
             timeout: Default gRPC call timeout in seconds.
+            retry_policy: Optional retry policy; defaults to
+                :func:`_default_retry_policy`.
+            retry_deadline: Optional total retry budget in seconds; defaults
+                to :func:`_default_retry_deadline`.
 
         Returns:
             ShoreGuardClient: Connected client instance.
@@ -124,6 +176,10 @@ class ShoreGuardClient:
         instance = cls.__new__(cls)
         instance._endpoint = endpoint
         instance._timeout = timeout
+        instance._retry_policy = retry_policy or _default_retry_policy()
+        instance._retry_deadline = (
+            retry_deadline if retry_deadline is not None else _default_retry_deadline()
+        )
 
         if ca_cert and client_cert and client_key:
             credentials = grpc.ssl_channel_credentials(
@@ -139,7 +195,12 @@ class ShoreGuardClient:
 
         instance._stub = openshell_pb2_grpc.OpenShellStub(instance._channel)
         instance._inference_stub = inference_pb2_grpc.InferenceStub(instance._channel)
-        instance.sandboxes = SandboxManager(instance._stub, timeout=timeout)
+        instance.sandboxes = SandboxManager(
+            instance._stub,
+            timeout=timeout,
+            retry_policy=instance._retry_policy,
+            retry_deadline=instance._retry_deadline,
+        )
         instance.policies = PolicyManager(instance._stub, timeout=timeout)
         instance.approvals = ApprovalManager(instance._stub, timeout=timeout)
         instance.providers = ProviderManager(instance._stub, timeout=timeout)

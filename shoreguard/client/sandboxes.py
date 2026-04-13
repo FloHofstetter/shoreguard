@@ -21,6 +21,7 @@ from shoreguard.exceptions import SandboxError
 
 from ._converters import _dict_to_policy
 from ._proto import datamodel_pb2, openshell_pb2, openshell_pb2_grpc, sandbox_pb2
+from ._resilience import DEFAULT_POLICY, RetryPolicy, call_with_retry, stream_with_retry
 from .policies import _policy_to_dict
 
 PHASE_NAMES = {
@@ -61,11 +62,63 @@ class SandboxManager:
     Args:
         stub: OpenShell gRPC stub.
         timeout: gRPC call timeout in seconds.
+        retry_policy: Retry/backoff policy applied to every unary RPC and to
+            stream-open calls. Defaults to :data:`DEFAULT_POLICY`.
+        retry_deadline: Total wall-clock budget in seconds including retries.
+            ``None`` lets ``max_attempts`` be the only limiter.
     """
 
-    def __init__(self, stub: openshell_pb2_grpc.OpenShellStub, *, timeout: float = 30.0) -> None:  # noqa: D107
+    # Class-level defaults so instances built via ``object.__new__`` (unit
+    # tests) inherit a safe retry policy without touching every fixture.
+    _retry_policy: RetryPolicy = DEFAULT_POLICY
+    _retry_deadline: float | None = None
+
+    def __init__(  # noqa: D107
+        self,
+        stub: openshell_pb2_grpc.OpenShellStub,
+        *,
+        timeout: float = 30.0,
+        retry_policy: RetryPolicy | None = None,
+        retry_deadline: float | None = 60.0,
+    ) -> None:
         self._stub = stub
         self._timeout = timeout
+        self._retry_policy = retry_policy or DEFAULT_POLICY
+        self._retry_deadline = retry_deadline
+
+    def _invoke(self, op_name: str, fn: Any) -> Any:
+        """Execute a unary gRPC call through the resilience wrapper.
+
+        Args:
+            op_name: Logical-op label used for logs and future metrics.
+            fn: Zero-arg callable that issues the gRPC call.
+
+        Returns:
+            Any: The result returned by ``fn``.
+        """
+        return call_with_retry(
+            fn,
+            op_name=op_name,
+            policy=self._retry_policy,
+            deadline_s=self._retry_deadline,
+        )
+
+    def _open_stream(self, op_name: str, fn: Any) -> Any:
+        """Open a gRPC server-stream; retry only the open, not in-flight reads.
+
+        Args:
+            op_name: Logical-op label used for logs and future metrics.
+            fn: Zero-arg callable that opens the stream.
+
+        Returns:
+            Any: The opened stream iterator.
+        """
+        return stream_with_retry(
+            fn,
+            op_name=op_name,
+            policy=self._retry_policy,
+            deadline_s=self._retry_deadline,
+        )
 
     def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """List all sandboxes.
@@ -77,9 +130,12 @@ class SandboxManager:
         Returns:
             list[dict[str, Any]]: List of sandbox dicts.
         """
-        resp = self._stub.ListSandboxes(
-            openshell_pb2.ListSandboxesRequest(limit=limit, offset=offset),
-            timeout=self._timeout,
+        resp = self._invoke(
+            "sandboxes.list",
+            lambda: self._stub.ListSandboxes(
+                openshell_pb2.ListSandboxesRequest(limit=limit, offset=offset),
+                timeout=self._timeout,
+            ),
         )
         return [_sandbox_to_dict(sb) for sb in resp.sandboxes]
 
@@ -92,8 +148,11 @@ class SandboxManager:
         Returns:
             dict[str, Any]: Sandbox data dict.
         """
-        resp = self._stub.GetSandbox(
-            openshell_pb2.GetSandboxRequest(name=name), timeout=self._timeout
+        resp = self._invoke(
+            "sandboxes.get",
+            lambda: self._stub.GetSandbox(
+                openshell_pb2.GetSandboxRequest(name=name), timeout=self._timeout
+            ),
         )
         return _sandbox_to_dict(resp.sandbox)
 
@@ -130,9 +189,12 @@ class SandboxManager:
         if policy:
             spec.policy.CopyFrom(_dict_to_policy(policy))
 
-        resp = self._stub.CreateSandbox(
-            openshell_pb2.CreateSandboxRequest(spec=spec, name=name),
-            timeout=self._timeout,
+        resp = self._invoke(
+            "sandboxes.create",
+            lambda: self._stub.CreateSandbox(
+                openshell_pb2.CreateSandboxRequest(spec=spec, name=name),
+                timeout=self._timeout,
+            ),
         )
         return _sandbox_to_dict(resp.sandbox)
 
@@ -145,8 +207,11 @@ class SandboxManager:
         Returns:
             bool: True if the sandbox was deleted.
         """
-        resp = self._stub.DeleteSandbox(
-            openshell_pb2.DeleteSandboxRequest(name=name), timeout=self._timeout
+        resp = self._invoke(
+            "sandboxes.delete",
+            lambda: self._stub.DeleteSandbox(
+                openshell_pb2.DeleteSandboxRequest(name=name), timeout=self._timeout
+            ),
         )
         return bool(resp.deleted)
 
@@ -185,9 +250,12 @@ class SandboxManager:
                 config_revision, policy_source, global_policy_version}``.
                 ``settings`` is a flat ``{key: {value, scope}}`` map.
         """
-        resp = self._stub.GetSandboxConfig(
-            sandbox_pb2.GetSandboxConfigRequest(sandbox_id=sandbox_id),
-            timeout=self._timeout,
+        resp = self._invoke(
+            "sandboxes.get_config",
+            lambda: self._stub.GetSandboxConfig(
+                sandbox_pb2.GetSandboxConfigRequest(sandbox_id=sandbox_id),
+                timeout=self._timeout,
+            ),
         )
         settings: dict[str, dict[str, Any]] = {}
         for key, eff in resp.settings.items():
@@ -223,9 +291,12 @@ class SandboxManager:
         Returns:
             dict[str, str]: Environment variables map.
         """
-        resp = self._stub.GetSandboxProviderEnvironment(
-            openshell_pb2.GetSandboxProviderEnvironmentRequest(sandbox_id=sandbox_id),
-            timeout=self._timeout,
+        resp = self._invoke(
+            "sandboxes.get_provider_environment",
+            lambda: self._stub.GetSandboxProviderEnvironment(
+                openshell_pb2.GetSandboxProviderEnvironmentRequest(sandbox_id=sandbox_id),
+                timeout=self._timeout,
+            ),
         )
         return dict(resp.environment)
 
@@ -263,7 +334,10 @@ class SandboxManager:
             tty=tty,
         )
         grpc_timeout = max(self._timeout, (timeout_seconds or 600) + 10)
-        stream = self._stub.ExecSandbox(request, timeout=grpc_timeout)
+        stream = self._open_stream(
+            "sandboxes.exec",
+            lambda: self._stub.ExecSandbox(request, timeout=grpc_timeout),
+        )
 
         stdout_parts: list[bytes] = []
         stderr_parts: list[bytes] = []
@@ -294,9 +368,12 @@ class SandboxManager:
             dict[str, Any]: SSH session details including token and
                 gateway connection info.
         """
-        resp = self._stub.CreateSshSession(
-            openshell_pb2.CreateSshSessionRequest(sandbox_id=sandbox_id),
-            timeout=self._timeout,
+        resp = self._invoke(
+            "sandboxes.create_ssh_session",
+            lambda: self._stub.CreateSshSession(
+                openshell_pb2.CreateSshSessionRequest(sandbox_id=sandbox_id),
+                timeout=self._timeout,
+            ),
         )
         return {
             "sandbox_id": resp.sandbox_id,
@@ -318,9 +395,12 @@ class SandboxManager:
         Returns:
             bool: True if the session was revoked.
         """
-        resp = self._stub.RevokeSshSession(
-            openshell_pb2.RevokeSshSessionRequest(token=token),
-            timeout=self._timeout,
+        resp = self._invoke(
+            "sandboxes.revoke_ssh_session",
+            lambda: self._stub.RevokeSshSession(
+                openshell_pb2.RevokeSshSessionRequest(token=token),
+                timeout=self._timeout,
+            ),
         )
         return bool(resp.revoked)
 
@@ -345,15 +425,18 @@ class SandboxManager:
         Returns:
             list[dict[str, Any]]: List of log entry dicts.
         """
-        resp = self._stub.GetSandboxLogs(
-            openshell_pb2.GetSandboxLogsRequest(
-                sandbox_id=sandbox_id,
-                lines=lines,
-                since_ms=since_ms,
-                sources=sources or [],
-                min_level=min_level,
+        resp = self._invoke(
+            "sandboxes.get_logs",
+            lambda: self._stub.GetSandboxLogs(
+                openshell_pb2.GetSandboxLogsRequest(
+                    sandbox_id=sandbox_id,
+                    lines=lines,
+                    since_ms=since_ms,
+                    sources=sources or [],
+                    min_level=min_level,
+                ),
+                timeout=self._timeout,
             ),
-            timeout=self._timeout,
         )
         return [
             {
@@ -388,13 +471,16 @@ class SandboxManager:
         Yields:
             dict[str, Any]: Event dict with ``type`` and ``data`` keys.
         """
-        stream = self._stub.WatchSandbox(
-            openshell_pb2.WatchSandboxRequest(
-                id=sandbox_id,
-                follow_status=follow_status,
-                follow_logs=follow_logs,
-                follow_events=follow_events,
-                log_tail_lines=log_tail_lines,
+        stream = self._open_stream(
+            "sandboxes.watch",
+            lambda: self._stub.WatchSandbox(
+                openshell_pb2.WatchSandboxRequest(
+                    id=sandbox_id,
+                    follow_status=follow_status,
+                    follow_logs=follow_logs,
+                    follow_events=follow_events,
+                    log_tail_lines=log_tail_lines,
+                ),
             ),
         )
         for event in stream:

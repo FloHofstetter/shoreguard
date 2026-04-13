@@ -324,6 +324,10 @@ class GatewaySettings(BaseSettings):
         backoff_max (float): Maximum reconnect backoff in seconds.
         backoff_factor (float): Exponential backoff multiplier between attempts.
         grpc_timeout (float): Default timeout for gRPC calls to gateways.
+        grpc_retry_max_attempts (int): Maximum attempts per logical RPC.
+        grpc_retry_initial_backoff (float): Initial backoff between retries in seconds.
+        grpc_retry_max_backoff (float): Maximum backoff between retries in seconds.
+        grpc_retry_deadline (float): Total wall-clock budget including retries.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_GATEWAY_")
@@ -335,6 +339,25 @@ class GatewaySettings(BaseSettings):
     )
     grpc_timeout: float = Field(
         default=30.0, description="Default timeout for gRPC calls to gateways"
+    )
+    grpc_retry_max_attempts: int = Field(
+        default=4,
+        description="Maximum number of attempts (including the first) for a retryable gRPC call",
+    )
+    grpc_retry_initial_backoff: float = Field(
+        default=0.25,
+        description="Initial exponential backoff between retries in seconds",
+    )
+    grpc_retry_max_backoff: float = Field(
+        default=4.0,
+        description="Maximum exponential backoff between retries in seconds",
+    )
+    grpc_retry_deadline: float = Field(
+        default=60.0,
+        description=(
+            "Total wall-clock budget in seconds for a single logical RPC including all "
+            "retries. Retries will not exceed this deadline."
+        ),
     )
 
 
