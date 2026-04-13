@@ -125,16 +125,16 @@ def _disable_auth():
     ``get_settings()`` call.
     """
     from shoreguard.api import auth
-    from shoreguard.api.ratelimit import reset_login_limiter
+    from shoreguard.api.ratelimit import reset_limiters
     from shoreguard.settings import reset_settings
 
     reset_settings()
     auth.reset()
-    reset_login_limiter()
+    reset_limiters()
     auth._no_auth = True  # noqa: SLF001
     yield
     auth.reset()
-    reset_login_limiter()
+    reset_limiters()
     reset_settings()
 
 
