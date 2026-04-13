@@ -1,4 +1,15 @@
-"""REST endpoints for webhook management (admin only)."""
+"""REST endpoints for managing webhook subscriptions.
+
+Admin-only CRUD over the webhook subscription table plus a test
+endpoint that fires a synthetic delivery against a single
+subscription — useful for validating signature handling on the
+receiving end without having to reproduce a real audit event.
+
+The delivery log is exposed as a subresource so operators can
+inspect retry history and failure reasons for each webhook
+without opening the database. Actual dispatch logic lives in
+:class:`~shoreguard.services.webhooks.WebhookService`.
+"""
 
 from __future__ import annotations
 

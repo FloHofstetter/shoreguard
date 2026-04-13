@@ -1,4 +1,19 @@
-"""REST endpoints for draft policy approval flow."""
+"""REST endpoints for the draft-policy approval flow.
+
+Exposes the operator-facing view of OpenShell's approval
+workflow: list pending chunks, approve / reject / edit
+individual ones, bulk approve-all, and undo / clear. Most routes
+forward to
+:class:`~shoreguard.services.approvals.ApprovalService`; the
+workflow-aware paths also consult
+:class:`~shoreguard.services.approval_workflow.ApprovalWorkflowService`
+to decide whether a call should fire the upstream
+``ApproveChunk`` immediately or record a vote and wait for
+quorum.
+
+Write actions respect policy pins (HTTP 423) and, when a workflow
+is configured, the admin-only override on ``approve-all``.
+"""
 
 from __future__ import annotations
 

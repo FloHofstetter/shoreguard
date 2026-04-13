@@ -1,4 +1,17 @@
-"""REST endpoints for provider CRUD."""
+"""REST endpoints for LLM provider CRUD.
+
+Wraps
+:class:`~shoreguard.services.providers.ProviderService` with
+auth, validation, and response shaping. Credential values flow
+only inbound; the ``/env`` subroute returns the per-provider env
+projection with values redacted to ``[REDACTED]`` so operators
+can debug credential wiring without ever seeing the secret
+material.
+
+Provider *types* (the schema descriptions from the gateway's
+``openshell.yaml``) are also exposed so the UI can render typed
+forms rather than a generic KV editor.
+"""
 
 from __future__ import annotations
 

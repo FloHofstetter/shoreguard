@@ -1,4 +1,20 @@
-"""REST endpoints for policy management."""
+"""REST endpoints for sandbox policy management.
+
+This module is the single entry point for every policy-touching
+flow: reading the active and effective policy, listing and
+diffing revisions, atomic single-rule CRUD for network /
+filesystem / process sections, preset application, YAML
+export / diff / apply for the GitOps flow, and pin CRUD for the
+change-freeze flow.
+
+Every write path checks for an active policy pin before touching
+storage and translates
+:class:`~shoreguard.exceptions.PolicyLockedError` into HTTP 423
+so callers see a clean locked response instead of a masked
+error. The GitOps apply path additionally consults the approval
+workflow service and may return HTTP 202 ``vote_recorded`` when
+a sandbox has a quorum workflow attached.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,18 @@
-"""REST endpoints for sandbox CRUD and execution."""
+"""REST endpoints for sandbox lifecycle and execution.
+
+Covers the full sandbox surface a UI or agent-framework adapter
+needs: list with label filtering, create (with optional
+``skip_hooks`` admin override), detail, delete, execute a command
+(with or without TTY mode), SSH session open/revoke, and tail
+logs. Merged metadata — the labels and description kept in
+ShoreGuard's own store — is applied at read time so callers see
+a single unified record.
+
+Writes forward through
+:class:`~shoreguard.services.sandbox.SandboxService`, which owns
+boot-hook dispatch, preset application, and the 202/poll
+pattern for long-running creates.
+"""
 
 from __future__ import annotations
 

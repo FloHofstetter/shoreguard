@@ -1,4 +1,13 @@
-"""REST endpoints for sandbox templates."""
+"""REST endpoints for listing and reading sandbox templates.
+
+Templates are YAML bundles shipped with ShoreGuard that
+pre-configure an image, GPU preference, provider set, policy
+presets, and environment for a new sandbox. This module exposes
+read-only endpoints — listing and fetching a single template —
+so the sandbox wizard can render a picker. Templates are not
+editable at runtime; changes go through the packaged YAML files
+and ship as part of a ShoreGuard release.
+"""
 
 from __future__ import annotations
 

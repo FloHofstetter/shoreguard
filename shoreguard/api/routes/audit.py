@@ -1,4 +1,13 @@
-"""REST endpoints for the audit log."""
+"""REST endpoints for querying and exporting the audit log.
+
+Exposes two read-only routes: a filterable list endpoint
+(``GET /api/audit`` with actor / resource / action filters and
+time-window paging) and an export endpoint that streams the
+filtered result set as CSV or JSON for external archival or SIEM
+ingestion. Writes never happen through this module — rows are
+appended from inside every mutating endpoint via
+``audit_log(...)``.
+"""
 
 from __future__ import annotations
 

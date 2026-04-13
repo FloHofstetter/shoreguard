@@ -1,4 +1,16 @@
-"""REST endpoints for long-running operation tracking."""
+"""REST endpoint for polling long-running operation status.
+
+Some mutating endpoints return HTTP 202 plus an operation id
+instead of holding the request open while a slow action (sandbox
+create, SSH session setup, gateway restart) runs to completion.
+This module provides the client-facing poll path clients hit to
+discover when those operations have finished, what they
+produced, and whether they succeeded.
+
+State is read directly from
+:class:`~shoreguard.services.operations.OperationService`; writes
+happen inside whichever service owns the operation worker.
+"""
 
 from __future__ import annotations
 

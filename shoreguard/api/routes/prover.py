@@ -1,4 +1,18 @@
-"""REST endpoints for Z3 policy formal verification."""
+"""REST endpoints for Z3-backed policy verification.
+
+Thin wrapper around
+:class:`~shoreguard.services.prover.ProverService` that lets
+operators run the built-in verification templates against a
+sandbox's active policy: ``can_exfiltrate``,
+``unrestricted_egress``, ``binary_bypass``,
+``write_despite_readonly``. Each call returns SAT with a witness
+model (the property fails and here is why) or UNSAT (the
+property holds for every assignment).
+
+The service owns the translation from policy dict to Z3
+constraints plus the query templates; this module handles auth,
+request validation, audit logging, and response shaping.
+"""
 
 from __future__ import annotations
 

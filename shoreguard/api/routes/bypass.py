@@ -1,4 +1,16 @@
-"""REST endpoints for bypass detection events."""
+"""REST endpoints for the Bypass Detection dashboard.
+
+Exposes read-only views over
+:class:`~shoreguard.services.bypass.BypassService`'s in-memory
+event ring buffer: a paginated event list with severity filter
+and a per-severity summary with top offending sandboxes. Each
+event carries a MITRE ATT&CK technique mapping for downstream
+SIEM correlation.
+
+The ring buffer is deliberately process-local: restarting
+ShoreGuard clears the history, so long-term retention is a
+webhook-to-SIEM problem, not a database problem for this route.
+"""
 
 from __future__ import annotations
 

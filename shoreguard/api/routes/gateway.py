@@ -1,4 +1,18 @@
-"""REST endpoints for gateway registration, management, and diagnostics."""
+"""REST endpoints for gateway CRUD, diagnostics, and discovery.
+
+Covers the full operator-facing surface of gateway management:
+register / update / delete a gateway, inspect its config and
+settings, probe health + test connectivity, start / stop / restart
+a local-mode gateway, fetch the resolved inference bundle, and
+trigger DNS-SRV auto-discovery.
+
+Endpoint-format validation happens here rather than in the
+registry service — request-level concerns (is this URL shape
+valid, does the host bypass private-IP guards, is the scheme
+allowed) do not belong on the storage layer, and keeping them
+here lets the validator live next to the discovery flow that
+shares the same rules.
+"""
 
 from __future__ import annotations
 
