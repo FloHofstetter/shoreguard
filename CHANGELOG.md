@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and where the non-obvious delegation boundaries are. That kind
   of context belongs next to the code; sprint history belongs in
   this file and in the roadmap.
+- **Docstring cleanup — tests, scripts, frontend.** Same pass
+  applied to `tests/` module and class docstrings, `scripts/`
+  demo-walker module/function docstrings plus banner and API
+  description strings, and `frontend/js/`, `frontend/css/`, and
+  `frontend/templates/` JSDoc headers and HTML/Jinja section
+  comments. Sprint identifiers no longer appear in any source
+  tree. Demo script filenames (`scripts/m*_demo.py`) stay as-is —
+  they remain historical markers referenced from runbooks. No
+  behavior, no test assertions, no Alpine bindings or selectors
+  touched.
 - **README.** Bumped the `cosign verify` example from the stale
   `0.27.0` image tag to `0.30.2`.
 - **CI.** Cleaned a stale milestone reference out of the
