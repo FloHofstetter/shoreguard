@@ -1,5 +1,5 @@
 /**
- * Shoreguard — Topbar Gateway Switcher (M8)
+ * Shoreguard — Topbar Gateway Switcher
  *
  * Replaces the read-only #gateway-status badge with a dropdown that lets
  * the operator pick the active gateway from any page. Uses pure URL

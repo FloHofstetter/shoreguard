@@ -24,7 +24,7 @@
     <!-- Approvals table -->
     <template x-if="!loading && !error && $notEmpty(chunks)">
         <div>
-            <!-- Multi-stage approval banner (M19) -->
+            <!-- Multi-stage approval banner -->
             <div x-show="workflow" x-cloak class="alert alert-primary d-flex align-items-center py-2 mb-3">
                 <i class="bi bi-people-fill me-2"></i>
                 <span>
@@ -143,7 +143,7 @@
                                                 <code class="me-1 px-1 bg-body-secondary rounded small" x-text="id"></code>
                                             </template>
                                         </div>
-                                        <!-- M16: Denial context enrichment -->
+                                        <!-- Denial context enrichment -->
                                         <div x-show="chunk.denial_context && chunk.denial_context.ancestors && chunk.denial_context.ancestors.length > 0" class="small text-muted mb-1">
                                             <span class="fw-semibold">Process chain:</span>
                                             <code x-text="ancestryBreadcrumb(chunk.denial_context)"></code>
@@ -211,7 +211,7 @@
                                     <span x-show="!chunk.confidence" class="text-muted">&mdash;</span>
                                 </td>
                                 <td class="text-end">
-                                    <!-- Vote progress badge (M19, shown only under an active workflow) -->
+                                    <!-- Vote progress badge (shown only under an active workflow) -->
                                     <template x-if="workflow && $eq(chunk.status, 'pending')">
                                         <div class="small text-muted mb-1"
                                              :title="(decisionsByChunk[chunk.id] || []).map(d => voterLabel(d) + ': ' + d.decision).join('\\n')">

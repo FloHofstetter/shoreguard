@@ -1,5 +1,5 @@
 /**
- * Boot hooks page — Alpine.js component (M22).
+ * Boot hooks page — Alpine.js component.
  *
  * CRUD + manual run for per-sandbox pre/post-create hooks. Hooks are
  * grouped by phase, displayed in execution order, and can be toggled,

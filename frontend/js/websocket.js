@@ -122,7 +122,7 @@ function handleWebSocketEvent(sandboxName, event) {
     // Draft policy updates
     if (event.type === 'draft_policy_update') {
         // Always notify policy-version listeners (independent of pending count)
-        // so M20 wait_loaded UX feedback can react on every reload signal.
+        // so wait_loaded UX feedback can react on every reload signal.
         document.dispatchEvent(new CustomEvent('sg:policy-status-update', {
             detail: { sandboxName, draft_version: event.data.draft_version },
         }));

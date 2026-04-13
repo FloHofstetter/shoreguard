@@ -35,7 +35,7 @@ function approvalsPage(name) {
         })(),
         filterSecurityFlagged: false,
 
-        // M19 multi-stage approvals (quorum workflow)
+        // Multi-stage approvals (quorum workflow)
         workflow: null,          // null when no workflow configured
         decisionsByChunk: {},    // chunk_id → list of decision dicts
         actorId: (window.sgCurrentUser && window.sgCurrentUser.id) || '',

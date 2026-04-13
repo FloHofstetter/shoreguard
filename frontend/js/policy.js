@@ -34,7 +34,7 @@ function policyPage(name) {
         networkCount: 0,
         fsCount: 0,
         procCount: 0,
-        // Policy pin state (M18)
+        // Policy pin state
         pin: null,
         pinning: false,
         pinReason: '',

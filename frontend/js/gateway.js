@@ -58,7 +58,7 @@ function gatewayList() {
             this.load();
         },
 
-        // M22: trigger DNS-SRV gateway discovery
+        // trigger DNS-SRV gateway discovery
         discoverResult: null,
         async discover() {
             try {
@@ -516,7 +516,7 @@ function inferenceConfig() {
     };
 }
 
-// ─── Resolved Inference Bundle (M20) ───────────────────────────────────────
+// ─── Resolved Inference Bundle ─────────────────────────────────────────────
 
 function inferenceBundle() {
     return {

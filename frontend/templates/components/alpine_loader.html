@@ -1,7 +1,7 @@
 {#
     Shared Alpine.js loader partial.
     Loads the regular Alpine build in both strict and legacy CSP modes.
-    The @alpinejs/csp build was evaluated during v0.27.0 M2.1 but its
+    The @alpinejs/csp build was evaluated early on but its
     expression parser is limited to plain property chains (no operators,
     no literals, no method call args) — too restrictive for this UI.
     Instead, strict mode ships 'unsafe-eval' in script-src (required for

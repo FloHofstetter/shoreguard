@@ -1,5 +1,5 @@
 /**
- * Shoreguard — Webhooks Management Page (M9)
+ * Shoreguard — Webhooks Management Page
  *
  * Alpine.js component backing /webhooks. Lists every registered webhook,
  * supports inline create with HMAC-secret reveal, edit/delete via modal,

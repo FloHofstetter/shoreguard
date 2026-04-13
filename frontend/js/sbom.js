@@ -1,5 +1,5 @@
 /**
- * SBOM viewer page — Alpine.js component (M21).
+ * SBOM viewer page — Alpine.js component.
  *
  * Loads + displays a CycloneDX SBOM snapshot for one sandbox: components
  * table (paginated, search + severity filter) and vulnerabilities list.
