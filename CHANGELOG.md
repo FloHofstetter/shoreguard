@@ -5,6 +5,29 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.30.3] — unreleased
+
+### Changed
+
+- **Docstring cleanup across the code surface.** Every module,
+  class, and method docstring in `shoreguard/` that was either a
+  trivial one-liner or dominated by sprint-tracking noise
+  (milestone identifiers, release-version timestamps used to
+  justify a design choice, CHANGELOG-style prose) has been
+  rewritten into a proper heading-plus-explanation shape that
+  describes *what* the code does, *why* it looks the way it does,
+  and where the non-obvious delegation boundaries are. That kind
+  of context belongs next to the code; sprint history belongs in
+  this file and in the roadmap.
+- **README.** Bumped the `cosign verify` example from the stale
+  `0.27.0` image tag to `0.30.2`.
+- **CI.** Cleaned a stale milestone reference out of the
+  `m12-fixture-lint` job comment. The job name itself is
+  preserved so branch-protection status checks don't break.
+
+No behavior changes, no schema changes, no new dependencies.
+Full test suite remains at 2933 passed / 1 skipped.
+
 ## [0.30.2] — 2026-04-13
 
 ### Added (M24)

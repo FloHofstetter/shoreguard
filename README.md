@@ -142,7 +142,7 @@ See the [deployment guide](https://flohofstetter.github.io/shoreguard/admin/depl
 Docker images on GHCR and wheels on PyPI are signed via [sigstore](https://sigstore.dev/) keyless (GitHub OIDC → Fulcio → Rekor). Verify before running:
 
 ```bash
-cosign verify ghcr.io/flohofstetter/shoreguard:0.27.0 \
+cosign verify ghcr.io/flohofstetter/shoreguard:0.30.2 \
   --certificate-identity-regexp 'https://github.com/FloHofstetter/shoreguard/.*' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
 ```

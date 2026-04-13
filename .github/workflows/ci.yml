@@ -104,13 +104,13 @@ jobs:
             exit 1
           fi
 
-  # Internal test fixture for M12 federation — wraps NVIDIA's OpenShell
-  # cluster image, NOT a user-facing chart. Kept in a separate job so
-  # its lint/render status is tracked distinctly from the production
-  # `charts/shoreguard` chart above, and so it can't be mistaken for
-  # part of the supported install surface. See
-  # tests/fixtures/charts/openshell-cluster/README.md for the scope
-  # decision.
+  # Internal test fixture for in-cluster federation — wraps NVIDIA's
+  # OpenShell cluster image, NOT a user-facing chart. Kept in a
+  # separate job so its lint/render status is tracked distinctly
+  # from the production `charts/shoreguard` chart above, and so it
+  # can't be mistaken for part of the supported install surface.
+  # See tests/fixtures/charts/openshell-cluster/README.md for the
+  # scope decision.
   m12-fixture-lint:
     runs-on: ubuntu-latest
     steps:
