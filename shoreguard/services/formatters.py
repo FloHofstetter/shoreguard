@@ -1,4 +1,17 @@
-"""Message formatters for notification channels (Slack, Discord, Email, Generic)."""
+"""Channel-specific payload formatters for webhook notifications.
+
+Each supported channel (Slack, Discord, Email, generic JSON)
+expects a different payload shape. Rather than branch inside the
+delivery pipeline, these formatters take a uniform
+``(event, resource)`` input and produce the channel-appropriate
+body: Slack Block Kit, Discord embed fields, plain-text email,
+or signed generic JSON.
+
+Pure functions with no I/O so the delivery pipeline in
+:mod:`shoreguard.services.webhooks` can render and sign a
+payload without touching the network, which makes retry-on-send
+straightforward and testing trivial.
+"""
 
 from __future__ import annotations
 

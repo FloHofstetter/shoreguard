@@ -1,4 +1,17 @@
-"""Gateway connection management and registry-backed discovery."""
+"""Live gRPC channel management for registered gateways.
+
+Companion to :mod:`shoreguard.services.registry`: the registry
+owns *what* gateways exist, this module owns the actual live
+:class:`ShoreGuardClient` instances connected to each one.
+Provides lazy client lookup, connection health probing, graceful
+channel shutdown on gateway removal, and an in-memory cache so
+every API call does not pay the mTLS handshake cost.
+
+Separating client lifecycle from persistent CRUD means registry
+edits (e.g. rename, label change) never need to tear down an
+in-flight call, and a channel failure only affects the one
+gateway rather than wedging the whole service.
+"""
 
 from __future__ import annotations
 

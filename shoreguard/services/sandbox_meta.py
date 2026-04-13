@@ -1,4 +1,16 @@
-"""CRUD for sandbox metadata (labels, description) stored in ShoreGuard DB."""
+"""Local storage for sandbox labels and description.
+
+OpenShell does not persist labels or free-text descriptions per
+sandbox, so this service keeps them in ShoreGuard's own database
+and merges them into gateway responses at read time. The split
+means operators can tag sandboxes (``env=prod``, ``team=ml``) and
+filter against those tags without requiring a gateway upgrade.
+
+Writes here are additive and scoped to the ShoreGuard deployment
+— two ShoreGuard instances pointed at the same gateway do not
+share metadata. That is intentional: it mirrors how two UIs
+would see independent bookmarks.
+"""
 
 from __future__ import annotations
 

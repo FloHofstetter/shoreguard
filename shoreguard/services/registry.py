@@ -1,4 +1,17 @@
-"""Gateway registry backed by SQLAlchemy."""
+"""Gateway registry: persistent list of every known OpenShell endpoint.
+
+Single source of truth for "which gateways does ShoreGuard know
+about". Backed by the ``gateways`` SQL table. Tracks connection
+material (endpoint, scheme, auth mode, mTLS cert bundle),
+per-gateway metadata the UI consumes (labels, free-text
+description), and the last-known health status maintained by the
+background health monitor.
+
+The registry intentionally does not own live gRPC clients — those
+belong to :class:`~shoreguard.services.gateway.GatewayService`.
+Keeping CRUD separate from client lifecycle means a registry
+edit never has to worry about tearing down an in-flight call.
+"""
 
 from __future__ import annotations
 
@@ -19,10 +32,18 @@ _UNSET: object = object()
 
 
 class GatewayRegistry:
-    """CRUD and health tracking for registered gateways.
+    """Persistent CRUD and health tracking for registered gateways.
+
+    Handles insert / update / delete of gateway rows, label + metadata
+    merging, and lazy health-status updates from the background health
+    monitor. Does not manage live gRPC channels — those live in
+    :class:`~shoreguard.services.gateway.GatewayService` — and does
+    not enforce endpoint-format validation, which is applied at the
+    API route layer before any call reaches this service.
 
     Args:
-        session_factory: SQLAlchemy session factory for database access.
+        session_factory: SQLAlchemy session factory used to open a
+            fresh session per call.
     """
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:  # noqa: D107

@@ -1,8 +1,19 @@
-"""Multi-stage approval (quorum) service.
+"""Quorum-based bookkeeping for multi-stage sandbox approvals.
 
-When a workflow is configured for a sandbox, approve/reject votes are
-recorded locally. Upstream gateway approve fires only after the quorum
-threshold is met; a single reject vote clears the chunk.
+When a sandbox has an approval workflow attached, individual
+approve/reject votes are recorded here rather than forwarded to
+the gateway directly. The upstream ``ApproveChunk`` call only
+fires once the configured quorum of approve votes has been
+reached; a single reject is unanimous and clears the chunk
+immediately regardless of how many approves preceded it.
+
+Escalation is deliberately reactive rather than scheduled: the
+service does not run a background timer. Instead, each incoming
+vote checks the elapsed time since the first vote against the
+workflow's ``escalation_timeout`` and surfaces an ``escalated``
+flag in :class:`VoteResult`, which the API route translates into
+an ``approval.escalated`` webhook. This avoids adding a background
+loop for a feature that already has a moving part (votes).
 """
 
 from __future__ import annotations
@@ -49,10 +60,17 @@ class VoteResult:
 
 
 class ApprovalWorkflowService:
-    """DB-backed quorum bookkeeping for draft approvals.
+    """Database-backed quorum bookkeeping for draft approvals.
+
+    Owns the ``approval_workflows`` and ``approval_decisions``
+    tables. Exposes workflow CRUD, vote recording with
+    approve/reject semantics, a quorum check used by the approval
+    route to decide whether to fire the upstream gateway call, and
+    a clear path that runs once the chunk reaches a terminal state.
 
     Args:
-        session_factory: SQLAlchemy session factory for database access.
+        session_factory: SQLAlchemy session factory used to open
+            short-lived sessions for each operation.
     """
 
     def __init__(self, session_factory: SessionMaker) -> None:  # noqa: D107

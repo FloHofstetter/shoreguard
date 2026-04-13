@@ -1,4 +1,17 @@
-"""Persistent audit log for state-changing operations."""
+"""Persistent audit log for every state-changing operation.
+
+Every API route that mutates state calls ``audit_log`` with a
+short action verb (``policy.update``, ``approval.approved``,
+``sbom.uploaded``, ...), a resource type, a resource id, and
+optional detail payload. The row is written asynchronously so a
+slow audit path never blocks the request, and a background task
+fans it out to the webhook pipeline.
+
+The audit log is the single source of truth for "who did what
+when" — it is filterable, exportable as CSV or JSON, and
+deliberately append-only. Retention is up to operators; there is
+no built-in prune.
+"""
 
 from __future__ import annotations
 

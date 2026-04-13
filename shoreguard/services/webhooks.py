@@ -1,4 +1,17 @@
-"""Webhook notification service for external integrations."""
+"""Webhook delivery pipeline for external integrations.
+
+Matches every emitted audit event against the configured webhook
+subscriptions and delivers a signed HTTP POST to each match.
+Delivery is asynchronous, retried with exponential backoff, and
+recorded in the ``webhook_deliveries`` table so operators can
+inspect failures after the fact.
+
+Supports several channel-specific payload shapes (Slack, Discord,
+Email, generic JSON) via
+:mod:`shoreguard.services.formatters`, and signs generic
+payloads with HMAC-SHA256 using the per-webhook secret so
+receivers can verify authenticity without trusting the transport.
+"""
 
 from __future__ import annotations
 

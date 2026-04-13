@@ -1,4 +1,17 @@
-"""Policy pin service for immutable policy locking."""
+"""Persistent sandbox policy pins for change-freeze scenarios.
+
+A pin freezes the active policy version of a sandbox. While a
+pin is in effect, every policy-write endpoint and both approve
+actions raise :class:`~shoreguard.exceptions.PolicyLockedError`,
+which the route layer translates into HTTP 423. Read endpoints
+(``GET /policy``, ``GET /policy/export``) are unaffected so
+callers can still inspect the frozen state.
+
+Pins are upserted per ``(gateway, sandbox)``, carry an optional
+free-text reason and an optional expiry. Auto-expiry is checked
+on every ``get`` / ``check`` call rather than via a background
+loop — a stale row is harmless until someone tries to act on it.
+"""
 
 from __future__ import annotations
 
@@ -22,10 +35,17 @@ policy_pin_service: PolicyPinService | None = None
 
 
 class PolicyPinService:
-    """DB-backed policy pinning for production freeze scenarios.
+    """Database-backed CRUD and enforcement of policy pins.
+
+    Owns the ``policy_pins`` table. Exposes ``pin`` / ``unpin`` /
+    ``get`` / ``check`` — the latter is the one write paths call
+    before every mutation to surface a clean HTTP 423 via
+    :class:`~shoreguard.exceptions.PolicyLockedError`. Expired
+    pins are removed lazily on read.
 
     Args:
-        session_factory: SQLAlchemy session factory for database access.
+        session_factory: SQLAlchemy session factory used to open
+            short-lived sessions for each call.
     """
 
     def __init__(self, session_factory: SessionMaker) -> None:  # noqa: D107

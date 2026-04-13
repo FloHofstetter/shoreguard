@@ -1,4 +1,17 @@
-"""Sandbox lifecycle operations including create-with-presets workflow."""
+"""Sandbox lifecycle operations: create, list, delete, exec, metadata.
+
+Wraps the ``ShoreGuardClient.sandboxes`` gRPC surface with
+behavior the raw client does not provide: merging sandbox
+metadata from the local ``sandbox_meta_store`` into list + detail
+responses, running pre-create validation hooks before
+``CreateSandbox`` reaches the gateway, and running post-create
+warm-up hooks inside the new sandbox once it is up.
+
+The create flow is intentionally centralised here so both the
+Web UI and the TUI can share the same preset-application +
+metadata + boot-hook sequence — earlier versions of ShoreGuard
+duplicated most of it in browser JS.
+"""
 
 from __future__ import annotations
 
@@ -25,19 +38,29 @@ logger = logging.getLogger(__name__)
 
 
 class SandboxService:
-    """Sandbox operations shared by Web UI and TUI.
+    """Gateway-scoped sandbox lifecycle operations.
 
-    Provides higher-level workflows like create-with-presets
-    that were previously implemented in browser JS.
+    One instance is constructed per ``(gateway, operation)``
+    invocation so the embedded gRPC client is already bound to
+    the right endpoint. Methods are synchronous because the gRPC
+    client is synchronous; async callers wrap them via
+    ``asyncio.to_thread``.
+
+    Metadata merging, preset application, and pre/post-create
+    hook dispatch happen inside this service rather than in the
+    route layer so the same flow is available to the TUI and any
+    future programmatic client without duplicated code.
 
     Args:
-        client: OpenShell gRPC client instance.
-        meta_store: Optional metadata store for labels/description.
-        boot_hooks: Optional ``BootHookService`` to invoke pre/post-create
-            hooks during ``create()``.
-        gateway_name: Gateway name this service is bound to (used for
-            boot-hook lookups when ``create()`` is called without an
-            explicit ``gateway_name`` argument).
+        client: OpenShell gRPC client bound to the target gateway.
+        meta_store: Optional store for sandbox labels + description
+            kept locally in ShoreGuard (OpenShell does not model them).
+        boot_hooks: Optional hook service invoked around
+            ``create()``; when ``None``, hook support is disabled
+            for this instance even if hooks exist in the database.
+        gateway_name: Gateway name this service is bound to, used
+            for hook lookups when ``create()`` is called without
+            an explicit ``gateway_name`` argument.
     """
 
     def __init__(  # noqa: D107

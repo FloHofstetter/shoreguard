@@ -1,4 +1,18 @@
-"""Provider management with metadata from openshell.yaml."""
+"""LLM provider CRUD with schema metadata from ``openshell.yaml``.
+
+Providers are the named credential containers OpenShell uses to
+route sandbox inference (Anthropic, OpenAI, Nvidia, ...). This
+service wraps the gRPC provider RPCs and overlays schema metadata
+read from the gateway's ``openshell.yaml`` so the UI can render
+a typed form rather than a generic KV editor: which fields each
+provider type requires, which are secret, which are optional,
+and what the default env-var projection looks like.
+
+Credentials only flow one way — into the service — and are never
+returned in responses; the ``/env`` projection redacts values to
+``[REDACTED]`` with a ``source`` annotation so operators can
+debug provider configuration without seeing the secret material.
+"""
 
 from __future__ import annotations
 

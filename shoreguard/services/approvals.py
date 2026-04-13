@@ -1,4 +1,20 @@
-"""Draft policy approval flow service."""
+"""Draft-policy approval workflow wrapper over the gRPC approval RPCs.
+
+OpenShell's approval flow works in terms of *draft policy chunks*:
+each time a denial fires, the gateway emits a chunk that proposes
+the rules that would allow the blocked action. This service
+mediates the operator-facing view of that flow — listing pending
+chunks, approving / rejecting / editing individual ones, and
+supporting bulk approve-all and undo operations.
+
+The service is deliberately thin: almost every call forwards
+directly to ``ShoreGuardClient.approvals`` with additional
+request-level validation and audit logging. Multi-stage quorum
+is not handled here — that lives in
+:class:`~shoreguard.services.approval_workflow.ApprovalWorkflowService`,
+which the approval route consults *before* calling through to
+this service.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,17 @@
-"""DB-backed service for tracking long-running operations."""
+"""Persistent state for long-running async operations.
+
+Some REST endpoints — sandbox create, SSH session setup, gateway
+restart — take long enough that returning 202 with an operation
+id is better than holding the HTTP connection open. This service
+backs that pattern: endpoints enqueue an operation, return the
+id, and clients poll ``GET /operations/{id}`` until the status
+flips from ``running`` to a terminal value.
+
+Operations are stored in SQL so a poll survives server restarts
+and fan out across replicas via the shared database. The worker
+side of each operation lives in the calling service; this module
+only owns lifecycle and state transitions.
+"""
 
 from __future__ import annotations
 
