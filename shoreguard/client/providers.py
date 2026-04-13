@@ -1,4 +1,13 @@
-"""Provider management operations."""
+"""gRPC wrapper for OpenShell's provider RPCs.
+
+Exposes list / get / create / update / delete against the
+upstream provider surface plus the env-projection call used to
+render a redacted view of a provider's environment variables.
+Credentials flow only into this manager via ``create`` and
+``update``; reads never return raw secrets — the wrapping
+service layer relies on that invariant when it renders the
+``[REDACTED]`` env projection.
+"""
 
 from __future__ import annotations
 

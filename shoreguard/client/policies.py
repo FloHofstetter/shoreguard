@@ -1,4 +1,19 @@
-"""Policy management operations."""
+"""gRPC wrapper for OpenShell's sandbox policy RPCs.
+
+Exposes read and write operations against a sandbox's policy via
+``GetSandbox`` / ``UpdateConfig`` / ``ListPolicyRevisions`` /
+``DiffPolicyRevisions``. Converts protobuf ``PolicyChunk`` /
+``NetworkRule`` / ``FilesystemPath`` / ``ProcessPolicy`` messages
+to plain dicts through the shared converters so every caller
+sees the same JSON-ready shape.
+
+This manager is deliberately stateless: it holds the stub and
+nothing else. Atomic single-rule CRUD (read-modify-write over
+whole-policy updates) lives in
+:class:`~shoreguard.services.policy.PolicyService`, not here,
+because the read-modify-write loop needs to be aware of
+pinning, audit logging, and denial-context capture.
+"""
 
 from __future__ import annotations
 

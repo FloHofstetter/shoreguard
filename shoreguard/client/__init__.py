@@ -1,4 +1,21 @@
-"""OpenShell gRPC client wrapper for Shoreguard."""
+"""OpenShell gRPC client wrapper used throughout ShoreGuard.
+
+Provides :class:`ShoreGuardClient`, the single object every
+service layer uses to talk to an OpenShell gateway. Manages the
+gRPC channel (plaintext or mTLS), builds the stubs once at
+construction time, and exposes four submanagers —
+:class:`ApprovalManager`, :class:`PolicyManager`,
+:class:`ProviderManager`, :class:`SandboxManager` — each of
+which maps a logical surface onto a subset of the underlying
+RPCs.
+
+The client is intentionally synchronous: gRPC itself is sync,
+and all the service layers wrap calls in
+``asyncio.to_thread`` when they need to run inside a FastAPI
+async route. Keeping the client sync avoids the double-wrapping
+that an async gRPC client would require without any benefit at
+this scale.
+"""
 
 from __future__ import annotations
 
@@ -29,13 +46,26 @@ logger = logging.getLogger(__name__)
 
 
 class ShoreGuardClient:
-    """Unified client for OpenShell gateway operations.
+    """Unified gRPC client bound to a single OpenShell gateway.
+
+    Holds the channel, the protobuf stubs, and the four submanagers
+    (``approvals``, ``policies``, ``providers``, ``sandboxes``)
+    that expose OpenShell's RPC surface. One instance maps to one
+    gateway endpoint — do not reuse across gateways; instead,
+    construct a new client per ``(endpoint, credentials)`` pair.
+
+    The channel is opened lazily on first use so construction is
+    cheap and a bad cert bundle only fails the first call rather
+    than the registry read that created the client.
 
     Args:
-        endpoint: gRPC endpoint address (host:port).
-        ca_path: Path to CA certificate for TLS.
-        cert_path: Path to client certificate for mTLS.
-        key_path: Path to client private key for mTLS.
+        endpoint: gRPC endpoint address as ``host:port``.
+        ca_path: Path to the CA certificate for TLS. ``None`` for
+            plaintext channels (permitted only in local mode).
+        cert_path: Path to the client certificate for mTLS.
+            ``None`` for server-only TLS.
+        key_path: Path to the client private key for mTLS.
+            ``None`` for server-only TLS.
         timeout: Default gRPC call timeout in seconds.
     """
 

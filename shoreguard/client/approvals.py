@@ -1,4 +1,13 @@
-"""Draft policy approval flow operations."""
+"""gRPC wrapper for OpenShell's draft policy approval RPCs.
+
+Owns the thin mapping from ``ShoreGuardClient.approvals`` method
+calls to the underlying ``SubmitPolicyAnalysis`` /
+``GetDraftPolicy`` / ``ApproveChunk`` / ``RejectChunk`` gRPC
+methods, translating protobuf messages into plain dicts via the
+shared converters. No business logic lives here — quorum,
+pinning, webhook fan-out, and audit logging all happen at the
+service layer above.
+"""
 
 from __future__ import annotations
 

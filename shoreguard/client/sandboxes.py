@@ -1,4 +1,15 @@
-"""Sandbox CRUD and execution operations."""
+"""gRPC wrapper for OpenShell's sandbox lifecycle and exec RPCs.
+
+Covers create / list / get / delete plus ``ExecSandbox`` — both
+regular and TTY variants — and the SSH session open / revoke
+pair. Sandbox metadata (labels, description) kept on the
+ShoreGuard side is not handled here; callers merge that in at
+the service layer.
+
+``ExecSandbox`` is also the delegation target for the post-create
+boot hooks flow: the hook service reuses this manager to run
+warm-up commands inside a sandbox once it has been created.
+"""
 
 from __future__ import annotations
 
