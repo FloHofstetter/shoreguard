@@ -33,6 +33,8 @@ from sqlalchemy.exc import SQLAlchemyError
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker as SessionMaker
 
+    from shoreguard.services.audit_export import AuditExporter
+
 from shoreguard.models import AuditEntry, Gateway
 
 logger = logging.getLogger(__name__)
@@ -117,10 +119,17 @@ class AuditService:
 
     Args:
         session_factory: SQLAlchemy session factory for database access.
+        exporter: Optional :class:`AuditExporter` that fans successful
+            writes out across stdout-JSON, syslog, and webhook lanes.
     """
 
-    def __init__(self, session_factory: SessionMaker) -> None:  # noqa: D107
+    def __init__(  # noqa: D107
+        self,
+        session_factory: SessionMaker,
+        exporter: AuditExporter | None = None,
+    ) -> None:
         self._session_factory = session_factory
+        self._exporter = exporter
 
     def log(
         self,
@@ -167,6 +176,14 @@ class AuditService:
                 )
                 session.add(entry)
                 session.commit()
+                if self._exporter is not None and self._exporter.enabled:
+                    try:
+                        self._exporter.dispatch(self._to_dict(entry))
+                    except Exception:
+                        logger.warning(
+                            "Audit exporter raised unexpectedly; ignoring",
+                            exc_info=True,
+                        )
         except SQLAlchemyError:
             logger.warning("Failed to write audit entry (action=%s)", action, exc_info=True)
 

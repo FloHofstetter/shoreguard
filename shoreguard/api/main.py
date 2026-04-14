@@ -148,9 +148,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # ── Audit ────────────────────────────────────────────────────────────
     import shoreguard.services.audit as audit_mod
+    from shoreguard.services.audit_export import AuditExporter
 
-    audit_mod.audit_service = audit_mod.AuditService(session_factory)
-    logger.info("Audit service initialised")
+    audit_exporter = AuditExporter(settings.audit, loop=asyncio.get_running_loop())
+    audit_mod.audit_service = audit_mod.AuditService(session_factory, exporter=audit_exporter)
+    logger.info(
+        "Audit service initialised (export lanes: stdout=%s syslog=%s webhook=%s)",
+        settings.audit.export_stdout_json,
+        settings.audit.export_syslog_enabled,
+        settings.audit.export_webhook_enabled,
+    )
 
     # ── Webhooks ────────────────────────────────────────────────────────
     import shoreguard.services.webhooks as webhook_mod
