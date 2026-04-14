@@ -5,6 +5,50 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.31.0] — 2026-04-14
+
+### Added
+
+- **M28 Observability — complete.** Three independent pillars land in
+  this release; all three are off by default and opt in via env vars:
+  - **Prometheus `/metrics`** — M28 gRPC call counters, retry counters,
+    sandbox phase-transition counters, boot-hook run counters and
+    duration histograms, and a gateway client-cert expiry gauge. The
+    `/metrics` endpoint honours the normal auth gate and can be flipped
+    public via `SHOREGUARD_METRICS_PUBLIC`.
+  - **OpenTelemetry trace context through the routed-inference path.**
+    FastAPI + gRPC auto-instrumentation so a W3C `traceparent` header
+    propagates end-to-end from an incoming HTTP request through every
+    outgoing gRPC call to an OpenShell gateway. Console exporter by
+    default; set `SHOREGUARD_TRACING_OTLP_ENDPOINT=...` for OTLP/HTTP.
+    New `SHOREGUARD_TRACING_*` settings. Disabled unless
+    `SHOREGUARD_TRACING_ENABLED=true`.
+  - **Structured audit-log export lanes.** A new `AuditExporter`
+    service fans every successfully-written audit entry across three
+    lanes, each independently togglable: stdout-JSON (one JSON line
+    per entry for Loki/Vector), syslog via `SysLogHandler` (RFC 5424
+    framing, JSON body, for SIEM receivers), and webhook via the
+    existing `fire_webhook()` pipeline as `audit.entry` events. Lane
+    errors are isolated — a broken receiver in one lane never
+    prevents siblings from firing, and a lane exception never
+    propagates into the audit write path. New
+    `SHOREGUARD_AUDIT_EXPORT_*` settings.
+- **mTLS hardening.** Client-cert validation is now eager at gateway
+  registration time (not lazy at first use), and the registered cert
+  is rotated proactively before expiry. Expiry is also surfaced on
+  `/metrics` via `sg_gateway_cert_expiry_seconds` (see above).
+- **gRPC retry + deadline resilience on the sandbox path.** Sandbox
+  create/exec/list now retry through a shared resilience layer with
+  per-op deadlines, exponential backoff, and jitter. Retry and final
+  status are surfaced on `/metrics`.
+
+### Changed
+
+- New dependencies: `opentelemetry-api`, `opentelemetry-sdk`,
+  `opentelemetry-instrumentation-fastapi`,
+  `opentelemetry-instrumentation-grpc`,
+  `opentelemetry-exporter-otlp-proto-http`.
+
 ## [0.30.3] — 2026-04-13
 
 ### Changed
