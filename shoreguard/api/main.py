@@ -90,6 +90,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Install request-ID log filter so %(request_id)s is available in all loggers.
     logging.getLogger().addFilter(RequestIdFilter())
 
+    # ── Tracing (OTel) ──────────────────────────────────────────────────
+    # M28 Observability Säule 2. Must happen before any gRPC channel is
+    # constructed so the client instrumentor can patch channel creation.
+    from .tracing import init_tracing, instrument_fastapi
+
+    if init_tracing():
+        instrument_fastapi(app)
+
     import shoreguard.services.gateway as gw_mod
     from shoreguard.db import init_db
     from shoreguard.services.registry import GatewayRegistry

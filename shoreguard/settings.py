@@ -423,6 +423,12 @@ class AuditSettings(BaseSettings):
         model_config (SettingsConfigDict): Pydantic settings configuration.
         retention_days (int): Days to retain audit log entries before cleanup.
         export_limit (int): Maximum rows returned by /audit/export in a single call.
+        export_stdout_json (bool): Emit each audit entry as a JSON line on stdout.
+        export_syslog_enabled (bool): Ship each audit entry to a remote syslog receiver.
+        export_syslog_host (str): Syslog server host when export_syslog_enabled=true.
+        export_syslog_port (int): Syslog server port when export_syslog_enabled=true.
+        export_syslog_facility (str): Syslog facility name (user, local0..local7, ...).
+        export_webhook_enabled (bool): Bridge audit entries into the webhook pipeline.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_AUDIT_")
@@ -433,6 +439,71 @@ class AuditSettings(BaseSettings):
     export_limit: int = Field(
         default=10_000,
         description="Maximum rows returned by /audit/export in a single call",
+    )
+    export_stdout_json: bool = Field(
+        default=False,
+        description="Emit each audit entry as a JSON line on stdout (Loki/Vector lane)",
+    )
+    export_syslog_enabled: bool = Field(
+        default=False,
+        description="Ship each audit entry to a remote syslog receiver as JSON body",
+    )
+    export_syslog_host: str = Field(
+        default="localhost",
+        description="Syslog server host when export_syslog_enabled=true",
+    )
+    export_syslog_port: int = Field(
+        default=514,
+        description="Syslog server port when export_syslog_enabled=true",
+    )
+    export_syslog_facility: str = Field(
+        default="user",
+        description="Syslog facility name (user, local0..local7, daemon, ...)",
+    )
+    export_webhook_enabled: bool = Field(
+        default=False,
+        description=(
+            "Bridge audit entries into the existing webhook pipeline as "
+            "'audit.entry' events; individual targets are configured per Webhook record"
+        ),
+    )
+
+
+class TracingSettings(BaseSettings):
+    """OpenTelemetry trace context propagation for the routed-inference path.
+
+    When ``enabled`` is true, incoming HTTP requests and outgoing gRPC calls
+    to OpenShell gateways are instrumented so that a W3C ``traceparent`` header
+    flows end-to-end. When an ``otlp_endpoint`` is set, spans are shipped via
+    OTLP/HTTP; otherwise a console exporter is used so locally-running
+    operators can verify propagation without standing up a collector.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Master switch for FastAPI + gRPC auto-instrumentation.
+        service_name (str): Value used for ``service.name`` resource attribute.
+        otlp_endpoint (str | None): OTLP/HTTP traces endpoint (e.g.
+            ``http://localhost:4318/v1/traces``). None = console exporter.
+        sample_ratio (float): Head-based sampling ratio in ``[0.0, 1.0]``.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_TRACING_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable OpenTelemetry auto-instrumentation for FastAPI and gRPC client",
+    )
+    service_name: str = Field(
+        default="shoreguard",
+        description="service.name resource attribute attached to every span",
+    )
+    otlp_endpoint: str | None = Field(
+        default=None,
+        description="OTLP/HTTP traces endpoint URL; if unset, spans go to stdout console exporter",
+    )
+    sample_ratio: float = Field(
+        default=1.0,
+        description="Head-based sampling ratio between 0.0 (off) and 1.0 (all)",
     )
 
 
@@ -856,6 +927,7 @@ class Settings(BaseSettings):
         prover (ProverSettings): Z3 policy prover settings.
         discovery (DiscoverySettings): DNS-SRV gateway auto-discovery.
         drift_detection (DriftDetectionSettings): Background policy drift detection.
+        tracing (TracingSettings): OpenTelemetry trace context propagation.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -875,6 +947,7 @@ class Settings(BaseSettings):
     prover: ProverSettings = Field(default_factory=ProverSettings)
     discovery: DiscoverySettings = Field(default_factory=DiscoverySettings)
     drift_detection: DriftDetectionSettings = Field(default_factory=DriftDetectionSettings)
+    tracing: TracingSettings = Field(default_factory=TracingSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.
