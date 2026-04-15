@@ -5,6 +5,31 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.32.1] — 2026-04-16
+
+### Fixed
+
+- **Release pipeline Trivy scan.** The v0.31.0 and v0.32.0 Release
+  workflows both failed at the "Scan image for CRITICAL/HIGH CVEs"
+  step because the computed image reference carried the original
+  repository casing (`ghcr.io/FloHofstetter/shoreguard@sha256:…`)
+  and Trivy rejects uppercase OCI references with
+  `could not parse reference`. The `docker/metadata` and
+  `docker/build-push` actions lowercase internally so the push
+  itself worked, but the Trivy step read `github.repository` raw.
+  A new workflow step lowercases the name into a step output and
+  the Trivy `image-ref` now reads from it. No code change; no
+  wire-format change. This release exists purely to get a passing
+  Release pipeline on tag so the Docker image, PyPI package, and
+  GitHub Release body actually ship for the 0.32.x line.
+- **Auto-tag version parser.** The `auto-tag` workflow's version
+  extractor used `(.+)$` which swallowed any trailing commit-subject
+  text after the version, so a subject like
+  `release: ShoreGuard v0.32.0 — M29 + M30` produced an
+  `EXPECTED=0.32.0 — M29 + M30` and failed the pyproject.toml
+  equality check. Bug was latent on v0.31.0 already. The capture
+  group now stops at the first whitespace.
+
 ## [0.32.0] — 2026-04-16
 
 ### Added
