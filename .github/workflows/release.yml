@@ -30,6 +30,17 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      # OCI image references must be lowercase; github.repository keeps
+      # whatever casing the repo was created with ("FloHofstetter/..."),
+      # and Trivy rejects the uppercase form with a parse error. docker/metadata
+      # and docker/build-push lowercase internally, but we need a lowercase
+      # handle for the Trivy image-ref below.
+      - name: Lowercase image name for OCI refs
+        id: imgname
+        env:
+          IMAGE_NAME_RAW: ${{ env.IMAGE_NAME }}
+        run: echo "lc=${IMAGE_NAME_RAW,,}" >> "$GITHUB_OUTPUT"
+
       - name: Compute build timestamp
         id: build_time
         run: echo "iso=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
@@ -73,7 +84,7 @@ jobs:
       - name: Scan image for CRITICAL/HIGH CVEs
         uses: aquasecurity/trivy-action@v0.35.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ env.REGISTRY }}/${{ steps.imgname.outputs.lc }}@${{ steps.build.outputs.digest }}
           format: table
           exit-code: "1"
           severity: CRITICAL,HIGH
