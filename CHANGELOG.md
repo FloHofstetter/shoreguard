@@ -5,6 +5,71 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.32.0] — 2026-04-16
+
+### Added
+
+- **M29 Upstream-Sync Hardening.** Parity pass against NVIDIA/OpenShell
+  v0.0.27–v0.0.30 for the parts of the upstream delta that apply to a
+  control-plane:
+  - **Network-policy deny rules** (upstream #822). Regenerated
+    `sandbox.proto` from upstream `origin/main` — adds the `L7DenyRule`
+    message and `NetworkEndpoint.deny_rules` field. Deny rules flow
+    through the dict ↔ proto converter and the Z3 prover encoding as
+    `NOT(any_deny_matches)` AND-ed over the allow-clause disjunction,
+    so a deny rule that overlaps an allow rule makes the otherwise
+    matching path UNSAT in counterexample search (deny wins).
+  - **TLD-level host wildcard rejection** (upstream #791). Registering
+    a network policy with `*.com` / `*.io` / `*.local` now raises
+    `PolicyValidationError` at policy-write time and surfaces as
+    HTTP 400. Multi-label suffixes like `*.example.com` stay allowed.
+  - **Symlink-aware binary paths** (upstream #774). When a network
+    policy declares a binary path that exists locally and is a
+    symlink, the resolved realpath is persisted in the proto instead
+    of the symlink. Remote-gateway paths (the common case) pass
+    through unchanged.
+  - **SSE error framing hardening** (upstream #842). A new
+    `_format_sse_event` helper strips stray control characters from
+    the `data:` line before emission so a pre-escaped payload cannot
+    smuggle a premature SSE-framing terminator.
+  - **Always-blocked IP list** (upstream #814). New
+    `SHOREGUARD_ALWAYS_BLOCKED_IPS` setting parses operator-supplied
+    CIDRs at startup (invalid entries hard-fail boot via a Pydantic
+    `field_validator`) and feeds `is_private_ip()` so extra ranges
+    (metadata VIPs, internal-management subnets) can be hard-blocked
+    without a code change.
+- **M30 libkrun microVM gateway awareness.** Upstream PR #611 added
+  a third gateway runtime alongside Docker and Kubernetes; ShoreGuard
+  now models gateway runtimes via a strict metadata convention:
+  - New `shoreguard.gateway_runtime` module defines the closed
+    `KNOWN_RUNTIMES` set (`docker`, `kubernetes`, `libkrun`) plus
+    `get_runtime()` / `validate_runtime()` helpers. The validator
+    rejects typos (`libKrun`, `krun`) and normalises mixed-case
+    inputs to the canonical lowercase spelling at registration time.
+  - `RegisterGatewayRequest` has a Pydantic `field_validator` on
+    `metadata` that picks up `metadata.runtime`, validates it, and
+    persists the normalised value. Unknown runtimes surface as
+    HTTP 422 with a precise field pointer.
+  - `GatewayResponse` gets a top-level `runtime: str | None` field,
+    populated by `GatewayRegistry._to_dict` so `GET /gateway/list`
+    and `GET /gateway/{name}/info` expose the same surface.
+  - `GET /gateway/list?runtime=libkrun` filters gateways by runtime
+    tag. Unknown runtime filters hard-fail with HTTP 400 instead of
+    silently returning an empty list.
+  - `gateway.register` audit-log entries include the resolved runtime
+    alongside endpoint, auth mode, and labels.
+
+### Changed
+
+- `sandbox.proto` is now byte-identical to
+  `NVIDIA/OpenShell@origin/main`, so ShoreGuard can speak wire-level
+  parity with any OpenShell gateway ≥ v0.0.30, including for
+  network-policy deny rules over the gRPC channel.
+- `_dict_to_network_rule` is now the single chokepoint for network
+  policy validation — it runs TLD-wildcard rejection and symlink
+  resolution before the proto is built, so every caller (YAML import,
+  REST CRUD, policy-apply proposal) picks up the same guarantees.
+
 ## [0.31.0] — 2026-04-14
 
 ### Added
