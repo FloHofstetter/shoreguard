@@ -338,6 +338,8 @@ class GatewayResponse(BaseModel):
         configured (bool | None): Whether the gateway is registered (only set by ``get_info``).
         version (str | None): Upstream openshell version reported by the live gateway when
             reachable.
+        runtime (str | None): Gateway runtime tag (``docker``, ``kubernetes``, ``libkrun``)
+            derived from ``metadata.runtime``. ``None`` when the tag is absent.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -359,6 +361,7 @@ class GatewayResponse(BaseModel):
     last_seen: str | None = None
     configured: bool | None = None
     version: str | None = None
+    runtime: str | None = None
 
 
 class GatewayUnregisterResponse(BaseModel):

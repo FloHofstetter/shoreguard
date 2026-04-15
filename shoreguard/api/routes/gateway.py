@@ -38,6 +38,7 @@ from shoreguard.api.schemas import (
 )
 from shoreguard.api.validation import validate_description, validate_labels
 from shoreguard.config import ENDPOINT_RE, VALID_GATEWAY_NAME_RE, is_private_ip
+from shoreguard.gateway_runtime import METADATA_RUNTIME_KEY, get_runtime, validate_runtime
 from shoreguard.services import operations as _ops_mod
 from shoreguard.services.audit import audit_log
 from shoreguard.services.webhooks import fire_webhook
@@ -151,6 +152,31 @@ class RegisterGatewayRequest(BaseModel):
         v = v.strip()
         _validate_endpoint_format(v)
         return v
+
+    @field_validator("metadata")
+    @classmethod
+    def validate_metadata_runtime(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Validate and normalise the optional ``metadata.runtime`` tag.
+
+        Runtime is a closed set (see :mod:`shoreguard.gateway_runtime`)
+        so typos like ``libKrun`` or ``krun`` are rejected at the field
+        level — Pydantic surfaces that as HTTP 422 with a precise pointer
+        instead of letting a silently misspelled tag fragment downstream
+        filter buckets. The returned dict always carries the canonical
+        lowercase spelling.
+
+        Args:
+            v: Raw metadata dict from the request body.
+
+        Returns:
+            dict[str, Any] | None: The metadata dict with the runtime
+                tag normalised to lowercase, or the input unchanged if
+                no runtime tag is present.
+        """
+        if v is None or METADATA_RUNTIME_KEY not in v:
+            return v
+        normalized = validate_runtime(v[METADATA_RUNTIME_KEY])
+        return {**v, METADATA_RUNTIME_KEY: normalized}
 
 
 _REMOTE_HOST_RE = re.compile(r"^[a-zA-Z0-9._-]{1,253}$")
@@ -276,18 +302,25 @@ async def discovery_status() -> dict[str, Any]:
 @router.get("/list", response_model=PaginatedResponse)
 async def gateway_list(
     label: list[str] | None = Query(None),
+    runtime: str | None = Query(
+        None,
+        description="Filter by gateway runtime tag (docker, kubernetes, libkrun)",
+    ),
 ) -> dict[str, Any]:
     """List all registered gateways with metadata and status.
 
     Args:
         label: Optional label filters in ``key:value`` format. Multiple
             labels are AND-combined.
+        runtime: Optional runtime tag filter. Rejected with HTTP 400
+            if not one of the known runtimes.
 
     Returns:
         dict[str, Any]: Paginated gateway records.
 
     Raises:
-        HTTPException: If a label filter has invalid format.
+        HTTPException: If a label filter has invalid format or the
+            runtime tag is not recognised.
     """
     labels_filter: dict[str, str] | None = None
     if label:
@@ -297,8 +330,16 @@ async def gateway_list(
                 raise HTTPException(400, f"Invalid label filter '{item}': expected key:value")
             key, value = item.split(":", 1)
             labels_filter[key] = value
+    runtime_normalized: str | None = None
+    if runtime is not None:
+        try:
+            runtime_normalized = validate_runtime(runtime)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
     svc = _get_gateway_service()
     items = await asyncio.to_thread(svc.list_all, labels_filter=labels_filter)
+    if runtime_normalized is not None:
+        items = [gw for gw in items if get_runtime(gw.get("metadata")) == runtime_normalized]
     return {"items": items, "total": len(items)}
 
 
@@ -532,6 +573,7 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
             "auth_mode": body.auth_mode,
             "description": body.description,
             "labels": body.labels,
+            "runtime": get_runtime(body.metadata),
         },
     )
     await fire_webhook(

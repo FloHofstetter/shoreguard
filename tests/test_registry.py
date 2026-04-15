@@ -462,6 +462,7 @@ class TestUpdateGatewayMetadataMutationKill:
             "registered_at",
             "last_seen",
             "last_status",
+            "runtime",
         }
         assert set(result.keys()) == expected_keys
 
@@ -567,6 +568,7 @@ class TestGetMutationKill:
             "registered_at",
             "last_seen",
             "last_status",
+            "runtime",
         }
         assert set(gw.keys()) == expected_keys
 

@@ -323,6 +323,8 @@ class GatewayRegistry:
         except json.JSONDecodeError:
             logger.warning("Corrupt labels_json for gateway '%s'", gw.name)
             labels = {}
+        from shoreguard.gateway_runtime import get_runtime
+
         return {
             "name": gw.name,
             "endpoint": gw.endpoint,
@@ -337,4 +339,5 @@ class GatewayRegistry:
             "registered_at": gw.registered_at.isoformat() if gw.registered_at else None,
             "last_seen": gw.last_seen.isoformat() if gw.last_seen else None,
             "last_status": gw.last_status,
+            "runtime": get_runtime(metadata),
         }
