@@ -23,8 +23,11 @@ jobs:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           set -euo pipefail
-          # Match first line only: "release: ShoreGuard vX.Y.Z[-suffix]"
-          version="$(printf '%s\n' "$COMMIT_MSG" | head -1 | sed -nE 's/^release: ShoreGuard v(.+)$/\1/p')"
+          # Match first line only: "release: ShoreGuard vX.Y.Z[-suffix] [— free text]"
+          # The capture group stops at the first whitespace so a trailing em-dash
+          # summary in the commit subject (e.g. "v0.32.0 — M29 + M30") does not
+          # end up in the extracted version string.
+          version="$(printf '%s\n' "$COMMIT_MSG" | head -1 | sed -nE 's/^release: ShoreGuard v([^ ]+).*$/\1/p')"
           if [ -z "$version" ]; then
             echo "::error::Could not parse version from commit message first line"
             exit 1
