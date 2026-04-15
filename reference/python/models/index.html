@@ -1,0 +1,6810 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Open-source control plane for NVIDIA OpenShell">
+      
+      
+        <meta name="author" content="Florian Hofstetter">
+      
+      
+        <link rel="canonical" href="https://flohofstetter.github.io/shoreguard/reference/python/models/">
+      
+      
+        <link rel="prev" href="../services/">
+      
+      
+        <link rel="next" href="../../../development/contributing/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Models - ShoreGuard</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="green" data-md-color-accent="green">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#models" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="ShoreGuard" class="md-header__button md-logo" aria-label="ShoreGuard" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ShoreGuard
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Models
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="green" data-md-color-accent="green"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="green"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/FloHofstetter/shoreguard" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    FloHofstetter/shoreguard
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../getting-started/installation/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../concepts/architecture/" class="md-tabs__link">
+          
+  
+  
+  Concepts
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guides/gateways/" class="md-tabs__link">
+          
+  
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../admin/rbac/" class="md-tabs__link">
+          
+  
+  
+  Administration
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../integrations/terraform/" class="md-tabs__link">
+          
+  
+  
+  Integrations
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../cli/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../development/contributing/" class="md-tabs__link">
+          
+  
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="ShoreGuard" class="md-nav__button md-logo" aria-label="ShoreGuard" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="logo">
+
+    </a>
+    ShoreGuard
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/FloHofstetter/shoreguard" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    FloHofstetter/shoreguard
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../getting-started/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../concepts/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../concepts/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/nemoclaw-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migrating from NemoClaw
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/gateways/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gateways
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/sandboxes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sandboxes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/boot-hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Boot Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/gateway-discovery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gateway Discovery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/policies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Policies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/policy-pinning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Policy Pinning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/policy-prover/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Policy Prover
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/gitops/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    GitOps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/approvals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approvals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/approval-workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Approval Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/bypass-detection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bypass Detection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/sbom/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SBOM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/webhooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Webhooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring & Logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guides/audit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit Log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Administration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Administration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../admin/rbac/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Users & RBAC
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../admin/oidc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OIDC / SSO
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../admin/service-principals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Service Principals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../admin/gateway-roles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gateway-Scoped Roles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../admin/deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../deploy/production-k8s/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Production Kubernetes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../admin/local-mode/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local Mode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../admin/database-migrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database Migrations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../admin/rollback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rollback Runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../admin/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integrations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../integrations/terraform/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Terraform
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../integrations/prometheus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prometheus Metrics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../integrations/oidc-providers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OIDC Provider Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    REST API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../presets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Policy Presets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7_6" id="__nav_7_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Python API
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../services/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Services
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#shoreguard.models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.Base" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Base
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.Gateway" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gateway
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.User" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.ServicePrincipal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ServicePrincipal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.UserGatewayRole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UserGatewayRole
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.SPGatewayRole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SPGatewayRole
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.Group" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Group
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.GroupMember" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GroupMember
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.GroupGatewayRole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GroupGatewayRole
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.AuditEntry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AuditEntry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.SandboxMeta" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SandboxMeta
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.Webhook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Webhook
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.WebhookDelivery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WebhookDelivery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.PolicyPin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PolicyPin
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.ApprovalWorkflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ApprovalWorkflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.ApprovalDecision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ApprovalDecision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.PolicyApplyProposal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PolicyApplyProposal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.SBOMSnapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SBOMSnapshot
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.SBOMComponent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SBOMComponent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.SandboxBootHook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SandboxBootHook
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.OperationRecord" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OperationRecord
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shoreguard.db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        db
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="db">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.db.init_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        init_db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.db.get_engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.db.init_async_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        init_async_db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.db.dispose_async_engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dispose_async_engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.db.get_async_session_factory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_async_session_factory
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/code-structure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../development/proto-stubs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Proto Stubs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#shoreguard.models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.Base" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Base
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.Gateway" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gateway
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.User" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        User
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.ServicePrincipal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ServicePrincipal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.UserGatewayRole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UserGatewayRole
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.SPGatewayRole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SPGatewayRole
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.Group" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Group
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.GroupMember" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GroupMember
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.GroupGatewayRole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GroupGatewayRole
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.AuditEntry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AuditEntry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.SandboxMeta" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SandboxMeta
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.Webhook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Webhook
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.WebhookDelivery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WebhookDelivery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.PolicyPin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PolicyPin
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.ApprovalWorkflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ApprovalWorkflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.ApprovalDecision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ApprovalDecision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.PolicyApplyProposal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PolicyApplyProposal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.SBOMSnapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SBOMSnapshot
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.SBOMComponent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SBOMComponent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.SandboxBootHook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SandboxBootHook
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.models.OperationRecord" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OperationRecord
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shoreguard.db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        db
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="db">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.db.init_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        init_db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.db.get_engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.db.init_async_db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        init_async_db
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.db.dispose_async_engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dispose_async_engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shoreguard.db.get_async_session_factory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_async_session_factory
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/FloHofstetter/shoreguard/edit/main/docs/reference/python/models.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="models">Models<a class="headerlink" href="#models" title="Permanent link">&para;</a></h1>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="shoreguard.models" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">models</span>
+
+
+<a href="#shoreguard.models" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>SQLAlchemy ORM models for Shoreguard.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.Base" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Base</span>
+
+
+<a href="#shoreguard.models.Base" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="sqlalchemy.orm.DeclarativeBase">DeclarativeBase</span></code></p>
+
+
+
+        <p>Base class for all Shoreguard models.</p>
+
+
+
+
+
+
+
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.Gateway" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Gateway</span>
+
+
+<a href="#shoreguard.models.Gateway" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A registered OpenShell gateway.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.name">name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unique gateway name (max 253 chars).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.endpoint">endpoint</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Host:port of the gateway gRPC endpoint.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.scheme">scheme</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Connection scheme (<code>https</code> by default).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.auth_mode">auth_mode</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional authentication mode identifier.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.ca_cert">ca_cert</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="bytes">bytes</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional CA certificate bytes for mTLS.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.client_cert">client_cert</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="bytes">bytes</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional client certificate bytes for mTLS.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.client_key">client_key</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="bytes">bytes</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional client private key bytes for mTLS.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.metadata_json">metadata_json</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional JSON-encoded metadata blob.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.description">description</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional free-text description of the gateway's purpose.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.labels_json">labels_json</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional JSON-encoded key-value labels for filtering.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.registered_at">registered_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp when the gateway was registered.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.last_seen">last_seen</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp of the most recent health check.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Gateway.last_status">last_status</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Last known health status string.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.User" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">User</span>
+
+
+<a href="#shoreguard.models.User" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A user account with email/password authentication.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.User.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.User.email">email</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unique email address (max 254 chars).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.User.hashed_password">hashed_password</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Bcrypt-hashed password, or <code>None</code> for invite-only.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.User.role">role</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Global role (<code>admin</code>, <code>operator</code>, <code>viewer</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.User.is_active">is_active</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="bool">bool</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the account is enabled.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.User.invite_token_hash">invite_token_hash</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>SHA-256 hash of the invite token, if pending.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.User.created_at">created_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp when the user was created.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.User.oidc_provider">oidc_provider</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the OIDC provider, or <code>None</code> for local accounts.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.User.oidc_sub">oidc_sub</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>OIDC subject identifier, or <code>None</code> for local accounts.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.ServicePrincipal" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">ServicePrincipal</span>
+
+
+<a href="#shoreguard.models.ServicePrincipal" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A service principal (API key) for programmatic access.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ServicePrincipal.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ServicePrincipal.name">name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unique human-readable name (max 100 chars).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ServicePrincipal.key_hash">key_hash</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>SHA-256 hash of the API key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ServicePrincipal.key_prefix">key_prefix</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>First 12 characters of the key for identification.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ServicePrincipal.role">role</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Global role (<code>admin</code>, <code>operator</code>, <code>viewer</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ServicePrincipal.created_by">created_by</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the user who created this principal, or <code>None</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ServicePrincipal.created_at">created_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp when the principal was created.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ServicePrincipal.last_used">last_used</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp of the most recent API call, or <code>None</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ServicePrincipal.expires_at">expires_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional expiry timestamp; <code>None</code> means never expires.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.UserGatewayRole" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">UserGatewayRole</span>
+
+
+<a href="#shoreguard.models.UserGatewayRole" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A per-gateway role override for a user.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.UserGatewayRole.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.UserGatewayRole.user_id">user_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the user.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.UserGatewayRole.gateway_id">gateway_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the gateway.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.UserGatewayRole.role">role</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Scoped role for this user on this gateway.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.SPGatewayRole" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">SPGatewayRole</span>
+
+
+<a href="#shoreguard.models.SPGatewayRole" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A per-gateway role override for a service principal.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SPGatewayRole.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SPGatewayRole.sp_id">sp_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the service principal.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SPGatewayRole.gateway_id">gateway_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the gateway.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SPGatewayRole.role">role</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Scoped role for this principal on this gateway.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.Group" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Group</span>
+
+
+<a href="#shoreguard.models.Group" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A named collection of users for group-based RBAC.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Group.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Group.name">name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unique group name (max 100 chars).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Group.description">description</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional human-readable description.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Group.role">role</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Global group role (<code>admin</code>, <code>operator</code>, <code>viewer</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Group.created_at">created_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp when the group was created.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.GroupMember" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">GroupMember</span>
+
+
+<a href="#shoreguard.models.GroupMember" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>Junction table linking users to groups.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.GroupMember.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.GroupMember.group_id">group_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the group.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.GroupMember.user_id">user_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the user.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.GroupGatewayRole" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">GroupGatewayRole</span>
+
+
+<a href="#shoreguard.models.GroupGatewayRole" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A per-gateway role override for a group.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.GroupGatewayRole.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.GroupGatewayRole.group_id">group_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the group.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.GroupGatewayRole.gateway_id">gateway_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the gateway.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.GroupGatewayRole.role">role</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Scoped role for this group on this gateway.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.AuditEntry" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">AuditEntry</span>
+
+
+<a href="#shoreguard.models.AuditEntry" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A persistent audit log entry for state-changing operations.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.AuditEntry.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.AuditEntry.timestamp">timestamp</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>When the action occurred.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.AuditEntry.actor">actor</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Email or service principal name of the acting identity.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.AuditEntry.actor_role">actor_role</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Effective role at time of action.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.AuditEntry.action">action</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Machine-readable action identifier.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.AuditEntry.resource_type">resource_type</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Type of resource affected (e.g. <code>sandbox</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.AuditEntry.resource_id">resource_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Identifier of the affected resource.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.AuditEntry.gateway_name">gateway_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Human-readable gateway name, if applicable.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.AuditEntry.gateway_id">gateway_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the gateway, or <code>None</code> if deleted.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.AuditEntry.detail">detail</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional free-text detail or JSON payload.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.AuditEntry.client_ip">client_ip</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>IP address of the requesting client, if available.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.SandboxMeta" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">SandboxMeta</span>
+
+
+<a href="#shoreguard.models.SandboxMeta" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>ShoreGuard-side metadata for a sandbox (labels, description).</p>
+<p>Sandboxes live on the OpenShell gateway; this table stores metadata
+that ShoreGuard manages independently.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxMeta.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxMeta.gateway_name">gateway_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the gateway the sandbox belongs to.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxMeta.sandbox_name">sandbox_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the sandbox (unique per gateway).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxMeta.description">description</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional free-text description.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxMeta.labels_json">labels_json</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional JSON-encoded key-value labels.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxMeta.created_at">created_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp when the metadata was first stored.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxMeta.updated_at">updated_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp of the last metadata update.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.Webhook" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">Webhook</span>
+
+
+<a href="#shoreguard.models.Webhook" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A webhook endpoint for event notifications.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Webhook.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Webhook.url">url</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Target URL for POST requests (max 2048 chars).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Webhook.secret">secret</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>HMAC-SHA256 signing secret.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Webhook.event_types">event_types</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>JSON-encoded list of subscribed event types.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Webhook.is_active">is_active</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="bool">bool</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the webhook is enabled.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Webhook.channel_type">channel_type</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Channel type (generic, slack, discord, email).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Webhook.extra_config">extra_config</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional JSON config for channel-specific settings.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Webhook.created_by">created_by</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Email or service principal name of the creator.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.Webhook.created_at">created_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp when the webhook was created.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.WebhookDelivery" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">WebhookDelivery</span>
+
+
+<a href="#shoreguard.models.WebhookDelivery" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A delivery attempt for a webhook event.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.WebhookDelivery.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.WebhookDelivery.webhook_id">webhook_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the webhook that was triggered.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.WebhookDelivery.event_type">event_type</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The event type that triggered the delivery.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.WebhookDelivery.payload_json">payload_json</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>JSON-encoded event payload.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.WebhookDelivery.status">status</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Delivery status (<code>pending</code>, <code>success</code>, <code>failed</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.WebhookDelivery.response_code">response_code</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>HTTP response code from the target, if any.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.WebhookDelivery.error_message">error_message</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Error details on failure, if any.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.WebhookDelivery.attempt">attempt</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Current attempt number (1-based).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.WebhookDelivery.created_at">created_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp when the delivery was created.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.WebhookDelivery.delivered_at">delivered_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp when delivery succeeded, if any.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.PolicyPin" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">PolicyPin</span>
+
+
+<a href="#shoreguard.models.PolicyPin" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A policy pin that locks a sandbox's policy at a specific version.</p>
+<p>When a pin is active, policy updates and draft approvals are blocked
+until the pin is removed or expires.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyPin.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyPin.gateway_name">gateway_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the gateway the sandbox belongs to.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyPin.sandbox_name">sandbox_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the pinned sandbox.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyPin.pinned_version">pinned_version</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The policy version that is locked.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyPin.pinned_by">pinned_by</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Email or service principal name of the actor who set the pin.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyPin.reason">reason</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional human-readable reason for pinning.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyPin.pinned_at">pinned_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp when the pin was created.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyPin.expires_at">expires_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional expiry timestamp; <code>None</code> means pin never expires.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.ApprovalWorkflow" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">ApprovalWorkflow</span>
+
+
+<a href="#shoreguard.models.ApprovalWorkflow" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A multi-stage approval (quorum) configuration for a sandbox.</p>
+<p>When a workflow exists, <code>POST .../approvals/{chunk_id}/approve</code> records
+a vote rather than calling the upstream gateway directly. The upstream
+approve fires only when the configured quorum is reached.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalWorkflow.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalWorkflow.gateway_name">gateway_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Gateway the sandbox belongs to.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalWorkflow.sandbox_name">sandbox_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sandbox this workflow applies to.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalWorkflow.required_approvals">required_approvals</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of distinct approve votes needed.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalWorkflow.required_roles_json">required_roles_json</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>JSON array of roles eligible to vote (empty = any).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalWorkflow.distinct_actors">distinct_actors</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="bool">bool</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If true, the same actor cannot vote twice.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalWorkflow.escalation_timeout_minutes">escalation_timeout_minutes</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Fire <code>approval.escalated</code> webhook after
+this many minutes since the first vote on a chunk; <code>None</code> = off.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalWorkflow.created_by">created_by</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Identity of the admin who configured the workflow.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalWorkflow.created_at">created_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>When the workflow was created.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalWorkflow.updated_at">updated_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>When the workflow was last updated.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.ApprovalDecision" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">ApprovalDecision</span>
+
+
+<a href="#shoreguard.models.ApprovalDecision" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A single vote cast against an approval chunk under a workflow.</p>
+<p>Append-only log; pending/approved/rejected state is derived from the row
+set. Rows are cleared once the upstream gateway approve fires (on quorum
+met) or the chunk is rejected.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalDecision.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalDecision.workflow_id">workflow_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>FK to the active workflow configuration.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalDecision.gateway_name">gateway_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Gateway the sandbox belongs to (denormalised for lookup).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalDecision.sandbox_name">sandbox_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sandbox the chunk belongs to (denormalised for lookup).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalDecision.chunk_id">chunk_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The draft chunk being voted on.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalDecision.actor">actor</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Identity of the voting user.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalDecision.role">role</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Role the voter held at vote time.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalDecision.decision">decision</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>approve</code> or <code>reject</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalDecision.comment">comment</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional free-text comment.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.ApprovalDecision.created_at">created_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>When the vote was cast.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.PolicyApplyProposal" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">PolicyApplyProposal</span>
+
+
+<a href="#shoreguard.models.PolicyApplyProposal" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A YAML policy apply proposal waiting for workflow quorum.</p>
+<p>Created on the first apply call for a sandbox with an active
+quorum approval workflow, and deleted once the proposal reaches
+a terminal state (quorum met, rejected, or superseded by a new
+YAML body). Lets subsequent vote-only calls reference the same
+proposal by its synthetic <code>chunk_id</code> without requiring the
+second runner to resubmit the YAML body — useful when the
+second voter is a human on the UI rather than the same CI
+pipeline.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyApplyProposal.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyApplyProposal.gateway_name">gateway_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Gateway the sandbox belongs to.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyApplyProposal.sandbox_name">sandbox_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sandbox the apply targets.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyApplyProposal.chunk_id">chunk_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Synthetic chunk id <code>policy.apply:&lt;sha16&gt;</code> derived from yaml.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyApplyProposal.yaml_text">yaml_text</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Raw YAML document body.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyApplyProposal.expected_hash">expected_hash</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optimistic-lock etag captured at proposal time.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyApplyProposal.proposed_by">proposed_by</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Identity of the actor that opened the proposal.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.PolicyApplyProposal.proposed_at">proposed_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>When the proposal was created.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.SBOMSnapshot" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">SBOMSnapshot</span>
+
+
+<a href="#shoreguard.models.SBOMSnapshot" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A CycloneDX SBOM uploaded for a sandbox.</p>
+<p>One snapshot per <code>(gateway, sandbox)</code> pair — a new upload
+replaces the previous snapshot rather than appending. Historical
+snapshots are intentionally out of scope; if you need them,
+archive the raw CycloneDX in object storage from CI before
+uploading, because the <code>raw_json</code> column reflects only the
+latest upload.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.gateway_name">gateway_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Gateway the sandbox belongs to.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.sandbox_name">sandbox_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sandbox the SBOM describes.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.bom_format">bom_format</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>CycloneDX-only for now ("CycloneDX").</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.spec_version">spec_version</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>CycloneDX spec version (e.g. "1.5").</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.serial_number">serial_number</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional CycloneDX serialNumber URN.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.uploaded_by">uploaded_by</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Identity of the user who uploaded the snapshot.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.uploaded_at">uploaded_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>When the snapshot was uploaded.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.component_count">component_count</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of components in the SBOM.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.vulnerability_count">vulnerability_count</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of vulnerabilities declared in the SBOM.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.max_severity">max_severity</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Highest severity across all vulnerabilities, or None.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.raw_json">raw_json</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The original CycloneDX JSON document, retained for download.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMSnapshot.components">components</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="list">list</span>[<a class="autorefs autorefs-internal" title="SBOMComponent (shoreguard.models.SBOMComponent)" href="#shoreguard.models.SBOMComponent">SBOMComponent</a>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Cascade-delete relationship to <code>SBOMComponent</code> rows.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.SBOMComponent" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">SBOMComponent</span>
+
+
+<a href="#shoreguard.models.SBOMComponent" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A single component row denormalised from a CycloneDX SBOM.</p>
+<p>Components are stored as flat rows so the components search
+endpoint can paginate and filter via SQL without re-parsing the
+raw CycloneDX JSON on each request. The <code>vuln_count</code> and
+<code>max_severity</code> columns are maintained at ingest time by
+joining through <code>bom_ref</code> against the document's
+<code>vulnerabilities</code> array, so the search endpoint never has to
+open the raw document.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMComponent.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMComponent.snapshot_id">snapshot_id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Foreign key to the parent SBOM snapshot.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMComponent.bom_ref">bom_ref</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>CycloneDX bom-ref of the component (used to join vulns).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMComponent.name">name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Component name (e.g. "requests").</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMComponent.version">version</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Component version (e.g. "2.31.0").</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMComponent.purl">purl</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Package URL (e.g. "pkg:pypi/requests@2.31.0").</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMComponent.type">type</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>CycloneDX type (library, framework, container, ...).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMComponent.licenses">licenses</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Comma-joined license identifiers.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMComponent.vuln_count">vuln_count</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of vulnerabilities affecting this component.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMComponent.max_severity">max_severity</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Highest severity across the component's vulnerabilities.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SBOMComponent.snapshot">snapshot</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<a class="autorefs autorefs-internal" title="SBOMSnapshot (shoreguard.models.SBOMSnapshot)" href="#shoreguard.models.SBOMSnapshot">SBOMSnapshot</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backref to the parent <code>SBOMSnapshot</code> row.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.SandboxBootHook" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">SandboxBootHook</span>
+
+
+<a href="#shoreguard.models.SandboxBootHook" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A pre- or post-create boot hook attached to a sandbox.</p>
+<p>Pre-create hooks act as ShoreGuard-side validation gates: their
+commands execute via <code>subprocess.run</code> inside the ShoreGuard
+process <em>before</em> <code>CreateSandbox</code> reaches the gateway, with a
+whitelisted environment exposing only <code>SG_SANDBOX_NAME</code>,
+<code>SG_SANDBOX_IMAGE</code>, <code>SG_SANDBOX_POLICY_ID</code>, and the hook's
+user-defined <code>env</code> entries.</p>
+<p>Post-create hooks run <em>inside</em> the new sandbox via the existing
+<code>ExecSandbox</code> RPC once creation succeeds, intended for warm-up
+tasks like package updates or telemetry initialisation.</p>
+<p>The execution surface is deliberately on the ShoreGuard side
+because the upstream gRPC contract has no native hook RPC. Once
+one exists, <code>BootHookService</code> can detect it and delegate
+without the schema changing.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Auto-incremented primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.gateway_name">gateway_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Gateway the sandbox belongs to.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.sandbox_name">sandbox_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sandbox this hook attaches to.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.name">name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Human-readable hook name (unique per sandbox+phase).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.phase">phase</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>pre_create</code> or <code>post_create</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.command">command</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Shell command to execute (parsed via shlex).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.workdir">workdir</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Working directory inside the sandbox (post-create only).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.env_json">env_json</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>JSON-encoded extra environment variables.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.timeout_seconds">timeout_seconds</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Hard wall-clock timeout for the hook.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.order">order</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sort key within (sandbox, phase).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.enabled">enabled</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="bool">bool</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the hook participates in automatic runs.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.continue_on_failure">continue_on_failure</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="bool">bool</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If true, post-create failures don't abort
+subsequent hooks (pre-create always aborts on failure).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.created_by">created_by</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Identity of the user who created the hook.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.created_at">created_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp when the hook was created.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.updated_at">updated_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp of the last update.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.last_run_at">last_run_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Timestamp of the most recent run.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.last_status">last_status</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>success</code> / <code>failure</code> / <code>skipped</code> / <code>None</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.SandboxBootHook.last_output">last_output</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Captured stdout+stderr (truncated to 4 KiB).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="shoreguard.models.OperationRecord" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">OperationRecord</span>
+
+
+<a href="#shoreguard.models.OperationRecord" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="Base (shoreguard.models.Base)" href="#shoreguard.models.Base">Base</a></code></p>
+
+
+
+        <p>A tracked long-running operation with DB persistence.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.id">id</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>UUID primary key.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.status">status</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Lifecycle state (pending → running → succeeded/failed, or cancelling → failed).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.resource_type">resource_type</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Type of resource (sandbox, exec, gateway).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.resource_key">resource_key</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Resource identifier for duplicate detection.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.idempotency_key">idempotency_key</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional client-provided key for idempotent requests.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.progress_pct">progress_pct</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Progress percentage (0-100).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.progress_msg">progress_msg</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Human-readable progress message.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.result_json">result_json</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>JSON-encoded result payload on success.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.error_message">error_message</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Error description on failure.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.error_code">error_code</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Machine-readable error code (timeout, cancelled, etc.).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.actor">actor</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Identity of the user who started the operation.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.gateway_name">gateway_name</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="str">str</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Gateway the operation targets.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.created_at">created_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>When the operation was created.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.updated_at">updated_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>When the operation was last updated.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="shoreguard.models.OperationRecord.completed_at">completed_at</span></code></td>
+            <td>
+                  <code><span title="sqlalchemy.orm.Mapped">Mapped</span>[<span title="datetime.datetime">datetime</span> | None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>When the operation finished.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="shoreguard.db" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">db</span>
+
+
+<a href="#shoreguard.db" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Database engine, session factory, and embedded Alembic migrations.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="shoreguard.db.init_db" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">init_db</span>
+
+
+<a href="#shoreguard.db.init_db" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">init_db</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Engine</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Create the engine, run migrations, and configure the session factory.</p>
+<p>Called once during application startup (FastAPI lifespan).</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>url</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>SQLAlchemy database URL. Falls back to <code>default_database_url()</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>Engine</code></td>            <td>
+                  <code><span title="sqlalchemy.engine.Engine">Engine</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The initialised SQLAlchemy engine.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If database migration fails.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="shoreguard.db.get_engine" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_engine</span>
+
+
+<a href="#shoreguard.db.get_engine" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">get_engine</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Engine</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the current engine.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>Engine</code></td>            <td>
+                  <code><span title="sqlalchemy.engine.Engine">Engine</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The active SQLAlchemy engine.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>init_db()</code> has not been called yet.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="shoreguard.db.init_async_db" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">init_async_db</span>
+
+
+<a href="#shoreguard.db.init_async_db" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">init_async_db</span><span class="p">(</span><span class="n">sync_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncEngine</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Create an async engine matching the sync database URL.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>sync_url</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The synchronous SQLAlchemy URL used by :func:<code>init_db</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>AsyncEngine</code></td>            <td>
+                  <code><span title="sqlalchemy.ext.asyncio.AsyncEngine">AsyncEngine</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The initialised async engine.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="shoreguard.db.dispose_async_engine" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">dispose_async_engine</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#shoreguard.db.dispose_async_engine" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">dispose_async_engine</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Dispose the async engine and clear the session factory.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="shoreguard.db.get_async_session_factory" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">get_async_session_factory</span>
+
+
+<a href="#shoreguard.db.get_async_session_factory" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">get_async_session_factory</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">async_sessionmaker</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return the async session factory.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>async_sessionmaker</code></td>            <td>
+                  <code><span title="sqlalchemy.ext.asyncio.async_sessionmaker">async_sessionmaker</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The active async session factory.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>init_async_db()</code> has not been called yet.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025–2026 Florian Hofstetter — Apache 2.0
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/FloHofstetter/shoreguard" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://pypi.org/project/shoreguard/" target="_blank" rel="noopener" title="pypi.org" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.8 200.5c-7.7-30.9-22.3-54.2-53.4-54.2h-40.1v47.4c0 36.8-31.2 67.8-66.8 67.8H172.7c-29.2 0-53.4 25-53.4 54.3v101.8c0 29 25.2 46 53.4 54.3 33.8 9.9 66.3 11.7 106.8 0 26.9-7.8 53.4-23.5 53.4-54.3v-40.7H226.2v-13.6h160.2c31.1 0 42.6-21.7 53.4-54.2 11.2-33.5 10.7-65.7 0-108.6M286.2 444.7a20.4 20.4 0 1 1 0-40.7 20.4 20.4 0 1 1 0 40.7M167.8 248.1h106.8c29.7 0 53.4-24.5 53.4-54.3V91.9c0-29-24.4-50.7-53.4-55.6-35.8-5.9-74.7-5.6-106.8.1-45.2 8-53.4 24.7-53.4 55.6v40.7h106.9v13.6h-147c-31.1 0-58.3 18.7-66.8 54.2-9.8 40.7-10.2 66.1 0 108.6 7.6 31.6 25.7 54.2 56.8 54.2H101v-48.8c0-35.3 30.5-66.4 66.8-66.4m-6.6-183.4a20.4 20.4 0 1 1 0 40.8 20.4 20.4 0 1 1 0-40.8"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.action.edit"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
