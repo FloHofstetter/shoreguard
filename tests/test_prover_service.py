@@ -522,3 +522,63 @@ class TestL7Rules:
         )
         assert results[0]["verdict"] == "VULNERABLE"
         assert results[0]["counterexample"]["binary"] == "/usr/bin/python3"
+
+
+# ---------------------------------------------------------------------------
+# deny rules (upstream #822)
+# ---------------------------------------------------------------------------
+
+
+class TestDenyRulesInProver:
+    """Deny rules override allow rules in the prover encoding."""
+
+    def _rule_with_deny(self, host: str, allow_path: str, deny_path: str) -> dict:
+        return {
+            "name": host,
+            "endpoints": [
+                {
+                    "host": host,
+                    "port": 443,
+                    "protocol": "rest",
+                    "rules": [{"allow": {"method": "GET", "path": allow_path}}],
+                    "deny_rules": [{"method": "GET", "path": deny_path}],
+                }
+            ],
+            "binaries": [],
+        }
+
+    def test_deny_blocks_otherwise_allowed_path(self, svc: ProverService) -> None:
+        """A deny rule identical to the allow rule should make exfiltration SAFE."""
+        policy = _simple_policy(
+            network_policies={
+                "api": self._rule_with_deny("api.example.com", "/v1/**", "/v1/**"),
+            }
+        )
+        results = svc.verify_policy(
+            policy,
+            [
+                {
+                    "query_id": "can_exfiltrate",
+                    "params": {"host_pattern": "api.example.com"},
+                },
+            ],
+        )
+        assert results[0]["verdict"] == "SAFE"
+
+    def test_partial_deny_still_vulnerable(self, svc: ProverService) -> None:
+        """Deny rule narrower than allow should still leave the endpoint reachable."""
+        policy = _simple_policy(
+            network_policies={
+                "api": self._rule_with_deny("api.example.com", "/v1/**", "/v1/admin/**"),
+            }
+        )
+        results = svc.verify_policy(
+            policy,
+            [
+                {
+                    "query_id": "can_exfiltrate",
+                    "params": {"host_pattern": "api.example.com"},
+                },
+            ],
+        )
+        assert results[0]["verdict"] == "VULNERABLE"

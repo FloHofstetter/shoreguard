@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from shoreguard.client._converters import _dict_to_l7_query, _dict_to_network_rule, _dict_to_policy
+import os
+
+import pytest
+
+from shoreguard.client._converters import (
+    PolicyValidationError,
+    _dict_to_l7_query,
+    _dict_to_network_rule,
+    _dict_to_policy,
+)
 
 # ---------- _dict_to_policy ----------
 
@@ -508,9 +517,18 @@ class TestDictToNetworkRuleMutations:
         assert allow.command == ""
 
     def test_binary_path_preserved(self):
-        rule = _dict_to_network_rule({"binaries": [{"path": "/bin/sh"}, {"path": "/bin/bash"}]})
-        assert rule.binaries[0].path == "/bin/sh"
-        assert rule.binaries[1].path == "/bin/bash"
+        # Use paths that are guaranteed not to exist locally so the new
+        # symlink-resolution pass in _dict_to_network_rule stays a no-op.
+        rule = _dict_to_network_rule(
+            {
+                "binaries": [
+                    {"path": "/sg-test/bin/alpha"},
+                    {"path": "/sg-test/bin/beta"},
+                ]
+            }
+        )
+        assert rule.binaries[0].path == "/sg-test/bin/alpha"
+        assert rule.binaries[1].path == "/sg-test/bin/beta"
 
     def test_name_default_empty(self):
         rule = _dict_to_network_rule({"endpoints": []})
@@ -613,3 +631,94 @@ class TestDictToNetworkRuleL7WithQuery:
         )
         allow = rule.endpoints[0].rules[0].allow
         assert len(allow.query) == 0
+
+
+# ---------- M29: deny rules, TLD reject, symlink resolve ----------
+
+
+class TestDenyRules:
+    """Deny rules are preserved through the converter (upstream #822)."""
+
+    def test_deny_rules_roundtrip_through_converter(self):
+        rule = _dict_to_network_rule(
+            {
+                "endpoints": [
+                    {
+                        "host": "api.example.com",
+                        "rules": [{"allow": {"method": "GET", "path": "/v1/**"}}],
+                        "deny_rules": [
+                            {"method": "DELETE", "path": "/v1/**"},
+                            {"method": "POST", "path": "/v1/admin/**"},
+                        ],
+                    }
+                ]
+            }
+        )
+        ep = rule.endpoints[0]
+        assert len(ep.rules) == 1
+        assert len(ep.deny_rules) == 2
+        assert ep.deny_rules[0].method == "DELETE"
+        assert ep.deny_rules[0].path == "/v1/**"
+        assert ep.deny_rules[1].method == "POST"
+
+    def test_deny_rule_query_matcher(self):
+        rule = _dict_to_network_rule(
+            {
+                "endpoints": [
+                    {
+                        "host": "api.example.com",
+                        "deny_rules": [
+                            {
+                                "method": "GET",
+                                "path": "/search",
+                                "query": {"q": {"glob": "*secret*"}},
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        deny = rule.endpoints[0].deny_rules[0]
+        assert "q" in deny.query
+        assert deny.query["q"].glob == "*secret*"
+
+
+class TestHostPatternValidation:
+    """TLD-level wildcard rejection (upstream #791)."""
+
+    @pytest.mark.parametrize("bad_host", ["*.com", "*.io", "*.net", "*.local"])
+    def test_tld_wildcard_rejected(self, bad_host):
+        with pytest.raises(PolicyValidationError, match="TLD level"):
+            _dict_to_network_rule({"endpoints": [{"host": bad_host}]})
+
+    @pytest.mark.parametrize(
+        "ok_host",
+        ["*.example.com", "api.example.com", "*.api.example.com", ""],
+    )
+    def test_multi_label_wildcard_allowed(self, ok_host):
+        # No exception — the rule builds successfully.
+        rule = _dict_to_network_rule({"endpoints": [{"host": ok_host}]})
+        assert rule.endpoints[0].host == ok_host
+
+
+class TestSymlinkResolution:
+    """Binary paths follow local symlinks (upstream #774)."""
+
+    def test_symlink_resolved_at_write_time(self, tmp_path):
+        target = tmp_path / "real-bin"
+        target.write_text("")
+        link = tmp_path / "link-bin"
+        os.symlink(target, link)
+
+        rule = _dict_to_network_rule({"binaries": [{"path": str(link)}]})
+        assert rule.binaries[0].path == str(target)
+
+    def test_non_symlink_passthrough(self, tmp_path):
+        real = tmp_path / "plain-bin"
+        real.write_text("")
+        rule = _dict_to_network_rule({"binaries": [{"path": str(real)}]})
+        assert rule.binaries[0].path == str(real)
+
+    def test_nonexistent_path_passthrough(self):
+        rule = _dict_to_network_rule({"binaries": [{"path": "/sg-nonexistent/bin/x"}]})
+        assert rule.binaries[0].path == "/sg-nonexistent/bin/x"

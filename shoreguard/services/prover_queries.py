@@ -189,27 +189,62 @@ def _encode_endpoint(
             bin_clauses = [v.binary == z3.StringVal(p) for p in bin_paths]
             parts.append(z3.Or(*bin_clauses) if len(bin_clauses) > 1 else bin_clauses[0])
 
-    # L7 rules
+    # L7 allow rules
     l7_rules = ep.get("rules", [])
     if l7_rules:
         l7_clauses: list[z3.BoolRef] = []
         for r in l7_rules:
             allow = r.get("allow", {})
-            l7_parts: list[z3.BoolRef] = []
-            method = allow.get("method", "")
-            if method:
-                l7_parts.append(v.method == z3.StringVal(method))
-            path = allow.get("path", "")
-            if path:
-                l7_parts.append(encode_path_match(path, v.path))
-            if l7_parts:
-                l7_clauses.append(z3.And(*l7_parts) if len(l7_parts) > 1 else l7_parts[0])
+            clause = _encode_l7_match(allow, v)
+            if clause is not None:
+                l7_clauses.append(clause)
         if l7_clauses:
             parts.append(z3.Or(*l7_clauses) if len(l7_clauses) > 1 else l7_clauses[0])
+
+    # L7 deny rules take precedence: a request that matches any deny clause
+    # is blocked even if it also matches an allow clause. We encode this by
+    # AND-ing the endpoint with NOT(any_deny_matches).
+    deny_rules = ep.get("deny_rules", [])
+    if deny_rules:
+        deny_clauses: list[z3.BoolRef] = []
+        for d in deny_rules:
+            clause = _encode_l7_match(d, v)
+            if clause is not None:
+                deny_clauses.append(clause)
+        if deny_clauses:
+            deny_any = z3.Or(*deny_clauses) if len(deny_clauses) > 1 else deny_clauses[0]
+            parts.append(z3.Not(deny_any))
 
     if not parts:
         return None
     return z3.And(*parts) if len(parts) > 1 else parts[0]
+
+
+def _encode_l7_match(rule: dict[str, Any], v: NetVars) -> z3.BoolRef | None:
+    """Encode an L7 rule (allow or deny) into a Z3 constraint.
+
+    Both ``L7Allow`` and ``L7DenyRule`` share the same matcher fields
+    (method, path, command) so this helper is reused for the allow and
+    deny encoding paths.
+
+    Args:
+        rule: L7 rule dict with ``method`` / ``path`` fields.
+        v: Z3 network variables.
+
+    Returns:
+        z3.BoolRef | None: Conjunction of matcher constraints, or
+            ``None`` if the rule has no recognised fields.
+    """
+    l7_parts: list[z3.BoolRef] = []
+    method = rule.get("method", "")
+    if method:
+        l7_parts.append(v.method == z3.StringVal(method))
+    path = rule.get("path", "")
+    if path:
+        l7_parts.append(encode_path_match(path, v.path))
+    if not l7_parts:
+        return None
+    return z3.And(*l7_parts) if len(l7_parts) > 1 else l7_parts[0]
 
 
 def encode_filesystem_policy(policy: dict[str, Any], v: FsVars) -> tuple[z3.BoolRef, z3.BoolRef]:

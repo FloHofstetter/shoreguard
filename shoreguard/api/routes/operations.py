@@ -33,6 +33,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _format_sse_event(event: str | None, payload: dict[str, Any]) -> str:
+    """Serialise an SSE event with control-character-safe data.
+
+    json.dumps already escapes embedded newline/CR inside strings, but
+    the SSE wire format treats raw newline, CR, or NUL bytes anywhere in
+    the data: line as a framing delimiter or hard abort. Mirrors upstream
+    OpenShell #842 (format_sse_error) by stripping any stray control bytes
+    before emission so a caller that hands us a pre-escaped string can't
+    smuggle in a premature terminator.
+
+    Args:
+        event: Optional SSE event name. ``None`` omits the ``event:`` line.
+        payload: JSON-serialisable dict for the ``data:`` line.
+
+    Returns:
+        str: Fully framed SSE record (``event`` line optional,
+            ``data`` line, terminating blank line).
+    """
+    data = json.dumps(payload)
+    data = data.replace("\r", "\\r").replace("\n", "\\n")
+    data = "".join(ch for ch in data if ch >= " " or ch == "\t")
+    prefix = f"event: {event}\n" if event else ""
+    return f"{prefix}data: {data}\n\n"
+
+
 def _get_svc() -> AsyncOperationService:
     if _ops_mod.operation_service is None:
         raise HTTPException(503, "Operation service not initialised")
@@ -138,10 +163,9 @@ async def stream_operation(operation_id: str) -> StreamingResponse:
         while True:
             op = await svc.get(operation_id)
             if op is None:
-                yield f"event: error\ndata: {json.dumps({'error': 'not_found'})}\n\n"
+                yield _format_sse_event("error", {"error": "not_found"})
                 return
-            data = json.dumps(svc.to_dict(op))
-            yield f"data: {data}\n\n"
+            yield _format_sse_event(None, svc.to_dict(op))
             if op.status in TERMINAL_STATES:
                 return
             await asyncio.sleep(1)

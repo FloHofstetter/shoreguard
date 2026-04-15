@@ -16,10 +16,11 @@ Usage::
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,9 @@ class ServerSettings(BaseSettings):
         forwarded_allow_ips (str): Comma-separated IPs (or "*") whose X-Forwarded-* headers
             uvicorn trusts. Default "127.0.0.1" is wrong behind a k8s Ingress — set to "*"
             (or the ingress controller's pod CIDR) when serving behind a TLS-terminating proxy.
+        always_blocked_ips (str): Comma-separated IPs or CIDR ranges that are always
+            blocked as SSRF targets regardless of local_mode. Parsed once at startup;
+            an invalid entry hard-fails boot.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_")
@@ -94,6 +98,40 @@ class ServerSettings(BaseSettings):
         "trusts. Set to '*' when serving behind a k8s Ingress — the default only "
         "trusts loopback, which means TLS-terminating proxies are ignored.",
     )
+    always_blocked_ips: str = Field(
+        default="",
+        description="Comma-separated IPs or CIDR ranges that are always blocked as SSRF "
+        "targets regardless of local_mode. Mirrors upstream OpenShell #814. Parsed once "
+        "at startup; an invalid entry hard-fails boot.",
+    )
+
+    @field_validator("always_blocked_ips")
+    @classmethod
+    def _validate_always_blocked_ips(cls, value: str) -> str:
+        """Parse each CIDR at load time so misconfigurations fail fast.
+
+        Keeps the original string representation but rejects the whole
+        setting if any entry is unparsable — the alternative (silent
+        drop) would mean an operator who typo'd a CIDR would get the
+        opposite of the security guarantee they asked for.
+
+        Args:
+            value: Raw comma-separated CIDR string from the environment.
+
+        Returns:
+            str: The unchanged input when every entry is parseable.
+
+        Raises:
+            ValueError: If any comma-separated entry fails to parse as
+                an IPv4/IPv6 network literal.
+        """
+        for entry in (p.strip() for p in value.split(",") if p.strip()):
+            try:
+                ipaddress.ip_network(entry, strict=False)
+            except ValueError as exc:
+                msg = f"invalid CIDR in SHOREGUARD_ALWAYS_BLOCKED_IPS: {entry!r} ({exc})"
+                raise ValueError(msg) from exc
+        return value
 
 
 class DatabaseSettings(BaseSettings):

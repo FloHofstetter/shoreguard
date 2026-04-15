@@ -116,6 +116,7 @@ class NetworkEndpoint(_message.Message):
         "rules",
         "allowed_ips",
         "ports",
+        "deny_rules",
     )
     HOST_FIELD_NUMBER: _ClassVar[int]
     PORT_FIELD_NUMBER: _ClassVar[int]
@@ -126,6 +127,7 @@ class NetworkEndpoint(_message.Message):
     RULES_FIELD_NUMBER: _ClassVar[int]
     ALLOWED_IPS_FIELD_NUMBER: _ClassVar[int]
     PORTS_FIELD_NUMBER: _ClassVar[int]
+    DENY_RULES_FIELD_NUMBER: _ClassVar[int]
     host: str
     port: int
     protocol: str
@@ -135,6 +137,7 @@ class NetworkEndpoint(_message.Message):
     rules: _containers.RepeatedCompositeFieldContainer[L7Rule]
     allowed_ips: _containers.RepeatedScalarFieldContainer[str]
     ports: _containers.RepeatedScalarFieldContainer[int]
+    deny_rules: _containers.RepeatedCompositeFieldContainer[L7DenyRule]
     def __init__(
         self,
         host: _Optional[str] = ...,
@@ -146,6 +149,37 @@ class NetworkEndpoint(_message.Message):
         rules: _Optional[_Iterable[_Union[L7Rule, _Mapping]]] = ...,
         allowed_ips: _Optional[_Iterable[str]] = ...,
         ports: _Optional[_Iterable[int]] = ...,
+        deny_rules: _Optional[_Iterable[_Union[L7DenyRule, _Mapping]]] = ...,
+    ) -> None: ...
+
+class L7DenyRule(_message.Message):
+    __slots__ = ("method", "path", "command", "query")
+    class QueryEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: L7QueryMatcher
+        def __init__(
+            self,
+            key: _Optional[str] = ...,
+            value: _Optional[_Union[L7QueryMatcher, _Mapping]] = ...,
+        ) -> None: ...
+
+    METHOD_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    COMMAND_FIELD_NUMBER: _ClassVar[int]
+    QUERY_FIELD_NUMBER: _ClassVar[int]
+    method: str
+    path: str
+    command: str
+    query: _containers.MessageMap[str, L7QueryMatcher]
+    def __init__(
+        self,
+        method: _Optional[str] = ...,
+        path: _Optional[str] = ...,
+        command: _Optional[str] = ...,
+        query: _Optional[_Mapping[str, L7QueryMatcher]] = ...,
     ) -> None: ...
 
 class L7Rule(_message.Message):
