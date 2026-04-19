@@ -5,6 +5,54 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.32.2] — 2026-04-19
+
+### Changed
+
+- **Upstream-sync confirmation (post-M29).** Re-verified parity against
+  NVIDIA/OpenShell `v0.0.32` and `origin/main@e39bb380`. All four
+  upstream `.proto` files (`sandbox.proto`, `inference.proto`,
+  `datamodel.proto`, `openshell.proto`) are byte-identical across
+  `v0.0.30` → `v0.0.32` → `origin/main`, so ShoreGuard's generated
+  stubs remain wire-parity without regeneration. Documentation
+  references bumped from `v0.0.26` to `v0.0.32` as the recommended
+  gateway pin — any gateway `≥ v0.0.30` is wire-compatible.
+- **Routed-inference docs** now describe the upstream header
+  sanitization behaviour added in OpenShell PR
+  [NVIDIA/OpenShell#826](https://github.com/NVIDIA/OpenShell/pull/826):
+  the gateway's router forwards only a common-header set
+  (`content-type`, `accept`, `accept-encoding`, `user-agent`), the
+  per-route `default_headers`, and a per-provider passthrough list
+  (`anthropic-version`, `anthropic-beta`, `openai-organization`,
+  `x-model-id`). ShoreGuard itself does not inject inference-path
+  HTTP headers, so no code change is required — OpenTelemetry
+  `traceparent` propagates on gRPC metadata, not on the forwarded
+  HTTP surface.
+- **Installation guide** now mentions the standalone
+  `openshell-gateway` binary upstream began publishing in
+  [NVIDIA/OpenShell#853](https://github.com/NVIDIA/OpenShell/pull/853)
+  as an alternative to the full cluster image.
+
+No behavior changes at runtime, no schema changes, no new dependencies.
+
+### Upstream watchlist (not pulled)
+
+Unmerged upstream branches tracked for a future milestone:
+
+- `feat/os-81-incremental-policy-merge` — adds incremental sandbox
+  policy updates (`proto/openshell.proto` +45). Relevant to M23
+  GitOps once tagged.
+- `feat/supervisor-session-grpc-data` + `feat/supervisor-session-relay`
+  — re-platforms sandbox SSH connect + exec onto an HTTP/2 relay
+  (`proto/compute_driver.proto` -25, `proto/openshell.proto` +120).
+  Wire-break candidate; will require a stub regen + parity pass on
+  the scale of M29 once released.
+- `fix/l7-path-canonicalization` — L7 path canonicalization fix; may
+  shift policy-prover counterexamples for path-prefix rules.
+- `tmutch/include-runtime-policy-revision-sandbox-get-output` —
+  surfaces runtime policy revision on `sandbox get`; pairs with M18
+  policy pinning UI once merged.
+
 ## [0.32.1] — 2026-04-16
 
 ### Fixed

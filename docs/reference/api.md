@@ -348,6 +348,22 @@ parameter. An empty value (the default) returns the cluster's default
 inference route; passing a name like `sandbox-system` returns the route
 that OpenShell v0.0.25+ uses for sandbox system-level model calls.
 
+!!! note "Upstream header sanitization (OpenShell ≥ v0.0.30)"
+    Requests forwarded through a named inference route are sanitized by
+    the gateway's router. Only these headers reach the upstream LLM:
+
+    - Common: `content-type`, `accept`, `accept-encoding`, `user-agent`.
+    - Per-provider passthrough: `anthropic-version`, `anthropic-beta`
+      for Anthropic; `openai-organization`, `x-model-id` for OpenAI;
+      `x-model-id` for generic.
+    - Any `default_headers` the route was registered with.
+
+    All other client-supplied headers are dropped.
+    `authorization`, `x-api-key`, `host`, `content-length`, and the
+    hop-by-hop set are stripped unconditionally — the gateway re-injects
+    the route's configured API key. This is upstream PR
+    [NVIDIA/OpenShell#826](https://github.com/NVIDIA/OpenShell/pull/826).
+
 ## SBOM (M21, v0.30.2+)
 
 | Method | Path | Description |

@@ -41,8 +41,10 @@ Terraform modules, or operator-based deployments.
 ## Step 1 — Install NVIDIA OpenShell
 
 Install NVIDIA's upstream OpenShell Helm chart into a dedicated namespace.
-ShoreGuard has been tested against **OpenShell v0.0.26** — pin to that
-version unless you have verified interop with a newer release.
+ShoreGuard tracks the latest upstream stable tag and is currently tested
+against **OpenShell v0.0.32** — pin to that version unless you have
+verified interop with a newer release. The protobuf wire surface has not
+changed since `v0.0.30`, so any gateway `≥ v0.0.30` is acceptable.
 
 !!! tip "Where to find the chart"
     Refer to [NVIDIA's OpenShell documentation](https://github.com/NVIDIA/openshell)

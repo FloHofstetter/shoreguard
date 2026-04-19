@@ -5,9 +5,22 @@
 - **Python 3.14** or newer
 - A running [NVIDIA OpenShell](https://docs.nvidia.com/openshell/) gateway
   (or use `--local` mode for local Docker-based gateways). OpenShell
-  **v0.0.26 or newer** is recommended — ShoreGuard v0.29.0 pins the
-  protobuf stubs to that release and exposes features (TTY exec, gateway
-  settings API, named inference routes) that require v0.0.23–v0.0.26.
+  **v0.0.32 or newer** is recommended. ShoreGuard's protobuf stubs are
+  byte-parity with upstream `proto/` at `v0.0.30` and the wire surface
+  has not changed through `v0.0.32`, so any gateway `≥ v0.0.30` is
+  wire-compatible; `v0.0.32` is the current tested pin. Individual
+  features still trace back to the release that first introduced them
+  (TTY exec from v0.0.23, settings API and named inference routes from
+  v0.0.25–v0.0.26).
+
+!!! tip "Gateway-only install (OpenShell ≥ v0.0.32)"
+    Upstream now publishes a standalone `openshell-gateway` binary per
+    release alongside the full cluster image. ShoreGuard treats this
+    binary like any other gateway — point it at an LLM provider, start
+    it listening on port `30051`, and register it via
+    `openshell gateway register` or ShoreGuard's
+    `POST /gateway/register`. Useful when you want a single gateway
+    process on a VM without the k3s-in-container footprint.
 
 ## Install from PyPI
 

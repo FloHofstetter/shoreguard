@@ -24,7 +24,7 @@ If any phase fails, that's the M8 gap to fix.
 
 ## Prerequisites
 
-- OpenShell binary on PATH (currently the latest stable, v0.0.26).
+- OpenShell binary on PATH (currently the latest stable, v0.0.32).
 - Real Anthropic API key in `ANTHROPIC_API_KEY`.
 - ShoreGuard repo, `uv sync` clean.
 - Two free TCP ports for the gateway clusters (default `8089` + `8189`).

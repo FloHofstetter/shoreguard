@@ -4,8 +4,8 @@ ShoreGuard hosts one CycloneDX Software Bill of Materials per
 sandbox and lets operators browse components, licenses, and known
 vulnerabilities directly in the UI. Uploads happen from CI —
 ShoreGuard does **not** pull SBOMs from gateways, because OpenShell
-v0.0.26 has no SBOM RPC and CI knows which build is actually
-deploying.
+has no SBOM RPC (still absent through v0.0.32) and CI knows which
+build is actually deploying.
 
 ## What it solves
 
