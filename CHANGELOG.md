@@ -5,6 +5,85 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.34.0] — 2026-04-23
+
+### Added
+
+- **M33 REST/UI Coverage Sweep.** Every OpenShell capability ShoreGuard
+  consumes is now reachable end-to-end — Client, REST, and UI:
+  - **REST routes for sandbox inspection.** New
+    `GET /api/gateways/{gw}/sandboxes/{name}/config` returns the full
+    stored sandbox configuration via `GetSandboxConfig`, and
+    `GET …/provider-env` surfaces the gateway-injected provider
+    environment with values redacted to `[REDACTED]`. Both were
+    implemented on the client since v0.30 but previously had no REST
+    caller.
+  - **Endpoint `allow_encoded_slash` UI toggle.** Rule editor now
+    exposes the M32 GitLab-style-path switch per endpoint; no more
+    YAML-only configuration.
+  - **GitOps merge-mode apply dialog.** New YAML apply section on the
+    sandbox policy page with a `replace | merge` radio group, optional
+    `expected_version` guard, dry-run preview, and guided toast when
+    the gateway rejects non-network edits with
+    `merge_unsupported`.
+  - **M18 drift indicator.** Policy pin panel now renders
+    `Pinned vX` and `Active vY` side-by-side and flags drift when the
+    supervisor has not yet reloaded the pinned revision — using the
+    `current_policy_version` field exposed in v0.33.
+  - **Advanced gateway settings editor.** Collapsible key/value panel
+    under each gateway's detail view with add/edit/delete operations
+    against `PUT/DELETE /api/gateways/{name}/settings/{key}` and a
+    warning banner that validation is gateway-side only.
+- **Coverage Matrix CI gate.** New `docs/reference/surface-coverage.md`
+  cross-tables every OpenShell RPC against Client / REST / UI
+  reachability. `scripts/check_coverage.py` enforces the matrix; the
+  `coverage-matrix` CI job is required and will fail the build when a
+  new RPC or route lands without being plumbed through all three
+  layers (with an explicit allowlist for the supervisor-only RPCs
+  `PushSandboxLogs`, `ReportPolicyStatus`, `ConnectSupervisor`,
+  `RelayStream`).
+- **M34 — `SandboxSpec.log_level`.** The last unmapped upstream
+  `SandboxSpec` field. Client `sandboxes.create()` accepts
+  `log_level=""|"debug"|"info"|"warn"|"error"`, the REST
+  `POST /sandboxes` schema mirrors the same enum, and the creation
+  wizard surfaces a Log Level select defaulting to "Gateway default"
+  (empty string, upstream-conformant).
+- **M35 — Proactive mTLS Cert Rotation.** New
+  `shoreguard.services.cert_rotation.CertRotationService` wires up
+  the `reload_credentials()` hook that has existed since v0.31 but
+  had no scheduler. A background task polls every registered gateway
+  each hour (`SHOREGUARD_CERT_ROTATION_POLL_INTERVAL_S`); when a
+  client cert drops below the threshold
+  (`SHOREGUARD_CERT_ROTATION_THRESHOLD_DAYS`, default 7 days), the
+  registry bytes are re-read and the gRPC channel is rebuilt.
+  Retries use exponential backoff
+  (`SHOREGUARD_CERT_ROTATION_MAX_RETRIES`, default 3); giveups fire
+  the `gateway.cert_rotation_failed` webhook. Rotation is idempotent
+  relative to the registry bytes, so multi-replica deployments need
+  no advisory lock. Successful rotations emit an audit
+  `gateway.cert_rotated` with before/after validity and the attempt
+  count. New metric
+  `sg_gateway_cert_rotations_total{gateway,outcome}` with labels
+  `success`, `failure`, `skipped_not_due`, `skipped_no_cert`. New
+  runbook at `docs/operations/cert-rotation.md`.
+
+### Changed
+
+- **Configuration reference** now documents the four
+  `SHOREGUARD_CERT_ROTATION_*` settings in a new "Cert Rotation"
+  section.
+- **Surface Coverage** linked from the docs nav under Reference.
+
+### Not in scope
+
+- Supervisor session relay RPCs (`ConnectSupervisor`, `RelayStream`)
+  remain generated-only; no Client / REST / UI surface.
+- A full gateway-settings table discovered from upstream remains a
+  follow-up: the Advanced Settings editor is a generic key/value
+  component hidden behind a warn banner, not a typed form.
+- `current_policy_version` drift indicator only covers the pin
+  panel; cross-sandbox fleet-wide drift dashboards are deferred.
+
 ## [0.33.0] — 2026-04-23
 
 ### Added
