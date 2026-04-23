@@ -85,6 +85,8 @@ def _network_rule_to_dict(rule: sandbox_pb2.NetworkPolicyRule) -> dict[str, Any]
             ep_dict["enforcement"] = ep.enforcement
         if ep.access:
             ep_dict["access"] = ep.access
+        if ep.allow_encoded_slash:
+            ep_dict["allow_encoded_slash"] = True
         if ep.rules:
             rules_list = []
             for r in ep.rules:

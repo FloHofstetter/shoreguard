@@ -280,6 +280,22 @@ def test_network_rule_to_dict_minimal():
     assert ep["port"] == 80
     assert "protocol" not in ep
     assert "tls" not in ep
+    assert "allow_encoded_slash" not in ep
+
+
+def test_network_rule_to_dict_allow_encoded_slash_surfaced_when_true():
+    rule = sandbox_pb2.NetworkPolicyRule(
+        name="gitlab",
+        endpoints=[
+            sandbox_pb2.NetworkEndpoint(
+                host="gitlab.example.com",
+                port=443,
+                allow_encoded_slash=True,
+            )
+        ],
+    )
+    result = _network_rule_to_dict(rule)
+    assert result["endpoints"][0]["allow_encoded_slash"] is True
 
 
 def test_get_with_embedded_policy(stub):

@@ -222,6 +222,7 @@ def _dict_to_network_rule(data: dict) -> sandbox_pb2.NetworkPolicyRule:
             access=ep_data.get("access", ""),
             allowed_ips=ep_data.get("allowed_ips", []),
             ports=ep_data.get("ports", []),
+            allow_encoded_slash=ep_data.get("allow_encoded_slash", False),
         )
         for rule_data in ep_data.get("rules", []):
             allow = rule_data.get("allow", {})

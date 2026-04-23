@@ -72,7 +72,12 @@ def encode_host_match(host_pattern: str, host_var: z3.SeqRef) -> z3.BoolRef:
     return host_var == z3.StringVal(host_pattern)
 
 
-def encode_path_match(path_pattern: str, path_var: z3.SeqRef) -> z3.BoolRef:
+def encode_path_match(
+    path_pattern: str,
+    path_var: z3.SeqRef,
+    *,
+    allow_encoded_slash: bool = False,  # noqa: ARG001 - consumed in WS3 canonicalization
+) -> z3.BoolRef:
     """Encode a path pattern into a Z3 constraint.
 
     ``/**`` or ``/*`` at the end maps to prefix match.  Otherwise exact match.
@@ -80,6 +85,10 @@ def encode_path_match(path_pattern: str, path_var: z3.SeqRef) -> z3.BoolRef:
     Args:
         path_pattern: URL path pattern (may end with ``/**`` or ``/*``).
         path_var: Z3 string variable representing the request path.
+        allow_encoded_slash: If True, the endpoint preserves percent-encoded
+            slashes (``%2F``) in request paths. Currently plumbed through for
+            the upcoming L7 canonicalization (WS3); no behavioural difference
+            yet.
 
     Returns:
         z3.BoolRef: Constraint that ``path_var`` matches the pattern.
@@ -189,13 +198,18 @@ def _encode_endpoint(
             bin_clauses = [v.binary == z3.StringVal(p) for p in bin_paths]
             parts.append(z3.Or(*bin_clauses) if len(bin_clauses) > 1 else bin_clauses[0])
 
+    # allow_encoded_slash flows from the endpoint down into every L7
+    # path match. Forwarded as a keyword arg; behavioural effect lands
+    # in WS3 (path canonicalization parity with upstream).
+    allow_encoded_slash = bool(ep.get("allow_encoded_slash", False))
+
     # L7 allow rules
     l7_rules = ep.get("rules", [])
     if l7_rules:
         l7_clauses: list[z3.BoolRef] = []
         for r in l7_rules:
             allow = r.get("allow", {})
-            clause = _encode_l7_match(allow, v)
+            clause = _encode_l7_match(allow, v, allow_encoded_slash=allow_encoded_slash)
             if clause is not None:
                 l7_clauses.append(clause)
         if l7_clauses:
@@ -208,7 +222,7 @@ def _encode_endpoint(
     if deny_rules:
         deny_clauses: list[z3.BoolRef] = []
         for d in deny_rules:
-            clause = _encode_l7_match(d, v)
+            clause = _encode_l7_match(d, v, allow_encoded_slash=allow_encoded_slash)
             if clause is not None:
                 deny_clauses.append(clause)
         if deny_clauses:
@@ -220,7 +234,12 @@ def _encode_endpoint(
     return z3.And(*parts) if len(parts) > 1 else parts[0]
 
 
-def _encode_l7_match(rule: dict[str, Any], v: NetVars) -> z3.BoolRef | None:
+def _encode_l7_match(
+    rule: dict[str, Any],
+    v: NetVars,
+    *,
+    allow_encoded_slash: bool = False,
+) -> z3.BoolRef | None:
     """Encode an L7 rule (allow or deny) into a Z3 constraint.
 
     Both ``L7Allow`` and ``L7DenyRule`` share the same matcher fields
@@ -230,6 +249,9 @@ def _encode_l7_match(rule: dict[str, Any], v: NetVars) -> z3.BoolRef | None:
     Args:
         rule: L7 rule dict with ``method`` / ``path`` fields.
         v: Z3 network variables.
+        allow_encoded_slash: Endpoint-level flag forwarded to
+            :func:`encode_path_match`; see the upstream
+            ``NetworkEndpoint.allow_encoded_slash`` field.
 
     Returns:
         z3.BoolRef | None: Conjunction of matcher constraints, or
@@ -241,7 +263,7 @@ def _encode_l7_match(rule: dict[str, Any], v: NetVars) -> z3.BoolRef | None:
         l7_parts.append(v.method == z3.StringVal(method))
     path = rule.get("path", "")
     if path:
-        l7_parts.append(encode_path_match(path, v.path))
+        l7_parts.append(encode_path_match(path, v.path, allow_encoded_slash=allow_encoded_slash))
     if not l7_parts:
         return None
     return z3.And(*l7_parts) if len(l7_parts) > 1 else l7_parts[0]

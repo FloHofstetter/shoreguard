@@ -244,6 +244,27 @@ def test_dict_to_network_rule_endpoint_defaults():
     assert ep.access == ""
     assert list(ep.allowed_ips) == []
     assert list(ep.ports) == []
+    assert ep.allow_encoded_slash is False
+
+
+def test_dict_to_network_rule_allow_encoded_slash_true():
+    rule = _dict_to_network_rule(
+        {
+            "endpoints": [
+                {
+                    "host": "gitlab.example.com",
+                    "port": 443,
+                    "allow_encoded_slash": True,
+                }
+            ],
+        }
+    )
+    assert rule.endpoints[0].allow_encoded_slash is True
+
+
+def test_dict_to_network_rule_allow_encoded_slash_default_false():
+    rule = _dict_to_network_rule({"endpoints": [{"host": "api.example.com", "port": 443}]})
+    assert rule.endpoints[0].allow_encoded_slash is False
 
 
 def test_dict_to_network_rule_multiple_endpoints():
