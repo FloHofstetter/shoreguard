@@ -5,6 +5,91 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.33.0] — 2026-04-23
+
+### Added
+
+- **M32 Upstream-Sync + GitOps Incremental Merges.** Pin bumped to
+  NVIDIA/OpenShell `v0.0.35` (from `v0.0.32`). Three upstream tags and
+  six `main` commits of delta, absorbed in six commits:
+  - **Stub regen** (`chore(proto)`). Protobuf stubs regenerated against
+    `v0.0.35`; `sandbox.proto` restored to byte-parity with upstream.
+    The `Sandbox` / `SandboxSpec` / `SandboxTemplate` message family
+    migrated upstream from `datamodel.proto` to `openshell.proto`; call
+    sites updated. `compute_driver.proto` is now skipped by the regen
+    script because the supervisor↔gateway surface is not consumed by
+    ShoreGuard as a control-plane.
+  - **`NetworkEndpoint.allow_encoded_slash`** (upstream #826). New
+    Field 11 flows through `_dict_to_network_rule`, the listing
+    converter, and the Z3 prover. Endpoints fronting GitLab-style
+    upstreams can now preserve `%2F` in paths instead of rejecting.
+    Default stays `False`, upstream-conformant.
+  - **L7 path canonicalization** (upstream #878). Closes a soundness
+    gap in the Z3 prover's L7 reasoning. A new
+    `canonicalize_request_path()` mirrors the upstream Rust
+    canonicalizer (percent-decode, dot-segment resolution, slash
+    collapse, `;params` strip) so prover counterexamples live in the
+    same path universe as the gateway's enforcement path.
+  - **SSH session response charset contract** (upstream #876). Every
+    field of `CreateSshSessionResponse` is now validated against the
+    documented charset before ShoreGuard surfaces the response.
+    Defence-in-depth: a compromised or misconfigured gateway cannot
+    push ProxyCommand-injection metacharacters into the REST response.
+  - **`current_policy_version` on sandbox endpoints.** The field was
+    already extracted client-side but not declared on
+    `SandboxResponse`; REST consumers and OpenAPI tooling now see it
+    and the M18 policy-pinning UI can render "configured vs. active".
+  - **GitOps incremental merge mode** (upstream #860, requires gateway
+    `≥ v0.0.33`). `POST /policy/apply` accepts
+    `mode: "replace" | "merge"`. In merge mode, ShoreGuard diffs
+    current against target policy, emits `PolicyMergeOperation`s
+    (`remove_rule` before `add_rule`, safety-ordered), and sends them
+    through the gateway's `UpdateConfigRequest.merge_operations`
+    surface. `UnsupportedMergeError` surfaces as HTTP 400 for
+    non-network edits (filesystem / process / landlock); callers
+    retry with `mode=replace`. CLI: `shoreguard policy apply
+    --mode merge`. New doc page `docs/guides/gitops-merge.md`.
+
+### Changed
+
+- Documentation pin references bumped from `v0.0.32` to `v0.0.35`
+  across `installation.md`, `production-k8s.md`, `sbom.md`, and
+  `m8-demo.md`. New compatibility matrix in `installation.md`.
+
+### Upstream absorbed (server-side, no ShoreGuard code change)
+
+These upstream changes land on the gateway and pass through our
+existing surfaces without modification:
+
+- Supervisor-initiated SSH connect / exec over gRPC-multiplexed relay
+  (#867). `ConnectSupervisor` / `RelayStream` RPCs and 12 new messages
+  exist only as generated Python; ShoreGuard does not consume them.
+- Seccomp / procfs hardening (#844, #869, #891).
+- Dedicated health-check listener on a separate unauthenticated port
+  (#903, #915).
+- `tower-http` TraceLayer request-level logging (#895).
+- `install-vm` CLI for the gateway binary (#887).
+- Dedicated Kubernetes client without read-timeout for watches (#907).
+- Read-only baseline path preservation (#910).
+- SSRF host-alias resolution (#912).
+- Configurable image-transfer timeout (#914).
+- Sandbox `git clone` trusts the internal CA via `GIT_SSL_CAINFO`
+  injection (#918).
+- E2E pipeline on external forks via copy-pr-bot flow (#922).
+
+### Upstream watchlist (unmerged at time of release)
+
+- `pull-request/904` — Podman compute driver. Clarify whether this
+  exposes a new gateway runtime tag (extending the M30 `KNOWN_RUNTIMES`
+  set) or a sandbox-side compute driver (orthogonal axis) before the
+  next sync.
+- `drew/creating-a-docker-driver-like-the-vm-driver` — bundled Docker
+  compute driver. Same clarification needed.
+- `drew/containers-in-virtual-machines` — libkrun OCI containers;
+  ShoreGuard-irrelevant.
+- `vcauxbrisebo/vm-gpu-support`, `feat/wsl-cdi-spec-watcher` — server
+  only, tracked until merge, no ShoreGuard delta expected.
+
 ## [0.32.2] — 2026-04-19
 
 ### Changed

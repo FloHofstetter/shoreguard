@@ -103,6 +103,7 @@ nav:
       - Policy Pinning: guides/policy-pinning.md
       - Policy Prover: guides/policy-prover.md
       - GitOps: guides/gitops.md
+      - GitOps Merge Mode: guides/gitops-merge.md
       - Approvals: guides/approvals.md
       - Approval Workflows: guides/approval-workflows.md
       - Bypass Detection: guides/bypass-detection.md
