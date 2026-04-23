@@ -153,6 +153,22 @@ See the [OIDC / SSO guide](../admin/oidc.md) for setup instructions.
 | `SHOREGUARD_BG_HEALTH_MAX_INTERVAL` | `300` | Max health-check interval after backoff |
 | `SHOREGUARD_BG_HEALTH_BACKOFF_THRESHOLD` | `10` | Consecutive errors before backing off |
 
+## Cert Rotation {: #cert-rotation }
+
+Proactive mTLS client-cert rotation. When enabled (default), a background
+task polls every registered gateway's cert expiry; certs below the
+threshold are rotated by re-reading credentials from the registry and
+rebuilding the gRPC channel via `reload_credentials()`. See
+[Cert Rotation operations](../operations/cert-rotation.md) for the
+runbook.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SHOREGUARD_CERT_ROTATION_ENABLED` | `true` | Master switch for the rotation loop |
+| `SHOREGUARD_CERT_ROTATION_THRESHOLD_DAYS` | `7` | Rotate when remaining validity drops below this many days |
+| `SHOREGUARD_CERT_ROTATION_POLL_INTERVAL_S` | `3600` | Seconds between rotation poll cycles |
+| `SHOREGUARD_CERT_ROTATION_MAX_RETRIES` | `3` | Retry attempts per rotation before firing the `gateway.cert_rotation_failed` webhook |
+
 ## Local Gateway {: #local-gateway }
 
 Only relevant when `SHOREGUARD_LOCAL_MODE=true`. See the
