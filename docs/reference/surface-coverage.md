@@ -22,7 +22,8 @@ chain is what makes a feature *usable*, not just *built*.
 
 ## The enforcement script
 
-[`scripts/check_coverage.py`](../../scripts/check_coverage.py) asserts
+`scripts/check_coverage.py` ([source](https://github.com/FloHofstetter/shoreguard/blob/main/scripts/check_coverage.py))
+asserts
 the invariant and is run as a required CI job. It:
 
 1. Enumerates all upstream RPCs from the generated `_pb2_grpc.py`.

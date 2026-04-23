@@ -5,6 +5,47 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.34.1] — 2026-04-23
+
+### Changed
+
+- **Upstream-sync confirmation (post-M35).** Re-verified parity against
+  NVIDIA/OpenShell `v0.0.36` and `origin/main` (through #943).
+  `proto/*.proto` is byte-identical `v0.0.35 → v0.0.36 → origin/main`,
+  so ShoreGuard's generated stubs remain wire-parity without
+  regeneration. Documentation pin bumped from `v0.0.35` to `v0.0.36`
+  across `installation.md`, `production-k8s.md`, and `sbom.md` — any
+  gateway `≥ v0.0.30` remains wire-compatible for existing flows.
+
+### Upstream absorbed (server-side, no ShoreGuard code change)
+
+- Gateway-owned VM readiness + VM compute driver E2E
+  ([#901](https://github.com/NVIDIA/OpenShell/pull/901)) — driver-vm
+  rework; supervisor-gateway readiness handshake moves server-side.
+- Optional **gateway-native Prometheus endpoint**
+  ([#920](https://github.com/NVIDIA/OpenShell/pull/920)) — new
+  `--metrics-port` flag exposes `openshell_server_grpc_requests_total`,
+  `openshell_server_grpc_request_duration_seconds`,
+  `openshell_server_http_requests_total`, and
+  `openshell_server_http_request_duration_seconds`. Helm chart adds
+  `service.metricsPort` (default `9090`; set to `0` to disable).
+  Complementary to ShoreGuard's control-plane metrics —
+  `docs/integrations/prometheus.md` now points operators at scraping
+  both jobs for end-to-end request-path visibility.
+- CI/Helm hygiene: #943 (helm ClusterRole cleanup), #938 (E2E Gate
+  posting), #942, #928, #929, #926 (CI/toolchain bumps), #931
+  (driver-vm cross-compile preflight).
+
+### Upstream watchlist (unmerged at time of release)
+
+- `drew/creating-a-docker-driver-like-the-vm-driver` — bundled Docker
+  compute driver; same compute-driver-axis question as v0.33
+  ([#904](https://github.com/NVIDIA/OpenShell/pull/904) Podman).
+- `drew/containers-in-virtual-machines` — libkrun OCI containers;
+  ShoreGuard-irrelevant wire-wise.
+- `vcauxbrisebo/vm-gpu-support`, `feat/wsl-cdi-spec-watcher` —
+  server-only, no ShoreGuard delta expected.
+
 ## [0.34.0] — 2026-04-23
 
 ### Added

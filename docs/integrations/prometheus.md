@@ -15,6 +15,18 @@ scrape_configs:
       - targets: ["shoreguard:8888"]
 ```
 
+!!! tip "Scrape the gateway too (OpenShell ≥ main, post-v0.0.36)"
+    Upstream OpenShell exposes its own Prometheus endpoint on a dedicated
+    metrics port behind the `--metrics-port` flag (disabled by default;
+    the Helm chart's `service.metricsPort` defaults to `9090`). Enabling
+    it adds `openshell_server_grpc_requests_total`,
+    `openshell_server_grpc_request_duration_seconds`,
+    `openshell_server_http_requests_total`, and
+    `openshell_server_http_request_duration_seconds` — all observed
+    gateway-side, complementary to ShoreGuard's control-plane metrics.
+    Scraping both jobs gives you end-to-end request-path visibility
+    from the REST edge through the gRPC hop into the gateway.
+
 ## Authentication
 
 By default, the `/metrics` endpoint requires authentication (session cookie or

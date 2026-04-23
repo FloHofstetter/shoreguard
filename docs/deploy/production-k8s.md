@@ -42,7 +42,7 @@ Terraform modules, or operator-based deployments.
 
 Install NVIDIA's upstream OpenShell Helm chart into a dedicated namespace.
 ShoreGuard tracks the latest upstream stable tag and is currently tested
-against **OpenShell v0.0.35** — pin to that version unless you have
+against **OpenShell v0.0.36** — pin to that version unless you have
 verified interop with a newer release. The baseline wire surface has not
 changed since `v0.0.30`, so any gateway `≥ v0.0.30` is acceptable for
 existing flows. Incremental policy merge (`/policy/apply?mode=merge`)

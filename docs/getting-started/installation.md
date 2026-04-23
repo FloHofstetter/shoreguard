@@ -5,8 +5,8 @@
 - **Python 3.14** or newer
 - A running [NVIDIA OpenShell](https://docs.nvidia.com/openshell/) gateway
   (or use `--local` mode for local Docker-based gateways). OpenShell
-  **v0.0.35 or newer** is recommended. ShoreGuard's protobuf stubs are
-  byte-parity with upstream `proto/` at `v0.0.35`, and the baseline wire
+  **v0.0.36 or newer** is recommended. ShoreGuard's protobuf stubs are
+  byte-parity with upstream `proto/` at `v0.0.36`, and the baseline wire
   surface ShoreGuard consumes has not changed since `v0.0.30`, so any
   gateway `≥ v0.0.30` is wire-compatible for existing flows. Individual
   features still trace back to the release that first introduced them
