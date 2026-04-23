@@ -20,7 +20,7 @@ import asyncio
 import logging
 import re
 import shlex
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
@@ -93,6 +93,9 @@ class CreateSandboxRequest(BaseModel):
         description: Optional free-text description.
         labels: Optional key-value labels.
         skip_hooks: Admin-only flag to bypass pre/post-create boot hooks.
+        log_level: Sandbox-supervisor log verbosity. Empty string means
+            "use the gateway's default level". Accepted values mirror
+            upstream: ``debug``, ``info``, ``warn``, ``error``.
     """
 
     name: str = Field(default="", max_length=253)
@@ -105,6 +108,7 @@ class CreateSandboxRequest(BaseModel):
     description: str | None = None
     labels: dict[str, str] | None = None
     skip_hooks: bool = Field(default=False)
+    log_level: Literal["", "debug", "info", "warn", "error"] = ""
 
     @field_validator("environment")
     @classmethod
@@ -289,6 +293,7 @@ async def create_sandbox(
             description=body.description,
             labels=body.labels,
             skip_hooks=body.skip_hooks,
+            log_level=body.log_level,
         )
         sb_name = result.get("name", body.name)
         assert _ops_mod.operation_service is not None
@@ -305,7 +310,19 @@ async def create_sandbox(
             except TimeoutError:
                 result["warning"] = "Sandbox created but did not become ready in time"
         logger.info("Sandbox creation completed: '%s' (op=%s)", sandbox_name, op.id)
-        await audit_log(request, "sandbox.create", "sandbox", sandbox_name, gateway=gw)
+        await audit_log(
+            request,
+            "sandbox.create",
+            "sandbox",
+            sandbox_name,
+            gateway=gw,
+            detail={
+                "image": body.image or "",
+                "gpu": body.gpu,
+                "providers": body.providers or [],
+                "log_level": body.log_level or "(gateway default)",
+            },
+        )
         await fire_webhook(
             "sandbox.created",
             {
@@ -315,6 +332,7 @@ async def create_sandbox(
                 "image": body.image or "",
                 "gpu": body.gpu,
                 "providers": body.providers or [],
+                "log_level": body.log_level or "",
             },
         )
         return result

@@ -418,7 +418,7 @@ async def test_sandbox_create_lro_success(api_client, mock_client):
 
     resp = await api_client.post(
         f"/api/gateways/{GW}/sandboxes",
-        json={"name": "lro-sb", "image": "base"},
+        json={"name": "lro-sb", "image": "base", "log_level": "debug"},
     )
     assert resp.status_code == 202
     assert resp.headers.get("location") is not None
@@ -430,6 +430,9 @@ async def test_sandbox_create_lro_success(api_client, mock_client):
     resp2 = await api_client.get(f"/api/operations/{op_id}")
     assert resp2.status_code == 200
     assert resp2.json()["status"] == "succeeded"
+    # log_level forwarded through to the client create call.
+    _, kwargs = mock_client.sandboxes.create.call_args
+    assert kwargs.get("log_level") == "debug"
 
 
 async def test_sandbox_create_lro_failure(api_client, mock_client):

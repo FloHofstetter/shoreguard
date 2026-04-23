@@ -324,6 +324,7 @@ class SandboxService:
         description: str | None = None,
         labels: dict[str, str] | None = None,
         skip_hooks: bool = False,
+        log_level: str = "",
     ) -> dict[str, Any]:
         """Create a sandbox and optionally apply presets.
 
@@ -347,6 +348,7 @@ class SandboxService:
             skip_hooks: If true, bypass pre/post boot hook execution
                 (admin override for cases where a broken hook would
                 block recreation).
+            log_level: Supervisor log verbosity (empty = gateway default).
 
         Returns:
             dict[str, Any]: Created sandbox record with preset status
@@ -380,6 +382,7 @@ class SandboxService:
             gpu=gpu,
             providers=providers,
             environment=environment,
+            log_level=log_level,
         )
 
         sandbox_name = result.get("name", name)

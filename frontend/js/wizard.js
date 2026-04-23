@@ -353,6 +353,7 @@ async function launchSandbox() {
     const presets = [...wizardState.presets];
     const description = document.getElementById('wizard-description')?.value?.trim() || '';
     const labels = Object.keys(_wizardLabels).length > 0 ? { ..._wizardLabels } : undefined;
+    const logLevel = document.getElementById('wizard-log-level')?.value || '';
 
     document.getElementById('wizard-progress').classList.remove('d-none');
     document.getElementById('wizard-launch-btn').disabled = true;
@@ -381,6 +382,7 @@ async function launchSandbox() {
                 presets: presets.length > 0 ? presets : undefined,
                 description: description || undefined,
                 labels,
+                log_level: logLevel || undefined,
             }),
         });
 

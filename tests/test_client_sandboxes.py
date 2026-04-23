@@ -469,6 +469,19 @@ def test_create_with_gpu_providers_env_policy(mgr, stub):
     assert result["id"] == "new"
 
 
+def test_create_log_level_default_empty(mgr, stub):
+    """create() without log_level leaves SandboxSpec.log_level empty,
+    letting the gateway pick its configured default."""
+    mgr.create(name="sb", image="img")
+    assert stub.request.spec.log_level == ""
+
+
+def test_create_log_level_forwarded(mgr, stub):
+    """create(log_level=...) sets SandboxSpec.log_level on the wire."""
+    mgr.create(name="sb", image="img", log_level="debug")
+    assert stub.request.spec.log_level == "debug"
+
+
 def test_create_no_image_no_providers():
     """create() without image/providers leaves those fields empty."""
 

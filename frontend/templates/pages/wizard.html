@@ -84,6 +84,21 @@
                         </div>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label" for="wizard-log-level">
+                            Supervisor Log Level <span class="text-muted small">(optional)</span>
+                        </label>
+                        <select id="wizard-log-level" class="form-select">
+                            <option value="">Gateway default</option>
+                            <option value="debug">debug</option>
+                            <option value="info">info</option>
+                            <option value="warn">warn</option>
+                            <option value="error">error</option>
+                        </select>
+                        <div class="form-text">
+                            Controls how verbose the sandbox supervisor's own logs are. Leave blank to inherit the gateway's default.
+                        </div>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">Providers <span class="text-muted small">(optional)</span></label>
                         <div id="wizard-provider-select"></div>
                         <div class="form-text">Select providers to attach. Sandboxes can also auto-create providers on demand.</div>

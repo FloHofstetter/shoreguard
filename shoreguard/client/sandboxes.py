@@ -261,6 +261,7 @@ class SandboxManager:
         providers: list[str] | None = None,
         gpu: bool = False,
         environment: dict[str, str] | None = None,
+        log_level: str = "",
     ) -> dict[str, Any]:
         """Create a new sandbox.
 
@@ -271,11 +272,16 @@ class SandboxManager:
             providers: Optional list of provider names.
             gpu: Whether to request GPU resources.
             environment: Optional environment variable key-value pairs.
+            log_level: Sandbox-supervisor log verbosity. Empty string
+                (default) means the gateway's default level. Accepted
+                values upstream: ``debug``, ``info``, ``warn``, ``error``.
 
         Returns:
             dict[str, Any]: Created sandbox data dict.
         """
         spec = openshell_pb2.SandboxSpec(gpu=gpu)
+        if log_level:
+            spec.log_level = log_level
         if image:
             spec.template.CopyFrom(openshell_pb2.SandboxTemplate(image=image))
         if providers:
