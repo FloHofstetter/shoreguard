@@ -63,6 +63,7 @@ function ruleDetailPage(sandboxName, ruleKey) {
                 tls: ep.tls || '',
                 enforcement: ep.enforcement || '',
                 access: ep.access || '',
+                allow_encoded_slash: !!ep.allow_encoded_slash,
                 rules: (ep.rules || []).map(r => this._mapL7Rule(r)),
             }));
             this.editing = true;
@@ -93,6 +94,7 @@ function ruleDetailPage(sandboxName, ruleKey) {
                 tls: '',
                 enforcement: '',
                 access: '',
+                allow_encoded_slash: false,
                 rules: [],
             };
         },
@@ -146,6 +148,7 @@ function ruleDetailPage(sandboxName, ruleKey) {
                     if (ep.tls) o.tls = ep.tls;
                     if (ep.enforcement) o.enforcement = ep.enforcement;
                     if (ep.access) o.access = ep.access;
+                    if (ep.allow_encoded_slash) o.allow_encoded_slash = true;
                     const rules = (ep.rules || [])
                         .filter(r => r.method || r.path || r.command)
                         .map(r => {
