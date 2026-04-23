@@ -207,6 +207,7 @@ def test_create_with_gpu(sandbox_svc, mock_client):
         gpu=True,
         providers=None,
         environment=None,
+        log_level="",
     )
 
 
@@ -222,6 +223,7 @@ def test_create_with_environment(sandbox_svc, mock_client):
         gpu=False,
         providers=None,
         environment={"FOO": "bar"},
+        log_level="",
     )
 
 
@@ -237,6 +239,7 @@ def test_create_with_providers(sandbox_svc, mock_client):
         gpu=False,
         providers=["prov-1", "prov-2"],
         environment=None,
+        log_level="",
     )
 
 

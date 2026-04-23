@@ -872,15 +872,23 @@ def test_wait_ready_checks_phase_exactly():
     m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
-    # Use a tight deadline so it times out fast
+    # Use a tight deadline so it times out fast. Prometheus may call
+    # ``time.time()`` internally when a new histogram label is observed
+    # for the first time (lazy ``_metric_init``), so we give it a
+    # stateful clock rather than a tight iterator: start at 0, flip past
+    # the deadline on the second observed-phase check.
     original_time = _time.time
-    times = iter([0, 1, 100])  # 3rd call past deadline
+    state = {"calls": 0}
+
+    def _fake_time() -> float:
+        state["calls"] += 1
+        return 0.0 if state["calls"] < 8 else 100.0
 
     with pytest.raises(TimeoutError):
         import time
 
         time.sleep = lambda _: None
-        time.time = lambda: next(times)
+        time.time = _fake_time
         try:
             m.wait_ready("sb1", timeout_seconds=5)
         finally:
