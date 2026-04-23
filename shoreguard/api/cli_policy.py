@@ -189,6 +189,14 @@ def apply_cmd(
         str | None,
         typer.Option("--expected-version", help="Optimistic-lock etag override"),
     ] = None,
+    mode: Annotated[
+        str,
+        typer.Option(
+            "--mode",
+            help="Apply mode: 'replace' (full rewrite) or 'merge' "
+            "(incremental network-rule delta, requires OpenShell ≥ v0.0.33)",
+        ),
+    ] = "replace",
     url: Annotated[str | None, typer.Option("--url")] = None,
 ) -> None:
     """Apply a YAML policy. Exits 1 on drift-but-not-applied or vote recorded.
@@ -199,14 +207,22 @@ def apply_cmd(
         file: YAML file path (or ``-`` for stdin).
         dry_run: When true, plan without writing.
         expected_version: Optional optimistic-lock etag override.
+        mode: Apply mode — ``replace`` (default) or ``merge``.
         url: ShoreGuard base URL override.
 
     Raises:
-        typer.Exit: Exit code 1 on drift / vote recorded, 2 on HTTP error.
+        typer.Exit: Exit code 1 on drift / vote recorded, 2 on HTTP error
+            or invalid mode.
     """
+    if mode not in ("replace", "merge"):
+        typer.echo(
+            f"error: invalid --mode {mode!r}; expected 'replace' or 'merge'",
+            err=True,
+        )
+        raise typer.Exit(code=2)
     base = _resolve_url(url)
     yaml_text = _read_yaml(file)
-    payload: dict[str, Any] = {"yaml": yaml_text, "dry_run": dry_run}
+    payload: dict[str, Any] = {"yaml": yaml_text, "dry_run": dry_run, "mode": mode}
     if expected_version:
         payload["expected_version"] = expected_version
     resp = _request(

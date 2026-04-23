@@ -118,6 +118,93 @@ class TestApplyDryRun:
         assert mock_client.policies.update.called
 
 
+class TestApplyMergeMode:
+    """mode=merge uses PolicyMergeOperation instead of a full rewrite."""
+
+    async def test_merge_mode_sends_merge_ops(self, api_client, mock_client):
+        _set_policy(
+            mock_client,
+            policy={
+                "filesystem": {"include_workdir": True, "read_only": ["/usr"], "read_write": []},
+                "process": {"run_as_user": "app", "run_as_group": "app"},
+                "network_policies": {
+                    "legacy": {"name": "legacy", "endpoints": [], "binaries": []},
+                },
+            },
+        )
+        mock_client.policies.apply_merge_operations.return_value = {
+            "version": 6,
+            "policy_hash": "sha256:merged",
+        }
+        body_yaml = (
+            "metadata:\n  gateway: test\n  sandbox: sb1\n"
+            "policy:\n"
+            "  filesystem: {include_workdir: true, read_only: [/usr], read_write: []}\n"
+            "  process: {run_as_user: app, run_as_group: app}\n"
+            "  network_policies:\n"
+            "    allow-gh: {name: allow-gh, endpoints: [{host: api.github.com, port: 443}]}\n"
+        )
+        resp = await api_client.post(
+            APPLY_URL, json={"yaml": body_yaml, "dry_run": False, "mode": "merge"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "applied"
+        # Merge path invoked; full-rewrite update was NOT.
+        assert mock_client.policies.apply_merge_operations.called
+        assert not mock_client.policies.update.called
+        ops = mock_client.policies.apply_merge_operations.call_args[0][1]
+        types = [op["type"] for op in ops]
+        # Legacy rule removed, allow-gh added, in that order.
+        assert types == ["remove_rule", "add_rule"]
+        assert ops[0]["rule_name"] == "legacy"
+        assert ops[1]["rule_name"] == "allow-gh"
+
+    async def test_merge_mode_rejects_filesystem_changes_400(self, api_client, mock_client):
+        _set_policy(
+            mock_client,
+            policy={
+                "filesystem": {"include_workdir": True, "read_only": ["/usr"], "read_write": []},
+                "process": {"run_as_user": "app", "run_as_group": "app"},
+                "network_policies": {},
+            },
+        )
+        body_yaml = (
+            "metadata:\n  gateway: test\n  sandbox: sb1\n"
+            "policy:\n"
+            "  filesystem: {include_workdir: true, read_only: [/usr, /etc], read_write: []}\n"
+            "  process: {run_as_user: app, run_as_group: app}\n"
+            "  network_policies: {}\n"
+        )
+        resp = await api_client.post(
+            APPLY_URL, json={"yaml": body_yaml, "dry_run": False, "mode": "merge"}
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        # FastAPI wraps structured detail under "detail" when the handler
+        # passes dict detail to HTTPException; if a global error handler
+        # flattens it, accept either shape so the test stays meaningful.
+        detail = body.get("detail") if isinstance(body.get("detail"), dict) else body
+        assert isinstance(detail, dict), f"unexpected 400 body: {body!r}"
+        assert detail.get("status") == "merge_unsupported" or "filesystem" in str(body)
+        assert not mock_client.policies.apply_merge_operations.called
+
+    async def test_replace_mode_default_preserves_behaviour(self, api_client, mock_client):
+        """Without mode=merge the handler continues to call .update() as before."""
+        _set_policy(mock_client)
+        mock_client.policies.update.return_value = {"version": 6, "policy_hash": "sha256:new"}
+        body_yaml = (
+            "metadata:\n  gateway: test\n  sandbox: sb1\n"
+            "policy:\n"
+            "  filesystem: {include_workdir: true, read_only: [/etc], read_write: []}\n"
+            "  process: {run_as_user: app, run_as_group: app}\n"
+            "  network_policies: {}\n"
+        )
+        resp = await api_client.post(APPLY_URL, json={"yaml": body_yaml, "dry_run": False})
+        assert resp.status_code == 200
+        assert mock_client.policies.update.called
+        assert not mock_client.policies.apply_merge_operations.called
+
+
 class TestApplyValidation:
     async def test_malformed_yaml_400(self, api_client, mock_client):
         _set_policy(mock_client)

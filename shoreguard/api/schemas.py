@@ -7,7 +7,7 @@ the auto-generated OpenAPI schema includes typed response definitions.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -636,11 +636,20 @@ class PolicyApplyRequest(BaseModel):
         yaml: YAML document body (with optional metadata block).
         dry_run: When true, compute diff without writing.
         expected_version: Optional optimistic-lock etag (overrides metadata).
+        mode: Apply mode. ``replace`` (default) writes the full target
+            policy as one ``UpdateConfigRequest.policy`` message — the
+            historical behaviour. ``merge`` computes the rule-level
+            diff against the current policy and sends only the
+            resulting ``merge_operations`` (upstream OpenShell ≥
+            v0.0.33). ``merge`` mode is rejected when the diff touches
+            sections outside ``network_policies`` — callers should
+            retry with ``replace``.
     """
 
     yaml: str
     dry_run: bool = False
     expected_version: str | None = None
+    mode: Literal["replace", "merge"] = "replace"
 
 
 class PolicyApplyResponse(BaseModel):

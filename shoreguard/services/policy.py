@@ -147,6 +147,35 @@ class PolicyService:
         self._client.policies.update(sandbox_name, proto_policy)
         return self._client.policies.get(sandbox_name)
 
+    def update_merge(
+        self,
+        sandbox_name: str,
+        operations: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Apply incremental merge operations and return the fresh policy.
+
+        Thin wrapper over
+        :meth:`shoreguard.client.policies.PolicyManager.apply_merge_operations`
+        that reshapes the response into the same ``PolicyResponse``
+        envelope :meth:`update` returns, so route handlers can treat the
+        two write paths as interchangeable.
+
+        Args:
+            sandbox_name: Name of the sandbox.
+            operations: Ordered merge-operation dicts, as synthesised by
+                :func:`shoreguard.services.policy_merge_ops.compute_merge_operations`.
+
+        Returns:
+            dict[str, Any]: Updated policy response.
+        """
+        logger.info(
+            "Applying %d merge operation(s) for sandbox '%s'",
+            len(operations),
+            sandbox_name,
+        )
+        self._client.policies.apply_merge_operations(sandbox_name, operations)
+        return self._client.policies.get(sandbox_name)
+
     def get_version(self, sandbox_name: str, version: int) -> dict[str, Any]:
         """Get a specific policy revision by version number.
 

@@ -52,6 +52,10 @@ from shoreguard.services.audit import audit_log
 from shoreguard.services.policy import PolicyService
 from shoreguard.services.policy_diff import diff_policy, is_empty
 from shoreguard.services.policy_diff import summary as diff_summary
+from shoreguard.services.policy_merge_ops import (
+    UnsupportedMergeError,
+    compute_merge_operations,
+)
 from shoreguard.services.policy_yaml import (
     PolicyYamlError,
     parse_yaml,
@@ -489,7 +493,22 @@ async def apply_policy(
         )
 
     # ── Write branch ─────────────────────────────────────────────────────
-    result = await asyncio.to_thread(svc.update, name, new_policy)
+    merge_ops: list[dict[str, Any]] | None = None
+    if body.mode == "merge":
+        try:
+            merge_ops = compute_merge_operations(current_policy, new_policy)
+        except UnsupportedMergeError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "status": "merge_unsupported",
+                    "reason": str(exc),
+                    "hint": "retry with mode='replace' for changes outside network_policies",
+                },
+            ) from exc
+        result = await asyncio.to_thread(svc.update_merge, name, merge_ops)
+    else:
+        result = await asyncio.to_thread(svc.update, name, new_policy)
     new_hash = ""
     if isinstance(result, dict):
         rev = result.get("revision") or {}
@@ -506,6 +525,8 @@ async def apply_policy(
             "applied_version": new_hash,
             "diff_summary": diff_summary_payload,
             "via_workflow": workflow is not None,
+            "apply_mode": body.mode,
+            "merge_operation_count": (len(merge_ops) if merge_ops is not None else None),
         },
     )
     await fire_webhook(
