@@ -9,12 +9,127 @@ UNSAT = property holds.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import z3  # pyright: ignore[reportMissingTypeStubs]
 
 # Z3's type stubs are incomplete — Or/And/BoolVal return types are too broad.
 # pyright: reportReturnType=false, reportArgumentType=false, reportAssignmentType=false
+
+# ---------------------------------------------------------------------------
+# L7 path canonicalization (upstream parity, PR NVIDIA/OpenShell#878)
+# ---------------------------------------------------------------------------
+
+# RFC 3986 unreserved characters — always safe to percent-decode in a path.
+_UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+_PERCENT_RE = re.compile(r"%([0-9A-Fa-f]{2})")
+# Sentinel used to protect `%2F` through the slash-collapse / dot-segment
+# passes when allow_encoded_slash is set. Chosen from a range that raw
+# canonicalization input would already reject (control bytes).
+_ENCODED_SLASH_SENTINEL = "\x01"
+
+
+def canonicalize_request_path(
+    raw: str,
+    *,
+    allow_encoded_slash: bool = False,
+) -> str:
+    """Canonicalize a URL path for L7 policy evaluation.
+
+    Mirrors the upstream OpenShell canonicalizer
+    (``crates/openshell-sandbox/src/l7/path.rs``, landed in
+    `NVIDIA/OpenShell#878 <https://github.com/NVIDIA/OpenShell/pull/878>`_,
+    commit ``c960d480``) so the Z3 prover reasons about paths the same way
+    the gateway does at enforcement. Soundness of the pinning workflow
+    (M17 / M18) depends on this equivalence — if the prover thinks a
+    counterexample path is distinct from a canonically-equal path the
+    gateway would accept, pinning verdicts lie.
+
+    Behaviour (best-effort, pattern-friendly):
+
+    - Strip any ``?query`` and ``#fragment`` suffixes.
+    - Percent-decode unreserved bytes (RFC 3986 ``A-Za-z0-9-._~``);
+      re-emit others as uppercase ``%HH`` so case differences do not
+      create spurious mismatches.
+    - ``%2F`` is preserved literally when ``allow_encoded_slash=True``;
+      otherwise it decodes to ``/`` and then participates in slash
+      collapse like any other separator.
+    - Collapse runs of ``/`` to a single ``/``.
+    - Strip trailing ``;params`` from each segment (Tomcat-class ACL
+      bypass mitigation — upstream default).
+    - Resolve ``.`` and ``..`` segments per RFC 3986 §5.2.4. A ``..``
+      that would escape the root is clamped at the root rather than
+      raising; this is more permissive than the upstream enforcement
+      path (which rejects with 400) but correct for *pattern*
+      normalization, where authors can reasonably write redundant dot
+      segments.
+    - An empty or missing leading ``/`` is normalized to ``/``.
+
+    Args:
+        raw: Input path (or pattern) to canonicalize.
+        allow_encoded_slash: Endpoint-level opt-in for GitLab-style APIs
+            that embed ``%2F`` in namespaced resource paths.
+
+    Returns:
+        str: Canonicalized path. Always starts with ``/`` when the input
+        did; empty input is preserved (callers treat empty as "no path
+        constraint").
+    """
+    if not raw:
+        return raw
+    # Isolate the path component from origin- or absolute-form input.
+    path = raw
+    if "#" in path:
+        path = path.split("#", 1)[0]
+    if "?" in path:
+        path = path.split("?", 1)[0]
+    if not path:
+        return "/"
+
+    # Percent-decoding stage. %2F handling depends on allow_encoded_slash.
+    def _decode(match: re.Match[str]) -> str:
+        hexbyte = match.group(1).upper()
+        if hexbyte == "2F":
+            return _ENCODED_SLASH_SENTINEL if allow_encoded_slash else "/"
+        try:
+            byte = int(hexbyte, 16)
+        except ValueError:  # pragma: no cover - regex guarantees hex
+            return match.group(0)
+        char = chr(byte)
+        if char in _UNRESERVED:
+            return char
+        return f"%{hexbyte}"
+
+    path = _PERCENT_RE.sub(_decode, path)
+
+    # Ensure leading slash for path-absolute targets. Pattern authors
+    # sometimes omit it; upstream would reject, but for the prover we
+    # normalize silently.
+    if not path.startswith("/"):
+        path = "/" + path
+
+    # Split, strip `;params`, collapse empties, resolve dot-segments.
+    resolved: list[str] = []
+    for segment in path.split("/"):
+        # `;param` strip happens per segment, including empty ones.
+        if ";" in segment:
+            segment = segment.split(";", 1)[0]
+        if segment == "" or segment == ".":
+            continue
+        if segment == "..":
+            if resolved:
+                resolved.pop()
+            # else: `..` at root — clamp, don't escape.
+            continue
+        resolved.append(segment)
+
+    canonical = "/" + "/".join(resolved)
+    # Restore %2F sentinels to literal %2F.
+    if allow_encoded_slash and _ENCODED_SLASH_SENTINEL in canonical:
+        canonical = canonical.replace(_ENCODED_SLASH_SENTINEL, "%2F")
+    return canonical
+
 
 # ---------------------------------------------------------------------------
 # Domain variables shared across queries
@@ -76,31 +191,57 @@ def encode_path_match(
     path_pattern: str,
     path_var: z3.SeqRef,
     *,
-    allow_encoded_slash: bool = False,  # noqa: ARG001 - consumed in WS3 canonicalization
+    allow_encoded_slash: bool = False,
 ) -> z3.BoolRef:
     """Encode a path pattern into a Z3 constraint.
 
-    ``/**`` or ``/*`` at the end maps to prefix match.  Otherwise exact match.
+    ``/**`` or ``/*`` at the end maps to prefix match.  Otherwise exact
+    match. Patterns are canonicalized via :func:`canonicalize_request_path`
+    first so author-side quirks (redundant dot segments, double slashes,
+    percent-encoded unreserved bytes, mixed-case ``%HH``) produce the same
+    Z3 constraint as their canonical equivalent. This is the soundness
+    anchor for the prover's L7 reasoning — the gateway canonicalizes
+    before policy evaluation (upstream PR #878), so a Z3 counterexample
+    must live in the canonical universe.
 
     Args:
         path_pattern: URL path pattern (may end with ``/**`` or ``/*``).
         path_var: Z3 string variable representing the request path.
-        allow_encoded_slash: If True, the endpoint preserves percent-encoded
-            slashes (``%2F``) in request paths. Currently plumbed through for
-            the upcoming L7 canonicalization (WS3); no behavioural difference
-            yet.
+        allow_encoded_slash: When True, ``%2F`` inside the pattern is
+            preserved as a literal ``%2F`` byte sequence (GitLab-style
+            endpoints). When False (default), ``%2F`` decodes to ``/``
+            and collapses with surrounding slashes.
 
     Returns:
         z3.BoolRef: Constraint that ``path_var`` matches the pattern.
     """
+    # Glob suffix handling predates canonicalization: strip the glob, then
+    # canonicalize the prefix, then rebuild. Canonicalizing `/api/**` as a
+    # whole would drop the trailing `**` into the dot-segment resolver
+    # (which would treat `**` as a literal segment — correct, but
+    # accidentally collapses `/api/*` to `/api` because the trailing `*`
+    # looks like nothing). Treat the glob as a grammar marker.
     if path_pattern.endswith("/**"):
-        prefix = path_pattern[:-2]  # "/foo" from "/foo/**"
+        prefix = canonicalize_request_path(
+            path_pattern[:-2] or "/",  # "/foo" from "/foo/**"; "/" from "/**"
+            allow_encoded_slash=allow_encoded_slash,
+        )
         return z3.Or(
-            z3.PrefixOf(z3.StringVal(prefix + "/"), path_var),
-            path_var == z3.StringVal(prefix),
+            z3.PrefixOf(
+                z3.StringVal(prefix.rstrip("/") + "/"),
+                path_var,
+            ),
+            path_var == z3.StringVal(prefix.rstrip("/") or "/"),
         )
     if path_pattern.endswith("/*"):
-        prefix = path_pattern[:-1]  # "/foo/" from "/foo/*"
+        prefix = canonicalize_request_path(
+            path_pattern[:-1] or "/",  # "/foo/" from "/foo/*"; "/" from "/*"
+            allow_encoded_slash=allow_encoded_slash,
+        )
+        # Re-add the trailing slash the canonicalizer strips from bare
+        # directory prefixes.
+        if not prefix.endswith("/"):
+            prefix = prefix + "/"
         return z3.And(
             z3.PrefixOf(z3.StringVal(prefix), path_var),
             # No further '/' after the prefix (single segment)
@@ -111,7 +252,8 @@ def encode_path_match(
                 )
             ),
         )
-    return path_var == z3.StringVal(path_pattern)
+    canonical = canonicalize_request_path(path_pattern, allow_encoded_slash=allow_encoded_slash)
+    return path_var == z3.StringVal(canonical)
 
 
 def encode_network_policy(policy: dict[str, Any], v: NetVars) -> z3.BoolRef:
