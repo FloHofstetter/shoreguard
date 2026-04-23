@@ -413,6 +413,13 @@ class SandboxResponse(BaseModel):
         gpu (bool | None): Whether the sandbox has GPU access.
         description (str | None): Human-readable sandbox description.
         labels (dict[str, str] | None): Label key/value pairs.
+        current_policy_version (int | None): Revision of the policy
+            currently loaded by the sandbox supervisor. May differ from
+            the configured revision in the policy-pinning workflow
+            (M18) when an approval has just been applied but the
+            supervisor has not reported back yet. Set from the gateway's
+            ``Sandbox.current_policy_version`` field; omitted when the
+            gateway does not expose it.
     """
 
     model_config = ConfigDict(extra="allow")
@@ -424,6 +431,7 @@ class SandboxResponse(BaseModel):
     gpu: bool | None = None
     description: str | None = None
     labels: dict[str, str] | None = None
+    current_policy_version: int | None = None
 
 
 class SandboxDeleteResponse(BaseModel):

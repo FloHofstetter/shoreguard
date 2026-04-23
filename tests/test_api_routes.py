@@ -151,6 +151,35 @@ async def test_get_sandbox(api_client, mock_client):
     assert resp.json()["name"] == "sb1"
 
 
+async def test_get_sandbox_surfaces_current_policy_version(api_client, mock_client):
+    """GET /api/gateways/{gw}/sandboxes/{name} forwards the gateway's
+    current_policy_version field so the M18 pinning UI can compare
+    configured vs. actively-loaded policy revisions."""
+    mock_client.sandboxes.get.return_value = {
+        "name": "sb1",
+        "phase": "ready",
+        "current_policy_version": 42,
+    }
+
+    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/sb1")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "sb1"
+    assert body["current_policy_version"] == 42
+
+
+async def test_get_sandbox_current_policy_version_absent_is_none(api_client, mock_client):
+    """Gateways that do not expose current_policy_version produce a None
+    field in the REST response (distinguishable from a zero revision)."""
+    mock_client.sandboxes.get.return_value = {"name": "sb1", "phase": "ready"}
+
+    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/sb1")
+
+    assert resp.status_code == 200
+    assert resp.json().get("current_policy_version") is None
+
+
 async def test_delete_sandbox(api_client, mock_client):
     """DELETE /api/gateways/{gw}/sandboxes/{name} deletes a sandbox."""
     mock_client.sandboxes.delete.return_value = True
