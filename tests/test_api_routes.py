@@ -190,6 +190,56 @@ async def test_delete_sandbox(api_client, mock_client):
     assert resp.json()["deleted"] is True
 
 
+async def test_get_sandbox_config_passes_through(api_client, mock_client):
+    """GET /sandboxes/{name}/config resolves name → id, calls the
+    gateway's GetSandboxConfig, and returns the raw dict so callers
+    can see exactly what the gateway has stored."""
+    mock_client.sandboxes.get.return_value = {"id": "sb-id-1", "name": "sb1"}
+    mock_client.sandboxes.get_config.return_value = {
+        "spec": {"gpu": True, "providers": ["anthropic"]},
+        "policy_hash": "sha256:abc",
+    }
+
+    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/sb1/config")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["policy_hash"] == "sha256:abc"
+    assert body["spec"]["gpu"] is True
+    # Lookup sent the id through to the RPC stub.
+    mock_client.sandboxes.get_config.assert_called_once_with("sb-id-1")
+
+
+async def test_get_sandbox_provider_env_redacts_values(api_client, mock_client):
+    """GET /sandboxes/{name}/provider-env returns keys with redacted
+    values so a compromised web client cannot leak credentials."""
+    mock_client.sandboxes.get.return_value = {"id": "sb-id-1", "name": "sb1"}
+    raw_fixture_value = "FAKE_TEST_SECRET_DO_NOT_USE"  # pragma: allowlist secret
+    mock_client.sandboxes.get_provider_environment.return_value = {
+        "ANTHROPIC_API_KEY": raw_fixture_value,
+        "OPENAI_ORG_ID": "org-abc",
+    }
+
+    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/sb1/provider-env")
+
+    assert resp.status_code == 200
+    env = resp.json()["env"]
+    assert env == {"ANTHROPIC_API_KEY": "[REDACTED]", "OPENAI_ORG_ID": "[REDACTED]"}
+    # The raw value never reached the response.
+    assert raw_fixture_value not in resp.text
+
+
+async def test_get_sandbox_provider_env_empty(api_client, mock_client):
+    """An empty env map returns an empty dict, not a missing field."""
+    mock_client.sandboxes.get.return_value = {"id": "sb-id-1", "name": "sb1"}
+    mock_client.sandboxes.get_provider_environment.return_value = {}
+
+    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/sb1/provider-env")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"env": {}}
+
+
 async def test_get_nonexistent_sandbox(api_client, mock_client):
     """GET /api/gateways/{gw}/sandboxes/{name} returns 404 for unknown sandbox."""
     mock_client.sandboxes.get.side_effect = NotFoundError("Sandbox not found")

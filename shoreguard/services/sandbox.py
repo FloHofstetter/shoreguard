@@ -231,6 +231,43 @@ class SandboxService:
         sandbox = self._client.sandboxes.get(name)
         return self._client.sandboxes.create_ssh_session(sandbox["id"])
 
+    def get_config(self, name: str) -> dict[str, Any]:
+        """Get the stored sandbox configuration from the gateway.
+
+        Resolves name to sandbox id, then calls ``GetSandboxConfig``. The
+        returned dict is the gateway-side spec (policy, providers,
+        template, etc.) as the gateway currently has it recorded — the
+        source of truth for "what is this sandbox configured with" in the
+        pinning / GitOps workflow.
+
+        Args:
+            name: Sandbox name.
+
+        Returns:
+            dict[str, Any]: Sandbox configuration as returned by the
+                gateway.
+        """
+        sandbox = self._client.sandboxes.get(name)
+        return self._client.sandboxes.get_config(sandbox["id"])
+
+    def get_provider_environment(self, name: str) -> dict[str, str]:
+        """Get the provider environment variables injected into a sandbox.
+
+        Resolves name to sandbox id, then calls
+        ``GetSandboxProviderEnvironment``. Returns the env map the
+        gateway will hand to the sandbox's runtime when it launches.
+        Values may be secret — callers that surface this over REST
+        should redact against the shared secret-key pattern.
+
+        Args:
+            name: Sandbox name.
+
+        Returns:
+            dict[str, str]: Environment key-value pairs.
+        """
+        sandbox = self._client.sandboxes.get(name)
+        return self._client.sandboxes.get_provider_environment(sandbox["id"])
+
     def revoke_ssh_session(self, token: str) -> bool:
         """Revoke an active SSH session by token.
 

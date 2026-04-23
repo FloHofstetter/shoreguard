@@ -32,7 +32,9 @@ from shoreguard.api.lro import run_lro
 from shoreguard.api.schemas import (
     LogEntryResponse,
     PaginatedResponse,
+    SandboxConfigResponse,
     SandboxDeleteResponse,
+    SandboxProviderEnvResponse,
     SandboxResponse,
     SshRevokeResponse,
     SshSessionResponse,
@@ -385,6 +387,58 @@ async def update_sandbox_metadata(
     logger.info("Sandbox metadata updated (sandbox=%s, actor=%s)", name, get_actor(request))
     await audit_log(request, "sandbox.metadata.update", "sandbox", name, gateway=gw)
     return result
+
+
+@router.get("/{name}/config", response_model=SandboxConfigResponse)
+async def get_sandbox_config(
+    name: str,
+    request: Request,
+    svc: SandboxService = Depends(_get_sandbox_service),
+) -> dict[str, Any]:
+    """Get the gateway-side stored configuration for a sandbox.
+
+    Calls ``GetSandboxConfig`` against the gateway and passes the result
+    through. Use this to answer "what is this sandbox configured with
+    right now on the gateway" — useful for pinning workflows and GitOps
+    drift detection. For the REST-level sandbox record (labels,
+    description, current_policy_version), use ``GET /{name}``.
+
+    Args:
+        name: Sandbox name.
+        request: Incoming HTTP request.
+        svc: Injected sandbox service.
+
+    Returns:
+        dict[str, Any]: Sandbox configuration as returned by the gateway.
+    """
+    del request  # only accepted to match the route-dependency shape
+    return await asyncio.to_thread(svc.get_config, name)
+
+
+@router.get("/{name}/provider-env", response_model=SandboxProviderEnvResponse)
+async def get_sandbox_provider_env(
+    name: str,
+    request: Request,
+    svc: SandboxService = Depends(_get_sandbox_service),
+) -> dict[str, dict[str, str]]:
+    """Get the provider environment-variable keys this sandbox receives.
+
+    Returns the env map the gateway will hand to the sandbox's runtime,
+    with all values redacted to ``[REDACTED]``. To understand *where* a
+    key's value originates (credential vs. config), cross-reference with
+    ``GET /providers/{name}/env``.
+
+    Args:
+        name: Sandbox name.
+        request: Incoming HTTP request.
+        svc: Injected sandbox service.
+
+    Returns:
+        dict[str, dict[str, str]]: ``{"env": {key: "[REDACTED]"}}``.
+    """
+    del request
+    raw = await asyncio.to_thread(svc.get_provider_environment, name)
+    return {"env": dict.fromkeys(raw, "[REDACTED]")}
 
 
 @router.delete(

@@ -444,6 +444,39 @@ class SandboxDeleteResponse(BaseModel):
     deleted: bool
 
 
+class SandboxConfigResponse(BaseModel):
+    """Stored sandbox configuration as held by the gateway.
+
+    The gateway returns a protobuf-derived dict whose fields depend on the
+    pinned OpenShell version. We pass it through verbatim under
+    ``extra="allow"`` so a future upstream field (e.g. new policy
+    section, new template knob) reaches the REST surface without a
+    schema bump.
+
+    Attributes:
+        model_config (ConfigDict): Pydantic config (extra fields allowed).
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+
+class SandboxProviderEnvResponse(BaseModel):
+    """Environment-variable keys the gateway injects into this sandbox.
+
+    Values are always redacted. Use ``GET /providers/{name}/env`` for
+    provider-level context on *where* a key comes from (credential vs.
+    config). This endpoint is the sandbox-scoped version — what this
+    specific sandbox actually receives at runtime.
+
+    Attributes:
+        env (dict[str, str]): Key → ``"[REDACTED]"`` map. An empty dict
+            means the gateway has no provider environment to inject for
+            this sandbox.
+    """
+
+    env: dict[str, str]
+
+
 class SshSessionResponse(BaseModel):
     """SSH session details.
 
