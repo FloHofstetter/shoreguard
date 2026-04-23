@@ -14,6 +14,7 @@ warm-up commands inside a sandbox once it has been created.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -51,6 +52,68 @@ PHASE_NAMES = {
     4: "deleting",
     5: "unknown",
 }
+
+
+# ---------------------------------------------------------------------------
+# CreateSshSessionResponse charset contract (upstream parity, PR #876)
+# ---------------------------------------------------------------------------
+#
+# Each regex mirrors the charset documented on the corresponding
+# ``CreateSshSessionResponse`` field in ``openshell.proto`` after
+# `NVIDIA/OpenShell#876 <https://github.com/NVIDIA/OpenShell/pull/876>`_.
+# The gateway holds the contract; ShoreGuard re-checks as
+# defence-in-depth because the fields are interpolated into an SSH
+# ``ProxyCommand`` that OpenSSH executes via ``/bin/sh -c``, so any
+# single shell metacharacter that leaks through is a command-injection
+# primitive.
+
+_SSH_SANDBOX_ID_RE = re.compile(r"^[A-Za-z0-9._\-]{1,128}$")
+_SSH_TOKEN_RE = re.compile(r"^[A-Za-z0-9._~+/=\-]{1,4096}$")
+# Conservative approximation of an RFC 3986 host: IPv4, bracketed IPv6,
+# or DNS-Punycode (which is alphanumeric + `.-`). No `@`, no `/`, no
+# whitespace, no shell metacharacters.
+_SSH_GATEWAY_HOST_RE = re.compile(r"^[A-Za-z0-9.\-:\[\]]{1,253}$")
+# RFC 3986 path-absolute, plus `%HH` sequences. Rejects `?`, `#`,
+# whitespace, backtick, backslash — anything that could break out of
+# the ProxyCommand URL grammar.
+_SSH_CONNECT_PATH_RE = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@/%\-]*$")
+_SSH_FINGERPRINT_RE = re.compile(r"^[A-Za-z0-9:+/=\-]+$")
+_SSH_ALLOWED_SCHEMES = frozenset({"http", "https"})
+
+
+def _validate_ssh_session_response(resp: Any) -> None:
+    """Enforce the upstream CreateSshSessionResponse charset contract.
+
+    Args:
+        resp: Protobuf response message returned by the gateway.
+
+    Raises:
+        SandboxError: If any field is outside the documented charset or
+            numeric range. The offending field name is surfaced but the
+            value is *not* logged — a violating payload may itself be an
+            injection attempt.
+    """
+    violation: str | None = None
+    if not _SSH_SANDBOX_ID_RE.match(resp.sandbox_id or ""):
+        violation = "sandbox_id"
+    elif not _SSH_TOKEN_RE.match(resp.token or ""):
+        violation = "token"
+    elif not _SSH_GATEWAY_HOST_RE.match(resp.gateway_host or ""):
+        violation = "gateway_host"
+    elif not 1 <= int(resp.gateway_port) <= 65535:
+        violation = "gateway_port"
+    elif resp.gateway_scheme not in _SSH_ALLOWED_SCHEMES:
+        violation = "gateway_scheme"
+    elif not _SSH_CONNECT_PATH_RE.match(resp.connect_path or ""):
+        violation = "connect_path"
+    # host_key_fingerprint is optional — empty string is valid.
+    elif resp.host_key_fingerprint and not _SSH_FINGERPRINT_RE.match(resp.host_key_fingerprint):
+        violation = "host_key_fingerprint"
+    if violation is not None:
+        raise SandboxError(
+            "ssh session response violates upstream charset contract "
+            f"(field={violation}); refusing to surface response"
+        )
 
 
 def _sandbox_to_dict(sb: openshell_pb2.Sandbox) -> dict[str, Any]:
@@ -394,8 +457,23 @@ class SandboxManager:
     def create_ssh_session(self, sandbox_id: str) -> dict[str, Any]:
         """Create a temporary SSH session for shell access to a sandbox.
 
+        The upstream gateway holds a documented charset contract on every
+        response field (see ``CreateSshSessionResponse`` in
+        ``openshell.proto``, tightened in
+        `NVIDIA/OpenShell#876 <https://github.com/NVIDIA/OpenShell/pull/876>`_).
+        The fields flow into an SSH ``ProxyCommand`` string executed
+        through ``/bin/sh -c`` on the caller's workstation, so anything
+        outside the contract is a ProxyCommand-injection vector.
+        ShoreGuard enforces the same contract client-side as
+        defence-in-depth: a compromised or misconfigured gateway cannot
+        push shell metacharacters into ShoreGuard's REST response.
+
         Args:
             sandbox_id: Sandbox identifier.
+
+        :func:`_validate_ssh_session_response` raises
+        :class:`SandboxError` before the response can escape if any field
+        is outside the documented charset or numeric range.
 
         Returns:
             dict[str, Any]: SSH session details including token and
@@ -408,6 +486,7 @@ class SandboxManager:
                 timeout=self._timeout,
             ),
         )
+        _validate_ssh_session_response(resp)
         return {
             "sandbox_id": resp.sandbox_id,
             "token": resp.token,

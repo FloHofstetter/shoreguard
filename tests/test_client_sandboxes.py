@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -725,6 +726,96 @@ def test_create_ssh_session_all_fields(mgr, stub):
     assert result["expires_at_ms"] == 9999
 
 
+# ─── create_ssh_session() charset contract (upstream #876 parity) ──────────
+
+
+def _ssh_response(**overrides: Any) -> SimpleNamespace:
+    """Return a clean CreateSshSessionResponse with targeted overrides."""
+    baseline = {
+        "sandbox_id": "abc",
+        "token": "tok-xyz",
+        "gateway_host": "127.0.0.1",
+        "gateway_port": 8080,
+        "gateway_scheme": "https",
+        "connect_path": "/connect",
+        "host_key_fingerprint": "SHA256:x",
+        "expires_at_ms": 9999,
+    }
+    baseline.update(overrides)
+    return SimpleNamespace(**baseline)
+
+
+def _mgr_with_ssh_response(resp: SimpleNamespace) -> SandboxManager:
+    stub = SimpleNamespace(CreateSshSession=lambda req, timeout=None: resp)
+    m = object.__new__(SandboxManager)
+    m._stub = stub  # type: ignore[assignment]
+    m._timeout = 30.0
+    return m
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        # Command-injection vectors on sandbox_id.
+        ("sandbox_id", "abc; rm -rf /"),
+        ("sandbox_id", "abc`whoami`"),
+        ("sandbox_id", ""),
+        ("sandbox_id", "x" * 129),
+        # Token with shell metacharacters.
+        ("token", "tok xyz"),
+        ("token", "tok;rm"),
+        ("token", "tok`whoami`"),
+        ("token", ""),
+        ("token", "a" * 4097),
+        # gateway_host with @ (would reshape URL userinfo).
+        ("gateway_host", "evil@127.0.0.1"),
+        ("gateway_host", "127.0.0.1 && curl evil.com"),
+        ("gateway_host", ""),
+        # Invalid ports.
+        ("gateway_port", 0),
+        ("gateway_port", 65536),
+        ("gateway_port", -1),
+        # Unexpected schemes.
+        ("gateway_scheme", "ssh"),
+        ("gateway_scheme", "file"),
+        ("gateway_scheme", ""),
+        # Query / fragment / whitespace in connect_path.
+        ("connect_path", "/connect?shell=/bin/bash"),
+        ("connect_path", "/connect#frag"),
+        ("connect_path", "/connect space"),
+        ("connect_path", "connect"),  # missing leading slash
+        ("connect_path", "/connect`whoami`"),
+        # Fingerprint with shell chars.
+        ("host_key_fingerprint", "SHA256:x;echo pwned"),
+    ],
+)
+def test_create_ssh_session_rejects_charset_violations(field: str, value: Any) -> None:
+    mgr = _mgr_with_ssh_response(_ssh_response(**{field: value}))
+    with pytest.raises(SandboxError, match=r"ssh session response violates"):
+        mgr.create_ssh_session("abc")
+
+
+def test_create_ssh_session_accepts_empty_host_key_fingerprint() -> None:
+    """An absent fingerprint is valid (opt-in field per upstream)."""
+    mgr = _mgr_with_ssh_response(_ssh_response(host_key_fingerprint=""))
+    result = mgr.create_ssh_session("abc")
+    assert result["host_key_fingerprint"] == ""
+
+
+def test_create_ssh_session_accepts_bracketed_ipv6_host() -> None:
+    """Bracketed IPv6 is RFC-3986-valid host syntax."""
+    mgr = _mgr_with_ssh_response(_ssh_response(gateway_host="[::1]"))
+    result = mgr.create_ssh_session("abc")
+    assert result["gateway_host"] == "[::1]"
+
+
+def test_create_ssh_session_accepts_percent_encoded_connect_path() -> None:
+    """RFC-3986 %HH escapes are permitted in connect_path."""
+    mgr = _mgr_with_ssh_response(_ssh_response(connect_path="/connect%20foo/bar"))
+    result = mgr.create_ssh_session("abc")
+    assert result["connect_path"] == "/connect%20foo/bar"
+
+
 # ─── wait_ready transitions ─────────────────────────────────────────────────
 
 
@@ -1218,8 +1309,13 @@ class TestWaitReadyMutations:
             m.wait_ready("my-sb")
 
     def test_wait_ready_timeout_message_contains_seconds(self, monkeypatch):
+        import itertools
+
         monkeypatch.setattr("time.sleep", lambda _: None)
-        times = iter([0, 1, 999])
+        # Prometheus label initialization in this worker consumes one or
+        # more time.time() calls depending on xdist-worker ordering;
+        # chain with an infinite 999 tail so exhaustion cannot happen.
+        times = itertools.chain([0, 1], itertools.repeat(999))
         monkeypatch.setattr("time.time", lambda: next(times))
 
         class _Stub(_FakeStub):
