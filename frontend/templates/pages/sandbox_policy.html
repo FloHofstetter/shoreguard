@@ -24,19 +24,45 @@
     <template x-if="!loading && !error && policy">
         <div>
             <!-- Pin banner -->
-            <div x-show="isPinned" x-cloak class="alert alert-warning d-flex align-items-center mb-3">
-                <i class="bi bi-lock-fill me-2 fs-5"></i>
+            <div x-show="isPinned" x-cloak
+                 class="alert d-flex align-items-center mb-3"
+                 :class="hasPinDrift ? 'alert-danger' : 'alert-warning'">
+                <i class="bi me-2 fs-5"
+                   :class="hasPinDrift ? 'bi-exclamation-triangle-fill' : 'bi-lock-fill'"></i>
                 <div class="flex-grow-1">
-                    <strong>Policy pinned</strong> at version <span x-text="pin?.pinned_version"></span>
-                    by <span x-text="pin?.pinned_by"></span>.
-                    <span x-show="pin?.reason" class="ms-1" x-text="pin?.reason"></span>
-                    <span x-show="pin?.expires_at" class="ms-1 text-muted small">
-                        (expires <span x-text="pin?.expires_at ? new Date(pin.expires_at).toLocaleString() : ''"></span>)
-                    </span>
+                    <strong x-text="hasPinDrift ? 'Policy drift detected' : 'Policy pinned'"></strong>
+                    <template x-if="!hasPinDrift">
+                        <span>
+                            at version <span x-text="pinnedVersion ?? '?'"></span>
+                            by <span x-text="pin?.pinned_by"></span>.
+                            <span x-show="pin?.reason" class="ms-1" x-text="pin?.reason"></span>
+                            <span x-show="pin?.expires_at" class="ms-1 text-muted small">
+                                (expires <span x-text="pin?.expires_at ? new Date(pin.expires_at).toLocaleString() : ''"></span>)
+                            </span>
+                        </span>
+                    </template>
+                    <template x-if="hasPinDrift">
+                        <span>
+                            Pinned at <span class="badge text-bg-warning" x-text="'v' + pinnedVersion"></span>
+                            but supervisor is loaded on
+                            <span class="badge text-bg-danger" x-text="'v' + activeVersion"></span>.
+                            The pinned revision has not yet been enforced on the sandbox.
+                            <span x-show="pin?.reason" class="ms-1 small" x-text="'(' + pin.reason + ')'"></span>
+                        </span>
+                    </template>
                 </div>
                 <button class="btn btn-sm btn-outline-warning ms-2" @click="unpinPolicy()">
                     <i class="bi bi-unlock me-1"></i>Unpin
                 </button>
+            </div>
+
+            <!-- No-pin active-version badge (when not pinned, show the active revision so operators can cross-check) -->
+            <div x-show="!isPinned && activeVersion !== null" x-cloak class="mb-3">
+                <span class="text-muted small">
+                    <i class="bi bi-activity me-1"></i>
+                    Supervisor-loaded revision:
+                    <span class="badge text-bg-secondary" x-text="'v' + activeVersion"></span>
+                </span>
             </div>
 
             <div class="d-flex justify-content-between align-items-center mb-4">

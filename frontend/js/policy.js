@@ -39,8 +39,21 @@ function policyPage(name) {
         pinning: false,
         pinReason: '',
         pinExpiresAt: '',
+        // Active policy version reported by the supervisor (M18 drift check)
+        activeVersion: null,
 
         get isPinned() { return this.pin !== null; },
+        get pinnedVersion() {
+            return this.pin && this.pin.pinned_version != null
+                ? Number(this.pin.pinned_version)
+                : null;
+        },
+        get hasPinDrift() {
+            return this.isPinned
+                && this.pinnedVersion !== null
+                && this.activeVersion !== null
+                && this.pinnedVersion !== this.activeVersion;
+        },
 
         async init() {
             await this.load();
@@ -50,9 +63,10 @@ function policyPage(name) {
             this.loading = true;
             this.error = '';
             try {
-                const [policyData, pinData] = await Promise.allSettled([
+                const [policyData, pinData, sbData] = await Promise.allSettled([
                     apiFetch(`${API}/sandboxes/${name}/policy`),
                     apiFetch(`${API}/sandboxes/${name}/policy/pin`),
+                    apiFetch(`${API}/sandboxes/${name}`),
                 ]);
 
                 if (policyData.status === 'fulfilled') {
@@ -68,6 +82,15 @@ function policyPage(name) {
 
                 // Pin: 404 = not pinned (expected), anything else is an error
                 this.pin = pinData.status === 'fulfilled' ? pinData.value : null;
+
+                // current_policy_version is the supervisor-reported active
+                // revision; surfaced on GET /sandboxes/{name} since M32/WS5.
+                if (sbData.status === 'fulfilled' && sbData.value) {
+                    const v = sbData.value.current_policy_version;
+                    this.activeVersion = v == null ? null : Number(v);
+                } else {
+                    this.activeVersion = null;
+                }
             } catch (e) {
                 this.error = e.message;
             } finally {
