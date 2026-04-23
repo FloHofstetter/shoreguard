@@ -318,6 +318,93 @@
                     </button>
                     <span x-show="saveOutput" class="small" x-html="saveOutput"></span>
                 </div>
+
+                <!-- ── Advanced Settings (raw key-value editor) ── -->
+                <fieldset x-show="gwConnected" x-cloak class="sg-fieldset mb-3 mt-3"
+                          x-data="gatewayAdvancedSettings" x-effect="maybeLoad(gw)">
+                    <legend class="sg-legend d-flex align-items-center">
+                        <button class="btn btn-sm btn-link text-decoration-none p-0 me-2"
+                                @click="expanded = !expanded">
+                            <i class="bi" :class="expanded ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                        </button>
+                        Advanced Settings
+                        <span class="badge text-bg-secondary ms-2" x-show="!loading"
+                              x-text="Object.keys(rows).length"></span>
+                    </legend>
+                    <div x-show="expanded" x-transition x-cloak>
+                        <div class="alert alert-warning small mb-3">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                            Changing settings bypasses validation ShoreGuard cannot
+                            perform. The gateway will reject unknown keys or invalid
+                            values — the error text below will tell you which.
+                        </div>
+                        <div x-show="loading" class="text-muted small">
+                            <div class="spinner-border spinner-border-sm me-2"></div>Loading settings…
+                        </div>
+                        <div x-show="!loading" x-cloak>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:30%">Key</th>
+                                            <th>Value</th>
+                                            <th style="width:1%"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="key in Object.keys(rows).sort()" :key="key">
+                                            <tr>
+                                                <td class="font-monospace small" x-text="key"></td>
+                                                <td>
+                                                    <input class="form-control form-control-sm font-monospace"
+                                                           type="text"
+                                                           x-model="rows[key].draft"
+                                                           :disabled="!$isAdmin || rows[key].busy">
+                                                </td>
+                                                <td class="text-nowrap">
+                                                    <button class="btn btn-sm btn-outline-primary me-1"
+                                                            @click="saveKey(key)"
+                                                            :disabled="!$isAdmin || rows[key].busy || rows[key].draft === rows[key].current">
+                                                        <i class="bi bi-check-lg"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-danger"
+                                                            @click="deleteKey(key)"
+                                                            :disabled="!$isAdmin || rows[key].busy">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                        <tr>
+                                            <td>
+                                                <input class="form-control form-control-sm font-monospace"
+                                                       type="text"
+                                                       x-model="newKey"
+                                                       placeholder="new.setting.key"
+                                                       :disabled="!$isAdmin || adding">
+                                            </td>
+                                            <td>
+                                                <input class="form-control form-control-sm font-monospace"
+                                                       type="text"
+                                                       x-model="newValue"
+                                                       placeholder="value"
+                                                       :disabled="!$isAdmin || adding">
+                                            </td>
+                                            <td class="text-nowrap">
+                                                <button class="btn btn-sm btn-outline-success"
+                                                        @click="addKey()"
+                                                        :disabled="!$isAdmin || adding || !newKey.trim()">
+                                                    <i class="bi bi-plus-lg"></i> Add
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div x-show="status" class="small mt-2" x-html="status"></div>
+                        </div>
+                    </div>
+                </fieldset>
             </div>
         </div>
     </div>

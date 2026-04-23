@@ -617,6 +617,138 @@ function gatewaySettings() {
 }
 
 
+// ─── Gateway Advanced Settings Component ───────────────────────────────────
+
+function gatewayAdvancedSettings() {
+    return {
+        rows: {},          // { key: { current: str, draft: str, busy: bool } }
+        newKey: '',
+        newValue: '',
+        loading: false,
+        loaded: false,
+        adding: false,
+        expanded: false,
+        status: '',
+        gwName: '',
+
+        maybeLoad(gw) {
+            if (gw && gw.connected && !this.loaded) {
+                this.gwName = gw.name;
+                this.load();
+            }
+        },
+
+        async load() {
+            this.loading = true;
+            this.loaded = true;
+            this.status = '';
+            try {
+                const resp = await apiFetch(`${API_GLOBAL}/gateway/${this.gwName}/settings`);
+                const settings = (resp && resp.settings) || {};
+                const rows = {};
+                for (const [k, v] of Object.entries(settings)) {
+                    const s = typeof v === 'string' ? v : JSON.stringify(v);
+                    rows[k] = { current: s, draft: s, busy: false };
+                }
+                this.rows = rows;
+            } catch (e) {
+                this.status = `<span class="text-danger">Load failed: ${e.message}</span>`;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        _valueForWire(raw) {
+            // Try JSON parse first (so booleans, numbers, arrays, objects round-trip);
+            // fall back to the raw string on parse failure.
+            const trimmed = raw.trim();
+            try { return JSON.parse(trimmed); } catch { return raw; }
+        },
+
+        async saveKey(key) {
+            if (!this.rows[key]) return;
+            const row = this.rows[key];
+            row.busy = true;
+            this.status = '';
+            try {
+                await apiFetch(
+                    `${API_GLOBAL}/gateway/${this.gwName}/settings/${encodeURIComponent(key)}`,
+                    {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ value: this._valueForWire(row.draft) }),
+                    },
+                );
+                row.current = row.draft;
+                this.status = `<span class="text-success">Saved <code>${key}</code>.</span>`;
+                showToast(`Setting ${key} saved.`, 'success');
+            } catch (e) {
+                this.status = `<span class="text-danger">Save failed for <code>${key}</code>: ${e.message}</span>`;
+                showToast(`Gateway rejected ${key}: ${e.message}`, 'danger');
+            } finally {
+                row.busy = false;
+            }
+        },
+
+        async deleteKey(key) {
+            const confirmed = await showConfirm(
+                `Delete gateway setting "${key}"?`,
+                { icon: 'trash', iconColor: 'text-danger', btnClass: 'btn-danger', btnLabel: 'Delete' },
+            );
+            if (!confirmed) return;
+            const row = this.rows[key];
+            row.busy = true;
+            this.status = '';
+            try {
+                await apiFetch(
+                    `${API_GLOBAL}/gateway/${this.gwName}/settings/${encodeURIComponent(key)}`,
+                    { method: 'DELETE' },
+                );
+                const { [key]: _removed, ...rest } = this.rows;
+                this.rows = rest;
+                this.status = `<span class="text-success">Deleted <code>${key}</code>.</span>`;
+                showToast(`Setting ${key} deleted.`, 'success');
+            } catch (e) {
+                this.status = `<span class="text-danger">Delete failed: ${e.message}</span>`;
+                showToast(`Delete failed: ${e.message}`, 'danger');
+                row.busy = false;
+            }
+        },
+
+        async addKey() {
+            const key = this.newKey.trim();
+            if (!key) return;
+            if (this.rows[key]) {
+                showToast(`Setting ${key} already exists — edit the row instead.`, 'warning');
+                return;
+            }
+            this.adding = true;
+            this.status = '';
+            try {
+                await apiFetch(
+                    `${API_GLOBAL}/gateway/${this.gwName}/settings/${encodeURIComponent(key)}`,
+                    {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ value: this._valueForWire(this.newValue) }),
+                    },
+                );
+                this.rows[key] = { current: this.newValue, draft: this.newValue, busy: false };
+                this.newKey = '';
+                this.newValue = '';
+                this.status = `<span class="text-success">Added <code>${key}</code>.</span>`;
+                showToast(`Setting ${key} added.`, 'success');
+            } catch (e) {
+                this.status = `<span class="text-danger">Add failed: ${e.message}</span>`;
+                showToast(`Gateway rejected ${key}: ${e.message}`, 'danger');
+            } finally {
+                this.adding = false;
+            }
+        },
+    };
+}
+
+
 // ─── Alpine.data registrations ─────────────────────────────────────────────
 
 document.addEventListener('alpine:init', () => {
@@ -625,6 +757,7 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('inferenceConfig', inferenceConfig);
     Alpine.data('inferenceBundle', inferenceBundle);
     Alpine.data('gatewaySettings', gatewaySettings);
+    Alpine.data('gatewayAdvancedSettings', gatewayAdvancedSettings);
     // Spread-merge factory replacing inline `{ ...gatewayList(), ...sortableTable('name') }`.
     Alpine.data('gatewaysList', () => ({ ...gatewayList(), ...sortableTable('name') }));
 });
