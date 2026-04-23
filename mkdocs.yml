@@ -132,6 +132,7 @@ nav:
       - Configuration: reference/configuration.md
       - Settings Reference: reference/settings.md
       - Policy Presets: reference/presets.md
+      - Surface Coverage: reference/surface-coverage.md
       - Python API:
           - Client: reference/python/client.md
           - Services: reference/python/services.md

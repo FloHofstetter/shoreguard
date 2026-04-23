@@ -30,6 +30,21 @@ jobs:
       - run: uv sync --group dev
       - run: uv run pip-audit
 
+  coverage-matrix:
+    # Enforces the "every upstream RPC is covered by client + REST + UI"
+    # invariant documented in docs/reference/surface-coverage.md.
+    # Required job — a new RPC or REST route landing without coverage
+    # blocks the merge until the chain is completed (or the allowlist
+    # is updated with justification).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+      - run: uv sync --group dev
+      - run: uv run python scripts/check_coverage.py
+
   security:
     runs-on: ubuntu-latest
     steps:
