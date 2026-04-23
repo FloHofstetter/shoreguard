@@ -769,6 +769,93 @@ function presetDetail(presetName) {
 }
 
 
+// ─── GitOps YAML Apply (WS33.3) ────────────────────────────────────────────
+
+function sandboxPolicyApplyYaml() {
+    return {
+        expanded: false,
+        yamlText: '',
+        applyMode: 'replace',
+        expectedVersion: '',
+        applying: false,
+        dryRunMode: false,
+        lastResult: null,
+
+        _buildBody(dryRun) {
+            const body = {
+                yaml: this.yamlText,
+                dry_run: dryRun,
+                mode: this.applyMode,
+            };
+            if (this.expectedVersion.trim()) {
+                body.expected_version = this.expectedVersion.trim();
+            }
+            return body;
+        },
+
+        _sandboxNameFromRoot() {
+            // The outer policyPage component owns sandboxName; pull it via
+            // $root so this section does not need its own copy.
+            const root = this.$root;
+            return (root && root.sandboxName) || '';
+        },
+
+        async _submit(dryRun) {
+            const sb = this._sandboxNameFromRoot();
+            if (!sb) {
+                showToast('Could not determine sandbox name.', 'danger');
+                return;
+            }
+            this.applying = true;
+            this.dryRunMode = dryRun;
+            this.lastResult = null;
+            try {
+                const result = await apiFetch(`${API}/sandboxes/${sb}/policy/apply`, {
+                    method: 'POST',
+                    body: JSON.stringify(this._buildBody(dryRun)),
+                });
+                this.lastResult = {
+                    ok: true,
+                    status: result.status || (dryRun ? 'dry_run' : 'applied'),
+                    message: dryRun
+                        ? 'Dry-run complete. Review the diff below; no changes written.'
+                        : 'Policy applied successfully.',
+                    diff: result.diff || null,
+                };
+                if (!dryRun) {
+                    showToast(`Policy ${this.applyMode}d.`, 'success');
+                }
+            } catch (e) {
+                // Special-case: HTTP 400 merge_unsupported → guide back to replace.
+                const msg = e?.message || String(e);
+                if (msg.includes('merge_unsupported')) {
+                    this.lastResult = {
+                        ok: false,
+                        status: 'Merge mode not applicable',
+                        message: 'This change touches filesystem, process, or landlock. Retry with Apply mode = Replace.',
+                        diff: null,
+                    };
+                    showToast('Merge mode cannot express this diff — use Replace.', 'warning');
+                } else {
+                    this.lastResult = {
+                        ok: false,
+                        status: 'Apply failed',
+                        message: msg,
+                        diff: null,
+                    };
+                    showToast(`Apply failed: ${msg}`, 'danger');
+                }
+            } finally {
+                this.applying = false;
+            }
+        },
+
+        runDryRun() { return this._submit(true); },
+        runApply() { return this._submit(false); },
+    };
+}
+
+
 // ─── Alpine.data registrations ─────────────────────────────────────────────
 
 document.addEventListener('alpine:init', () => {
@@ -778,6 +865,7 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('processPolicyPage', processPolicyPage);
     Alpine.data('presetsPage', presetsPage);
     Alpine.data('presetDetail', presetDetail);
+    Alpine.data('sandboxPolicyApplyYaml', sandboxPolicyApplyYaml);
     // Spread-merge factory replacing inline `{ ...presetsList(), ...sortableTable('name') }`.
     Alpine.data('presetsListPage', () => ({ ...presetsList(), ...sortableTable('name') }));
 });

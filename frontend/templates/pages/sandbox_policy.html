@@ -116,6 +116,91 @@
                     </a>
                 </div>
             </div>
+
+            <!-- GitOps YAML Apply -->
+            <div class="row g-3 mt-0" x-data="sandboxPolicyApplyYaml">
+                <div class="col-12">
+                    <div class="card sg-card-themed">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-cloud-upload fs-4 text-primary me-3"></i>
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-0">Apply Policy YAML</h6>
+                                    <span class="text-muted small">
+                                        Paste a GitOps policy document and apply it atomically. Mirrors
+                                        <code>shoreguard policy apply</code> on the CLI.
+                                    </span>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary ms-2"
+                                        @click="expanded = !expanded"
+                                        :aria-expanded="expanded">
+                                    <i class="bi" :class="expanded ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                                    <span x-text="expanded ? 'Collapse' : 'Expand'"></span>
+                                </button>
+                            </div>
+                            <div x-show="expanded" x-transition class="mt-3">
+                                <div class="mb-3">
+                                    <label class="form-label small">YAML Document</label>
+                                    <textarea class="form-control font-monospace"
+                                              rows="10"
+                                              x-model="yamlText"
+                                              placeholder="metadata:&#10;  gateway: my-gw&#10;  sandbox: sb1&#10;policy:&#10;  network_policies:&#10;    allow-gh: {name: allow-gh, endpoints: [{host: api.github.com, port: 443}]}"></textarea>
+                                </div>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label small">Apply Mode</label>
+                                        <div class="btn-group w-100" role="group" aria-label="Apply mode">
+                                            <input type="radio" class="btn-check" name="apply-mode" id="apply-mode-replace"
+                                                   value="replace" x-model="applyMode">
+                                            <label class="btn btn-outline-primary" for="apply-mode-replace">
+                                                <i class="bi bi-arrow-repeat me-1"></i>Replace
+                                            </label>
+                                            <input type="radio" class="btn-check" name="apply-mode" id="apply-mode-merge"
+                                                   value="merge" x-model="applyMode">
+                                            <label class="btn btn-outline-primary" for="apply-mode-merge">
+                                                <i class="bi bi-sliders me-1"></i>Merge
+                                            </label>
+                                        </div>
+                                        <div class="form-text small" x-show="applyMode === 'merge'">
+                                            Sends per-rule merge operations instead of a full rewrite.
+                                            Requires gateway <strong>&ge; v0.0.33</strong> and cannot express
+                                            filesystem / process / landlock changes.
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small">Optimistic Lock (optional)</label>
+                                        <input type="text" class="form-control font-monospace"
+                                               x-model="expectedVersion"
+                                               placeholder="sha256:... (leave empty to skip)">
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-outline-primary" @click="runDryRun()" :disabled="applying || !yamlText.trim()">
+                                        <span x-show="applying && dryRunMode" class="spinner-border spinner-border-sm me-1"></span>
+                                        <i x-show="!(applying && dryRunMode)" class="bi bi-eye me-1"></i>Dry-Run (Diff)
+                                    </button>
+                                    <button class="btn btn-primary" @click="runApply()" :disabled="applying || !yamlText.trim()">
+                                        <span x-show="applying && !dryRunMode" class="spinner-border spinner-border-sm me-1"></span>
+                                        <i x-show="!(applying && !dryRunMode)" class="bi bi-cloud-upload me-1"></i>
+                                        Apply (<span x-text="applyMode"></span>)
+                                    </button>
+                                </div>
+                                <template x-if="lastResult">
+                                    <div class="mt-3">
+                                        <div class="alert" :class="lastResult.ok ? 'alert-success' : 'alert-warning'">
+                                            <div class="fw-semibold" x-text="lastResult.status"></div>
+                                            <div x-show="lastResult.message" class="small mt-1" x-text="lastResult.message"></div>
+                                            <template x-if="lastResult.diff">
+                                                <pre class="mt-2 mb-0 small" x-text="JSON.stringify(lastResult.diff, null, 2)"></pre>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </template>
 
