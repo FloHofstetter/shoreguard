@@ -98,6 +98,12 @@ sg_gateway_cert_expiry_seconds = Gauge(
     ["gateway"],
 )
 
+sg_gateway_cert_rotations_total = Counter(
+    "sg_gateway_cert_rotations_total",
+    "Outcomes of the background cert-rotation service per gateway",
+    ["gateway", "outcome"],
+)
+
 
 def record_grpc_attempt(*, op_name: str, attempt: int, code: object, outcome: str) -> None:
     """Callback target for :func:`shoreguard.client._resilience.call_with_retry`.
@@ -156,6 +162,19 @@ def record_sandbox_phase_transition(*, gateway: str, from_phase: str, to_phase: 
     sg_sandbox_phase_transitions_total.labels(
         gateway=gateway, **{"from": from_phase, "to": to_phase}
     ).inc()
+
+
+def record_gateway_cert_rotation(gateway: str, outcome: str) -> None:
+    """Increment the cert-rotation outcome counter.
+
+    Args:
+        gateway: Gateway name label.
+        outcome: One of ``"success"``, ``"failure"``, ``"skipped_not_due"``,
+            ``"skipped_no_cert"``. Unknown labels are accepted so callers
+            can add new outcomes without a code change here; dashboards
+            will surface them automatically.
+    """
+    sg_gateway_cert_rotations_total.labels(gateway=gateway, outcome=outcome).inc()
 
 
 def record_gateway_cert_expiry(gateway: str, seconds_until_expiry: float | None) -> None:

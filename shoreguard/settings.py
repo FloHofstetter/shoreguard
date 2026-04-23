@@ -611,6 +611,40 @@ class BackgroundSettings(BaseSettings):
     )
 
 
+class CertRotationSettings(BaseSettings):
+    """Proactive mTLS client-cert rotation settings.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Whether the background cert-rotation service runs.
+        threshold_days (int): Rotate when a client cert has fewer than
+            this many days remaining until expiry.
+        poll_interval_s (int): Seconds between rotation-check passes.
+        max_retries (int): Retry attempts when a rotation RPC fails
+            before giving up for this poll cycle. Next poll cycle tries
+            afresh.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_CERT_ROTATION_")
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable the background proactive cert-rotation service",
+    )
+    threshold_days: int = Field(
+        default=7,
+        description="Rotate when remaining validity drops below this many days",
+    )
+    poll_interval_s: int = Field(
+        default=3600,
+        description="Seconds between rotation-check passes across gateways",
+    )
+    max_retries: int = Field(
+        default=3,
+        description="Retry attempts per rotation before deferring to the next cycle",
+    )
+
+
 class LocalGatewaySettings(BaseSettings):
     """Local gateway Docker lifecycle management.
 
@@ -966,6 +1000,7 @@ class Settings(BaseSettings):
         discovery (DiscoverySettings): DNS-SRV gateway auto-discovery.
         drift_detection (DriftDetectionSettings): Background policy drift detection.
         tracing (TracingSettings): OpenTelemetry trace context propagation.
+        cert_rotation (CertRotationSettings): Proactive mTLS cert rotation.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -986,6 +1021,7 @@ class Settings(BaseSettings):
     discovery: DiscoverySettings = Field(default_factory=DiscoverySettings)
     drift_detection: DriftDetectionSettings = Field(default_factory=DriftDetectionSettings)
     tracing: TracingSettings = Field(default_factory=TracingSettings)
+    cert_rotation: CertRotationSettings = Field(default_factory=CertRotationSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

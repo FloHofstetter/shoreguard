@@ -246,6 +246,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.drift_detection.enabled,
     )
 
+    # ── Proactive cert rotation ───────────────────────────────────────
+    import shoreguard.services.cert_rotation as cert_rotation_mod
+
+    cert_rotation_mod.init_cert_rotation_service(
+        gw_mod.gateway_service,
+        threshold_days=settings.cert_rotation.threshold_days,
+        max_retries=settings.cert_rotation.max_retries,
+    )
+    logger.info(
+        "Cert rotation service initialised (enabled=%s, threshold_days=%d)",
+        settings.cert_rotation.enabled,
+        settings.cert_rotation.threshold_days,
+    )
+
     # ── Denial context cache ───────────────────────────────────────────
     import shoreguard.services.denial_context as dc_mod
 
@@ -422,6 +436,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     drift_task = asyncio.create_task(_drift_detection_loop())
     drift_task.add_done_callback(_make_done_cb("drift_detection"))
+
+    async def _cert_rotation_loop() -> None:
+        """Periodically rotate gateway client certs before expiry."""
+        if not settings.cert_rotation.enabled:
+            return
+        interval = settings.cert_rotation.poll_interval_s
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                from shoreguard.services import cert_rotation as cert_rotation_mod
+
+                svc = cert_rotation_mod.cert_rotation_service
+                if svc is None:
+                    continue
+                outcomes = await svc.run_once()
+                if any(outcomes.get(k) for k in ("success", "failure")):
+                    logger.info(
+                        "Cert rotation cycle: %s",
+                        ", ".join(f"{k}={v}" for k, v in outcomes.items() if v),
+                    )
+            except Exception:
+                logger.exception("Cert rotation loop error")
+
+    cert_rotation_task = asyncio.create_task(_cert_rotation_loop())
+    cert_rotation_task.add_done_callback(_make_done_cb("cert_rotation"))
     yield
 
     # ── Graceful shutdown ──────────────────────────────────────────
@@ -432,6 +471,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     health_task.cancel()
     discovery_task.cancel()
     drift_task.cancel()
+    cert_rotation_task.cancel()
 
     # 2. Cancel LRO tasks (CancelledError handler marks ops as failed)
     from shoreguard.api.lro import shutdown_lros
