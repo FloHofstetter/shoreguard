@@ -50,7 +50,10 @@ STUB_DIR = REPO_ROOT / "shoreguard" / "client" / "_proto"
 OPENSHELL_REPO = "https://github.com/NVIDIA/OpenShell.git"
 
 # test.proto is an OpenShell-internal testing helper — not part of the API.
-SKIP_PROTOS = {"test.proto"}
+# compute_driver.proto is the supervisor↔gateway interface; ShoreGuard is a
+# control-plane and never calls those RPCs, so we skip its stubs to keep the
+# generated surface minimal.
+SKIP_PROTOS = {"test.proto", "compute_driver.proto"}
 
 # Proto modules whose names may appear as bare ``import <name>_pb2`` in the
 # generated code.  We rewrite those to relative imports so the stubs work

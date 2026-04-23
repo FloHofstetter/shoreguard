@@ -29,7 +29,15 @@ if _version_not_supported:
 
 
 class OpenShellStub(object):
-    """OpenShell service provides sandbox, provider, and runtime management capabilities."""
+    """OpenShell service provides sandbox, provider, and runtime management capabilities.
+
+    Conventions:
+    - This file owns the public API resource model exposed to OpenShell clients.
+    - `Sandbox`, `SandboxSpec`, `SandboxStatus`, and `SandboxPhase` are gateway-owned
+    public types. Internal compute drivers must not import or return them directly.
+    - The gateway translates internal compute-driver observations into these public
+    resource messages before persisting or returning them to clients.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -169,6 +177,18 @@ class OpenShellStub(object):
             response_deserializer=openshell__pb2.PushSandboxLogsResponse.FromString,
             _registered_method=True,
         )
+        self.ConnectSupervisor = channel.stream_stream(
+            "/openshell.v1.OpenShell/ConnectSupervisor",
+            request_serializer=openshell__pb2.SupervisorMessage.SerializeToString,
+            response_deserializer=openshell__pb2.GatewayMessage.FromString,
+            _registered_method=True,
+        )
+        self.RelayStream = channel.stream_stream(
+            "/openshell.v1.OpenShell/RelayStream",
+            request_serializer=openshell__pb2.RelayFrame.SerializeToString,
+            response_deserializer=openshell__pb2.RelayFrame.FromString,
+            _registered_method=True,
+        )
         self.WatchSandbox = channel.unary_stream(
             "/openshell.v1.OpenShell/WatchSandbox",
             request_serializer=openshell__pb2.WatchSandboxRequest.SerializeToString,
@@ -232,7 +252,15 @@ class OpenShellStub(object):
 
 
 class OpenShellServicer(object):
-    """OpenShell service provides sandbox, provider, and runtime management capabilities."""
+    """OpenShell service provides sandbox, provider, and runtime management capabilities.
+
+    Conventions:
+    - This file owns the public API resource model exposed to OpenShell clients.
+    - `Sandbox`, `SandboxSpec`, `SandboxStatus`, and `SandboxPhase` are gateway-owned
+    public types. Internal compute drivers must not import or return them directly.
+    - The gateway translates internal compute-driver observations into these public
+    resource messages before persisting or returning them to clients.
+    """
 
     def Health(self, request, context):
         """Check the health of the service."""
@@ -362,6 +390,35 @@ class OpenShellServicer(object):
 
     def PushSandboxLogs(self, request_iterator, context):
         """Push sandbox supervisor logs to the server (client-streaming)."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def ConnectSupervisor(self, request_iterator, context):
+        """Persistent supervisor-to-gateway session (bidirectional streaming).
+
+        The supervisor opens this stream at startup and keeps it alive for the
+        sandbox lifetime. The gateway uses it to coordinate relay channels for
+        SSH connect and ExecSandbox. Raw SSH bytes flow over RelayStream calls
+        (separate HTTP/2 streams on the same connection), not over this stream.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def RelayStream(self, request_iterator, context):
+        """Raw byte relay between supervisor and gateway.
+
+        The supervisor initiates this call after receiving a RelayOpen message
+        on its ConnectSupervisor stream. The first RelayFrame carries a
+        RelayInit with the channel_id to associate the new HTTP/2 stream with
+        the pending relay slot on the gateway. Subsequent frames carry raw bytes in either
+        direction between the gateway-side waiter (ssh_tunnel / exec handler)
+        and the supervisor-side local SSH daemon bridge.
+
+        This rides the same TCP+TLS+HTTP/2 connection as ConnectSupervisor —
+        no new TLS handshake, no reverse HTTP CONNECT.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
@@ -550,6 +607,16 @@ def add_OpenShellServicer_to_server(servicer, server):
             request_deserializer=openshell__pb2.PushSandboxLogsRequest.FromString,
             response_serializer=openshell__pb2.PushSandboxLogsResponse.SerializeToString,
         ),
+        "ConnectSupervisor": grpc.stream_stream_rpc_method_handler(
+            servicer.ConnectSupervisor,
+            request_deserializer=openshell__pb2.SupervisorMessage.FromString,
+            response_serializer=openshell__pb2.GatewayMessage.SerializeToString,
+        ),
+        "RelayStream": grpc.stream_stream_rpc_method_handler(
+            servicer.RelayStream,
+            request_deserializer=openshell__pb2.RelayFrame.FromString,
+            response_serializer=openshell__pb2.RelayFrame.SerializeToString,
+        ),
         "WatchSandbox": grpc.unary_stream_rpc_method_handler(
             servicer.WatchSandbox,
             request_deserializer=openshell__pb2.WatchSandboxRequest.FromString,
@@ -610,7 +677,15 @@ def add_OpenShellServicer_to_server(servicer, server):
 
 # This class is part of an EXPERIMENTAL API.
 class OpenShell(object):
-    """OpenShell service provides sandbox, provider, and runtime management capabilities."""
+    """OpenShell service provides sandbox, provider, and runtime management capabilities.
+
+    Conventions:
+    - This file owns the public API resource model exposed to OpenShell clients.
+    - `Sandbox`, `SandboxSpec`, `SandboxStatus`, and `SandboxPhase` are gateway-owned
+    public types. Internal compute drivers must not import or return them directly.
+    - The gateway translates internal compute-driver observations into these public
+    resource messages before persisting or returning them to clients.
+    """
 
     @staticmethod
     def Health(
@@ -1261,6 +1336,66 @@ class OpenShell(object):
             "/openshell.v1.OpenShell/PushSandboxLogs",
             openshell__pb2.PushSandboxLogsRequest.SerializeToString,
             openshell__pb2.PushSandboxLogsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def ConnectSupervisor(
+        request_iterator,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.stream_stream(
+            request_iterator,
+            target,
+            "/openshell.v1.OpenShell/ConnectSupervisor",
+            openshell__pb2.SupervisorMessage.SerializeToString,
+            openshell__pb2.GatewayMessage.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def RelayStream(
+        request_iterator,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.stream_stream(
+            request_iterator,
+            target,
+            "/openshell.v1.OpenShell/RelayStream",
+            openshell__pb2.RelayFrame.SerializeToString,
+            openshell__pb2.RelayFrame.FromString,
             options,
             channel_credentials,
             insecure,

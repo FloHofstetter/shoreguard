@@ -94,7 +94,7 @@ def test_record_gateway_cert_expiry_sets_gauge():
 def test_sandbox_manager_invoke_emits_metrics(monkeypatch):
     from types import SimpleNamespace
 
-    from shoreguard.client._proto import datamodel_pb2
+    from shoreguard.client._proto import openshell_pb2
     from shoreguard.client._resilience import RetryPolicy
     from shoreguard.client.sandboxes import SandboxManager
 
@@ -112,7 +112,7 @@ def test_sandbox_manager_invoke_emits_metrics(monkeypatch):
             if calls["n"] == 1:
                 raise _FakeRpcError()
             return SimpleNamespace(
-                sandboxes=[datamodel_pb2.Sandbox(id="x", name="sb", phase=2)]  # type: ignore[arg-type]
+                sandboxes=[openshell_pb2.Sandbox(id="x", name="sb", phase=2)]  # type: ignore[arg-type]
             )
 
     m = object.__new__(SandboxManager)

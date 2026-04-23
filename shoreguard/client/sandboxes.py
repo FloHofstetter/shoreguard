@@ -21,7 +21,7 @@ from typing import Any
 from shoreguard.exceptions import SandboxError
 
 from ._converters import _dict_to_policy
-from ._proto import datamodel_pb2, openshell_pb2, openshell_pb2_grpc, sandbox_pb2
+from ._proto import openshell_pb2, openshell_pb2_grpc, sandbox_pb2
 from ._resilience import DEFAULT_POLICY, RetryPolicy, call_with_retry, stream_with_retry
 from .policies import _policy_to_dict
 
@@ -53,7 +53,7 @@ PHASE_NAMES = {
 }
 
 
-def _sandbox_to_dict(sb: datamodel_pb2.Sandbox) -> dict[str, Any]:
+def _sandbox_to_dict(sb: openshell_pb2.Sandbox) -> dict[str, Any]:
     """Convert a protobuf Sandbox to a plain dict.
 
     Args:
@@ -212,9 +212,9 @@ class SandboxManager:
         Returns:
             dict[str, Any]: Created sandbox data dict.
         """
-        spec = datamodel_pb2.SandboxSpec(gpu=gpu)
+        spec = openshell_pb2.SandboxSpec(gpu=gpu)
         if image:
-            spec.template.CopyFrom(datamodel_pb2.SandboxTemplate(image=image))
+            spec.template.CopyFrom(openshell_pb2.SandboxTemplate(image=image))
         if providers:
             spec.providers.extend(providers)
         if environment:

@@ -117,6 +117,7 @@ class NetworkEndpoint(_message.Message):
         "allowed_ips",
         "ports",
         "deny_rules",
+        "allow_encoded_slash",
     )
     HOST_FIELD_NUMBER: _ClassVar[int]
     PORT_FIELD_NUMBER: _ClassVar[int]
@@ -128,6 +129,7 @@ class NetworkEndpoint(_message.Message):
     ALLOWED_IPS_FIELD_NUMBER: _ClassVar[int]
     PORTS_FIELD_NUMBER: _ClassVar[int]
     DENY_RULES_FIELD_NUMBER: _ClassVar[int]
+    ALLOW_ENCODED_SLASH_FIELD_NUMBER: _ClassVar[int]
     host: str
     port: int
     protocol: str
@@ -138,6 +140,7 @@ class NetworkEndpoint(_message.Message):
     allowed_ips: _containers.RepeatedScalarFieldContainer[str]
     ports: _containers.RepeatedScalarFieldContainer[int]
     deny_rules: _containers.RepeatedCompositeFieldContainer[L7DenyRule]
+    allow_encoded_slash: bool
     def __init__(
         self,
         host: _Optional[str] = ...,
@@ -150,6 +153,7 @@ class NetworkEndpoint(_message.Message):
         allowed_ips: _Optional[_Iterable[str]] = ...,
         ports: _Optional[_Iterable[int]] = ...,
         deny_rules: _Optional[_Iterable[_Union[L7DenyRule, _Mapping]]] = ...,
+        allow_encoded_slash: bool = ...,
     ) -> None: ...
 
 class L7DenyRule(_message.Message):

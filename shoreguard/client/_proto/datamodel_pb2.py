@@ -19,12 +19,8 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
-from . import sandbox_pb2 as sandbox__pb2
-
-
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x0f\x64\x61tamodel.proto\x12\x16openshell.datamodel.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\rsandbox.proto"\x8c\x02\n\x07Sandbox\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x11\n\tnamespace\x18\x03 \x01(\t\x12\x31\n\x04spec\x18\x04 \x01(\x0b\x32#.openshell.datamodel.v1.SandboxSpec\x12\x35\n\x06status\x18\x05 \x01(\x0b\x32%.openshell.datamodel.v1.SandboxStatus\x12\x33\n\x05phase\x18\x06 \x01(\x0e\x32$.openshell.datamodel.v1.SandboxPhase\x12\x15\n\rcreated_at_ms\x18\x07 \x01(\x03\x12\x1e\n\x16\x63urrent_policy_version\x18\x08 \x01(\r"\xaf\x02\n\x0bSandboxSpec\x12\x11\n\tlog_level\x18\x01 \x01(\t\x12I\n\x0b\x65nvironment\x18\x05 \x03(\x0b\x32\x34.openshell.datamodel.v1.SandboxSpec.EnvironmentEntry\x12\x39\n\x08template\x18\x06 \x01(\x0b\x32\'.openshell.datamodel.v1.SandboxTemplate\x12\x33\n\x06policy\x18\x07 \x01(\x0b\x32#.openshell.sandbox.v1.SandboxPolicy\x12\x11\n\tproviders\x18\x08 \x03(\t\x12\x0b\n\x03gpu\x18\t \x01(\x08\x1a\x32\n\x10\x45nvironmentEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01"\xb1\x04\n\x0fSandboxTemplate\x12\r\n\x05image\x18\x01 \x01(\t\x12\x1a\n\x12runtime_class_name\x18\x02 \x01(\t\x12\x14\n\x0c\x61gent_socket\x18\x03 \x01(\t\x12\x43\n\x06labels\x18\x04 \x03(\x0b\x32\x33.openshell.datamodel.v1.SandboxTemplate.LabelsEntry\x12M\n\x0b\x61nnotations\x18\x05 \x03(\x0b\x32\x38.openshell.datamodel.v1.SandboxTemplate.AnnotationsEntry\x12M\n\x0b\x65nvironment\x18\x06 \x03(\x0b\x32\x38.openshell.datamodel.v1.SandboxTemplate.EnvironmentEntry\x12*\n\tresources\x18\x07 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x37\n\x16volume_claim_templates\x18\t \x01(\x0b\x32\x17.google.protobuf.Struct\x1a-\n\x0bLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a\x32\n\x10\x41nnotationsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a\x32\n\x10\x45nvironmentEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01"\x9c\x01\n\rSandboxStatus\x12\x14\n\x0csandbox_name\x18\x01 \x01(\t\x12\x11\n\tagent_pod\x18\x02 \x01(\t\x12\x10\n\x08\x61gent_fd\x18\x03 \x01(\t\x12\x12\n\nsandbox_fd\x18\x04 \x01(\t\x12<\n\nconditions\x18\x05 \x03(\x0b\x32(.openshell.datamodel.v1.SandboxCondition"o\n\x10SandboxCondition\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\t\x12\x0e\n\x06reason\x18\x03 \x01(\t\x12\x0f\n\x07message\x18\x04 \x01(\t\x12\x1c\n\x14last_transition_time\x18\x05 \x01(\t"\x9b\x02\n\x08Provider\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0c\n\x04type\x18\x03 \x01(\t\x12\x46\n\x0b\x63redentials\x18\x04 \x03(\x0b\x32\x31.openshell.datamodel.v1.Provider.CredentialsEntry\x12<\n\x06\x63onfig\x18\x05 \x03(\x0b\x32,.openshell.datamodel.v1.Provider.ConfigEntry\x1a\x32\n\x10\x43redentialsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a-\n\x0b\x43onfigEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01*\xb6\x01\n\x0cSandboxPhase\x12\x1d\n\x19SANDBOX_PHASE_UNSPECIFIED\x10\x00\x12\x1e\n\x1aSANDBOX_PHASE_PROVISIONING\x10\x01\x12\x17\n\x13SANDBOX_PHASE_READY\x10\x02\x12\x17\n\x13SANDBOX_PHASE_ERROR\x10\x03\x12\x1a\n\x16SANDBOX_PHASE_DELETING\x10\x04\x12\x19\n\x15SANDBOX_PHASE_UNKNOWN\x10\x05\x62\x06proto3'
+    b'\n\x0f\x64\x61tamodel.proto\x12\x16openshell.datamodel.v1"\x9b\x02\n\x08Provider\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0c\n\x04type\x18\x03 \x01(\t\x12\x46\n\x0b\x63redentials\x18\x04 \x03(\x0b\x32\x31.openshell.datamodel.v1.Provider.CredentialsEntry\x12<\n\x06\x63onfig\x18\x05 \x03(\x0b\x32,.openshell.datamodel.v1.Provider.ConfigEntry\x1a\x32\n\x10\x43redentialsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a-\n\x0b\x43onfigEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x62\x06proto3'
 )
 
 _globals = globals()
@@ -32,42 +28,14 @@ _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "datamodel_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
     DESCRIPTOR._loaded_options = None
-    _globals["_SANDBOXSPEC_ENVIRONMENTENTRY"]._loaded_options = None
-    _globals["_SANDBOXSPEC_ENVIRONMENTENTRY"]._serialized_options = b"8\001"
-    _globals["_SANDBOXTEMPLATE_LABELSENTRY"]._loaded_options = None
-    _globals["_SANDBOXTEMPLATE_LABELSENTRY"]._serialized_options = b"8\001"
-    _globals["_SANDBOXTEMPLATE_ANNOTATIONSENTRY"]._loaded_options = None
-    _globals["_SANDBOXTEMPLATE_ANNOTATIONSENTRY"]._serialized_options = b"8\001"
-    _globals["_SANDBOXTEMPLATE_ENVIRONMENTENTRY"]._loaded_options = None
-    _globals["_SANDBOXTEMPLATE_ENVIRONMENTENTRY"]._serialized_options = b"8\001"
     _globals["_PROVIDER_CREDENTIALSENTRY"]._loaded_options = None
     _globals["_PROVIDER_CREDENTIALSENTRY"]._serialized_options = b"8\001"
     _globals["_PROVIDER_CONFIGENTRY"]._loaded_options = None
     _globals["_PROVIDER_CONFIGENTRY"]._serialized_options = b"8\001"
-    _globals["_SANDBOXPHASE"]._serialized_start = 1788
-    _globals["_SANDBOXPHASE"]._serialized_end = 1970
-    _globals["_SANDBOX"]._serialized_start = 89
-    _globals["_SANDBOX"]._serialized_end = 357
-    _globals["_SANDBOXSPEC"]._serialized_start = 360
-    _globals["_SANDBOXSPEC"]._serialized_end = 663
-    _globals["_SANDBOXSPEC_ENVIRONMENTENTRY"]._serialized_start = 613
-    _globals["_SANDBOXSPEC_ENVIRONMENTENTRY"]._serialized_end = 663
-    _globals["_SANDBOXTEMPLATE"]._serialized_start = 666
-    _globals["_SANDBOXTEMPLATE"]._serialized_end = 1227
-    _globals["_SANDBOXTEMPLATE_LABELSENTRY"]._serialized_start = 1078
-    _globals["_SANDBOXTEMPLATE_LABELSENTRY"]._serialized_end = 1123
-    _globals["_SANDBOXTEMPLATE_ANNOTATIONSENTRY"]._serialized_start = 1125
-    _globals["_SANDBOXTEMPLATE_ANNOTATIONSENTRY"]._serialized_end = 1175
-    _globals["_SANDBOXTEMPLATE_ENVIRONMENTENTRY"]._serialized_start = 613
-    _globals["_SANDBOXTEMPLATE_ENVIRONMENTENTRY"]._serialized_end = 663
-    _globals["_SANDBOXSTATUS"]._serialized_start = 1230
-    _globals["_SANDBOXSTATUS"]._serialized_end = 1386
-    _globals["_SANDBOXCONDITION"]._serialized_start = 1388
-    _globals["_SANDBOXCONDITION"]._serialized_end = 1499
-    _globals["_PROVIDER"]._serialized_start = 1502
-    _globals["_PROVIDER"]._serialized_end = 1785
-    _globals["_PROVIDER_CREDENTIALSENTRY"]._serialized_start = 1688
-    _globals["_PROVIDER_CREDENTIALSENTRY"]._serialized_end = 1738
-    _globals["_PROVIDER_CONFIGENTRY"]._serialized_start = 1740
-    _globals["_PROVIDER_CONFIGENTRY"]._serialized_end = 1785
+    _globals["_PROVIDER"]._serialized_start = 44
+    _globals["_PROVIDER"]._serialized_end = 327
+    _globals["_PROVIDER_CREDENTIALSENTRY"]._serialized_start = 230
+    _globals["_PROVIDER_CREDENTIALSENTRY"]._serialized_end = 280
+    _globals["_PROVIDER_CONFIGENTRY"]._serialized_start = 282
+    _globals["_PROVIDER_CONFIGENTRY"]._serialized_end = 327
 # @@protoc_insertion_point(module_scope)

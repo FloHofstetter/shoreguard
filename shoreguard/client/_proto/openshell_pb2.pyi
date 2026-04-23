@@ -1,4 +1,5 @@
 from . import datamodel_pb2 as _datamodel_pb2
+from google.protobuf import struct_pb2 as _struct_pb2
 from . import sandbox_pb2 as _sandbox_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
@@ -8,6 +9,15 @@ from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class SandboxPhase(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    SANDBOX_PHASE_UNSPECIFIED: _ClassVar[SandboxPhase]
+    SANDBOX_PHASE_PROVISIONING: _ClassVar[SandboxPhase]
+    SANDBOX_PHASE_READY: _ClassVar[SandboxPhase]
+    SANDBOX_PHASE_ERROR: _ClassVar[SandboxPhase]
+    SANDBOX_PHASE_DELETING: _ClassVar[SandboxPhase]
+    SANDBOX_PHASE_UNKNOWN: _ClassVar[SandboxPhase]
 
 class PolicyStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -24,6 +34,12 @@ class ServiceStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     SERVICE_STATUS_DEGRADED: _ClassVar[ServiceStatus]
     SERVICE_STATUS_UNHEALTHY: _ClassVar[ServiceStatus]
 
+SANDBOX_PHASE_UNSPECIFIED: SandboxPhase
+SANDBOX_PHASE_PROVISIONING: SandboxPhase
+SANDBOX_PHASE_READY: SandboxPhase
+SANDBOX_PHASE_ERROR: SandboxPhase
+SANDBOX_PHASE_DELETING: SandboxPhase
+SANDBOX_PHASE_UNKNOWN: SandboxPhase
 POLICY_STATUS_UNSPECIFIED: PolicyStatus
 POLICY_STATUS_PENDING: PolicyStatus
 POLICY_STATUS_LOADED: PolicyStatus
@@ -48,16 +64,222 @@ class HealthResponse(_message.Message):
         self, status: _Optional[_Union[ServiceStatus, str]] = ..., version: _Optional[str] = ...
     ) -> None: ...
 
+class Sandbox(_message.Message):
+    __slots__ = (
+        "id",
+        "name",
+        "namespace",
+        "spec",
+        "status",
+        "phase",
+        "created_at_ms",
+        "current_policy_version",
+    )
+    ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    SPEC_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    PHASE_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_MS_FIELD_NUMBER: _ClassVar[int]
+    CURRENT_POLICY_VERSION_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    name: str
+    namespace: str
+    spec: SandboxSpec
+    status: SandboxStatus
+    phase: SandboxPhase
+    created_at_ms: int
+    current_policy_version: int
+    def __init__(
+        self,
+        id: _Optional[str] = ...,
+        name: _Optional[str] = ...,
+        namespace: _Optional[str] = ...,
+        spec: _Optional[_Union[SandboxSpec, _Mapping]] = ...,
+        status: _Optional[_Union[SandboxStatus, _Mapping]] = ...,
+        phase: _Optional[_Union[SandboxPhase, str]] = ...,
+        created_at_ms: _Optional[int] = ...,
+        current_policy_version: _Optional[int] = ...,
+    ) -> None: ...
+
+class SandboxSpec(_message.Message):
+    __slots__ = ("log_level", "environment", "template", "policy", "providers", "gpu")
+    class EnvironmentEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+
+    LOG_LEVEL_FIELD_NUMBER: _ClassVar[int]
+    ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
+    TEMPLATE_FIELD_NUMBER: _ClassVar[int]
+    POLICY_FIELD_NUMBER: _ClassVar[int]
+    PROVIDERS_FIELD_NUMBER: _ClassVar[int]
+    GPU_FIELD_NUMBER: _ClassVar[int]
+    log_level: str
+    environment: _containers.ScalarMap[str, str]
+    template: SandboxTemplate
+    policy: _sandbox_pb2.SandboxPolicy
+    providers: _containers.RepeatedScalarFieldContainer[str]
+    gpu: bool
+    def __init__(
+        self,
+        log_level: _Optional[str] = ...,
+        environment: _Optional[_Mapping[str, str]] = ...,
+        template: _Optional[_Union[SandboxTemplate, _Mapping]] = ...,
+        policy: _Optional[_Union[_sandbox_pb2.SandboxPolicy, _Mapping]] = ...,
+        providers: _Optional[_Iterable[str]] = ...,
+        gpu: bool = ...,
+    ) -> None: ...
+
+class SandboxTemplate(_message.Message):
+    __slots__ = (
+        "image",
+        "runtime_class_name",
+        "agent_socket",
+        "labels",
+        "annotations",
+        "environment",
+        "resources",
+        "volume_claim_templates",
+    )
+    class LabelsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+
+    class AnnotationsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+
+    class EnvironmentEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+
+    IMAGE_FIELD_NUMBER: _ClassVar[int]
+    RUNTIME_CLASS_NAME_FIELD_NUMBER: _ClassVar[int]
+    AGENT_SOCKET_FIELD_NUMBER: _ClassVar[int]
+    LABELS_FIELD_NUMBER: _ClassVar[int]
+    ANNOTATIONS_FIELD_NUMBER: _ClassVar[int]
+    ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
+    RESOURCES_FIELD_NUMBER: _ClassVar[int]
+    VOLUME_CLAIM_TEMPLATES_FIELD_NUMBER: _ClassVar[int]
+    image: str
+    runtime_class_name: str
+    agent_socket: str
+    labels: _containers.ScalarMap[str, str]
+    annotations: _containers.ScalarMap[str, str]
+    environment: _containers.ScalarMap[str, str]
+    resources: _struct_pb2.Struct
+    volume_claim_templates: _struct_pb2.Struct
+    def __init__(
+        self,
+        image: _Optional[str] = ...,
+        runtime_class_name: _Optional[str] = ...,
+        agent_socket: _Optional[str] = ...,
+        labels: _Optional[_Mapping[str, str]] = ...,
+        annotations: _Optional[_Mapping[str, str]] = ...,
+        environment: _Optional[_Mapping[str, str]] = ...,
+        resources: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...,
+        volume_claim_templates: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...,
+    ) -> None: ...
+
+class SandboxStatus(_message.Message):
+    __slots__ = ("sandbox_name", "agent_pod", "agent_fd", "sandbox_fd", "conditions")
+    SANDBOX_NAME_FIELD_NUMBER: _ClassVar[int]
+    AGENT_POD_FIELD_NUMBER: _ClassVar[int]
+    AGENT_FD_FIELD_NUMBER: _ClassVar[int]
+    SANDBOX_FD_FIELD_NUMBER: _ClassVar[int]
+    CONDITIONS_FIELD_NUMBER: _ClassVar[int]
+    sandbox_name: str
+    agent_pod: str
+    agent_fd: str
+    sandbox_fd: str
+    conditions: _containers.RepeatedCompositeFieldContainer[SandboxCondition]
+    def __init__(
+        self,
+        sandbox_name: _Optional[str] = ...,
+        agent_pod: _Optional[str] = ...,
+        agent_fd: _Optional[str] = ...,
+        sandbox_fd: _Optional[str] = ...,
+        conditions: _Optional[_Iterable[_Union[SandboxCondition, _Mapping]]] = ...,
+    ) -> None: ...
+
+class SandboxCondition(_message.Message):
+    __slots__ = ("type", "status", "reason", "message", "last_transition_time")
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    LAST_TRANSITION_TIME_FIELD_NUMBER: _ClassVar[int]
+    type: str
+    status: str
+    reason: str
+    message: str
+    last_transition_time: str
+    def __init__(
+        self,
+        type: _Optional[str] = ...,
+        status: _Optional[str] = ...,
+        reason: _Optional[str] = ...,
+        message: _Optional[str] = ...,
+        last_transition_time: _Optional[str] = ...,
+    ) -> None: ...
+
+class PlatformEvent(_message.Message):
+    __slots__ = ("timestamp_ms", "source", "type", "reason", "message", "metadata")
+    class MetadataEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+
+    TIMESTAMP_MS_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FIELD_NUMBER: _ClassVar[int]
+    timestamp_ms: int
+    source: str
+    type: str
+    reason: str
+    message: str
+    metadata: _containers.ScalarMap[str, str]
+    def __init__(
+        self,
+        timestamp_ms: _Optional[int] = ...,
+        source: _Optional[str] = ...,
+        type: _Optional[str] = ...,
+        reason: _Optional[str] = ...,
+        message: _Optional[str] = ...,
+        metadata: _Optional[_Mapping[str, str]] = ...,
+    ) -> None: ...
+
 class CreateSandboxRequest(_message.Message):
     __slots__ = ("spec", "name")
     SPEC_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
-    spec: _datamodel_pb2.SandboxSpec
+    spec: SandboxSpec
     name: str
     def __init__(
-        self,
-        spec: _Optional[_Union[_datamodel_pb2.SandboxSpec, _Mapping]] = ...,
-        name: _Optional[str] = ...,
+        self, spec: _Optional[_Union[SandboxSpec, _Mapping]] = ..., name: _Optional[str] = ...
     ) -> None: ...
 
 class GetSandboxRequest(_message.Message):
@@ -83,17 +305,15 @@ class DeleteSandboxRequest(_message.Message):
 class SandboxResponse(_message.Message):
     __slots__ = ("sandbox",)
     SANDBOX_FIELD_NUMBER: _ClassVar[int]
-    sandbox: _datamodel_pb2.Sandbox
-    def __init__(
-        self, sandbox: _Optional[_Union[_datamodel_pb2.Sandbox, _Mapping]] = ...
-    ) -> None: ...
+    sandbox: Sandbox
+    def __init__(self, sandbox: _Optional[_Union[Sandbox, _Mapping]] = ...) -> None: ...
 
 class ListSandboxesResponse(_message.Message):
     __slots__ = ("sandboxes",)
     SANDBOXES_FIELD_NUMBER: _ClassVar[int]
-    sandboxes: _containers.RepeatedCompositeFieldContainer[_datamodel_pb2.Sandbox]
+    sandboxes: _containers.RepeatedCompositeFieldContainer[Sandbox]
     def __init__(
-        self, sandboxes: _Optional[_Iterable[_Union[_datamodel_pb2.Sandbox, _Mapping]]] = ...
+        self, sandboxes: _Optional[_Iterable[_Union[Sandbox, _Mapping]]] = ...
     ) -> None: ...
 
 class DeleteSandboxResponse(_message.Message):
@@ -316,14 +536,14 @@ class SandboxStreamEvent(_message.Message):
     EVENT_FIELD_NUMBER: _ClassVar[int]
     WARNING_FIELD_NUMBER: _ClassVar[int]
     DRAFT_POLICY_UPDATE_FIELD_NUMBER: _ClassVar[int]
-    sandbox: _datamodel_pb2.Sandbox
+    sandbox: Sandbox
     log: SandboxLogLine
     event: PlatformEvent
     warning: SandboxStreamWarning
     draft_policy_update: DraftPolicyUpdate
     def __init__(
         self,
-        sandbox: _Optional[_Union[_datamodel_pb2.Sandbox, _Mapping]] = ...,
+        sandbox: _Optional[_Union[Sandbox, _Mapping]] = ...,
         log: _Optional[_Union[SandboxLogLine, _Mapping]] = ...,
         event: _Optional[_Union[PlatformEvent, _Mapping]] = ...,
         warning: _Optional[_Union[SandboxStreamWarning, _Mapping]] = ...,
@@ -363,38 +583,6 @@ class SandboxLogLine(_message.Message):
         message: _Optional[str] = ...,
         source: _Optional[str] = ...,
         fields: _Optional[_Mapping[str, str]] = ...,
-    ) -> None: ...
-
-class PlatformEvent(_message.Message):
-    __slots__ = ("timestamp_ms", "source", "type", "reason", "message", "metadata")
-    class MetadataEntry(_message.Message):
-        __slots__ = ("key", "value")
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: str
-        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
-
-    TIMESTAMP_MS_FIELD_NUMBER: _ClassVar[int]
-    SOURCE_FIELD_NUMBER: _ClassVar[int]
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    REASON_FIELD_NUMBER: _ClassVar[int]
-    MESSAGE_FIELD_NUMBER: _ClassVar[int]
-    METADATA_FIELD_NUMBER: _ClassVar[int]
-    timestamp_ms: int
-    source: str
-    type: str
-    reason: str
-    message: str
-    metadata: _containers.ScalarMap[str, str]
-    def __init__(
-        self,
-        timestamp_ms: _Optional[int] = ...,
-        source: _Optional[str] = ...,
-        type: _Optional[str] = ...,
-        reason: _Optional[str] = ...,
-        message: _Optional[str] = ...,
-        metadata: _Optional[_Mapping[str, str]] = ...,
     ) -> None: ...
 
 class SandboxStreamWarning(_message.Message):
@@ -482,18 +670,27 @@ class GetSandboxProviderEnvironmentResponse(_message.Message):
     def __init__(self, environment: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class UpdateConfigRequest(_message.Message):
-    __slots__ = ("name", "policy", "setting_key", "setting_value", "delete_setting")
+    __slots__ = (
+        "name",
+        "policy",
+        "setting_key",
+        "setting_value",
+        "delete_setting",
+        "merge_operations",
+    )
     NAME_FIELD_NUMBER: _ClassVar[int]
     POLICY_FIELD_NUMBER: _ClassVar[int]
     SETTING_KEY_FIELD_NUMBER: _ClassVar[int]
     SETTING_VALUE_FIELD_NUMBER: _ClassVar[int]
     DELETE_SETTING_FIELD_NUMBER: _ClassVar[int]
     GLOBAL_FIELD_NUMBER: _ClassVar[int]
+    MERGE_OPERATIONS_FIELD_NUMBER: _ClassVar[int]
     name: str
     policy: _sandbox_pb2.SandboxPolicy
     setting_key: str
     setting_value: _sandbox_pb2.SettingValue
     delete_setting: bool
+    merge_operations: _containers.RepeatedCompositeFieldContainer[PolicyMergeOperation]
     def __init__(
         self,
         name: _Optional[str] = ...,
@@ -501,7 +698,112 @@ class UpdateConfigRequest(_message.Message):
         setting_key: _Optional[str] = ...,
         setting_value: _Optional[_Union[_sandbox_pb2.SettingValue, _Mapping]] = ...,
         delete_setting: bool = ...,
+        merge_operations: _Optional[_Iterable[_Union[PolicyMergeOperation, _Mapping]]] = ...,
         **kwargs,
+    ) -> None: ...
+
+class PolicyMergeOperation(_message.Message):
+    __slots__ = (
+        "add_rule",
+        "remove_endpoint",
+        "remove_rule",
+        "add_deny_rules",
+        "add_allow_rules",
+        "remove_binary",
+    )
+    ADD_RULE_FIELD_NUMBER: _ClassVar[int]
+    REMOVE_ENDPOINT_FIELD_NUMBER: _ClassVar[int]
+    REMOVE_RULE_FIELD_NUMBER: _ClassVar[int]
+    ADD_DENY_RULES_FIELD_NUMBER: _ClassVar[int]
+    ADD_ALLOW_RULES_FIELD_NUMBER: _ClassVar[int]
+    REMOVE_BINARY_FIELD_NUMBER: _ClassVar[int]
+    add_rule: AddNetworkRule
+    remove_endpoint: RemoveNetworkEndpoint
+    remove_rule: RemoveNetworkRule
+    add_deny_rules: AddDenyRules
+    add_allow_rules: AddAllowRules
+    remove_binary: RemoveNetworkBinary
+    def __init__(
+        self,
+        add_rule: _Optional[_Union[AddNetworkRule, _Mapping]] = ...,
+        remove_endpoint: _Optional[_Union[RemoveNetworkEndpoint, _Mapping]] = ...,
+        remove_rule: _Optional[_Union[RemoveNetworkRule, _Mapping]] = ...,
+        add_deny_rules: _Optional[_Union[AddDenyRules, _Mapping]] = ...,
+        add_allow_rules: _Optional[_Union[AddAllowRules, _Mapping]] = ...,
+        remove_binary: _Optional[_Union[RemoveNetworkBinary, _Mapping]] = ...,
+    ) -> None: ...
+
+class AddNetworkRule(_message.Message):
+    __slots__ = ("rule_name", "rule")
+    RULE_NAME_FIELD_NUMBER: _ClassVar[int]
+    RULE_FIELD_NUMBER: _ClassVar[int]
+    rule_name: str
+    rule: _sandbox_pb2.NetworkPolicyRule
+    def __init__(
+        self,
+        rule_name: _Optional[str] = ...,
+        rule: _Optional[_Union[_sandbox_pb2.NetworkPolicyRule, _Mapping]] = ...,
+    ) -> None: ...
+
+class RemoveNetworkEndpoint(_message.Message):
+    __slots__ = ("rule_name", "host", "port")
+    RULE_NAME_FIELD_NUMBER: _ClassVar[int]
+    HOST_FIELD_NUMBER: _ClassVar[int]
+    PORT_FIELD_NUMBER: _ClassVar[int]
+    rule_name: str
+    host: str
+    port: int
+    def __init__(
+        self,
+        rule_name: _Optional[str] = ...,
+        host: _Optional[str] = ...,
+        port: _Optional[int] = ...,
+    ) -> None: ...
+
+class RemoveNetworkRule(_message.Message):
+    __slots__ = ("rule_name",)
+    RULE_NAME_FIELD_NUMBER: _ClassVar[int]
+    rule_name: str
+    def __init__(self, rule_name: _Optional[str] = ...) -> None: ...
+
+class AddDenyRules(_message.Message):
+    __slots__ = ("host", "port", "deny_rules")
+    HOST_FIELD_NUMBER: _ClassVar[int]
+    PORT_FIELD_NUMBER: _ClassVar[int]
+    DENY_RULES_FIELD_NUMBER: _ClassVar[int]
+    host: str
+    port: int
+    deny_rules: _containers.RepeatedCompositeFieldContainer[_sandbox_pb2.L7DenyRule]
+    def __init__(
+        self,
+        host: _Optional[str] = ...,
+        port: _Optional[int] = ...,
+        deny_rules: _Optional[_Iterable[_Union[_sandbox_pb2.L7DenyRule, _Mapping]]] = ...,
+    ) -> None: ...
+
+class AddAllowRules(_message.Message):
+    __slots__ = ("host", "port", "rules")
+    HOST_FIELD_NUMBER: _ClassVar[int]
+    PORT_FIELD_NUMBER: _ClassVar[int]
+    RULES_FIELD_NUMBER: _ClassVar[int]
+    host: str
+    port: int
+    rules: _containers.RepeatedCompositeFieldContainer[_sandbox_pb2.L7Rule]
+    def __init__(
+        self,
+        host: _Optional[str] = ...,
+        port: _Optional[int] = ...,
+        rules: _Optional[_Iterable[_Union[_sandbox_pb2.L7Rule, _Mapping]]] = ...,
+    ) -> None: ...
+
+class RemoveNetworkBinary(_message.Message):
+    __slots__ = ("rule_name", "binary_path")
+    RULE_NAME_FIELD_NUMBER: _ClassVar[int]
+    BINARY_PATH_FIELD_NUMBER: _ClassVar[int]
+    rule_name: str
+    binary_path: str
+    def __init__(
+        self, rule_name: _Optional[str] = ..., binary_path: _Optional[str] = ...
     ) -> None: ...
 
 class UpdateConfigResponse(_message.Message):
@@ -675,6 +977,121 @@ class GetSandboxLogsResponse(_message.Message):
         logs: _Optional[_Iterable[_Union[SandboxLogLine, _Mapping]]] = ...,
         buffer_total: _Optional[int] = ...,
     ) -> None: ...
+
+class SupervisorMessage(_message.Message):
+    __slots__ = ("hello", "heartbeat", "relay_open_result", "relay_close")
+    HELLO_FIELD_NUMBER: _ClassVar[int]
+    HEARTBEAT_FIELD_NUMBER: _ClassVar[int]
+    RELAY_OPEN_RESULT_FIELD_NUMBER: _ClassVar[int]
+    RELAY_CLOSE_FIELD_NUMBER: _ClassVar[int]
+    hello: SupervisorHello
+    heartbeat: SupervisorHeartbeat
+    relay_open_result: RelayOpenResult
+    relay_close: RelayClose
+    def __init__(
+        self,
+        hello: _Optional[_Union[SupervisorHello, _Mapping]] = ...,
+        heartbeat: _Optional[_Union[SupervisorHeartbeat, _Mapping]] = ...,
+        relay_open_result: _Optional[_Union[RelayOpenResult, _Mapping]] = ...,
+        relay_close: _Optional[_Union[RelayClose, _Mapping]] = ...,
+    ) -> None: ...
+
+class GatewayMessage(_message.Message):
+    __slots__ = ("session_accepted", "session_rejected", "heartbeat", "relay_open", "relay_close")
+    SESSION_ACCEPTED_FIELD_NUMBER: _ClassVar[int]
+    SESSION_REJECTED_FIELD_NUMBER: _ClassVar[int]
+    HEARTBEAT_FIELD_NUMBER: _ClassVar[int]
+    RELAY_OPEN_FIELD_NUMBER: _ClassVar[int]
+    RELAY_CLOSE_FIELD_NUMBER: _ClassVar[int]
+    session_accepted: SessionAccepted
+    session_rejected: SessionRejected
+    heartbeat: GatewayHeartbeat
+    relay_open: RelayOpen
+    relay_close: RelayClose
+    def __init__(
+        self,
+        session_accepted: _Optional[_Union[SessionAccepted, _Mapping]] = ...,
+        session_rejected: _Optional[_Union[SessionRejected, _Mapping]] = ...,
+        heartbeat: _Optional[_Union[GatewayHeartbeat, _Mapping]] = ...,
+        relay_open: _Optional[_Union[RelayOpen, _Mapping]] = ...,
+        relay_close: _Optional[_Union[RelayClose, _Mapping]] = ...,
+    ) -> None: ...
+
+class SupervisorHello(_message.Message):
+    __slots__ = ("sandbox_id", "instance_id")
+    SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
+    sandbox_id: str
+    instance_id: str
+    def __init__(
+        self, sandbox_id: _Optional[str] = ..., instance_id: _Optional[str] = ...
+    ) -> None: ...
+
+class SessionAccepted(_message.Message):
+    __slots__ = ("session_id", "heartbeat_interval_secs")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    HEARTBEAT_INTERVAL_SECS_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    heartbeat_interval_secs: int
+    def __init__(
+        self, session_id: _Optional[str] = ..., heartbeat_interval_secs: _Optional[int] = ...
+    ) -> None: ...
+
+class SessionRejected(_message.Message):
+    __slots__ = ("reason",)
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    reason: str
+    def __init__(self, reason: _Optional[str] = ...) -> None: ...
+
+class SupervisorHeartbeat(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class GatewayHeartbeat(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class RelayOpen(_message.Message):
+    __slots__ = ("channel_id",)
+    CHANNEL_ID_FIELD_NUMBER: _ClassVar[int]
+    channel_id: str
+    def __init__(self, channel_id: _Optional[str] = ...) -> None: ...
+
+class RelayInit(_message.Message):
+    __slots__ = ("channel_id",)
+    CHANNEL_ID_FIELD_NUMBER: _ClassVar[int]
+    channel_id: str
+    def __init__(self, channel_id: _Optional[str] = ...) -> None: ...
+
+class RelayFrame(_message.Message):
+    __slots__ = ("init", "data")
+    INIT_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    init: RelayInit
+    data: bytes
+    def __init__(
+        self, init: _Optional[_Union[RelayInit, _Mapping]] = ..., data: _Optional[bytes] = ...
+    ) -> None: ...
+
+class RelayOpenResult(_message.Message):
+    __slots__ = ("channel_id", "success", "error")
+    CHANNEL_ID_FIELD_NUMBER: _ClassVar[int]
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    channel_id: str
+    success: bool
+    error: str
+    def __init__(
+        self, channel_id: _Optional[str] = ..., success: bool = ..., error: _Optional[str] = ...
+    ) -> None: ...
+
+class RelayClose(_message.Message):
+    __slots__ = ("channel_id", "reason")
+    CHANNEL_ID_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    channel_id: str
+    reason: str
+    def __init__(self, channel_id: _Optional[str] = ..., reason: _Optional[str] = ...) -> None: ...
 
 class L7RequestSample(_message.Message):
     __slots__ = ("method", "path", "decision", "count")
