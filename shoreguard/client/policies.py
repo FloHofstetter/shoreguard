@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ._converters import _dict_to_l7_allow, _dict_to_l7_deny, _dict_to_network_rule
 from ._proto import openshell_pb2, openshell_pb2_grpc, sandbox_pb2
 
 POLICY_STATUS_NAMES = {
@@ -28,6 +29,105 @@ POLICY_STATUS_NAMES = {
     3: "failed",
     4: "superseded",
 }
+
+
+# ---------------------------------------------------------------------------
+# Incremental policy merge operations (upstream PR #860, OpenShell ≥ v0.0.33)
+# ---------------------------------------------------------------------------
+#
+# The upstream ``PolicyMergeOperation`` oneof carries six operations:
+# ``add_rule``, ``remove_rule``, ``remove_endpoint``, ``add_allow_rules``,
+# ``add_deny_rules``, ``remove_binary``. ShoreGuard exchanges them as dicts
+# with a ``type`` discriminator so the REST / CLI / YAML layers do not need
+# protobuf dependencies.
+#
+# There is no ``update_rule`` op upstream; rule body changes are expressed
+# as ``remove_rule`` + ``add_rule`` in that order.
+
+_MERGE_OP_TYPES = frozenset(
+    {
+        "add_rule",
+        "remove_rule",
+        "remove_endpoint",
+        "add_allow_rules",
+        "add_deny_rules",
+        "remove_binary",
+    }
+)
+
+
+class MergeOperationError(ValueError):
+    """Invalid merge operation dict.
+
+    Raised when a merge-operation dict cannot be converted to its
+    protobuf form (unknown ``type``, missing required field).
+    """
+
+
+def _dict_to_merge_operation(op: dict[str, Any]) -> openshell_pb2.PolicyMergeOperation:
+    """Convert a ShoreGuard merge-op dict into the protobuf oneof.
+
+    Args:
+        op: Dict with a ``type`` discriminator and op-specific fields.
+
+    Returns:
+        openshell_pb2.PolicyMergeOperation: Populated protobuf oneof
+            carrying one of six concrete operations.
+
+    Raises:
+        MergeOperationError: If ``op["type"]`` is missing or unknown.
+    """
+    op_type = op.get("type")
+    if op_type not in _MERGE_OP_TYPES:
+        raise MergeOperationError(
+            f"unknown or missing merge operation type: {op_type!r} "
+            f"(expected one of {sorted(_MERGE_OP_TYPES)})"
+        )
+    if op_type == "add_rule":
+        return openshell_pb2.PolicyMergeOperation(
+            add_rule=openshell_pb2.AddNetworkRule(
+                rule_name=op.get("rule_name", ""),
+                rule=_dict_to_network_rule(op.get("rule", {})),
+            )
+        )
+    if op_type == "remove_rule":
+        return openshell_pb2.PolicyMergeOperation(
+            remove_rule=openshell_pb2.RemoveNetworkRule(rule_name=op.get("rule_name", ""))
+        )
+    if op_type == "remove_endpoint":
+        return openshell_pb2.PolicyMergeOperation(
+            remove_endpoint=openshell_pb2.RemoveNetworkEndpoint(
+                rule_name=op.get("rule_name", ""),
+                host=op.get("host", ""),
+                port=int(op.get("port", 0)),
+            )
+        )
+    if op_type == "add_allow_rules":
+        return openshell_pb2.PolicyMergeOperation(
+            add_allow_rules=openshell_pb2.AddAllowRules(
+                host=op.get("host", ""),
+                port=int(op.get("port", 0)),
+                rules=[
+                    sandbox_pb2.L7Rule(allow=_dict_to_l7_allow(r.get("allow", {})))
+                    for r in op.get("rules", [])
+                ],
+            )
+        )
+    if op_type == "add_deny_rules":
+        return openshell_pb2.PolicyMergeOperation(
+            add_deny_rules=openshell_pb2.AddDenyRules(
+                host=op.get("host", ""),
+                port=int(op.get("port", 0)),
+                deny_rules=[_dict_to_l7_deny(d) for d in op.get("deny_rules", [])],
+            )
+        )
+    # remove_binary: the only remaining type.
+    return openshell_pb2.PolicyMergeOperation(
+        remove_binary=openshell_pb2.RemoveNetworkBinary(
+            rule_name=op.get("rule_name", ""),
+            binary_path=op.get("binary_path", ""),
+        )
+    )
 
 
 def _policy_to_dict(policy: sandbox_pb2.SandboxPolicy) -> dict[str, Any]:
@@ -247,6 +347,52 @@ class PolicyManager:
                 name=sandbox_name,
                 policy=policy,
                 **{"global": global_scope},  # type: ignore[arg-type]
+            ),
+            timeout=self._timeout,
+        )
+        return {
+            "version": resp.version,
+            "policy_hash": resp.policy_hash,
+        }
+
+    def apply_merge_operations(
+        self,
+        sandbox_name: str,
+        operations: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Apply incremental policy merge operations against a sandbox.
+
+        Maps to ``UpdateConfigRequest.merge_operations`` (upstream PR #860,
+        `NVIDIA/OpenShell#860 <https://github.com/NVIDIA/OpenShell/pull/860>`_).
+        Each dict in *operations* carries a ``type`` discriminator and
+        op-specific fields; see :func:`_dict_to_merge_operation` for the
+        accepted shapes.
+
+        Operations are applied in order by the gateway. Callers
+        constructing deltas from a Git source of truth (M23 GitOps) should
+        emit ``remove_*`` operations before ``add_*`` operations so a
+        partial failure cannot leave the gateway in a state that is
+        inconsistent with either the source or the target revision.
+
+        This path is sandbox-scoped only — the upstream proto does not
+        support a ``global`` merge. Callers that need global replacement
+        must use :meth:`update` instead.
+
+        Args:
+            sandbox_name: Sandbox whose policy is being mutated.
+            operations: Ordered list of merge-op dicts. Empty list is a
+                no-op (the gateway still assigns a new revision).
+
+        Returns:
+            dict[str, Any]: ``version`` and ``policy_hash`` of the new
+                revision, shaped identically to :meth:`update` so
+                downstream code can treat the two as interchangeable.
+        """
+        merge_ops = [_dict_to_merge_operation(op) for op in operations]
+        resp = self._stub.UpdateConfig(
+            openshell_pb2.UpdateConfigRequest(
+                name=sandbox_name,
+                merge_operations=merge_ops,
             ),
             timeout=self._timeout,
         )

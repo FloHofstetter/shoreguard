@@ -7,7 +7,13 @@ from types import SimpleNamespace
 import pytest
 
 from shoreguard.client._proto import openshell_pb2, sandbox_pb2
-from shoreguard.client.policies import PolicyManager, _network_rule_to_dict, _policy_to_dict
+from shoreguard.client.policies import (
+    MergeOperationError,
+    PolicyManager,
+    _dict_to_merge_operation,
+    _network_rule_to_dict,
+    _policy_to_dict,
+)
 
 
 class _FakeStub:
@@ -893,3 +899,159 @@ class TestPolicyManagerMutations:
         assert "policy" in result
         assert result["policy"]["version"] == 2
         assert "r" in result["policy"]["network_policies"]
+
+
+# ---------------------------------------------------------------------------
+# Incremental policy merge operations (WS6a)
+# ---------------------------------------------------------------------------
+
+
+class TestDictToMergeOperation:
+    def test_add_rule_round_trip(self) -> None:
+        op = _dict_to_merge_operation(
+            {
+                "type": "add_rule",
+                "rule_name": "allow-gh",
+                "rule": {
+                    "name": "allow-gh",
+                    "endpoints": [{"host": "api.github.com", "port": 443}],
+                },
+            }
+        )
+        assert op.HasField("add_rule")
+        assert op.add_rule.rule_name == "allow-gh"
+        assert op.add_rule.rule.name == "allow-gh"
+        assert op.add_rule.rule.endpoints[0].host == "api.github.com"
+
+    def test_remove_rule(self) -> None:
+        op = _dict_to_merge_operation({"type": "remove_rule", "rule_name": "obsolete"})
+        assert op.HasField("remove_rule")
+        assert op.remove_rule.rule_name == "obsolete"
+
+    def test_remove_endpoint(self) -> None:
+        op = _dict_to_merge_operation(
+            {
+                "type": "remove_endpoint",
+                "rule_name": "allow-api",
+                "host": "api.example.com",
+                "port": 443,
+            }
+        )
+        assert op.HasField("remove_endpoint")
+        assert op.remove_endpoint.rule_name == "allow-api"
+        assert op.remove_endpoint.host == "api.example.com"
+        assert op.remove_endpoint.port == 443
+
+    def test_add_allow_rules_wraps_in_l7rule(self) -> None:
+        op = _dict_to_merge_operation(
+            {
+                "type": "add_allow_rules",
+                "host": "api.example.com",
+                "port": 443,
+                "rules": [{"allow": {"method": "GET", "path": "/api/**"}}],
+            }
+        )
+        assert op.HasField("add_allow_rules")
+        assert op.add_allow_rules.host == "api.example.com"
+        assert op.add_allow_rules.port == 443
+        assert len(op.add_allow_rules.rules) == 1
+        assert op.add_allow_rules.rules[0].allow.method == "GET"
+        assert op.add_allow_rules.rules[0].allow.path == "/api/**"
+
+    def test_add_deny_rules(self) -> None:
+        op = _dict_to_merge_operation(
+            {
+                "type": "add_deny_rules",
+                "host": "api.example.com",
+                "port": 443,
+                "deny_rules": [{"method": "DELETE", "path": "/admin/**"}],
+            }
+        )
+        assert op.HasField("add_deny_rules")
+        assert op.add_deny_rules.deny_rules[0].method == "DELETE"
+        assert op.add_deny_rules.deny_rules[0].path == "/admin/**"
+
+    def test_remove_binary(self) -> None:
+        op = _dict_to_merge_operation(
+            {
+                "type": "remove_binary",
+                "rule_name": "allow-curl",
+                "binary_path": "/usr/bin/curl",
+            }
+        )
+        assert op.HasField("remove_binary")
+        assert op.remove_binary.rule_name == "allow-curl"
+        assert op.remove_binary.binary_path == "/usr/bin/curl"
+
+    def test_missing_type_raises(self) -> None:
+        with pytest.raises(MergeOperationError, match="unknown or missing"):
+            _dict_to_merge_operation({})
+
+    def test_unknown_type_raises(self) -> None:
+        with pytest.raises(MergeOperationError, match="unknown or missing"):
+            _dict_to_merge_operation({"type": "update_rule"})
+
+
+class TestApplyMergeOperations:
+    def test_sends_merge_operations_not_policy(self) -> None:
+        """UpdateConfigRequest must carry merge_operations with no policy
+        attached — the merge semantics are incompatible with a full rewrite."""
+
+        class _Stub(_FakeStub):
+            def UpdateConfig(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(version=7, policy_hash="merged-hash")
+
+        s = _Stub()
+        m = object.__new__(PolicyManager)
+        m._stub = s  # type: ignore[assignment]
+        m._timeout = 30.0
+        result = m.apply_merge_operations(
+            "sb",
+            [
+                {"type": "remove_rule", "rule_name": "old"},
+                {
+                    "type": "add_rule",
+                    "rule_name": "new",
+                    "rule": {"name": "new", "endpoints": []},
+                },
+            ],
+        )
+        assert result == {"version": 7, "policy_hash": "merged-hash"}
+        assert s.request.name == "sb"
+        assert len(s.request.merge_operations) == 2
+        # Removes come first, by convention and by what we sent.
+        assert s.request.merge_operations[0].HasField("remove_rule")
+        assert s.request.merge_operations[1].HasField("add_rule")
+        # No policy attached — merge path is sandbox-scoped and incremental.
+        assert not s.request.HasField("policy")
+
+    def test_empty_operations_list_is_noop(self) -> None:
+        class _Stub(_FakeStub):
+            def UpdateConfig(self, req, timeout=None):
+                self.request = req
+                return SimpleNamespace(version=8, policy_hash="noop")
+
+        s = _Stub()
+        m = object.__new__(PolicyManager)
+        m._stub = s  # type: ignore[assignment]
+        m._timeout = 30.0
+        result = m.apply_merge_operations("sb", [])
+        assert result == {"version": 8, "policy_hash": "noop"}
+        assert len(s.request.merge_operations) == 0
+
+    def test_invalid_operation_raises_before_rpc(self) -> None:
+        """An unknown op type is caught in _dict_to_merge_operation and
+        the gRPC call is never issued — the stub's UpdateConfig would
+        raise if invoked."""
+
+        class _Stub(_FakeStub):
+            def UpdateConfig(self, req, timeout=None):
+                raise AssertionError("UpdateConfig must not be called")
+
+        s = _Stub()
+        m = object.__new__(PolicyManager)
+        m._stub = s  # type: ignore[assignment]
+        m._timeout = 30.0
+        with pytest.raises(MergeOperationError):
+            m.apply_merge_operations("sb", [{"type": "update_rule"}])
