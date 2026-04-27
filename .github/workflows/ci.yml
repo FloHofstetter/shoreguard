@@ -28,7 +28,12 @@ jobs:
         with:
           python-version: "3.14"
       - run: uv sync --group dev
-      - run: uv run pip-audit
+      # CVE-2026-3219: pip 26.0.1 has a known vulnerability with no fix
+      # version published yet. uv's resolver bundles pip 26.0.1 into the
+      # dev environment for legacy editable-install fallbacks; the CVE
+      # affects pip itself, not Shoreguard's runtime dependencies. Remove
+      # the --ignore-vuln flag once pip ships a patched release.
+      - run: uv run pip-audit --ignore-vuln CVE-2026-3219
 
   coverage-matrix:
     # Enforces the "every upstream RPC is covered by client + REST + UI"
