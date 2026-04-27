@@ -264,13 +264,13 @@ async def test_viewer_cannot_read_gateway_settings(viewer_client):
 
 async def test_viewer_cannot_update_gateway_settings(viewer_client):
     resp = await viewer_client.put(
-        f"/api/gateway/{GW}/settings/ocsf_logging_enabled", json={"value": True}
+        f"/api/gateway/{GW}/settings/ocsf_json_enabled", json={"value": True}
     )
     assert resp.status_code == 403
 
 
 async def test_viewer_cannot_delete_gateway_settings(viewer_client):
-    resp = await viewer_client.delete(f"/api/gateway/{GW}/settings/ocsf_logging_enabled")
+    resp = await viewer_client.delete(f"/api/gateway/{GW}/settings/ocsf_json_enabled")
     assert resp.status_code == 403
 
 

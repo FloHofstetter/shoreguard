@@ -1754,7 +1754,7 @@ wheels = [
 
 [[package]]
 name = "shoreguard"
-version = "0.34.1"
+version = "0.34.2"
 source = { editable = "." }
 dependencies = [
     { name = "aiosmtplib" },

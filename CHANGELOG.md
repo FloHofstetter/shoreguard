@@ -5,6 +5,20 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.34.2] — 2026-04-27
+
+### Fixed
+
+- **Gateway OCSF logging toggle was silently broken.** The gateway-detail
+  Observability switch and its REST/CLI counterparts wrote setting key
+  `ocsf_logging_enabled`, but OpenShell `crates/openshell-core/src/settings.rs`
+  registers the key as `ocsf_json_enabled` — gateways rejected the unknown key
+  with `InvalidArgument`, so the toggle never took effect. Renamed all
+  read/write call sites to use `ocsf_json_enabled` (`frontend/js/gateway.js`,
+  `tests/test_rbac.py`, `tests/test_api_gateway_routes.py`). Existing gateway
+  state is unaffected; the next save through the toggle now writes the correct
+  registered key.
+
 ## [0.34.1] — 2026-04-23
 
 ### Changed

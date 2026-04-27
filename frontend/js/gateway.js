@@ -582,7 +582,7 @@ function gatewaySettings() {
             try {
                 const config = await apiFetch(`${API_GLOBAL}/gateway/${this.gwName}/settings`);
                 const settings = (config && config.settings) || {};
-                this.ocsfLoggingEnabled = settings.ocsf_logging_enabled === true;
+                this.ocsfLoggingEnabled = settings.ocsf_json_enabled === true;
             } catch {
                 this.ocsfLoggingEnabled = false;
             } finally {
@@ -595,7 +595,7 @@ function gatewaySettings() {
             this.saving = true;
             try {
                 await apiFetch(
-                    `${API_GLOBAL}/gateway/${this.gwName}/settings/ocsf_logging_enabled`,
+                    `${API_GLOBAL}/gateway/${this.gwName}/settings/ocsf_json_enabled`,
                     {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
