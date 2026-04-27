@@ -19,6 +19,11 @@ from ._proto import datamodel_pb2, openshell_pb2, openshell_pb2_grpc
 def _provider_to_dict(provider: datamodel_pb2.Provider) -> dict[str, Any]:
     """Convert a Provider protobuf to a plain dict.
 
+    Identity fields (id, name) come from the OpenShell ObjectMeta convention
+    (`Provider.metadata`) introduced in OpenShell #919. Pre-#919 wire payloads
+    are not supported on this branch — Shoreguard requires gateway version
+    v0.0.37+.
+
     Args:
         provider: Provider protobuf message.
 
@@ -27,8 +32,8 @@ def _provider_to_dict(provider: datamodel_pb2.Provider) -> dict[str, Any]:
             and config.
     """
     return {
-        "id": provider.id,
-        "name": provider.name,
+        "id": provider.metadata.id,
+        "name": provider.metadata.name,
         "type": provider.type,
         "credentials": dict(provider.credentials),
         "config": dict(provider.config),
@@ -97,7 +102,7 @@ class ProviderManager:
             dict[str, Any]: Created provider data dict.
         """
         provider = datamodel_pb2.Provider(
-            name=name,
+            metadata=datamodel_pb2.ObjectMeta(name=name),
             type=provider_type,
             credentials=credentials or {},
             config=config or {},
@@ -128,7 +133,7 @@ class ProviderManager:
             dict[str, Any]: Updated provider data dict.
         """
         provider = datamodel_pb2.Provider(
-            name=name,
+            metadata=datamodel_pb2.ObjectMeta(name=name),
             type=provider_type,
             credentials=credentials or {},
             config=config or {},

@@ -11,7 +11,10 @@ from shoreguard.client.providers import ProviderManager, _provider_to_dict
 
 
 def _make_provider(name: str = "prov-1", ptype: str = "anthropic") -> datamodel_pb2.Provider:
-    return datamodel_pb2.Provider(id="id-1", name=name, type=ptype)
+    return datamodel_pb2.Provider(
+        metadata=datamodel_pb2.ObjectMeta(id="id-1", name=name),
+        type=ptype,
+    )
 
 
 class _FakeStub:
@@ -79,7 +82,7 @@ def test_create_sends_credentials(mgr, stub):
         credentials={"ANTHROPIC_API_KEY": "sk-xxx"},
     )
 
-    assert stub.request.provider.name == "new-prov"
+    assert stub.request.provider.metadata.name == "new-prov"
     assert stub.request.provider.type == "anthropic"
     assert dict(stub.request.provider.credentials) == {"ANTHROPIC_API_KEY": "sk-xxx"}
     assert result["name"] == "new-prov"
@@ -89,7 +92,7 @@ def test_update_sends_name_and_type(mgr, stub):
     """update() builds Provider proto with new type and sends it."""
     result = mgr.update(name="prov-1", provider_type="openai")
 
-    assert stub.request.provider.name == "prov-1"
+    assert stub.request.provider.metadata.name == "prov-1"
     assert stub.request.provider.type == "openai"
     assert result["type"] == "openai"
 
@@ -108,8 +111,7 @@ def test_delete_returns_bool(mgr, stub):
 def test_provider_to_dict_all_fields():
     """Assert all fields: id, name, type, credentials, config."""
     provider = datamodel_pb2.Provider(
-        id="id-42",
-        name="my-prov",
+        metadata=datamodel_pb2.ObjectMeta(id="id-42", name="my-prov"),
         type="openai",
         credentials={"API_KEY": "sk-123"},
         config={"region": "us-east-1"},
@@ -185,15 +187,17 @@ class TestProviderToDictMutations:
     """Kill mutations in _provider_to_dict field mappings."""
 
     def test_empty_credentials_and_config(self):
-        provider = datamodel_pb2.Provider(id="i", name="n", type="t")
+        provider = datamodel_pb2.Provider(
+            metadata=datamodel_pb2.ObjectMeta(id="i", name="n"),
+            type="t",
+        )
         result = _provider_to_dict(provider)
         assert result["credentials"] == {}
         assert result["config"] == {}
 
     def test_each_field_maps_correctly(self):
         provider = datamodel_pb2.Provider(
-            id="ID",
-            name="NAME",
+            metadata=datamodel_pb2.ObjectMeta(id="ID", name="NAME"),
             type="TYPE",
             credentials={"k1": "v1"},
             config={"k2": "v2"},
@@ -206,7 +210,10 @@ class TestProviderToDictMutations:
         assert result["config"] == {"k2": "v2"}
 
     def test_dict_keys_exact(self):
-        provider = datamodel_pb2.Provider(id="i", name="n", type="t")
+        provider = datamodel_pb2.Provider(
+            metadata=datamodel_pb2.ObjectMeta(id="i", name="n"),
+            type="t",
+        )
         result = _provider_to_dict(provider)
         assert set(result.keys()) == {"id", "name", "type", "credentials", "config"}
 
@@ -346,4 +353,4 @@ class TestProviderManagerMutations:
         m._timeout = 30.0
         m.create(name="p", provider_type="openai")
         assert s.request.provider.type == "openai"
-        assert s.request.provider.name == "p"
+        assert s.request.provider.metadata.name == "p"

@@ -20,7 +20,7 @@ _sym_db = _symbol_database.Default()
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x0f\x64\x61tamodel.proto\x12\x16openshell.datamodel.v1"\x9b\x02\n\x08Provider\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0c\n\x04type\x18\x03 \x01(\t\x12\x46\n\x0b\x63redentials\x18\x04 \x03(\x0b\x32\x31.openshell.datamodel.v1.Provider.CredentialsEntry\x12<\n\x06\x63onfig\x18\x05 \x03(\x0b\x32,.openshell.datamodel.v1.Provider.ConfigEntry\x1a\x32\n\x10\x43redentialsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a-\n\x0b\x43onfigEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x62\x06proto3'
+    b'\n\x0f\x64\x61tamodel.proto\x12\x16openshell.datamodel.v1"\xac\x01\n\nObjectMeta\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x15\n\rcreated_at_ms\x18\x03 \x01(\x03\x12>\n\x06labels\x18\x04 \x03(\x0b\x32..openshell.datamodel.v1.ObjectMeta.LabelsEntry\x1a-\n\x0bLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01"\xb7\x02\n\x08Provider\x12\x34\n\x08metadata\x18\x01 \x01(\x0b\x32".openshell.datamodel.v1.ObjectMeta\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\x46\n\x0b\x63redentials\x18\x03 \x03(\x0b\x32\x31.openshell.datamodel.v1.Provider.CredentialsEntry\x12<\n\x06\x63onfig\x18\x04 \x03(\x0b\x32,.openshell.datamodel.v1.Provider.ConfigEntry\x1a\x32\n\x10\x43redentialsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x1a-\n\x0b\x43onfigEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x62\x06proto3'
 )
 
 _globals = globals()
@@ -28,14 +28,20 @@ _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "datamodel_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
     DESCRIPTOR._loaded_options = None
+    _globals["_OBJECTMETA_LABELSENTRY"]._loaded_options = None
+    _globals["_OBJECTMETA_LABELSENTRY"]._serialized_options = b"8\001"
     _globals["_PROVIDER_CREDENTIALSENTRY"]._loaded_options = None
     _globals["_PROVIDER_CREDENTIALSENTRY"]._serialized_options = b"8\001"
     _globals["_PROVIDER_CONFIGENTRY"]._loaded_options = None
     _globals["_PROVIDER_CONFIGENTRY"]._serialized_options = b"8\001"
-    _globals["_PROVIDER"]._serialized_start = 44
-    _globals["_PROVIDER"]._serialized_end = 327
-    _globals["_PROVIDER_CREDENTIALSENTRY"]._serialized_start = 230
-    _globals["_PROVIDER_CREDENTIALSENTRY"]._serialized_end = 280
-    _globals["_PROVIDER_CONFIGENTRY"]._serialized_start = 282
-    _globals["_PROVIDER_CONFIGENTRY"]._serialized_end = 327
+    _globals["_OBJECTMETA"]._serialized_start = 44
+    _globals["_OBJECTMETA"]._serialized_end = 216
+    _globals["_OBJECTMETA_LABELSENTRY"]._serialized_start = 171
+    _globals["_OBJECTMETA_LABELSENTRY"]._serialized_end = 216
+    _globals["_PROVIDER"]._serialized_start = 219
+    _globals["_PROVIDER"]._serialized_end = 530
+    _globals["_PROVIDER_CREDENTIALSENTRY"]._serialized_start = 433
+    _globals["_PROVIDER_CREDENTIALSENTRY"]._serialized_end = 483
+    _globals["_PROVIDER_CONFIGENTRY"]._serialized_start = 485
+    _globals["_PROVIDER_CONFIGENTRY"]._serialized_end = 530
 # @@protoc_insertion_point(module_scope)

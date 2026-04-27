@@ -87,6 +87,11 @@ class SandboxService:
     ) -> list[dict[str, Any]]:
         """List all sandboxes with merged metadata.
 
+        Labels are the union of upstream-native labels (from
+        ``Sandbox.metadata.labels``, OpenShell #919+) and Shoreguard's
+        DB-side ``SandboxMeta.labels``. On key conflict, the upstream
+        label wins.
+
         Args:
             limit: Maximum number of sandboxes to return.
             offset: Number of sandboxes to skip.
@@ -96,20 +101,25 @@ class SandboxService:
         Returns:
             list[dict[str, Any]]: Sandbox records with metadata.
         """
-        sandboxes = self._client.sandboxes.list(limit=limit, offset=offset)
+        selector = ",".join(f"{k}={v}" for k, v in labels_filter.items()) if labels_filter else ""
+        sandboxes = self._client.sandboxes.list(limit=limit, offset=offset, label_selector=selector)
         if self._meta and gateway_name:
             all_meta = self._meta.list_for_gateway(gateway_name)
             for sb in sandboxes:
                 name = sb.get("name", "")
                 meta = all_meta.get(name)
                 sb["description"] = meta["description"] if meta else None
-                sb["labels"] = meta["labels"] if meta else {}
-            if labels_filter:
-                sandboxes = [
-                    sb
-                    for sb in sandboxes
-                    if all(sb.get("labels", {}).get(k) == v for k, v in labels_filter.items())
-                ]
+                db_labels = meta["labels"] if meta else {}
+                sb["labels"] = {**db_labels, **sb.pop("upstream_labels", {})}
+        else:
+            for sb in sandboxes:
+                sb["labels"] = sb.pop("upstream_labels", {})
+        if labels_filter:
+            sandboxes = [
+                sb
+                for sb in sandboxes
+                if all(sb.get("labels", {}).get(k) == v for k, v in labels_filter.items())
+            ]
         return sandboxes
 
     def get(self, name: str, *, gateway_name: str | None = None) -> dict[str, Any]:
@@ -126,7 +136,10 @@ class SandboxService:
         if self._meta and gateway_name:
             meta = self._meta.get(gateway_name, name)
             sb["description"] = meta["description"] if meta else None
-            sb["labels"] = meta["labels"] if meta else {}
+            db_labels = meta["labels"] if meta else {}
+            sb["labels"] = {**db_labels, **sb.pop("upstream_labels", {})}
+        else:
+            sb["labels"] = sb.pop("upstream_labels", {})
         return sb
 
     def delete(self, name: str, *, gateway_name: str | None = None) -> bool:
@@ -305,10 +318,12 @@ class SandboxService:
             raise RuntimeError("Metadata store not configured")
         # Verify sandbox exists on gateway
         sb = self._client.sandboxes.get(name)
+        upstream_labels: dict[str, str] = sb.pop("upstream_labels", {})
         self._meta.upsert(gateway_name, name, description=description, labels=labels)
         meta = self._meta.get(gateway_name, name)
         sb["description"] = meta["description"] if meta else None
-        sb["labels"] = meta["labels"] if meta else {}
+        db_labels = meta["labels"] if meta else {}
+        sb["labels"] = {**db_labels, **upstream_labels}
         return sb
 
     def create(
@@ -383,9 +398,11 @@ class SandboxService:
             providers=providers,
             environment=environment,
             log_level=log_level,
+            labels=labels,
         )
 
         sandbox_name = result.get("name", name)
+        upstream_labels: dict[str, str] = result.pop("upstream_labels", {})
 
         # Store metadata if provided
         if self._meta and gateway_name and (description is not None or labels is not None):
@@ -397,7 +414,10 @@ class SandboxService:
             )
             meta = self._meta.get(gateway_name, sandbox_name)
             result["description"] = meta["description"] if meta else None
-            result["labels"] = meta["labels"] if meta else {}
+            db_labels = meta["labels"] if meta else {}
+            result["labels"] = {**db_labels, **upstream_labels}
+        else:
+            result["labels"] = upstream_labels
 
         if not presets:
             if run_hooks:

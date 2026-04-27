@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from shoreguard.client._proto import openshell_pb2
+from shoreguard.client._proto import datamodel_pb2, openshell_pb2
 from shoreguard.client.sandboxes import SandboxManager, _sandbox_to_dict
 from shoreguard.exceptions import SandboxError
 
@@ -22,17 +22,30 @@ class _FakeStub:
         self.request = req
         return SimpleNamespace(
             sandboxes=[
-                openshell_pb2.Sandbox(id="abc", name="sb1", phase=2),  # type: ignore[arg-type]
+                openshell_pb2.Sandbox(
+                    metadata=datamodel_pb2.ObjectMeta(id="abc", name="sb1"),
+                    phase=openshell_pb2.SANDBOX_PHASE_READY,
+                ),  # type: ignore[arg-type]
             ]
         )
 
     def GetSandbox(self, req, timeout=None):
         self.request = req
-        return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="abc", name="sb1", phase=2))  # type: ignore[arg-type]
+        return SimpleNamespace(
+            sandbox=openshell_pb2.Sandbox(
+                metadata=datamodel_pb2.ObjectMeta(id="abc", name="sb1"),
+                phase=openshell_pb2.SANDBOX_PHASE_READY,
+            )
+        )  # type: ignore[arg-type]
 
     def CreateSandbox(self, req, timeout=None):
         self.request = req
-        return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="new", name="new-sb", phase=1))  # type: ignore[arg-type]
+        return SimpleNamespace(
+            sandbox=openshell_pb2.Sandbox(
+                metadata=datamodel_pb2.ObjectMeta(id="new", name="new-sb"),
+                phase=openshell_pb2.SANDBOX_PHASE_PROVISIONING,
+            )
+        )  # type: ignore[arg-type]
 
     def DeleteSandbox(self, req, timeout=None):
         self.request = req
@@ -215,7 +228,12 @@ def test_wait_ready_immediate(monkeypatch):
 
     class _ReadyStub(_FakeStub):
         def GetSandbox(self, req, timeout=None):
-            return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="abc", name="sb1", phase=2))  # type: ignore[arg-type]
+            return SimpleNamespace(
+                sandbox=openshell_pb2.Sandbox(
+                    metadata=datamodel_pb2.ObjectMeta(id="abc", name="sb1"),
+                    phase=openshell_pb2.SANDBOX_PHASE_READY,
+                )
+            )  # type: ignore[arg-type]
 
     s = _ReadyStub()
     m = object.__new__(SandboxManager)
@@ -232,7 +250,12 @@ def test_wait_ready_error_phase(monkeypatch):
 
     class _ErrorStub(_FakeStub):
         def GetSandbox(self, req, timeout=None):
-            return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="abc", name="sb1", phase=3))  # type: ignore[arg-type]
+            return SimpleNamespace(
+                sandbox=openshell_pb2.Sandbox(
+                    metadata=datamodel_pb2.ObjectMeta(id="abc", name="sb1"),
+                    phase=openshell_pb2.SANDBOX_PHASE_ERROR,
+                )
+            )  # type: ignore[arg-type]
 
     s = _ErrorStub()
     m = object.__new__(SandboxManager)
@@ -252,7 +275,12 @@ def test_wait_ready_timeout(monkeypatch):
 
     class _ProvisioningStub(_FakeStub):
         def GetSandbox(self, req, timeout=None):
-            return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="abc", name="sb1", phase=1))  # type: ignore[arg-type]
+            return SimpleNamespace(
+                sandbox=openshell_pb2.Sandbox(
+                    metadata=datamodel_pb2.ObjectMeta(id="abc", name="sb1"),
+                    phase=openshell_pb2.SANDBOX_PHASE_PROVISIONING,
+                )
+            )  # type: ignore[arg-type]
 
     s = _ProvisioningStub()
     m = object.__new__(SandboxManager)
@@ -283,7 +311,10 @@ def _make_watch_mgr(events):
 def test_watch_status_event():
     """Watch yields status dict for sandbox payload."""
     event = openshell_pb2.SandboxStreamEvent(
-        sandbox=openshell_pb2.Sandbox(id="abc", name="sb1", phase=2),  # type: ignore[arg-type]
+        sandbox=openshell_pb2.Sandbox(
+            metadata=datamodel_pb2.ObjectMeta(id="abc", name="sb1"),
+            phase=openshell_pb2.SANDBOX_PHASE_READY,
+        ),  # type: ignore[arg-type]
     )
     mgr = _make_watch_mgr([event])
     results = list(mgr.watch("abc"))
@@ -379,11 +410,8 @@ def test_watch_warning_event():
 def test_sandbox_to_dict_all_phase_codes(phase_code, phase_name):
     """_sandbox_to_dict maps each phase code 0-5 to correct name."""
     sb = openshell_pb2.Sandbox(
-        id="id1",
-        name="sb1",
-        namespace="ns1",
+        metadata=datamodel_pb2.ObjectMeta(id="id1", name="sb1", created_at_ms=12345),
         phase=phase_code,
-        created_at_ms=12345,
         current_policy_version=7,
     )
     d = _sandbox_to_dict(sb)
@@ -393,7 +421,10 @@ def test_sandbox_to_dict_all_phase_codes(phase_code, phase_name):
 
 def test_sandbox_to_dict_unknown_phase_code():
     """Unknown phase code (e.g. 99) returns 'unknown'."""
-    sb = openshell_pb2.Sandbox(id="id1", name="sb1", phase=99)  # type: ignore[arg-type]
+    sb = openshell_pb2.Sandbox(
+        metadata=datamodel_pb2.ObjectMeta(id="id1", name="sb1"),
+        phase=99,  # type: ignore[arg-type]
+    )
     d = _sandbox_to_dict(sb)
     assert d["phase"] == "unknown"
     assert d["phase_code"] == 99
@@ -402,11 +433,8 @@ def test_sandbox_to_dict_unknown_phase_code():
 def test_sandbox_to_dict_all_fields():
     """_sandbox_to_dict returns all expected fields with correct values."""
     sb = openshell_pb2.Sandbox(
-        id="id42",
-        name="my-sb",
-        namespace="default",
-        phase=2,  # type: ignore[arg-type]
-        created_at_ms=9999,
+        metadata=datamodel_pb2.ObjectMeta(id="id42", name="my-sb", created_at_ms=9999),
+        phase=openshell_pb2.SANDBOX_PHASE_READY,  # type: ignore[arg-type]
         current_policy_version=3,
         spec=openshell_pb2.SandboxSpec(
             template=openshell_pb2.SandboxTemplate(image="ubuntu:22.04"),
@@ -416,7 +444,6 @@ def test_sandbox_to_dict_all_fields():
     d = _sandbox_to_dict(sb)
     assert d["id"] == "id42"
     assert d["name"] == "my-sb"
-    assert d["namespace"] == "default"
     assert d["phase"] == "ready"
     assert d["phase_code"] == 2
     assert d["created_at_ms"] == 9999
@@ -428,8 +455,7 @@ def test_sandbox_to_dict_all_fields():
 def test_sandbox_to_dict_empty_image_is_none():
     """When image is empty string, _sandbox_to_dict returns None."""
     sb = openshell_pb2.Sandbox(
-        id="id1",
-        name="sb1",
+        metadata=datamodel_pb2.ObjectMeta(id="id1", name="sb1"),
         spec=openshell_pb2.SandboxSpec(
             template=openshell_pb2.SandboxTemplate(image=""),
         ),
@@ -440,7 +466,7 @@ def test_sandbox_to_dict_empty_image_is_none():
 
 def test_sandbox_to_dict_no_spec_gpu_false():
     """When spec is not set, gpu defaults to False."""
-    sb = openshell_pb2.Sandbox(id="id1", name="sb1")
+    sb = openshell_pb2.Sandbox(metadata=datamodel_pb2.ObjectMeta(id="id1", name="sb1"))
     d = _sandbox_to_dict(sb)
     assert d["gpu"] is False
 
@@ -489,7 +515,10 @@ def test_create_no_image_no_providers():
         def CreateSandbox(self, req, timeout=None):
             self.request = req
             return SimpleNamespace(
-                sandbox=openshell_pb2.Sandbox(id="bare", name="bare-sb", phase=1)  # type: ignore[arg-type]
+                sandbox=openshell_pb2.Sandbox(
+                    metadata=datamodel_pb2.ObjectMeta(id="bare", name="bare-sb"),
+                    phase=openshell_pb2.SANDBOX_PHASE_PROVISIONING,
+                )  # type: ignore[arg-type]
             )
 
     s = _CreateStub()
@@ -846,8 +875,16 @@ def test_wait_ready_provisioning_then_ready(monkeypatch):
             nonlocal call_count
             call_count += 1
             # First 2 calls: provisioning; then ready
-            phase = 1 if call_count <= 2 else 2
-            return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="abc", name="sb1", phase=phase))  # type: ignore[arg-type]
+            phase = (
+                openshell_pb2.SANDBOX_PHASE_PROVISIONING
+                if call_count <= 2
+                else openshell_pb2.SANDBOX_PHASE_READY
+            )
+            return SimpleNamespace(
+                sandbox=openshell_pb2.Sandbox(
+                    metadata=datamodel_pb2.ObjectMeta(id="abc", name="sb1"), phase=phase
+                )
+            )
 
     s = _TransitionStub()
     m = object.__new__(SandboxManager)
@@ -865,7 +902,12 @@ def test_wait_ready_checks_phase_exactly():
 
     class _DeletingStub(_FakeStub):
         def GetSandbox(self, req, timeout=None):
-            return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="abc", name="sb1", phase=4))  # type: ignore[arg-type]
+            return SimpleNamespace(
+                sandbox=openshell_pb2.Sandbox(
+                    metadata=datamodel_pb2.ObjectMeta(id="abc", name="sb1"),
+                    phase=openshell_pb2.SANDBOX_PHASE_DELETING,
+                )
+            )  # type: ignore[arg-type]
 
     s = _DeletingStub()
     m = object.__new__(SandboxManager)
@@ -905,11 +947,8 @@ class TestSandboxToDictMutations:
     def test_each_field_is_from_correct_proto_field(self):
         """Each dict key maps to the correct proto field, not swapped."""
         sb = openshell_pb2.Sandbox(
-            id="ID",
-            name="NAME",
-            namespace="NS",
-            phase=2,  # type: ignore[arg-type]
-            created_at_ms=42,
+            metadata=datamodel_pb2.ObjectMeta(id="ID", name="NAME", created_at_ms=42),
+            phase=openshell_pb2.SANDBOX_PHASE_READY,  # type: ignore[arg-type]
             current_policy_version=7,
             spec=openshell_pb2.SandboxSpec(
                 template=openshell_pb2.SandboxTemplate(image="IMG"),
@@ -919,7 +958,6 @@ class TestSandboxToDictMutations:
         d = _sandbox_to_dict(sb)
         assert d["id"] == "ID"
         assert d["name"] == "NAME"
-        assert d["namespace"] == "NS"
         assert d["phase"] == "ready"
         assert d["phase_code"] == 2
         assert d["created_at_ms"] == 42
@@ -929,14 +967,13 @@ class TestSandboxToDictMutations:
 
     def test_gpu_false_when_no_spec(self):
         """When sb.HasField('spec') is false, gpu should be False."""
-        sb = openshell_pb2.Sandbox(id="x", name="y")
+        sb = openshell_pb2.Sandbox(metadata=datamodel_pb2.ObjectMeta(id="x", name="y"))
         d = _sandbox_to_dict(sb)
         assert d["gpu"] is False
 
     def test_image_none_when_empty(self):
         sb = openshell_pb2.Sandbox(
-            id="x",
-            name="y",
+            metadata=datamodel_pb2.ObjectMeta(id="x", name="y"),
             spec=openshell_pb2.SandboxSpec(template=openshell_pb2.SandboxTemplate(image="")),
         )
         d = _sandbox_to_dict(sb)
@@ -944,8 +981,7 @@ class TestSandboxToDictMutations:
 
     def test_image_value_when_set(self):
         sb = openshell_pb2.Sandbox(
-            id="x",
-            name="y",
+            metadata=datamodel_pb2.ObjectMeta(id="x", name="y"),
             spec=openshell_pb2.SandboxSpec(template=openshell_pb2.SandboxTemplate(image="ubuntu")),
         )
         d = _sandbox_to_dict(sb)
@@ -1001,7 +1037,12 @@ class TestCreateMutations:
         class _Stub(_FakeStub):
             def CreateSandbox(self, req, timeout=None):
                 self.request = req
-                return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="x", name="y", phase=1))  # type: ignore[arg-type]
+                return SimpleNamespace(
+                    sandbox=openshell_pb2.Sandbox(
+                        metadata=datamodel_pb2.ObjectMeta(id="x", name="y"),
+                        phase=openshell_pb2.SANDBOX_PHASE_PROVISIONING,
+                    )
+                )  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)
@@ -1014,7 +1055,12 @@ class TestCreateMutations:
         class _Stub(_FakeStub):
             def CreateSandbox(self, req, timeout=None):
                 self.request = req
-                return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="x", name="y", phase=1))  # type: ignore[arg-type]
+                return SimpleNamespace(
+                    sandbox=openshell_pb2.Sandbox(
+                        metadata=datamodel_pb2.ObjectMeta(id="x", name="y"),
+                        phase=openshell_pb2.SANDBOX_PHASE_PROVISIONING,
+                    )
+                )  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)
@@ -1027,7 +1073,12 @@ class TestCreateMutations:
         class _Stub(_FakeStub):
             def CreateSandbox(self, req, timeout=None):
                 self.request = req
-                return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="x", name="y", phase=1))  # type: ignore[arg-type]
+                return SimpleNamespace(
+                    sandbox=openshell_pb2.Sandbox(
+                        metadata=datamodel_pb2.ObjectMeta(id="x", name="y"),
+                        phase=openshell_pb2.SANDBOX_PHASE_PROVISIONING,
+                    )
+                )  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)
@@ -1040,7 +1091,12 @@ class TestCreateMutations:
         class _Stub(_FakeStub):
             def CreateSandbox(self, req, timeout=None):
                 self.request = req
-                return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="x", name="y", phase=1))  # type: ignore[arg-type]
+                return SimpleNamespace(
+                    sandbox=openshell_pb2.Sandbox(
+                        metadata=datamodel_pb2.ObjectMeta(id="x", name="y"),
+                        phase=openshell_pb2.SANDBOX_PHASE_PROVISIONING,
+                    )
+                )  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)
@@ -1293,7 +1349,10 @@ class TestWatchMutations:
     def test_watch_multiple_events_order(self):
         events = [
             openshell_pb2.SandboxStreamEvent(
-                sandbox=openshell_pb2.Sandbox(id="a", name="s", phase=1)  # type: ignore[arg-type]
+                sandbox=openshell_pb2.Sandbox(
+                    metadata=datamodel_pb2.ObjectMeta(id="a", name="s"),
+                    phase=openshell_pb2.SANDBOX_PHASE_PROVISIONING,
+                )  # type: ignore[arg-type]
             ),
             openshell_pb2.SandboxStreamEvent(
                 log=openshell_pb2.SandboxLogLine(
@@ -1320,7 +1379,12 @@ class TestWaitReadyMutations:
 
         class _Stub(_FakeStub):
             def GetSandbox(self, req, timeout=None):
-                return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="a", name="my-sb", phase=3))  # type: ignore[arg-type]
+                return SimpleNamespace(
+                    sandbox=openshell_pb2.Sandbox(
+                        metadata=datamodel_pb2.ObjectMeta(id="a", name="my-sb"),
+                        phase=openshell_pb2.SANDBOX_PHASE_ERROR,
+                    )
+                )  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)
@@ -1341,7 +1405,12 @@ class TestWaitReadyMutations:
 
         class _Stub(_FakeStub):
             def GetSandbox(self, req, timeout=None):
-                return SimpleNamespace(sandbox=openshell_pb2.Sandbox(id="a", name="sb", phase=1))  # type: ignore[arg-type]
+                return SimpleNamespace(
+                    sandbox=openshell_pb2.Sandbox(
+                        metadata=datamodel_pb2.ObjectMeta(id="a", name="sb"),
+                        phase=openshell_pb2.SANDBOX_PHASE_PROVISIONING,
+                    )
+                )  # type: ignore[arg-type]
 
         s = _Stub()
         m = object.__new__(SandboxManager)

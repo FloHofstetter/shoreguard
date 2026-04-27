@@ -119,6 +119,11 @@ def _validate_ssh_session_response(resp: Any) -> None:
 def _sandbox_to_dict(sb: openshell_pb2.Sandbox) -> dict[str, Any]:
     """Convert a protobuf Sandbox to a plain dict.
 
+    Identity fields (id, name, created_at_ms, upstream_labels) come from the
+    OpenShell ObjectMeta convention (`Sandbox.metadata`) introduced in
+    OpenShell #919. Pre-#919 wire payloads are not supported on this branch —
+    Shoreguard requires gateway version v0.0.37+.
+
     Args:
         sb: Sandbox protobuf message.
 
@@ -126,12 +131,12 @@ def _sandbox_to_dict(sb: openshell_pb2.Sandbox) -> dict[str, Any]:
         dict[str, Any]: Sandbox data with id, name, phase, and spec fields.
     """
     return {
-        "id": sb.id,
-        "name": sb.name,
-        "namespace": sb.namespace,
+        "id": sb.metadata.id,
+        "name": sb.metadata.name,
         "phase": PHASE_NAMES.get(sb.phase, "unknown"),
         "phase_code": sb.phase,
-        "created_at_ms": sb.created_at_ms,
+        "created_at_ms": sb.metadata.created_at_ms,
+        "upstream_labels": dict(sb.metadata.labels),
         "current_policy_version": sb.current_policy_version,
         "image": sb.spec.template.image if sb.spec.template.image else None,
         "gpu": sb.spec.gpu if sb.HasField("spec") else False,
@@ -216,12 +221,21 @@ class SandboxManager:
             if record_duration is not None:
                 record_duration(op_name, time.monotonic() - start)
 
-    def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    def list(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        label_selector: str = "",
+    ) -> list[dict[str, Any]]:
         """List all sandboxes.
 
         Args:
             limit: Maximum number of sandboxes to return.
             offset: Pagination offset.
+            label_selector: Optional Kubernetes-style label selector
+                (e.g. ``"team=alpha,env=prod"``) to filter sandboxes
+                gateway-side. Empty string means no filter.
 
         Returns:
             list[dict[str, Any]]: List of sandbox dicts.
@@ -229,7 +243,11 @@ class SandboxManager:
         resp = self._invoke(
             "sandboxes.list",
             lambda: self._stub.ListSandboxes(
-                openshell_pb2.ListSandboxesRequest(limit=limit, offset=offset),
+                openshell_pb2.ListSandboxesRequest(
+                    limit=limit,
+                    offset=offset,
+                    label_selector=label_selector,
+                ),
                 timeout=self._timeout,
             ),
         )
@@ -262,6 +280,7 @@ class SandboxManager:
         gpu: bool = False,
         environment: dict[str, str] | None = None,
         log_level: str = "",
+        labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Create a new sandbox.
 
@@ -275,6 +294,9 @@ class SandboxManager:
             log_level: Sandbox-supervisor log verbosity. Empty string
                 (default) means the gateway's default level. Accepted
                 values upstream: ``debug``, ``info``, ``warn``, ``error``.
+            labels: Optional Kubernetes-style key/value labels stored on
+                the gateway-side ``Sandbox.metadata.labels``. Keys must
+                follow Kubernetes label conventions.
 
         Returns:
             dict[str, Any]: Created sandbox data dict.
@@ -294,7 +316,11 @@ class SandboxManager:
         resp = self._invoke(
             "sandboxes.create",
             lambda: self._stub.CreateSandbox(
-                openshell_pb2.CreateSandboxRequest(spec=spec, name=name),
+                openshell_pb2.CreateSandboxRequest(
+                    spec=spec,
+                    name=name,
+                    labels=labels or {},
+                ),
                 timeout=self._timeout,
             ),
         )

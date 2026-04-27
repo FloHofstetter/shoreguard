@@ -66,7 +66,7 @@ def test_create_without_presets(sandbox_svc, mock_client):
 
     result = sandbox_svc.create(name="sb1", image="base")
 
-    assert result == {"name": "sb1", "phase": "provisioning"}
+    assert result == {"name": "sb1", "phase": "provisioning", "labels": {}}
     mock_client.sandboxes.wait_ready.assert_not_called()
 
 
@@ -131,7 +131,7 @@ def test_list(sandbox_svc, mock_client):
 
     result = sandbox_svc.list(limit=50, offset=10)
 
-    mock_client.sandboxes.list.assert_called_once_with(limit=50, offset=10)
+    mock_client.sandboxes.list.assert_called_once_with(limit=50, offset=10, label_selector="")
     assert len(result) == 2
 
 
@@ -208,6 +208,7 @@ def test_create_with_gpu(sandbox_svc, mock_client):
         providers=None,
         environment=None,
         log_level="",
+        labels=None,
     )
 
 
@@ -224,6 +225,7 @@ def test_create_with_environment(sandbox_svc, mock_client):
         providers=None,
         environment={"FOO": "bar"},
         log_level="",
+        labels=None,
     )
 
 
@@ -240,6 +242,7 @@ def test_create_with_providers(sandbox_svc, mock_client):
         providers=["prov-1", "prov-2"],
         environment=None,
         log_level="",
+        labels=None,
     )
 
 

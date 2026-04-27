@@ -65,41 +65,23 @@ class HealthResponse(_message.Message):
     ) -> None: ...
 
 class Sandbox(_message.Message):
-    __slots__ = (
-        "id",
-        "name",
-        "namespace",
-        "spec",
-        "status",
-        "phase",
-        "created_at_ms",
-        "current_policy_version",
-    )
-    ID_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("metadata", "spec", "status", "phase", "current_policy_version")
+    METADATA_FIELD_NUMBER: _ClassVar[int]
     SPEC_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     PHASE_FIELD_NUMBER: _ClassVar[int]
-    CREATED_AT_MS_FIELD_NUMBER: _ClassVar[int]
     CURRENT_POLICY_VERSION_FIELD_NUMBER: _ClassVar[int]
-    id: str
-    name: str
-    namespace: str
+    metadata: _datamodel_pb2.ObjectMeta
     spec: SandboxSpec
     status: SandboxStatus
     phase: SandboxPhase
-    created_at_ms: int
     current_policy_version: int
     def __init__(
         self,
-        id: _Optional[str] = ...,
-        name: _Optional[str] = ...,
-        namespace: _Optional[str] = ...,
+        metadata: _Optional[_Union[_datamodel_pb2.ObjectMeta, _Mapping]] = ...,
         spec: _Optional[_Union[SandboxSpec, _Mapping]] = ...,
         status: _Optional[_Union[SandboxStatus, _Mapping]] = ...,
         phase: _Optional[_Union[SandboxPhase, str]] = ...,
-        created_at_ms: _Optional[int] = ...,
         current_policy_version: _Optional[int] = ...,
     ) -> None: ...
 
@@ -273,13 +255,26 @@ class PlatformEvent(_message.Message):
     ) -> None: ...
 
 class CreateSandboxRequest(_message.Message):
-    __slots__ = ("spec", "name")
+    __slots__ = ("spec", "name", "labels")
+    class LabelsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+
     SPEC_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
+    LABELS_FIELD_NUMBER: _ClassVar[int]
     spec: SandboxSpec
     name: str
+    labels: _containers.ScalarMap[str, str]
     def __init__(
-        self, spec: _Optional[_Union[SandboxSpec, _Mapping]] = ..., name: _Optional[str] = ...
+        self,
+        spec: _Optional[_Union[SandboxSpec, _Mapping]] = ...,
+        name: _Optional[str] = ...,
+        labels: _Optional[_Mapping[str, str]] = ...,
     ) -> None: ...
 
 class GetSandboxRequest(_message.Message):
@@ -289,12 +284,19 @@ class GetSandboxRequest(_message.Message):
     def __init__(self, name: _Optional[str] = ...) -> None: ...
 
 class ListSandboxesRequest(_message.Message):
-    __slots__ = ("limit", "offset")
+    __slots__ = ("limit", "offset", "label_selector")
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     OFFSET_FIELD_NUMBER: _ClassVar[int]
+    LABEL_SELECTOR_FIELD_NUMBER: _ClassVar[int]
     limit: int
     offset: int
-    def __init__(self, limit: _Optional[int] = ..., offset: _Optional[int] = ...) -> None: ...
+    label_selector: str
+    def __init__(
+        self,
+        limit: _Optional[int] = ...,
+        offset: _Optional[int] = ...,
+        label_selector: _Optional[str] = ...,
+    ) -> None: ...
 
 class DeleteSandboxRequest(_message.Message):
     __slots__ = ("name",)
@@ -456,30 +458,24 @@ class ExecSandboxEvent(_message.Message):
     ) -> None: ...
 
 class SshSession(_message.Message):
-    __slots__ = ("id", "sandbox_id", "token", "created_at_ms", "revoked", "name", "expires_at_ms")
-    ID_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("metadata", "sandbox_id", "token", "expires_at_ms", "revoked")
+    METADATA_FIELD_NUMBER: _ClassVar[int]
     SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
     TOKEN_FIELD_NUMBER: _ClassVar[int]
-    CREATED_AT_MS_FIELD_NUMBER: _ClassVar[int]
-    REVOKED_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_AT_MS_FIELD_NUMBER: _ClassVar[int]
-    id: str
+    REVOKED_FIELD_NUMBER: _ClassVar[int]
+    metadata: _datamodel_pb2.ObjectMeta
     sandbox_id: str
     token: str
-    created_at_ms: int
-    revoked: bool
-    name: str
     expires_at_ms: int
+    revoked: bool
     def __init__(
         self,
-        id: _Optional[str] = ...,
+        metadata: _Optional[_Union[_datamodel_pb2.ObjectMeta, _Mapping]] = ...,
         sandbox_id: _Optional[str] = ...,
         token: _Optional[str] = ...,
-        created_at_ms: _Optional[int] = ...,
-        revoked: bool = ...,
-        name: _Optional[str] = ...,
         expires_at_ms: _Optional[int] = ...,
+        revoked: bool = ...,
     ) -> None: ...
 
 class WatchSandboxRequest(_message.Message):
