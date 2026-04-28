@@ -176,7 +176,7 @@ jobs:
           echo "Extracted $(wc -l < release_body.md) lines for v${version}"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: ShoreGuard ${{ github.ref_name }}
