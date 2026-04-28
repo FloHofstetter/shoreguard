@@ -5,7 +5,7 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.34.2] — 2026-04-27
+## [0.34.2] — 2026-04-28
 
 ### Fixed
 
@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `tests/test_rbac.py`, `tests/test_api_gateway_routes.py`). Existing gateway
   state is unaffected; the next save through the toggle now writes the correct
   registered key.
+
+### Changed
+
+- The CI `audit` job and the `pre-push` `pip-audit` hook now both ignore
+  `CVE-2026-3219` (pip 26.0.1, no fix version published yet). The CVE affects
+  pip itself — bundled into the dev environment by uv — not Shoreguard's
+  runtime dependencies. Whitelisted with an inline comment in both call sites
+  so it's removed automatically once pip ships a patched release. All other
+  CVEs continue to fail the build.
 
 ## [0.34.1] — 2026-04-23
 
