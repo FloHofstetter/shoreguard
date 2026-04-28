@@ -90,7 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
       - run: helm lint charts/shoreguard
       # `helm template` catches rendering errors that `helm lint` misses
       # (missing required values, bad pipelines, required()-gated fields).
@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
       - run: helm lint tests/fixtures/charts/openshell-cluster --set label.env=dev
       - name: Render openshell-cluster fixture (positive)
         run: |
