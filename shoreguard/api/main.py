@@ -40,6 +40,7 @@ from .routes import (
     operations,
     policies,
     prover,
+    provider_profiles,
     providers,
     sandboxes,
     sbom,
@@ -521,6 +522,10 @@ app = FastAPI(
         {"name": "policies-global", "description": "Global policy presets (not gateway-scoped)"},
         {"name": "approvals", "description": "Draft policy approval workflow"},
         {"name": "providers", "description": "Inference provider CRUD"},
+        {
+            "name": "provider-profiles",
+            "description": "Reusable provider-type profile registry (M37 / OpenShell PR #1170)",
+        },
         {"name": "gateway", "description": "Gateway registration, lifecycle, and diagnostics"},
         {"name": "operations", "description": "Long-running operation tracking and polling"},
         {"name": "audit", "description": "Audit log queries and export (admin only)"},
@@ -777,6 +782,9 @@ gw_api.include_router(prover.router, prefix="/sandboxes", tags=["prover"])
 gw_api.include_router(sbom.router, prefix="/sandboxes", tags=["sbom"])
 gw_api.include_router(boot_hooks.router, prefix="/sandboxes", tags=["boot_hooks"])
 gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
+gw_api.include_router(
+    provider_profiles.router, prefix="/provider-profiles", tags=["provider-profiles"]
+)
 
 
 @gw_api.get("/health", response_model=None)

@@ -1,3 +1,4 @@
+from . import datamodel_pb2 as _datamodel_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -22,20 +23,17 @@ class ClusterInferenceConfig(_message.Message):
     ) -> None: ...
 
 class InferenceRoute(_message.Message):
-    __slots__ = ("id", "config", "name", "version")
-    ID_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("metadata", "config", "version")
+    METADATA_FIELD_NUMBER: _ClassVar[int]
     CONFIG_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
-    id: str
+    metadata: _datamodel_pb2.ObjectMeta
     config: ClusterInferenceConfig
-    name: str
     version: int
     def __init__(
         self,
-        id: _Optional[str] = ...,
+        metadata: _Optional[_Union[_datamodel_pb2.ObjectMeta, _Mapping]] = ...,
         config: _Optional[_Union[ClusterInferenceConfig, _Mapping]] = ...,
-        name: _Optional[str] = ...,
         version: _Optional[int] = ...,
     ) -> None: ...
 

@@ -28,6 +28,7 @@ def mock_client():
     client.sandboxes = MagicMock()
     client.policies = MagicMock()
     client.providers = MagicMock()
+    client.provider_profiles = MagicMock()
     client.approvals = MagicMock()
     return client
 

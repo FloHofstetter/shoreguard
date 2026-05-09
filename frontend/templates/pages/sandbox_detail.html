@@ -29,7 +29,6 @@
                 </div>
                 <div class="sandbox-meta">
                     <span class="font-monospace" x-text="sandbox.image || 'Default image'"></span>
-                    <span x-text="sandbox.namespace || 'default'"></span>
                     <span x-show="sandbox.created_at_ms" x-text="formatTimestamp(sandbox.created_at_ms)"></span>
                     <span x-show="sandbox.gpu"><i class="bi bi-gpu-card text-info me-1"></i>GPU</span>
                 </div>
@@ -141,6 +140,45 @@
                         <i x-show="!saving" class="bi bi-check-lg me-1"></i>Save
                     </button>
                     <span x-show="saveOutput" class="small" x-html="saveOutput"></span>
+                </div>
+            </fieldset>
+
+            <!-- Attached Providers (M37 / OpenShell PR #1242) -->
+            <fieldset class="sg-fieldset mb-4">
+                <legend class="sg-legend">
+                    <i class="bi bi-plug me-1"></i>Attached Providers
+                </legend>
+                <div x-show="attachError" x-cloak class="alert alert-danger py-2 small" x-text="attachError"></div>
+                <div x-show="attachedProviders.length === 0" class="text-muted fst-italic small mb-2">
+                    No providers attached to this sandbox.
+                </div>
+                <div x-show="attachedProviders.length > 0" class="d-flex flex-wrap gap-2 mb-2">
+                    <template x-for="prov in attachedProviders" :key="prov.name">
+                        <span class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+                            <i class="bi bi-key text-info"></i>
+                            <span class="font-monospace" x-text="prov.name"></span>
+                            <span class="text-muted small" x-text="'(' + prov.type + ')'"></span>
+                            <button x-show="$isOperator" type="button"
+                                    class="btn-close btn-close-sm ms-1 sg-fs-xxs"
+                                    @click="detachProvider(prov.name)"
+                                    title="Detach"></button>
+                        </span>
+                    </template>
+                </div>
+                <div x-show="$isOperator" x-cloak class="input-group input-group-sm sg-mw-400"
+                     @click.once="loadAvailableProviders()">
+                    <select class="form-select" x-model="attachProviderName" :disabled="attachBusy">
+                        <option value="">Select provider…</option>
+                        <template x-for="prov in attachableProviders" :key="prov.name">
+                            <option :value="prov.name" x-text="prov.name + ' (' + prov.type + ')'"></option>
+                        </template>
+                    </select>
+                    <button class="btn btn-outline-success" type="button"
+                            @click="attachProvider()"
+                            :disabled="!attachProviderName || attachBusy">
+                        <span x-show="attachBusy" class="spinner-border spinner-border-sm me-1"></span>
+                        <i x-show="!attachBusy" class="bi bi-plus me-1"></i>Attach
+                    </button>
                 </div>
             </fieldset>
 

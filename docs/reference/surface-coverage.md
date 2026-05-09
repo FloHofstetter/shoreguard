@@ -73,8 +73,8 @@ uv run python scripts/check_coverage.py
 Expected output on success:
 
 ```
-Surface coverage OK: 34 upstream RPCs, 30 client-consumed,
-131 REST routes, 70 UI apiFetch calls.
+Surface coverage OK: 42 upstream RPCs, 38 client-consumed,
+137 REST routes, 77 UI apiFetch calls.
 ```
 
 On failure, the script prints a summary to stderr and exits non-zero,
@@ -82,10 +82,15 @@ matching the CI job's behaviour.
 
 ## Current state
 
-As of v0.34.0:
+As of v0.35.0 (M37 upstream-sync against `origin/main @ 57a80ed2`):
 
-- 34 upstream RPCs; 30 consumed by the client (4 allowlisted as
+- 42 upstream RPCs; 38 consumed by the client (4 allowlisted as
   supervisor-path).
+- Eight new RPCs land in this release — `ListSandboxProviders`,
+  `AttachSandboxProvider`, `DetachSandboxProvider` (PR #1242), and
+  `ListProviderProfiles`, `GetProviderProfile`, `ImportProviderProfiles`,
+  `LintProviderProfiles`, `DeleteProviderProfile` (PR #1170). Each has
+  client + REST + UI coverage.
 - Every non-supervisor RPC has a client method that unit tests
   exercise.
 - REST surface covers every client method that is meaningful for an
@@ -102,4 +107,7 @@ then-known gaps (GetSandboxConfig / GetSandboxProviderEnvironment REST
 routes; allow_encoded_slash toggle, apply-mode toggle, drift indicator,
 and advanced gateway settings in the UI). The invariant is enforced
 from v0.34.0 onwards — earlier releases did not have the script and
-accumulated several silent gaps.
+accumulated several silent gaps. M37 (v0.35.0) was the first
+upstream-sync executed under the script's full discipline: it landed
+eight new RPCs end-to-end (client + REST + UI) without any
+allowlist additions.

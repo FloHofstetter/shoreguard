@@ -25,6 +25,7 @@ from ._converters import _dict_to_policy
 from ._proto import openshell_pb2, openshell_pb2_grpc, sandbox_pb2
 from ._resilience import DEFAULT_POLICY, RetryPolicy, call_with_retry, stream_with_retry
 from .policies import _policy_to_dict
+from .providers import _provider_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -119,19 +120,27 @@ def _validate_ssh_session_response(resp: Any) -> None:
 def _sandbox_to_dict(sb: openshell_pb2.Sandbox) -> dict[str, Any]:
     """Convert a protobuf Sandbox to a plain dict.
 
+    Identity fields are flattened from the upstream ``ObjectMeta`` (introduced
+    upstream alongside the M37 sync) so REST/UI consumers continue to read
+    ``sb["id"]``/``sb["name"]`` directly. The legacy ``namespace`` field was
+    removed from the public API upstream and is therefore gone from this
+    projection too.
+
     Args:
         sb: Sandbox protobuf message.
 
     Returns:
-        dict[str, Any]: Sandbox data with id, name, phase, and spec fields.
+        dict[str, Any]: Sandbox data with id, name, labels, phase, and spec
+            fields.
     """
+    meta = sb.metadata
     return {
-        "id": sb.id,
-        "name": sb.name,
-        "namespace": sb.namespace,
+        "id": meta.id,
+        "name": meta.name,
+        "labels": dict(meta.labels),
         "phase": PHASE_NAMES.get(sb.phase, "unknown"),
         "phase_code": sb.phase,
-        "created_at_ms": sb.created_at_ms,
+        "created_at_ms": meta.created_at_ms,
         "current_policy_version": sb.current_policy_version,
         "image": sb.spec.template.image if sb.spec.template.image else None,
         "gpu": sb.spec.gpu if sb.HasField("spec") else False,
@@ -316,6 +325,78 @@ class SandboxManager:
             ),
         )
         return bool(resp.deleted)
+
+    def list_providers(self, sandbox_name: str) -> list[dict[str, Any]]:
+        """List provider records attached to a sandbox.
+
+        Args:
+            sandbox_name: Sandbox name (canonical lookup key).
+
+        Returns:
+            list[dict[str, Any]]: Attached provider records, each as the
+                flat dict returned by :func:`_provider_to_dict`.
+        """
+        resp = self._invoke(
+            "sandboxes.list_providers",
+            lambda: self._stub.ListSandboxProviders(
+                openshell_pb2.ListSandboxProvidersRequest(sandbox_name=sandbox_name),
+                timeout=self._timeout,
+            ),
+        )
+        return [_provider_to_dict(p) for p in resp.providers]
+
+    def attach_provider(self, sandbox_name: str, provider_name: str) -> dict[str, Any]:
+        """Attach a provider record to a sandbox.
+
+        Args:
+            sandbox_name: Sandbox name (canonical lookup key).
+            provider_name: Provider name to attach.
+
+        Returns:
+            dict[str, Any]: ``{sandbox: <sandbox dict>, attached: bool}``
+                where ``attached`` is False if the provider was already
+                attached.
+        """
+        resp = self._invoke(
+            "sandboxes.attach_provider",
+            lambda: self._stub.AttachSandboxProvider(
+                openshell_pb2.AttachSandboxProviderRequest(
+                    sandbox_name=sandbox_name,
+                    provider_name=provider_name,
+                ),
+                timeout=self._timeout,
+            ),
+        )
+        return {
+            "sandbox": _sandbox_to_dict(resp.sandbox),
+            "attached": bool(resp.attached),
+        }
+
+    def detach_provider(self, sandbox_name: str, provider_name: str) -> dict[str, Any]:
+        """Detach a provider record from a sandbox.
+
+        Args:
+            sandbox_name: Sandbox name (canonical lookup key).
+            provider_name: Provider name to detach.
+
+        Returns:
+            dict[str, Any]: ``{sandbox: <sandbox dict>, detached: bool}``
+                where ``detached`` is False if the provider was not attached.
+        """
+        resp = self._invoke(
+            "sandboxes.detach_provider",
+            lambda: self._stub.DetachSandboxProvider(
+                openshell_pb2.DetachSandboxProviderRequest(
+                    sandbox_name=sandbox_name,
+                    provider_name=provider_name,
+                ),
+                timeout=self._timeout,
+            ),
+        )
+        return {
+            "sandbox": _sandbox_to_dict(resp.sandbox),
+            "detached": bool(resp.detached),
+        }
 
     def wait_ready(self, name: str, *, timeout_seconds: float = 300.0) -> dict[str, Any]:
         """Block until a sandbox reaches READY phase.

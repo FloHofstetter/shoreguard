@@ -1978,6 +1978,11 @@ async def gateway_detail_or_sub(
             ctx["provider_name"] = provider_name
             return templates.TemplateResponse(request, "pages/provider_form.html", ctx)
 
+    # Provider profiles (M37 / OpenShell PR #1170 — typed provider-type registry)
+    if rest == "provider-profiles":
+        ctx["active_page"] = "provider-profiles"
+        return templates.TemplateResponse(request, "pages/provider_profiles.html", ctx)
+
     # Wizard
     if rest == "wizard":
         meta = _openshell_meta()

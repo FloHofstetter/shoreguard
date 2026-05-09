@@ -30,8 +30,12 @@ from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.api.lro import run_lro
 from shoreguard.api.schemas import (
+    AttachSandboxProviderRequest,
+    AttachSandboxProviderResponse,
+    DetachSandboxProviderResponse,
     LogEntryResponse,
     PaginatedResponse,
+    ProviderResponse,
     SandboxConfigResponse,
     SandboxDeleteResponse,
     SandboxProviderEnvResponse,
@@ -457,6 +461,119 @@ async def get_sandbox_provider_env(
     del request
     raw = await asyncio.to_thread(svc.get_provider_environment, name)
     return {"env": dict.fromkeys(raw, "[REDACTED]")}
+
+
+@router.get("/{name}/providers", response_model=list[ProviderResponse])
+async def list_sandbox_providers(
+    name: str,
+    svc: SandboxService = Depends(_get_sandbox_service),
+) -> list[dict[str, Any]]:
+    """List provider records attached to a sandbox.
+
+    Mirrors upstream ``ListSandboxProviders`` (PR #1242). Returns the
+    flat-projection provider dicts the gateway has on file as attached to
+    this sandbox.
+
+    Args:
+        name: Sandbox name.
+        svc: Injected sandbox service.
+
+    Returns:
+        list[dict[str, Any]]: Attached provider records.
+    """
+    return await asyncio.to_thread(svc.list_providers, name)
+
+
+@router.post(
+    "/{name}/providers",
+    response_model=AttachSandboxProviderResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
+async def attach_sandbox_provider(
+    name: str,
+    body: AttachSandboxProviderRequest,
+    request: Request,
+    svc: SandboxService = Depends(_get_sandbox_service),
+) -> dict[str, Any]:
+    """Attach a provider record to a sandbox.
+
+    Mirrors upstream ``AttachSandboxProvider`` (PR #1242).
+
+    Args:
+        name: Sandbox name.
+        body: Attach payload with the provider name.
+        request: Incoming HTTP request.
+        svc: Injected sandbox service.
+
+    Returns:
+        dict[str, Any]: ``{sandbox, attached}`` — see
+            :class:`AttachSandboxProviderResponse`.
+    """
+    check_write_rate_limit(request)
+    result = await asyncio.to_thread(svc.attach_provider, name, body.provider_name)
+    actor = get_actor(request)
+    gw = get_gateway_name(request)
+    logger.info(
+        "Sandbox provider attached (sandbox=%s, provider=%s, actor=%s)",
+        name,
+        body.provider_name,
+        actor,
+    )
+    await audit_log(
+        request,
+        "sandbox.provider.attach",
+        "sandbox",
+        name,
+        gateway=gw,
+        detail={"provider": body.provider_name, "attached": result["attached"]},
+    )
+    return result
+
+
+@router.delete(
+    "/{name}/providers/{provider_name}",
+    response_model=DetachSandboxProviderResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
+async def detach_sandbox_provider(
+    name: str,
+    provider_name: str,
+    request: Request,
+    svc: SandboxService = Depends(_get_sandbox_service),
+) -> dict[str, Any]:
+    """Detach a provider record from a sandbox.
+
+    Mirrors upstream ``DetachSandboxProvider`` (PR #1242).
+
+    Args:
+        name: Sandbox name.
+        provider_name: Provider name to detach.
+        request: Incoming HTTP request.
+        svc: Injected sandbox service.
+
+    Returns:
+        dict[str, Any]: ``{sandbox, detached}`` — see
+            :class:`DetachSandboxProviderResponse`.
+    """
+    check_write_rate_limit(request)
+    result = await asyncio.to_thread(svc.detach_provider, name, provider_name)
+    actor = get_actor(request)
+    gw = get_gateway_name(request)
+    logger.info(
+        "Sandbox provider detached (sandbox=%s, provider=%s, actor=%s)",
+        name,
+        provider_name,
+        actor,
+    )
+    await audit_log(
+        request,
+        "sandbox.provider.detach",
+        "sandbox",
+        name,
+        gateway=gw,
+        detail={"provider": provider_name, "detached": result["detached"]},
+    )
+    return result
 
 
 @router.delete(

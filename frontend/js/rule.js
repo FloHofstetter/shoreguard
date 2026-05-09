@@ -64,6 +64,10 @@ function ruleDetailPage(sandboxName, ruleKey) {
                 enforcement: ep.enforcement || '',
                 access: ep.access || '',
                 allow_encoded_slash: !!ep.allow_encoded_slash,
+                // GraphQL extensions (M37 / OpenShell PR #1083)
+                persisted_queries: ep.persisted_queries || '',
+                graphql_max_body_bytes: ep.graphql_max_body_bytes || 0,
+                path: ep.path || '',
                 rules: (ep.rules || []).map(r => this._mapL7Rule(r)),
             }));
             this.editing = true;
@@ -95,6 +99,9 @@ function ruleDetailPage(sandboxName, ruleKey) {
                 enforcement: '',
                 access: '',
                 allow_encoded_slash: false,
+                persisted_queries: '',
+                graphql_max_body_bytes: 0,
+                path: '',
                 rules: [],
             };
         },
@@ -111,6 +118,10 @@ function ruleDetailPage(sandboxName, ruleKey) {
                 method: allow.method || '',
                 path: allow.path || '',
                 command: allow.command || '',
+                // GraphQL extensions (M37 / OpenShell PR #1083)
+                operation_type: allow.operation_type || '',
+                operation_name: allow.operation_name || '',
+                fields: (allow.fields || []).join(', '),
                 query,
             };
         },
@@ -121,6 +132,9 @@ function ruleDetailPage(sandboxName, ruleKey) {
                 method: '',
                 path: '',
                 command: '',
+                operation_type: '',
+                operation_name: '',
+                fields: '',
                 query: [],
             });
         },
@@ -149,13 +163,24 @@ function ruleDetailPage(sandboxName, ruleKey) {
                     if (ep.enforcement) o.enforcement = ep.enforcement;
                     if (ep.access) o.access = ep.access;
                     if (ep.allow_encoded_slash) o.allow_encoded_slash = true;
+                    if (ep.protocol === 'graphql') {
+                        if (ep.persisted_queries) o.persisted_queries = ep.persisted_queries;
+                        if (ep.graphql_max_body_bytes) o.graphql_max_body_bytes = ep.graphql_max_body_bytes;
+                        if (ep.path) o.path = ep.path;
+                    }
                     const rules = (ep.rules || [])
-                        .filter(r => r.method || r.path || r.command)
+                        .filter(r => r.method || r.path || r.command || r.operation_type || r.operation_name || r.fields)
                         .map(r => {
                             const allow = {};
                             if (r.method) allow.method = r.method;
                             if (r.path) allow.path = r.path;
                             if (r.command) allow.command = r.command;
+                            if (r.operation_type) allow.operation_type = r.operation_type;
+                            if (r.operation_name) allow.operation_name = r.operation_name;
+                            if (r.fields) {
+                                const fields = r.fields.split(',').map(f => f.trim()).filter(Boolean);
+                                if (fields.length) allow.fields = fields;
+                            }
                             const query = {};
                             (r.query || []).filter(qm => qm.param.trim()).forEach(qm => {
                                 if (qm.type === 'glob') {

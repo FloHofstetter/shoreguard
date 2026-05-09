@@ -153,7 +153,9 @@ def _dict_to_l7_allow(allow: dict) -> sandbox_pb2.L7Allow:
     """Convert an L7 allow dict to a protobuf ``L7Allow`` message.
 
     Args:
-        allow: Allow rule fields (method, path, command, query).
+        allow: Allow rule fields (method, path, command, query) plus the
+            M37 GraphQL extensions (operation_type, operation_name,
+            fields).
 
     Returns:
         sandbox_pb2.L7Allow: Populated protobuf message.
@@ -162,6 +164,9 @@ def _dict_to_l7_allow(allow: dict) -> sandbox_pb2.L7Allow:
         method=allow.get("method", ""),
         path=allow.get("path", ""),
         command=allow.get("command", ""),
+        operation_type=allow.get("operation_type", ""),
+        operation_name=allow.get("operation_name", ""),
+        fields=allow.get("fields", []),
     )
     if "query" in allow:
         for k, v in _dict_to_l7_query(allow["query"]).items():
@@ -173,12 +178,14 @@ def _dict_to_l7_deny(deny: dict) -> sandbox_pb2.L7DenyRule:
     """Convert an L7 deny dict to a protobuf ``L7DenyRule`` message.
 
     Deny rules share the same shape as allow rules (method, path,
-    command, query) but semantically block matching requests even when
-    an allow clause would accept them. Upstream OpenShell #822 defines
+    command, query) — and, after M37, the same GraphQL operation
+    matchers — but semantically block matching requests even when an
+    allow clause would accept them. Upstream OpenShell #822 defines
     deny rules as taking precedence over allow rules.
 
     Args:
-        deny: Deny rule fields (method, path, command, query).
+        deny: Deny rule fields (method, path, command, query,
+            operation_type, operation_name, fields).
 
     Returns:
         sandbox_pb2.L7DenyRule: Populated protobuf message.
@@ -187,6 +194,9 @@ def _dict_to_l7_deny(deny: dict) -> sandbox_pb2.L7DenyRule:
         method=deny.get("method", ""),
         path=deny.get("path", ""),
         command=deny.get("command", ""),
+        operation_type=deny.get("operation_type", ""),
+        operation_name=deny.get("operation_name", ""),
+        fields=deny.get("fields", []),
     )
     if "query" in deny:
         for k, v in _dict_to_l7_query(deny["query"]).items():
@@ -223,6 +233,9 @@ def _dict_to_network_rule(data: dict) -> sandbox_pb2.NetworkPolicyRule:
             allowed_ips=ep_data.get("allowed_ips", []),
             ports=ep_data.get("ports", []),
             allow_encoded_slash=ep_data.get("allow_encoded_slash", False),
+            persisted_queries=ep_data.get("persisted_queries", ""),
+            graphql_max_body_bytes=ep_data.get("graphql_max_body_bytes", 0),
+            path=ep_data.get("path", ""),
         )
         for rule_data in ep_data.get("rules", []):
             allow = rule_data.get("allow", {})

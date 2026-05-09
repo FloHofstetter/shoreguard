@@ -4,23 +4,22 @@
 
 - **Python 3.14** or newer
 - A running [NVIDIA OpenShell](https://docs.nvidia.com/openshell/) gateway
-  (or use `--local` mode for local Docker-based gateways). OpenShell
-  **v0.0.36 or newer** is recommended. ShoreGuard's protobuf stubs are
-  byte-parity with upstream `proto/` at `v0.0.36`, and the baseline wire
-  surface ShoreGuard consumes has not changed since `v0.0.30`, so any
-  gateway `≥ v0.0.30` is wire-compatible for existing flows. Individual
-  features still trace back to the release that first introduced them
-  (TTY exec from v0.0.23, settings API and named inference routes from
-  v0.0.25–v0.0.26, L7 path canonicalization from v0.0.34, incremental
-  policy merge operations from v0.0.33 — see the compatibility matrix
-  below).
+  (or use `--local` mode for local Docker-based gateways). ShoreGuard
+  **v0.35.0** requires OpenShell **`v0.0.37` or newer** (effectively
+  `origin/main` until the next upstream tag is cut), because the
+  `Provider` and `Sandbox` wire schemas were migrated to the upstream
+  `ObjectMeta` convention in M37 — there is no compat shim for the
+  pre-`ObjectMeta` shape. Individual features still trace back to the
+  release that first introduced them; see the compatibility matrix.
 
 !!! info "Compatibility matrix"
     | Feature | Minimum gateway version |
     | --- | --- |
-    | Core wire surface | `v0.0.30` |
-    | L7 deny rules, TLD rejection, SSE hardening (M29) | `v0.0.30` |
-    | `NetworkEndpoint.allow_encoded_slash` (GitLab-style `%2F` paths) | `v0.0.30` |
+    | Core wire surface (post-`ObjectMeta`) | `v0.0.37` |
+    | Sandbox-provider attach lifecycle (`*SandboxProvider`) | `v0.0.37` (PR #1242) |
+    | Provider-profile registry (`*ProviderProfile`) | `v0.0.37` (PR #1170) |
+    | GraphQL L7 inspection (`protocol=graphql`, `operation_*`, `fields`) | `v0.0.37` (PR #1083) |
+    | L7 deny rules, TLD rejection, SSE hardening | `v0.0.30` |
     | L7 path canonicalization parity | `v0.0.34` |
     | `SSH session response` charset contract | `v0.0.34` |
     | `/policy/apply?mode=merge` (incremental policy updates) | `v0.0.33` |

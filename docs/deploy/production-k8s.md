@@ -41,14 +41,13 @@ Terraform modules, or operator-based deployments.
 ## Step 1 — Install NVIDIA OpenShell
 
 Install NVIDIA's upstream OpenShell Helm chart into a dedicated namespace.
-ShoreGuard tracks the latest upstream stable tag and is currently tested
-against **OpenShell v0.0.36** — pin to that version unless you have
-verified interop with a newer release. The baseline wire surface has not
-changed since `v0.0.30`, so any gateway `≥ v0.0.30` is acceptable for
-existing flows. Incremental policy merge (`/policy/apply?mode=merge`)
-additionally requires a gateway `≥ v0.0.33`; the L7 path canonicalization
-soundness parity and the SSH-session charset contract the ShoreGuard
-client now enforces both rely on gateway behaviour landed in `v0.0.34`.
+ShoreGuard `v0.35.0` requires **OpenShell `v0.0.37` or newer** (effectively
+`origin/main` until the next upstream tag is cut). The `Provider` and
+`Sandbox` wire schemas were migrated to the upstream `ObjectMeta`
+convention in M37, and ShoreGuard does not ship a compat shim for the
+pre-`ObjectMeta` shape — pre-`v0.0.37` gateways will fail at the first
+`ListSandboxes` / `ListProviders`. Pin to a specific upstream commit
+or tag rather than tracking `main` for production deployments.
 
 !!! tip "Where to find the chart"
     Refer to [NVIDIA's OpenShell documentation](https://github.com/NVIDIA/openshell)

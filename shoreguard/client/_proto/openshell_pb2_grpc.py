@@ -69,6 +69,24 @@ class OpenShellStub(object):
             response_deserializer=openshell__pb2.ListSandboxesResponse.FromString,
             _registered_method=True,
         )
+        self.ListSandboxProviders = channel.unary_unary(
+            "/openshell.v1.OpenShell/ListSandboxProviders",
+            request_serializer=openshell__pb2.ListSandboxProvidersRequest.SerializeToString,
+            response_deserializer=openshell__pb2.ListSandboxProvidersResponse.FromString,
+            _registered_method=True,
+        )
+        self.AttachSandboxProvider = channel.unary_unary(
+            "/openshell.v1.OpenShell/AttachSandboxProvider",
+            request_serializer=openshell__pb2.AttachSandboxProviderRequest.SerializeToString,
+            response_deserializer=openshell__pb2.AttachSandboxProviderResponse.FromString,
+            _registered_method=True,
+        )
+        self.DetachSandboxProvider = channel.unary_unary(
+            "/openshell.v1.OpenShell/DetachSandboxProvider",
+            request_serializer=openshell__pb2.DetachSandboxProviderRequest.SerializeToString,
+            response_deserializer=openshell__pb2.DetachSandboxProviderResponse.FromString,
+            _registered_method=True,
+        )
         self.DeleteSandbox = channel.unary_unary(
             "/openshell.v1.OpenShell/DeleteSandbox",
             request_serializer=openshell__pb2.DeleteSandboxRequest.SerializeToString,
@@ -111,6 +129,30 @@ class OpenShellStub(object):
             response_deserializer=openshell__pb2.ListProvidersResponse.FromString,
             _registered_method=True,
         )
+        self.ListProviderProfiles = channel.unary_unary(
+            "/openshell.v1.OpenShell/ListProviderProfiles",
+            request_serializer=openshell__pb2.ListProviderProfilesRequest.SerializeToString,
+            response_deserializer=openshell__pb2.ListProviderProfilesResponse.FromString,
+            _registered_method=True,
+        )
+        self.GetProviderProfile = channel.unary_unary(
+            "/openshell.v1.OpenShell/GetProviderProfile",
+            request_serializer=openshell__pb2.GetProviderProfileRequest.SerializeToString,
+            response_deserializer=openshell__pb2.ProviderProfileResponse.FromString,
+            _registered_method=True,
+        )
+        self.ImportProviderProfiles = channel.unary_unary(
+            "/openshell.v1.OpenShell/ImportProviderProfiles",
+            request_serializer=openshell__pb2.ImportProviderProfilesRequest.SerializeToString,
+            response_deserializer=openshell__pb2.ImportProviderProfilesResponse.FromString,
+            _registered_method=True,
+        )
+        self.LintProviderProfiles = channel.unary_unary(
+            "/openshell.v1.OpenShell/LintProviderProfiles",
+            request_serializer=openshell__pb2.LintProviderProfilesRequest.SerializeToString,
+            response_deserializer=openshell__pb2.LintProviderProfilesResponse.FromString,
+            _registered_method=True,
+        )
         self.UpdateProvider = channel.unary_unary(
             "/openshell.v1.OpenShell/UpdateProvider",
             request_serializer=openshell__pb2.UpdateProviderRequest.SerializeToString,
@@ -121,6 +163,12 @@ class OpenShellStub(object):
             "/openshell.v1.OpenShell/DeleteProvider",
             request_serializer=openshell__pb2.DeleteProviderRequest.SerializeToString,
             response_deserializer=openshell__pb2.DeleteProviderResponse.FromString,
+            _registered_method=True,
+        )
+        self.DeleteProviderProfile = channel.unary_unary(
+            "/openshell.v1.OpenShell/DeleteProviderProfile",
+            request_serializer=openshell__pb2.DeleteProviderProfileRequest.SerializeToString,
+            response_deserializer=openshell__pb2.DeleteProviderProfileResponse.FromString,
             _registered_method=True,
         )
         self.GetSandboxConfig = channel.unary_unary(
@@ -286,6 +334,24 @@ class OpenShellServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def ListSandboxProviders(self, request, context):
+        """List provider records attached to a sandbox."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def AttachSandboxProvider(self, request, context):
+        """Attach a provider record to an existing sandbox."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def DetachSandboxProvider(self, request, context):
+        """Detach a provider record from an existing sandbox."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
     def DeleteSandbox(self, request, context):
         """Delete a sandbox by name."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -328,6 +394,30 @@ class OpenShellServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def ListProviderProfiles(self, request, context):
+        """List available provider type profiles."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def GetProviderProfile(self, request, context):
+        """Fetch one provider type profile by id."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def ImportProviderProfiles(self, request, context):
+        """Import custom provider type profiles."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def LintProviderProfiles(self, request, context):
+        """Validate provider type profiles without registering them."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
     def UpdateProvider(self, request, context):
         """Update an existing provider by name."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -336,6 +426,12 @@ class OpenShellServicer(object):
 
     def DeleteProvider(self, request, context):
         """Delete a provider by name."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def DeleteProviderProfile(self, request, context):
+        """Delete a custom provider type profile by id."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
@@ -517,6 +613,21 @@ def add_OpenShellServicer_to_server(servicer, server):
             request_deserializer=openshell__pb2.ListSandboxesRequest.FromString,
             response_serializer=openshell__pb2.ListSandboxesResponse.SerializeToString,
         ),
+        "ListSandboxProviders": grpc.unary_unary_rpc_method_handler(
+            servicer.ListSandboxProviders,
+            request_deserializer=openshell__pb2.ListSandboxProvidersRequest.FromString,
+            response_serializer=openshell__pb2.ListSandboxProvidersResponse.SerializeToString,
+        ),
+        "AttachSandboxProvider": grpc.unary_unary_rpc_method_handler(
+            servicer.AttachSandboxProvider,
+            request_deserializer=openshell__pb2.AttachSandboxProviderRequest.FromString,
+            response_serializer=openshell__pb2.AttachSandboxProviderResponse.SerializeToString,
+        ),
+        "DetachSandboxProvider": grpc.unary_unary_rpc_method_handler(
+            servicer.DetachSandboxProvider,
+            request_deserializer=openshell__pb2.DetachSandboxProviderRequest.FromString,
+            response_serializer=openshell__pb2.DetachSandboxProviderResponse.SerializeToString,
+        ),
         "DeleteSandbox": grpc.unary_unary_rpc_method_handler(
             servicer.DeleteSandbox,
             request_deserializer=openshell__pb2.DeleteSandboxRequest.FromString,
@@ -552,6 +663,26 @@ def add_OpenShellServicer_to_server(servicer, server):
             request_deserializer=openshell__pb2.ListProvidersRequest.FromString,
             response_serializer=openshell__pb2.ListProvidersResponse.SerializeToString,
         ),
+        "ListProviderProfiles": grpc.unary_unary_rpc_method_handler(
+            servicer.ListProviderProfiles,
+            request_deserializer=openshell__pb2.ListProviderProfilesRequest.FromString,
+            response_serializer=openshell__pb2.ListProviderProfilesResponse.SerializeToString,
+        ),
+        "GetProviderProfile": grpc.unary_unary_rpc_method_handler(
+            servicer.GetProviderProfile,
+            request_deserializer=openshell__pb2.GetProviderProfileRequest.FromString,
+            response_serializer=openshell__pb2.ProviderProfileResponse.SerializeToString,
+        ),
+        "ImportProviderProfiles": grpc.unary_unary_rpc_method_handler(
+            servicer.ImportProviderProfiles,
+            request_deserializer=openshell__pb2.ImportProviderProfilesRequest.FromString,
+            response_serializer=openshell__pb2.ImportProviderProfilesResponse.SerializeToString,
+        ),
+        "LintProviderProfiles": grpc.unary_unary_rpc_method_handler(
+            servicer.LintProviderProfiles,
+            request_deserializer=openshell__pb2.LintProviderProfilesRequest.FromString,
+            response_serializer=openshell__pb2.LintProviderProfilesResponse.SerializeToString,
+        ),
         "UpdateProvider": grpc.unary_unary_rpc_method_handler(
             servicer.UpdateProvider,
             request_deserializer=openshell__pb2.UpdateProviderRequest.FromString,
@@ -561,6 +692,11 @@ def add_OpenShellServicer_to_server(servicer, server):
             servicer.DeleteProvider,
             request_deserializer=openshell__pb2.DeleteProviderRequest.FromString,
             response_serializer=openshell__pb2.DeleteProviderResponse.SerializeToString,
+        ),
+        "DeleteProviderProfile": grpc.unary_unary_rpc_method_handler(
+            servicer.DeleteProviderProfile,
+            request_deserializer=openshell__pb2.DeleteProviderProfileRequest.FromString,
+            response_serializer=openshell__pb2.DeleteProviderProfileResponse.SerializeToString,
         ),
         "GetSandboxConfig": grpc.unary_unary_rpc_method_handler(
             servicer.GetSandboxConfig,
@@ -808,6 +944,96 @@ class OpenShell(object):
         )
 
     @staticmethod
+    def ListSandboxProviders(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/ListSandboxProviders",
+            openshell__pb2.ListSandboxProvidersRequest.SerializeToString,
+            openshell__pb2.ListSandboxProvidersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def AttachSandboxProvider(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/AttachSandboxProvider",
+            openshell__pb2.AttachSandboxProviderRequest.SerializeToString,
+            openshell__pb2.AttachSandboxProviderResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def DetachSandboxProvider(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/DetachSandboxProvider",
+            openshell__pb2.DetachSandboxProviderRequest.SerializeToString,
+            openshell__pb2.DetachSandboxProviderResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
     def DeleteSandbox(
         request,
         target,
@@ -1018,6 +1244,126 @@ class OpenShell(object):
         )
 
     @staticmethod
+    def ListProviderProfiles(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/ListProviderProfiles",
+            openshell__pb2.ListProviderProfilesRequest.SerializeToString,
+            openshell__pb2.ListProviderProfilesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def GetProviderProfile(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/GetProviderProfile",
+            openshell__pb2.GetProviderProfileRequest.SerializeToString,
+            openshell__pb2.ProviderProfileResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def ImportProviderProfiles(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/ImportProviderProfiles",
+            openshell__pb2.ImportProviderProfilesRequest.SerializeToString,
+            openshell__pb2.ImportProviderProfilesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def LintProviderProfiles(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/LintProviderProfiles",
+            openshell__pb2.LintProviderProfilesRequest.SerializeToString,
+            openshell__pb2.LintProviderProfilesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
     def UpdateProvider(
         request,
         target,
@@ -1066,6 +1412,36 @@ class OpenShell(object):
             "/openshell.v1.OpenShell/DeleteProvider",
             openshell__pb2.DeleteProviderRequest.SerializeToString,
             openshell__pb2.DeleteProviderResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def DeleteProviderProfile(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/DeleteProviderProfile",
+            openshell__pb2.DeleteProviderProfileRequest.SerializeToString,
+            openshell__pb2.DeleteProviderProfileResponse.FromString,
             options,
             channel_credentials,
             insecure,

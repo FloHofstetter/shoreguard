@@ -277,7 +277,8 @@ def test_default_policy_uses_documented_retryable_set():
 def test_sandbox_manager_retries_list_on_unavailable(monkeypatch):
     from types import SimpleNamespace
 
-    from shoreguard.client._proto import openshell_pb2
+    from shoreguard.client._proto import datamodel_pb2, openshell_pb2
+    from shoreguard.client._proto.openshell_pb2 import SANDBOX_PHASE_READY as _PHASE_READY
     from shoreguard.client.sandboxes import SandboxManager
 
     # Keep sleeps fast.
@@ -291,7 +292,12 @@ def test_sandbox_manager_retries_list_on_unavailable(monkeypatch):
             if calls["n"] < 3:
                 raise _FakeRpcError(grpc.StatusCode.UNAVAILABLE)
             return SimpleNamespace(
-                sandboxes=[openshell_pb2.Sandbox(id="id1", name="sb1", phase=2)]  # type: ignore[arg-type]
+                sandboxes=[
+                    openshell_pb2.Sandbox(
+                        metadata=datamodel_pb2.ObjectMeta(id="id1", name="sb1"),
+                        phase=_PHASE_READY,
+                    )
+                ]  # type: ignore[arg-type]
             )
 
     m = object.__new__(SandboxManager)

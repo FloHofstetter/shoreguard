@@ -118,7 +118,23 @@ class NetworkEndpoint(_message.Message):
         "ports",
         "deny_rules",
         "allow_encoded_slash",
+        "persisted_queries",
+        "graphql_persisted_queries",
+        "graphql_max_body_bytes",
+        "path",
     )
+    class GraphqlPersistedQueriesEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: GraphqlOperation
+        def __init__(
+            self,
+            key: _Optional[str] = ...,
+            value: _Optional[_Union[GraphqlOperation, _Mapping]] = ...,
+        ) -> None: ...
+
     HOST_FIELD_NUMBER: _ClassVar[int]
     PORT_FIELD_NUMBER: _ClassVar[int]
     PROTOCOL_FIELD_NUMBER: _ClassVar[int]
@@ -130,6 +146,10 @@ class NetworkEndpoint(_message.Message):
     PORTS_FIELD_NUMBER: _ClassVar[int]
     DENY_RULES_FIELD_NUMBER: _ClassVar[int]
     ALLOW_ENCODED_SLASH_FIELD_NUMBER: _ClassVar[int]
+    PERSISTED_QUERIES_FIELD_NUMBER: _ClassVar[int]
+    GRAPHQL_PERSISTED_QUERIES_FIELD_NUMBER: _ClassVar[int]
+    GRAPHQL_MAX_BODY_BYTES_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
     host: str
     port: int
     protocol: str
@@ -141,6 +161,10 @@ class NetworkEndpoint(_message.Message):
     ports: _containers.RepeatedScalarFieldContainer[int]
     deny_rules: _containers.RepeatedCompositeFieldContainer[L7DenyRule]
     allow_encoded_slash: bool
+    persisted_queries: str
+    graphql_persisted_queries: _containers.MessageMap[str, GraphqlOperation]
+    graphql_max_body_bytes: int
+    path: str
     def __init__(
         self,
         host: _Optional[str] = ...,
@@ -154,10 +178,29 @@ class NetworkEndpoint(_message.Message):
         ports: _Optional[_Iterable[int]] = ...,
         deny_rules: _Optional[_Iterable[_Union[L7DenyRule, _Mapping]]] = ...,
         allow_encoded_slash: bool = ...,
+        persisted_queries: _Optional[str] = ...,
+        graphql_persisted_queries: _Optional[_Mapping[str, GraphqlOperation]] = ...,
+        graphql_max_body_bytes: _Optional[int] = ...,
+        path: _Optional[str] = ...,
+    ) -> None: ...
+
+class GraphqlOperation(_message.Message):
+    __slots__ = ("operation_type", "operation_name", "fields")
+    OPERATION_TYPE_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_NAME_FIELD_NUMBER: _ClassVar[int]
+    FIELDS_FIELD_NUMBER: _ClassVar[int]
+    operation_type: str
+    operation_name: str
+    fields: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(
+        self,
+        operation_type: _Optional[str] = ...,
+        operation_name: _Optional[str] = ...,
+        fields: _Optional[_Iterable[str]] = ...,
     ) -> None: ...
 
 class L7DenyRule(_message.Message):
-    __slots__ = ("method", "path", "command", "query")
+    __slots__ = ("method", "path", "command", "query", "operation_type", "operation_name", "fields")
     class QueryEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -174,16 +217,25 @@ class L7DenyRule(_message.Message):
     PATH_FIELD_NUMBER: _ClassVar[int]
     COMMAND_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_TYPE_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_NAME_FIELD_NUMBER: _ClassVar[int]
+    FIELDS_FIELD_NUMBER: _ClassVar[int]
     method: str
     path: str
     command: str
     query: _containers.MessageMap[str, L7QueryMatcher]
+    operation_type: str
+    operation_name: str
+    fields: _containers.RepeatedScalarFieldContainer[str]
     def __init__(
         self,
         method: _Optional[str] = ...,
         path: _Optional[str] = ...,
         command: _Optional[str] = ...,
         query: _Optional[_Mapping[str, L7QueryMatcher]] = ...,
+        operation_type: _Optional[str] = ...,
+        operation_name: _Optional[str] = ...,
+        fields: _Optional[_Iterable[str]] = ...,
     ) -> None: ...
 
 class L7Rule(_message.Message):
@@ -193,7 +245,7 @@ class L7Rule(_message.Message):
     def __init__(self, allow: _Optional[_Union[L7Allow, _Mapping]] = ...) -> None: ...
 
 class L7Allow(_message.Message):
-    __slots__ = ("method", "path", "command", "query")
+    __slots__ = ("method", "path", "command", "query", "operation_type", "operation_name", "fields")
     class QueryEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -210,16 +262,25 @@ class L7Allow(_message.Message):
     PATH_FIELD_NUMBER: _ClassVar[int]
     COMMAND_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_TYPE_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_NAME_FIELD_NUMBER: _ClassVar[int]
+    FIELDS_FIELD_NUMBER: _ClassVar[int]
     method: str
     path: str
     command: str
     query: _containers.MessageMap[str, L7QueryMatcher]
+    operation_type: str
+    operation_name: str
+    fields: _containers.RepeatedScalarFieldContainer[str]
     def __init__(
         self,
         method: _Optional[str] = ...,
         path: _Optional[str] = ...,
         command: _Optional[str] = ...,
         query: _Optional[_Mapping[str, L7QueryMatcher]] = ...,
+        operation_type: _Optional[str] = ...,
+        operation_name: _Optional[str] = ...,
+        fields: _Optional[_Iterable[str]] = ...,
     ) -> None: ...
 
 class L7QueryMatcher(_message.Message):
@@ -311,6 +372,7 @@ class GetSandboxConfigResponse(_message.Message):
         "config_revision",
         "policy_source",
         "global_policy_version",
+        "provider_env_revision",
     )
     class SettingsEntry(_message.Message):
         __slots__ = ("key", "value")
@@ -331,6 +393,7 @@ class GetSandboxConfigResponse(_message.Message):
     CONFIG_REVISION_FIELD_NUMBER: _ClassVar[int]
     POLICY_SOURCE_FIELD_NUMBER: _ClassVar[int]
     GLOBAL_POLICY_VERSION_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_ENV_REVISION_FIELD_NUMBER: _ClassVar[int]
     policy: SandboxPolicy
     version: int
     policy_hash: str
@@ -338,6 +401,7 @@ class GetSandboxConfigResponse(_message.Message):
     config_revision: int
     policy_source: PolicySource
     global_policy_version: int
+    provider_env_revision: int
     def __init__(
         self,
         policy: _Optional[_Union[SandboxPolicy, _Mapping]] = ...,
@@ -347,4 +411,5 @@ class GetSandboxConfigResponse(_message.Message):
         config_revision: _Optional[int] = ...,
         policy_source: _Optional[_Union[PolicySource, str]] = ...,
         global_policy_version: _Optional[int] = ...,
+        provider_env_revision: _Optional[int] = ...,
     ) -> None: ...

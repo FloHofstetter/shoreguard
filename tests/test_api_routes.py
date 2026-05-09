@@ -229,6 +229,72 @@ async def test_get_sandbox_provider_env_redacts_values(api_client, mock_client):
     assert raw_fixture_value not in resp.text
 
 
+async def test_list_sandbox_providers(api_client, mock_client):
+    """GET /sandboxes/{name}/providers lists attached provider records."""
+    mock_client.sandboxes.list_providers.return_value = [
+        {"id": "p1", "name": "anthropic", "type": "claude"},
+        {"id": "p2", "name": "openai", "type": "openai"},
+    ]
+
+    resp = await api_client.get(f"/api/gateways/{GW}/sandboxes/sb1/providers")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 2
+    assert body[0]["name"] == "anthropic"
+    mock_client.sandboxes.list_providers.assert_called_once_with("sb1")
+
+
+async def test_attach_sandbox_provider_newly_attached(api_client, mock_client):
+    """POST /sandboxes/{name}/providers attaches a provider; attached=True."""
+    mock_client.sandboxes.attach_provider.return_value = {
+        "sandbox": {"id": "sb-id", "name": "sb1"},
+        "attached": True,
+    }
+
+    resp = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes/sb1/providers",
+        json={"provider_name": "anthropic"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["attached"] is True
+    assert body["sandbox"]["name"] == "sb1"
+    mock_client.sandboxes.attach_provider.assert_called_once_with("sb1", "anthropic")
+
+
+async def test_attach_sandbox_provider_already_attached(api_client, mock_client):
+    """Attaching an already-attached provider returns attached=False."""
+    mock_client.sandboxes.attach_provider.return_value = {
+        "sandbox": {"id": "sb-id", "name": "sb1"},
+        "attached": False,
+    }
+
+    resp = await api_client.post(
+        f"/api/gateways/{GW}/sandboxes/sb1/providers",
+        json={"provider_name": "anthropic"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["attached"] is False
+
+
+async def test_detach_sandbox_provider(api_client, mock_client):
+    """DELETE /sandboxes/{name}/providers/{provider_name} detaches it."""
+    mock_client.sandboxes.detach_provider.return_value = {
+        "sandbox": {"id": "sb-id", "name": "sb1"},
+        "detached": True,
+    }
+
+    resp = await api_client.delete(f"/api/gateways/{GW}/sandboxes/sb1/providers/anthropic")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["detached"] is True
+    mock_client.sandboxes.detach_provider.assert_called_once_with("sb1", "anthropic")
+
+
 async def test_get_sandbox_provider_env_empty(api_client, mock_client):
     """An empty env map returns an empty dict, not a missing field."""
     mock_client.sandboxes.get.return_value = {"id": "sb-id-1", "name": "sb1"}

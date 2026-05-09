@@ -268,6 +268,41 @@ class SandboxService:
         sandbox = self._client.sandboxes.get(name)
         return self._client.sandboxes.get_provider_environment(sandbox["id"])
 
+    def list_providers(self, name: str) -> list[dict[str, Any]]:
+        """List provider records attached to a sandbox.
+
+        Args:
+            name: Sandbox name (canonical lookup key).
+
+        Returns:
+            list[dict[str, Any]]: Attached provider records.
+        """
+        return self._client.sandboxes.list_providers(name)
+
+    def attach_provider(self, name: str, provider_name: str) -> dict[str, Any]:
+        """Attach a provider record to a sandbox.
+
+        Args:
+            name: Sandbox name.
+            provider_name: Provider name to attach.
+
+        Returns:
+            dict[str, Any]: ``{sandbox, attached}``.
+        """
+        return self._client.sandboxes.attach_provider(name, provider_name)
+
+    def detach_provider(self, name: str, provider_name: str) -> dict[str, Any]:
+        """Detach a provider record from a sandbox.
+
+        Args:
+            name: Sandbox name.
+            provider_name: Provider name to detach.
+
+        Returns:
+            dict[str, Any]: ``{sandbox, detached}``.
+        """
+        return self._client.sandboxes.detach_provider(name, provider_name)
+
     def revoke_ssh_session(self, token: str) -> bool:
         """Revoke an active SSH session by token.
 

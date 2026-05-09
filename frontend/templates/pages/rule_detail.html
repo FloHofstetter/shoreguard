@@ -182,6 +182,7 @@
                                     <select class="form-select form-select-sm" x-model="ep.protocol">
                                         <option value="">&mdash;</option>
                                         <option value="rest">REST</option>
+                                        <option value="graphql">GraphQL</option>
                                         <option value="sql">SQL</option>
                                     </select>
                                 </div>
@@ -226,6 +227,26 @@
                                     </div>
                                 </div>
                             </div>
+                            <!-- GraphQL section (M37 / OpenShell PR #1083) -->
+                            <div class="row g-2 mt-1" x-show="ep.protocol === 'graphql'" x-cloak>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted mb-1">Persisted queries</label>
+                                    <select class="form-select form-select-sm" x-model="ep.persisted_queries">
+                                        <option value="">deny (default)</option>
+                                        <option value="allow_registered">allow registered</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted mb-1">Max body bytes</label>
+                                    <input type="number" min="0" class="form-control form-control-sm"
+                                           placeholder="65536" x-model.number="ep.graphql_max_body_bytes">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted mb-1">Path glob</label>
+                                    <input type="text" class="form-control form-control-sm"
+                                           placeholder="/graphql" x-model="ep.path">
+                                </div>
+                            </div>
                             <!-- L7 Rules per endpoint -->
                             <div class="mt-2 border-top pt-2">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
@@ -263,6 +284,28 @@
                                                 <div class="col-md-4">
                                                     <label class="form-label small text-muted mb-0">Command</label>
                                                     <input type="text" class="form-control form-control-sm" placeholder="e.g. SELECT" x-model="rule.command">
+                                                </div>
+                                            </div>
+                                            <!-- GraphQL operation matchers (M37 / OpenShell PR #1083) -->
+                                            <div class="row g-2 mb-1" x-show="ep.protocol === 'graphql'" x-cloak>
+                                                <div class="col-md-3">
+                                                    <label class="form-label small text-muted mb-0">Op type</label>
+                                                    <select class="form-select form-select-sm" x-model="rule.operation_type">
+                                                        <option value="">* (any)</option>
+                                                        <option value="query">query</option>
+                                                        <option value="mutation">mutation</option>
+                                                        <option value="subscription">subscription</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label small text-muted mb-0">Op name (glob)</label>
+                                                    <input type="text" class="form-control form-control-sm"
+                                                           placeholder="GetUser*" x-model="rule.operation_name">
+                                                </div>
+                                                <div class="col-md-5">
+                                                    <label class="form-label small text-muted mb-0">Fields (comma-separated globs)</label>
+                                                    <input type="text" class="form-control form-control-sm"
+                                                           placeholder="user.email, user.name" x-model="rule.fields">
                                                 </div>
                                             </div>
                                             <!-- Query Matchers -->

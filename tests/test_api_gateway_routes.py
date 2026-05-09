@@ -130,6 +130,30 @@ async def test_gateway_settings_put_str(gw_client, mock_gw_svc):
     mock_gw_svc.update_setting.assert_called_once_with("gw1", "log_level", "debug")
 
 
+async def test_gateway_settings_put_providers_v2_enabled(gw_client, mock_gw_svc):
+    """M37: ``providers_v2_enabled`` is a registered upstream key."""
+    mock_gw_svc.update_setting.return_value = {"settings_revision": 12, "deleted": False}
+    resp = await gw_client.put(
+        "/api/gateway/gw1/settings/providers_v2_enabled",
+        json={"value": True},
+    )
+    assert resp.status_code == 200
+    mock_gw_svc.update_setting.assert_called_once_with("gw1", "providers_v2_enabled", True)
+
+
+async def test_gateway_settings_put_agent_policy_proposals_enabled(gw_client, mock_gw_svc):
+    """M37: ``agent_policy_proposals_enabled`` is a registered upstream key."""
+    mock_gw_svc.update_setting.return_value = {"settings_revision": 13, "deleted": False}
+    resp = await gw_client.put(
+        "/api/gateway/gw1/settings/agent_policy_proposals_enabled",
+        json={"value": True},
+    )
+    assert resp.status_code == 200
+    mock_gw_svc.update_setting.assert_called_once_with(
+        "gw1", "agent_policy_proposals_enabled", True
+    )
+
+
 async def test_gateway_settings_put_invalid_payload_422(gw_client, mock_gw_svc):
     resp = await gw_client.put("/api/gateway/gw1/settings/foo", json={})
     assert resp.status_code == 422

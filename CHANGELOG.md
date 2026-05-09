@@ -5,6 +5,95 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.35.0] — 2026-05-09
+
+### M37 Upstream-Sync
+
+Synced ShoreGuard against
+[`NVIDIA/OpenShell` `origin/main @ 57a80ed2`](https://github.com/NVIDIA/OpenShell/commit/57a80ed2)
+— 157 commits past the M36 sync point (PR #943) including the
+`v0.0.37` release tag. Stub regen, eight new RPC clusters wired
+end-to-end (client → REST → UI), GraphQL L7 inspection surfaced in the
+endpoint-rule editor, and a hard-cut migration of the `Provider` and
+`Sandbox` wire schemas to the new upstream `ObjectMeta` convention.
+
+**Gateway minimum lifts to `v0.0.37+` (effectively
+`origin/main` until the next upstream tag):** ShoreGuard no longer
+speaks the pre-`ObjectMeta` `Provider`/`Sandbox` shape and will fail at
+the first list/get against any older gateway. There is no compat shim.
+
+### Added
+
+- **WS37.3 — Sandbox-provider attach lifecycle.** Three new RPCs from
+  upstream [PR #1242](https://github.com/NVIDIA/OpenShell/pull/1242) —
+  `ListSandboxProviders`, `AttachSandboxProvider`,
+  `DetachSandboxProvider` — fully wired through
+  `shoreguard.client.sandboxes.SandboxManager.{list_providers,
+  attach_provider, detach_provider}`, the REST surface (`GET`, `POST`,
+  `DELETE` under `/sandboxes/{name}/providers`) and a new "Attached
+  Providers" card on the sandbox-detail page with attach picker and
+  detach badges.
+- **WS37.4 — Provider-profile registry.** Five new RPCs from upstream
+  [PR #1170](https://github.com/NVIDIA/OpenShell/pull/1170) wrapped in a
+  new `shoreguard.client.provider_profiles.ProviderProfileManager`:
+  `ListProviderProfiles`, `GetProviderProfile`,
+  `ImportProviderProfiles`, `LintProviderProfiles`,
+  `DeleteProviderProfile`. New REST router under
+  `/api/gateways/{gw}/provider-profiles` (list, get, lint, import,
+  delete). New UI page at `/gateways/{gw}/provider-profiles` with a
+  table view and a lint-then-apply import dialog modeled on the GitOps
+  apply flow. Gateway-detail page gained a "Profiles" quick-action
+  button.
+- **WS37.5 — GraphQL L7 inspection.** Endpoint-rule editor's protocol
+  dropdown now offers `graphql` (PR #1083). New endpoint-level fields
+  (`persisted_queries`, `graphql_max_body_bytes`, `path` glob) and
+  per-rule fields (`operation_type`, `operation_name`, `fields`) are
+  rendered conditionally when the protocol is GraphQL. Wire mapping
+  added in `shoreguard.client._converters` and reverse projection in
+  `shoreguard.client.policies._network_rule_to_dict`.
+- **WS37.6 — Two new gateway settings keys** registered upstream and
+  smoke-tested in ShoreGuard:
+  - `providers_v2_enabled` (gateway-level opt-in for the provider
+    profile policy composition surface).
+  - `agent_policy_proposals_enabled` (sandbox-level opt-in for the
+    agent-driven policy proposal surface).
+  Both flow through the existing generic Settings whitelist (UI editor
+  is data-driven and discovers new keys automatically) — only test
+  coverage was added for drift protection à la v0.34.2.
+
+### Changed
+
+- **WS37.2 — `Provider` wire-schema hard cut.** Upstream relocated
+  `Provider.id` and `Provider.name` into a nested `ObjectMeta` message
+  with shifted field numbers (`id` was 1, became `metadata.id = 1`;
+  `type` was 3, is now 2; etc.). ShoreGuard's
+  `_provider_to_dict` and `Provider`-construction sites in
+  `ProviderManager.{create, update}` were rewritten to read/write via
+  `provider.metadata.{id, name, created_at_ms, labels}`. The
+  `ProviderResponse` Pydantic schema gained explicit `id`,
+  `created_at_ms` and `labels` fields. Tests across
+  `tests/test_client_providers.py` were migrated.
+- **`Sandbox` wire-schema hard cut.** Same `ObjectMeta` migration also
+  applied to `Sandbox` — `sandbox.id`, `sandbox.name`,
+  `sandbox.created_at_ms` now flow through `sandbox.metadata`. The
+  legacy `namespace` field was removed upstream and dropped from the
+  ShoreGuard projection. Bulk-rewrote the construction call sites in
+  `tests/test_client_sandboxes.py`,
+  `tests/test_client_resilience.py`, and `tests/test_m28_metrics.py`.
+- **Surface-coverage doc updated.** `docs/reference/surface-coverage.md`
+  reflects the new totals: 42 upstream RPCs, 38 client-consumed,
+  137 REST routes, 77 UI apiFetch calls.
+
+### Notes
+
+- Agent-driven policy MVP RPCs from upstream
+  [PR #1151](https://github.com/NVIDIA/OpenShell/pull/1151) (
+  `SubmitPolicyAnalysis`, `GetDraftPolicy`, `*DraftChunk*`,
+  `GetDraftHistory`) were already wired through
+  `shoreguard.client.policies` and `shoreguard.api.routes.policies`
+  during the M36 sync; this release verifies the surface remains
+  consistent against the new proto.
+
 ## [0.34.2] — 2026-04-28
 
 ### Fixed

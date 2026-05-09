@@ -187,6 +187,12 @@ def _network_rule_to_dict(rule: sandbox_pb2.NetworkPolicyRule) -> dict[str, Any]
             ep_dict["access"] = ep.access
         if ep.allow_encoded_slash:
             ep_dict["allow_encoded_slash"] = True
+        if ep.persisted_queries:
+            ep_dict["persisted_queries"] = ep.persisted_queries
+        if ep.graphql_max_body_bytes:
+            ep_dict["graphql_max_body_bytes"] = ep.graphql_max_body_bytes
+        if ep.path:
+            ep_dict["path"] = ep.path
         if ep.rules:
             rules_list = []
             for r in ep.rules:
@@ -195,6 +201,12 @@ def _network_rule_to_dict(rule: sandbox_pb2.NetworkPolicyRule) -> dict[str, Any]
                     "path": r.allow.path,
                     "command": r.allow.command,
                 }
+                if r.allow.operation_type:
+                    allow_dict["operation_type"] = r.allow.operation_type
+                if r.allow.operation_name:
+                    allow_dict["operation_name"] = r.allow.operation_name
+                if r.allow.fields:
+                    allow_dict["fields"] = list(r.allow.fields)
                 if r.allow.query:
                     allow_dict["query"] = {
                         key: {
@@ -213,6 +225,12 @@ def _network_rule_to_dict(rule: sandbox_pb2.NetworkPolicyRule) -> dict[str, Any]
                     "path": d.path,
                     "command": d.command,
                 }
+                if d.operation_type:
+                    deny_dict["operation_type"] = d.operation_type
+                if d.operation_name:
+                    deny_dict["operation_name"] = d.operation_name
+                if d.fields:
+                    deny_dict["fields"] = list(d.fields)
                 if d.query:
                     deny_dict["query"] = {
                         key: {

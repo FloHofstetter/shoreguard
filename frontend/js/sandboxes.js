@@ -62,6 +62,12 @@ function sandboxDetail(name) {
         saving: false,
         saveOutput: '',
         wsState: 'connecting',
+        // Attached providers (M37 / OpenShell PR #1242)
+        attachedProviders: [],
+        availableProviders: [],
+        attachProviderName: '',
+        attachBusy: false,
+        attachError: '',
 
         async init() {
             await this.load();
@@ -77,18 +83,20 @@ function sandboxDetail(name) {
             this.loading = true;
             this.error = '';
             try {
-                const [sb, draft, policyData] = await Promise.all([
+                const [sb, draft, policyData, attached] = await Promise.all([
                     apiFetch(`${API}/sandboxes/${name}`),
                     // Full draft (chunks + rolling_summary + last_analyzed_at_ms)
                     // rather than /approvals/pending: lets us derive the three
                     // overview-card counters in a single call.
                     apiFetch(`${API}/sandboxes/${name}/approvals`).catch(() => null),
                     apiFetch(`${API}/sandboxes/${name}/policy`).catch(() => null),
+                    apiFetch(`${API}/sandboxes/${name}/providers`).catch(() => []),
                 ]);
 
                 this.sandbox = sb;
                 this.metaDescription = sb.description || '';
                 this.metaLabels = Object.entries(sb.labels || {}).map(([k, v]) => ({ key: k, val: v }));
+                this.attachedProviders = Array.isArray(attached) ? attached : [];
                 const chunks = (draft && draft.chunks) || [];
                 const pending = chunks.filter(c => c.status === 'pending');
                 this.pendingCount = pending.length;
@@ -175,6 +183,84 @@ function sandboxDetail(name) {
                 this.saveOutput = `<span class="text-danger">${escapeHtml(e.message)}</span>`;
             }
             this.saving = false;
+        },
+
+        // ─── Attached Providers (M37, OpenShell PR #1242) ────────────────────
+        async loadAvailableProviders() {
+            // Lazy-load on first attach attempt; the global provider list can
+            // be larger than the attached-list, so we only fetch when the user
+            // actually opens the picker.
+            if (this.availableProviders.length > 0) return;
+            try {
+                const resp = await apiFetch(`${API}/providers`);
+                this.availableProviders = Array.isArray(resp) ? resp : (resp.items || []);
+            } catch (e) {
+                this.attachError = `Failed to load providers: ${e.message}`;
+            }
+        },
+
+        get attachableProviders() {
+            const attachedNames = new Set(this.attachedProviders.map(p => p.name));
+            return this.availableProviders.filter(p => !attachedNames.has(p.name));
+        },
+
+        async attachProvider() {
+            const provName = (this.attachProviderName || '').trim();
+            if (!provName) return;
+            this.attachBusy = true;
+            this.attachError = '';
+            try {
+                const resp = await apiFetch(
+                    `${API}/sandboxes/${this.sandboxName}/providers`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ provider_name: provName }),
+                    },
+                );
+                if (resp.attached) {
+                    showToast(`Provider "${provName}" attached.`, 'success');
+                } else {
+                    showToast(`Provider "${provName}" was already attached.`, 'info');
+                }
+                this.attachProviderName = '';
+                await this.refreshAttachedProviders();
+            } catch (e) {
+                this.attachError = e.message;
+            } finally {
+                this.attachBusy = false;
+            }
+        },
+
+        async detachProvider(providerName) {
+            const confirmed = await showConfirm(
+                `Detach provider "${providerName}" from this sandbox?`,
+                { icon: 'plug', btnLabel: 'Detach' },
+            );
+            if (!confirmed) return;
+            try {
+                const resp = await apiFetch(
+                    `${API}/sandboxes/${this.sandboxName}/providers/${providerName}`,
+                    { method: 'DELETE' },
+                );
+                if (resp.detached) {
+                    showToast(`Provider "${providerName}" detached.`, 'success');
+                } else {
+                    showToast(`Provider "${providerName}" was not attached.`, 'info');
+                }
+                await this.refreshAttachedProviders();
+            } catch (e) {
+                showToast(`Detach failed: ${e.message}`, 'danger');
+            }
+        },
+
+        async refreshAttachedProviders() {
+            try {
+                const resp = await apiFetch(`${API}/sandboxes/${this.sandboxName}/providers`);
+                this.attachedProviders = Array.isArray(resp) ? resp : [];
+            } catch (e) {
+                this.attachedProviders = [];
+            }
         },
     };
 }

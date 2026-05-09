@@ -23,12 +23,16 @@ def _provider_to_dict(provider: datamodel_pb2.Provider) -> dict[str, Any]:
         provider: Provider protobuf message.
 
     Returns:
-        dict[str, Any]: Provider data with id, name, type, credentials,
-            and config.
+        dict[str, Any]: Flat projection of the provider with id/name/labels/
+            created_at_ms hoisted from ``provider.metadata`` plus type,
+            credentials and config.
     """
+    meta = provider.metadata
     return {
-        "id": provider.id,
-        "name": provider.name,
+        "id": meta.id,
+        "name": meta.name,
+        "created_at_ms": meta.created_at_ms,
+        "labels": dict(meta.labels),
         "type": provider.type,
         "credentials": dict(provider.credentials),
         "config": dict(provider.config),
@@ -84,6 +88,7 @@ class ProviderManager:
         provider_type: str,
         credentials: dict[str, str] | None = None,
         config: dict[str, str] | None = None,
+        labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Create a new provider.
 
@@ -92,12 +97,13 @@ class ProviderManager:
             provider_type: Provider type identifier.
             credentials: Provider credential key-value pairs.
             config: Provider configuration key-value pairs.
+            labels: Optional Kubernetes-style labels.
 
         Returns:
             dict[str, Any]: Created provider data dict.
         """
         provider = datamodel_pb2.Provider(
-            name=name,
+            metadata=datamodel_pb2.ObjectMeta(name=name, labels=labels or {}),
             type=provider_type,
             credentials=credentials or {},
             config=config or {},
@@ -115,6 +121,7 @@ class ProviderManager:
         provider_type: str = "",
         credentials: dict[str, str] | None = None,
         config: dict[str, str] | None = None,
+        labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Update an existing provider.
 
@@ -123,12 +130,13 @@ class ProviderManager:
             provider_type: Provider type identifier.
             credentials: Provider credential key-value pairs.
             config: Provider configuration key-value pairs.
+            labels: Optional Kubernetes-style labels.
 
         Returns:
             dict[str, Any]: Updated provider data dict.
         """
         provider = datamodel_pb2.Provider(
-            name=name,
+            metadata=datamodel_pb2.ObjectMeta(name=name, labels=labels or {}),
             type=provider_type,
             credentials=credentials or {},
             config=config or {},

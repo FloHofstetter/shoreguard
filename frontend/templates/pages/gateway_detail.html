@@ -88,6 +88,13 @@
                 </a>
             </div>
             <div class="col">
+                <a :href="gwProviderProfilesUrl"
+                   class="btn btn-outline-secondary w-100 py-3"
+                   :class="{ 'disabled': gwNotConnected }">
+                    <i class="bi bi-collection me-2"></i>Profiles
+                </a>
+            </div>
+            <div class="col">
                 <a :href="gwWizardUrl"
                    class="btn btn-outline-success w-100 py-3"
                    :class="{ 'disabled': gwNotConnected }">
