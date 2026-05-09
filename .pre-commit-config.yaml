@@ -91,12 +91,14 @@ repos:
 
       - id: pip-audit
         name: pip-audit
-        # CVE-2026-3219: pip 26.0.1 (bundled by uv into the dev environment)
-        # has a known vulnerability with no fix version published yet. The
-        # CVE affects pip itself, not Shoreguard's runtime dependencies.
-        # Mirrors the same allowlist used by the CI `audit` job. Remove
-        # --ignore-vuln once pip ships a patched release.
-        entry: uv run pip-audit --ignore-vuln CVE-2026-3219
+        # CVE-2026-3219, CVE-2026-6357: pip 26.0.1 (bundled by uv into the
+        # dev environment) has known vulnerabilities. CVE-2026-6357 is fixed
+        # in pip 26.1 but uv has not yet bumped its bundled pip; CVE-2026-3219
+        # has no fix yet. Both CVEs affect pip itself, not Shoreguard's
+        # runtime dependencies. Mirrors the same allowlist used by the CI
+        # `audit` job. Remove --ignore-vuln entries once uv ships a release
+        # with a patched pip.
+        entry: uv run pip-audit --ignore-vuln CVE-2026-3219 --ignore-vuln CVE-2026-6357
         language: system
         pass_filenames: false
         stages: [pre-push]
