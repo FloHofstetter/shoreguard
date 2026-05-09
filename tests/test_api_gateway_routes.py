@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from unittest.mock import patch
 
+import grpc
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -141,14 +142,28 @@ async def test_gateway_settings_put_providers_v2_enabled(gw_client, mock_gw_svc)
     mock_gw_svc.update_setting.assert_called_once_with("gw1", "providers_v2_enabled", True)
 
 
-async def test_gateway_settings_put_agent_policy_proposals_enabled(gw_client, mock_gw_svc):
-    """M37: ``agent_policy_proposals_enabled`` is a registered upstream key."""
-    mock_gw_svc.update_setting.return_value = {"settings_revision": 13, "deleted": False}
+async def test_gateway_settings_put_sandbox_scoped_key_rejected(gw_client, mock_gw_svc):
+    """Sandbox-scoped registered keys are rejected at the gateway-settings endpoint.
+
+    ``agent_policy_proposals_enabled`` lives in upstream ``REGISTERED_SETTINGS``
+    with ``Scope::Sandbox``. The gateway returns ``INVALID_ARGUMENT`` when it is
+    set via the gateway-level settings RPC. ShoreGuard surfaces that as HTTP 400
+    via the standard gRPC→problem-details mapping.
+    """
+
+    class _InvalidArgRpcError(grpc.RpcError):
+        def code(self) -> grpc.StatusCode:  # type: ignore[override]
+            return grpc.StatusCode.INVALID_ARGUMENT
+
+        def details(self) -> str:  # type: ignore[override]
+            return "setting 'agent_policy_proposals_enabled' is sandbox-scoped"
+
+    mock_gw_svc.update_setting.side_effect = _InvalidArgRpcError()
     resp = await gw_client.put(
         "/api/gateway/gw1/settings/agent_policy_proposals_enabled",
         json={"value": True},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 400
     mock_gw_svc.update_setting.assert_called_once_with(
         "gw1", "agent_policy_proposals_enabled", True
     )

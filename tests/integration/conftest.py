@@ -1,9 +1,11 @@
 """Integration test fixtures — real OpenShell gateway connection.
 
 Gateway resolution order:
-1. SHOREGUARD_TEST_ENDPOINT env var (e.g. "localhost:8080")
+1. SHOREGUARD_TEST_ENDPOINT env var (e.g. "localhost:18080")
 2. OPENSHELL_GATEWAY env var (connect via from_active_cluster)
-3. Auto-start: openshell gateway start --name sg-test --port 18080 --plaintext
+3. Auto-start: foreground ``openshell-gateway`` daemon (v0.0.37+) with a
+   tempfile SQLite state and plaintext gRPC. The process is torn down on
+   session exit.
 4. Skip all integration tests if none of the above work.
 """
 
@@ -12,7 +14,9 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import signal
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -31,8 +35,9 @@ collect_ignore_glob = ["test_*.py"] if _UNDER_MUTMUT else []
 
 logger = logging.getLogger("shoreguard.tests.integration")
 
-_AUTO_GW_NAME = "sg-test"
 _AUTO_GW_PORT = 18080
+_AUTO_GW_HEALTH_PORT = 18081
+_AUTO_GW_METRICS_PORT = 18082
 
 
 def _wait_healthy(client: ShoreGuardClient, timeout: float = 120.0) -> None:
@@ -50,47 +55,83 @@ def _wait_healthy(client: ShoreGuardClient, timeout: float = 120.0) -> None:
     raise TimeoutError(f"Gateway not healthy within {timeout}s: {last_err}")
 
 
+# Holds (popen, state_dir) for teardown when auto-start is used.
+_AUTO_STATE: tuple[subprocess.Popen[bytes], str] | None = None
+
+
 def _auto_start_gateway() -> str | None:
-    """Try to start a test gateway via openshell CLI. Returns endpoint or None."""
-    if not shutil.which("openshell"):
+    """Spawn an ``openshell-gateway`` daemon (v0.0.37+) for the session.
+
+    Returns ``localhost:<port>`` on success, or None if the binary is missing
+    or the process exits before binding.
+    """
+    global _AUTO_STATE
+    binary = shutil.which("openshell-gateway")
+    if not binary:
         return None
 
+    state_dir = tempfile.mkdtemp(prefix="shoreguard-it-gw-")
+    db_url = f"sqlite:{state_dir}/openshell.db"
+    grpc_endpoint = f"http://127.0.0.1:{_AUTO_GW_PORT}"
+    cmd = [
+        binary,
+        "--bind-address",
+        "127.0.0.1",
+        "--port",
+        str(_AUTO_GW_PORT),
+        "--health-port",
+        str(_AUTO_GW_HEALTH_PORT),
+        "--metrics-port",
+        str(_AUTO_GW_METRICS_PORT),
+        "--disable-tls",
+        "--disable-gateway-auth",
+        "--db-url",
+        db_url,
+        "--grpc-endpoint",
+        grpc_endpoint,
+    ]
     try:
-        proc = subprocess.run(
-            [
-                "openshell",
-                "gateway",
-                "start",
-                "--name",
-                _AUTO_GW_NAME,
-                "--port",
-                str(_AUTO_GW_PORT),
-                "--plaintext",
-                "--disable-gateway-auth",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=600,
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
         )
-        if proc.returncode == 0:
-            return f"localhost:{_AUTO_GW_PORT}"
-        logger.warning("Auto-start failed: %s", proc.stderr.strip())
-    except Exception as e:
+    except Exception as e:  # pragma: no cover - environment specific
         logger.warning("Auto-start exception: %s", e)
-    return None
+        shutil.rmtree(state_dir, ignore_errors=True)
+        return None
+
+    # Give the daemon a moment to crash on bad flags.
+    time.sleep(0.5)
+    if proc.poll() is not None:
+        stderr = (proc.stderr.read().decode() if proc.stderr else "").strip()
+        logger.warning("openshell-gateway exited early: %s", stderr)
+        shutil.rmtree(state_dir, ignore_errors=True)
+        return None
+
+    _AUTO_STATE = (proc, state_dir)
+    return f"localhost:{_AUTO_GW_PORT}"
 
 
 def _auto_destroy_gateway() -> None:
-    """Destroy the auto-started test gateway."""
+    """Stop the auto-started gateway daemon and remove its state directory."""
+    global _AUTO_STATE
+    if _AUTO_STATE is None:
+        return
+    proc, state_dir = _AUTO_STATE
+    _AUTO_STATE = None
     try:
-        subprocess.run(
-            ["openshell", "gateway", "destroy", "--name", _AUTO_GW_NAME],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        if proc.poll() is None:
+            proc.send_signal(signal.SIGTERM)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
     except Exception:
         pass
+    shutil.rmtree(state_dir, ignore_errors=True)
 
 
 # ── Auto-xfail UNIMPLEMENTED gRPC calls ───────────────────────────────────
