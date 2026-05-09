@@ -59,7 +59,9 @@ the first list/get against any older gateway. There is no compat shim.
     agent-driven policy proposal surface).
   Both flow through the existing generic Settings whitelist (UI editor
   is data-driven and discovers new keys automatically) — only test
-  coverage was added for drift protection à la v0.34.2.
+  coverage was added for drift protection à la v0.34.2. See
+  `docs/reference/gateway-settings.md` for the full registered-keys
+  table.
 
 ### Changed
 

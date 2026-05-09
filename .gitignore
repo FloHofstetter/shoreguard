@@ -43,5 +43,8 @@ mutants/
 # Claude Code
 .claude/
 
+# Playwright MCP scratch dir
+.playwright-mcp/
+
 # PyPI credentials
 .pypirc

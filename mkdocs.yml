@@ -132,6 +132,7 @@ nav:
       - REST API: reference/api.md
       - Configuration: reference/configuration.md
       - Settings Reference: reference/settings.md
+      - Gateway Settings: reference/gateway-settings.md
       - Policy Presets: reference/presets.md
       - Surface Coverage: reference/surface-coverage.md
       - Python API:
