@@ -277,6 +277,17 @@ See the [contributing guide](https://flohofstetter.github.io/shoreguard/developm
 
 Full docs: **[flohofstetter.github.io/shoreguard](https://flohofstetter.github.io/shoreguard/)**
 
+## Contributing
+
+PRs welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the
+development environment, local gates, and PR conventions. Bugs
+and feature requests go through GitHub Issues.
+
+## Security
+
+Vulnerabilities should be reported privately. See
+[`SECURITY.md`](SECURITY.md) for the responsible-disclosure path.
+
 ## License
 
-[Apache 2.0](LICENSE)
+[Apache 2.0](LICENSE). See also [`NOTICE.txt`](NOTICE.txt).

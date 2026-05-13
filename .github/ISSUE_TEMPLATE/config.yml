@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/FloHofstetter/shoreguard/security/policy
+    about: Please report security issues responsibly per the SECURITY.md policy — do not open a public issue.
+  - name: Question or discussion
+    url: https://github.com/FloHofstetter/shoreguard/discussions
+    about: For open-ended questions or design discussions — use Discussions, not Issues.
+  - name: OpenShell upstream
+    url: https://github.com/NVIDIA/OpenShell/issues
+    about: Issues with OpenShell itself (the runtime ShoreGuard controls) belong upstream at NVIDIA.

@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest a new capability or extension for ShoreGuard.
+title: "[feat] "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ShoreGuard sits between operators and OpenShell's secure
+        runtime. Please describe the operator-facing problem first,
+        then the proposal.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What operator pain motivates this request?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: UI, REST API, Terraform-provider surface, or all three.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links to upstream OpenShell issues, prior art in other governance tools.

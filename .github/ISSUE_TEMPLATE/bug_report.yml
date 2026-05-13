@@ -1,0 +1,93 @@
+name: Bug report
+description: A defect, regression, or unexpected behaviour in ShoreGuard.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report.
+
+        **Security vulnerabilities should NOT be filed here** — see
+        [SECURITY.md](../../SECURITY.md) for the responsible-disclosure
+        process.
+
+  - type: input
+    id: version
+    attributes:
+      label: ShoreGuard version
+      description: Output of `uv run shoreguard --version` or the docker image tag.
+      placeholder: "v0.34.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-mode
+    attributes:
+      label: Installation mode
+      options:
+        - Docker compose (GHCR pull)
+        - Docker compose (local build)
+        - Source checkout + uv sync
+        - PyPI install
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Database backend
+      options:
+        - SQLite (dev only)
+        - Postgres
+    validations:
+      required: true
+
+  - type: input
+    id: openshell-version
+    attributes:
+      label: OpenShell version
+      description: The NVIDIA OpenShell version ShoreGuard is managing.
+      placeholder: "v0.5.x"
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Configure a sandbox with policy X
+        2. Submit agent task via Y
+        3. Observe …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include stack traces, API responses, log excerpts.
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      placeholder: |
+        - Python: 3.14.0
+        - OS: Manjaro 6.12 / Ubuntu 22.04
+        - DB: Postgres 16
+        - OpenShell: ...
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: shell
