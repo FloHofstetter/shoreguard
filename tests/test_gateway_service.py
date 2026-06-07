@@ -199,7 +199,11 @@ def test_try_connect_from_registry(svc, registry):
 
     assert result is mock_client
     mock_factory.assert_called_once_with(
-        "10.0.0.1:8443", ca_cert=b"ca", client_cert=b"cert", client_key=b"key"
+        "10.0.0.1:8443",
+        ca_cert=b"ca",
+        client_cert=b"cert",
+        client_key=b"key",
+        require_mtls=None,
     )
 
 
@@ -477,6 +481,43 @@ def test_try_connect_from_registry_allows_private_ip_in_local_mode(svc, registry
     ):
         result = svc._try_connect_from_registry("local-gw", creds)
     assert result is mock_client
+
+
+def test_try_connect_from_registry_relaxes_mtls_for_local_plaintext(svc, registry, monkeypatch):
+    """Local mode: a plaintext private gateway with no cert bundle connects with mTLS relaxed."""
+    monkeypatch.setenv("SHOREGUARD_LOCAL_MODE", "1")
+    registry.register("local-plain", "127.0.0.1:8080", auth_mode="insecure")
+    creds = registry.get_credentials("local-plain")
+    mock_client = MagicMock()
+    mock_client.health.return_value = {"status": "healthy"}
+    with patch(
+        "shoreguard.services.gateway.ShoreGuardClient.from_credentials",
+        return_value=mock_client,
+    ) as from_creds:
+        result = svc._try_connect_from_registry("local-plain", creds)
+    assert result is mock_client
+    assert from_creds.call_args.kwargs["require_mtls"] is False
+
+
+def test_try_connect_from_registry_keeps_mtls_default_without_local_mode(
+    svc, registry, monkeypatch
+):
+    """Outside local mode require_mtls is left at its default (None) — no silent relax."""
+    monkeypatch.delenv("SHOREGUARD_LOCAL_MODE", raising=False)
+    registry.register("remote-plain", "203.0.113.5:8443", auth_mode="insecure")
+    creds = registry.get_credentials("remote-plain")
+    mock_client = MagicMock()
+    mock_client.health.return_value = {"status": "healthy"}
+    with (
+        patch("shoreguard.services.gateway.is_private_ip", return_value=False),
+        patch(
+            "shoreguard.services.gateway.ShoreGuardClient.from_credentials",
+            return_value=mock_client,
+        ) as from_creds,
+    ):
+        result = svc._try_connect_from_registry("remote-plain", creds)
+    assert result is mock_client
+    assert from_creds.call_args.kwargs["require_mtls"] is None
 
 
 def test_try_connect_from_registry_allows_public_ip(svc, registry):
@@ -795,7 +836,9 @@ class TestTryConnectFromRegistry:
             ) as mock_fc,
         ):
             svc._try_connect_from_registry("gw", creds)
-        mock_fc.assert_called_once_with("host:443", ca_cert=None, client_cert=None, client_key=None)
+        mock_fc.assert_called_once_with(
+            "host:443", ca_cert=None, client_cert=None, client_key=None, require_mtls=None
+        )
 
     def test_from_credentials_called_with_bytes(self, svc):
         """Bytes creds are passed through to from_credentials."""
@@ -816,7 +859,7 @@ class TestTryConnectFromRegistry:
         ):
             svc._try_connect_from_registry("gw", creds)
         mock_fc.assert_called_once_with(
-            "host:443", ca_cert=b"ca", client_cert=b"cert", client_key=b"key"
+            "host:443", ca_cert=b"ca", client_cert=b"cert", client_key=b"key", require_mtls=None
         )
 
     def test_from_credentials_missing_optional_creds(self, svc):
@@ -832,7 +875,9 @@ class TestTryConnectFromRegistry:
             ) as mock_fc,
         ):
             svc._try_connect_from_registry("gw", creds)
-        mock_fc.assert_called_once_with("host:443", ca_cert=None, client_cert=None, client_key=None)
+        mock_fc.assert_called_once_with(
+            "host:443", ca_cert=None, client_cert=None, client_key=None, require_mtls=None
+        )
 
     def test_connection_error_returns_none(self, svc):
         creds = {"endpoint": "host:443"}

@@ -241,7 +241,9 @@ class GatewayService:
         # (kube-dns / CoreDNS is authoritative, not user-controllable,
         # so DNS-rebinding is not possible against this suffix).
         is_cluster_dns = host.lower().endswith(".svc.cluster.local")
-        if not is_cluster_dns and is_private_ip(host) and not get_settings().server.local_mode:
+        is_local_mode = get_settings().server.local_mode
+        is_private = is_private_ip(host)
+        if not is_cluster_dns and is_private and not is_local_mode:
             logger.warning(
                 "Gateway '%s' endpoint '%s' resolves to a private IP — blocking connection",
                 name,
@@ -251,12 +253,32 @@ class GatewayService:
         ca_cert = creds.get("ca_cert")
         client_cert = creds.get("client_cert")
         client_key = creds.get("client_key")
+        has_bundle = (
+            isinstance(ca_cert, bytes)
+            and isinstance(client_cert, bytes)
+            and isinstance(client_key, bytes)
+        )
+        # Solo-dev on-ramp: in local mode a loopback/private gateway registered
+        # without a cert bundle connects in plaintext. This mirrors the private-IP
+        # SSRF bypass above — local mode means "trust my local box", and certs are
+        # exactly the ceremony a single-box dev avoids by using the OpenShell TUI.
+        # Strictly gated on local_mode + a private/loopback host, so production
+        # (require_mtls default True, public endpoints) is unaffected.
+        require_mtls = None
+        if is_local_mode and is_private and not has_bundle:
+            require_mtls = False
+            logger.warning(
+                "Gateway '%s' (%s): local mode, connecting without mTLS (plaintext)",
+                name,
+                endpoint,
+            )
         try:
             client = ShoreGuardClient.from_credentials(
                 endpoint,
                 ca_cert=ca_cert if isinstance(ca_cert, bytes) else None,
                 client_cert=client_cert if isinstance(client_cert, bytes) else None,
                 client_key=client_key if isinstance(client_key, bytes) else None,
+                require_mtls=require_mtls,
             )
         except (grpc.RpcError, OSError, ConnectionError, TimeoutError) as e:
             logger.debug("Gateway '%s' connection failed (type=%s): %s", name, type(e).__name__, e)
