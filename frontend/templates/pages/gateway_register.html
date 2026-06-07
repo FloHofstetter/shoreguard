@@ -13,6 +13,16 @@
     <div class="col-lg-8" x-data="gatewayRegisterPage()">
         <h5 class="mb-3"><i class="bi bi-plus-circle me-2"></i>Register Gateway</h5>
 
+        <div class="alert alert-info small d-flex" role="alert">
+            <i class="bi bi-info-circle me-2 mt-1"></i>
+            <div>
+                Most solo setups don't need this. If OpenShell runs on this machine, restart
+                ShoreGuard with <code>shoreguard --local</code> and your gateway is auto-detected —
+                no certificates required. This form connects a <strong>remote</strong> gateway
+                (needs an endpoint and mTLS certificates).
+            </div>
+        </div>
+
         <div class="card sg-card-themed">
             <div class="card-body">
                 <form @submit.prevent="submit()">
