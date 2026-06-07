@@ -96,7 +96,8 @@ def main(
         typer.Option(
             "--local/--no-local",
             envvar="SHOREGUARD_LOCAL_MODE",
-            help="Enable local mode: Docker lifecycle management for gateways.",
+            help="Enable local mode: Docker lifecycle management for gateways "
+            "(requires a running Docker daemon).",
             rich_help_panel="Server",
         ),
     ] = False,

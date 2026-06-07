@@ -1,11 +1,16 @@
 """FastAPI application entry point."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from shoreguard.services.local_gateway import LocalGatewayManager
 
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -70,6 +75,27 @@ _task_health: dict[str, dict[str, Any]] = {
 }
 
 
+def _warn_if_docker_unusable(manager: LocalGatewayManager) -> None:
+    """Log a boot-time warning when local mode is on but Docker is unusable.
+
+    Runs ``manager.diagnostics()`` and, if Docker is not accessible, emits a
+    single actionable warning so the failure surfaces at startup instead of as
+    an opaque gRPC timeout the first time a solo dev creates a sandbox. Never
+    raises — ShoreGuard still boots so the operator can read the message.
+
+    Args:
+        manager: The local gateway manager whose Docker diagnostics to check.
+    """
+    diag = manager.diagnostics()
+    if not diag["docker_accessible"]:
+        logger.warning(
+            "Local mode is on but Docker is not usable (%s). Sandbox/gateway "
+            "lifecycle will fail until Docker is running and accessible. "
+            "See GET /api/gateways/diagnostics for details.",
+            diag["docker_error"] or "Docker not installed",
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan — initialise DB, services, and background tasks.
@@ -120,6 +146,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         local_mod.local_gateway_manager = local_mod.LocalGatewayManager(gw_mod.gateway_service)
         logger.info("Local gateway mode enabled")
+
+        # Surface Docker problems at boot instead of as an opaque gRPC timeout
+        # later, when a solo dev first tries to create a sandbox. ``diagnostics``
+        # shells out to ``docker``, so run it off the event loop.
+        await asyncio.to_thread(_warn_if_docker_unusable, local_mod.local_gateway_manager)
 
         # Auto-import filesystem gateways so locally managed gateways
         # appear in the DB without a manual import-gateways step.

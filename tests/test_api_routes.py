@@ -43,6 +43,16 @@ async def test_create_sandbox_validation(api_client, mock_client):
     assert resp.status_code == 202
 
 
+def test_ready_timeout_warning_is_actionable():
+    """The sandbox ready-timeout warning names the knob and where to look."""
+    from shoreguard.api.routes.sandboxes import _ready_timeout_warning
+
+    msg = _ready_timeout_warning(180.0)
+    assert "SHOREGUARD_SANDBOX_READY_TIMEOUT" in msg
+    assert "180s" in msg
+    assert "diagnostics" in msg
+
+
 async def test_health_disconnected(api_client, mock_client):
     """GET /api/gateways/{gw}/health returns 503 when gateway raises GatewayNotConnectedError."""
     mock_client.health.side_effect = GatewayNotConnectedError("not connected")

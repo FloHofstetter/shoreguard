@@ -57,6 +57,25 @@ logger = logging.getLogger(__name__)
 
 _VALID_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 
+
+def _ready_timeout_warning(ready_timeout: float) -> str:
+    """Build the actionable warning shown when a new sandbox isn't ready in time.
+
+    Args:
+        ready_timeout: The configured wait-for-ready budget in seconds.
+
+    Returns:
+        str: A message naming the timeout knob and where to look (gateway
+            health / Docker diagnostics) instead of a bare "not ready".
+    """
+    return (
+        f"Sandbox created but did not become ready within {ready_timeout:g}s. "
+        "Check the gateway is healthy and (in local mode) that Docker is running "
+        "— see GET /api/gateways/diagnostics. Raise SHOREGUARD_SANDBOX_READY_TIMEOUT "
+        "if the image is slow to pull on first launch."
+    )
+
+
 router = APIRouter()
 
 
@@ -303,16 +322,16 @@ async def create_sandbox(
         assert _ops_mod.operation_service is not None
         await _ops_mod.operation_service.update_progress(op.id, 30, "Waiting for ready state")  # type: ignore[misc]
         if sb_name:
-            try:
-                from shoreguard.settings import get_settings
+            from shoreguard.settings import get_settings
 
-                ready_timeout = get_settings().sandbox.ready_timeout
+            ready_timeout = get_settings().sandbox.ready_timeout
+            try:
                 await asyncio.to_thread(
                     client.sandboxes.wait_ready, sb_name, timeout_seconds=ready_timeout
                 )
                 result = await asyncio.to_thread(svc.get, sb_name, gateway_name=gw)
             except TimeoutError:
-                result["warning"] = "Sandbox created but did not become ready in time"
+                result["warning"] = _ready_timeout_warning(ready_timeout)
         logger.info("Sandbox creation completed: '%s' (op=%s)", sandbox_name, op.id)
         await audit_log(
             request,

@@ -1047,3 +1047,34 @@ def test_ws_forward_rejects_bad_target():
             ws.send_json({"target": "nope"})
             msg = ws.receive_json()
             assert msg["type"] == "error"
+
+
+def test_warn_if_docker_unusable_logs_when_inaccessible(caplog):
+    """Boot-time helper warns (once, non-fatally) when Docker is not accessible."""
+    import logging
+
+    from shoreguard.api.main import _warn_if_docker_unusable
+
+    manager = MagicMock()
+    manager.diagnostics.return_value = {
+        "docker_accessible": False,
+        "docker_error": "Docker daemon is not running",
+    }
+    with caplog.at_level(logging.WARNING, logger="shoreguard.api.main"):
+        _warn_if_docker_unusable(manager)
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("Docker is not usable" in m for m in messages)
+    assert any("Docker daemon is not running" in m for m in messages)
+
+
+def test_warn_if_docker_unusable_silent_when_accessible(caplog):
+    """Helper stays silent when Docker is accessible."""
+    import logging
+
+    from shoreguard.api.main import _warn_if_docker_unusable
+
+    manager = MagicMock()
+    manager.diagnostics.return_value = {"docker_accessible": True, "docker_error": None}
+    with caplog.at_level(logging.WARNING, logger="shoreguard.api.main"):
+        _warn_if_docker_unusable(manager)
+    assert not any("Docker is not usable" in r.getMessage() for r in caplog.records)
