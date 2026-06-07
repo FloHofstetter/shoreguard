@@ -44,6 +44,7 @@ from .policies import PolicyManager
 from .provider_profiles import ProviderProfileManager
 from .providers import ProviderManager
 from .sandboxes import SandboxManager
+from .services import ServiceManager
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +217,7 @@ class ShoreGuardClient:
         self.approvals = ApprovalManager(self._stub, timeout=timeout)
         self.providers = ProviderManager(self._stub, timeout=timeout)
         self.provider_profiles = ProviderProfileManager(self._stub, timeout=timeout)
+        self.services = ServiceManager(self._stub, timeout=timeout)
 
     @classmethod
     def from_credentials(
@@ -304,6 +306,7 @@ class ShoreGuardClient:
         instance.approvals = ApprovalManager(instance._stub, timeout=timeout)
         instance.providers = ProviderManager(instance._stub, timeout=timeout)
         instance.provider_profiles = ProviderProfileManager(instance._stub, timeout=timeout)
+        instance.services = ServiceManager(instance._stub, timeout=timeout)
         return instance
 
     @classmethod
@@ -598,6 +601,7 @@ class ShoreGuardClient:
         self.approvals = ApprovalManager(self._stub, timeout=self._timeout)
         self.providers = ProviderManager(self._stub, timeout=self._timeout)
         self.provider_profiles = ProviderProfileManager(self._stub, timeout=self._timeout)
+        self.services = ServiceManager(self._stub, timeout=self._timeout)
         try:
             old_channel.close()
         except Exception:  # noqa: BLE001

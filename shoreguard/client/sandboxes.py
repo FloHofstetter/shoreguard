@@ -14,9 +14,10 @@ warm-up commands inside a sandbox once it has been created.
 from __future__ import annotations
 
 import logging
+import queue
 import re
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from shoreguard.exceptions import SandboxError
@@ -138,13 +139,113 @@ def _sandbox_to_dict(sb: openshell_pb2.Sandbox) -> dict[str, Any]:
         "id": meta.id,
         "name": meta.name,
         "labels": dict(meta.labels),
-        "phase": PHASE_NAMES.get(sb.phase, "unknown"),
-        "phase_code": sb.phase,
+        "phase": PHASE_NAMES.get(sb.status.phase, "unknown"),
+        "phase_code": sb.status.phase,
         "created_at_ms": meta.created_at_ms,
-        "current_policy_version": sb.current_policy_version,
+        "resource_version": meta.resource_version,
+        "current_policy_version": sb.status.current_policy_version,
         "image": sb.spec.template.image if sb.spec.template.image else None,
         "gpu": sb.spec.gpu if sb.HasField("spec") else False,
     }
+
+
+def _exec_input_iter(
+    sandbox_id: str,
+    command: list[str],
+    inbound: queue.Queue[dict[str, Any] | None],
+    *,
+    workdir: str,
+    env: dict[str, str] | None,
+    cols: int,
+    rows: int,
+) -> Iterator[openshell_pb2.ExecSandboxInput]:
+    """Yield the request stream for ``ExecSandboxInteractive``.
+
+    The first message is the exec request (TTY always on); subsequent messages
+    are stdin/resize frames drained from *inbound* until a ``None`` sentinel.
+
+    Args:
+        sandbox_id: Sandbox identifier.
+        command: Command and arguments to execute.
+        inbound: Thread-safe queue of stdin/resize frames; ``None`` ends input.
+        workdir: Working directory inside the sandbox.
+        env: Optional environment variables for the command.
+        cols: Initial terminal columns.
+        rows: Initial terminal rows.
+
+    Yields:
+        openshell_pb2.ExecSandboxInput: The start frame, then stdin/resize frames.
+    """
+    yield openshell_pb2.ExecSandboxInput(
+        start=openshell_pb2.ExecSandboxRequest(
+            sandbox_id=sandbox_id,
+            command=command,
+            workdir=workdir,
+            environment=dict(env or {}),
+            tty=True,
+            cols=cols,
+            rows=rows,
+        )
+    )
+    while True:
+        item = inbound.get()
+        if item is None:
+            return
+        kind = item.get("type")
+        if kind == "stdin":
+            yield openshell_pb2.ExecSandboxInput(stdin=bytes(item["data"]))
+        elif kind == "resize":
+            yield openshell_pb2.ExecSandboxInput(
+                resize=openshell_pb2.ExecSandboxWindowResize(
+                    cols=int(item["cols"]), rows=int(item["rows"])
+                )
+            )
+
+
+def _build_tcp_forward_init(init: dict[str, Any]) -> openshell_pb2.TcpForwardInit:
+    """Build a TcpForwardInit message from a plain init dict.
+
+    Args:
+        init: Mapping with ``sandbox_id``, optional ``service_id`` and
+            ``authorization_token``, a ``target`` of ``"ssh"`` or ``"tcp"`` and,
+            for TCP, ``host`` and ``port``.
+
+    Returns:
+        openshell_pb2.TcpForwardInit: The constructed init message.
+    """
+    common = {
+        "sandbox_id": init["sandbox_id"],
+        "service_id": init.get("service_id", ""),
+        "authorization_token": init.get("authorization_token", ""),
+    }
+    if init.get("target") == "ssh":
+        return openshell_pb2.TcpForwardInit(ssh=openshell_pb2.SshRelayTarget(), **common)
+    return openshell_pb2.TcpForwardInit(
+        tcp=openshell_pb2.TcpRelayTarget(host=init["host"], port=int(init["port"])), **common
+    )
+
+
+def _tcp_forward_iter(
+    init: dict[str, Any], inbound: queue.Queue[bytes | None]
+) -> Iterator[openshell_pb2.TcpForwardFrame]:
+    """Yield the request stream for ``ForwardTcp``.
+
+    The first frame carries the relay target; subsequent frames carry raw byte
+    chunks drained from *inbound* until a ``None`` sentinel half-closes the tunnel.
+
+    Args:
+        init: Relay-init mapping (see :func:`_build_tcp_forward_init`).
+        inbound: Thread-safe queue of outbound byte chunks; ``None`` ends the stream.
+
+    Yields:
+        openshell_pb2.TcpForwardFrame: The init frame, then data frames.
+    """
+    yield openshell_pb2.TcpForwardFrame(init=_build_tcp_forward_init(init))
+    while True:
+        chunk = inbound.get()
+        if chunk is None:
+            return
+        yield openshell_pb2.TcpForwardFrame(data=bytes(chunk))
 
 
 class SandboxManager:
@@ -540,6 +641,122 @@ class SandboxManager:
             "stdout": b"".join(stdout_parts).decode("utf-8", errors="replace"),
             "stderr": b"".join(stderr_parts).decode("utf-8", errors="replace"),
         }
+
+    def exec_interactive(
+        self,
+        sandbox_id: str,
+        command: list[str],
+        *,
+        inbound: queue.Queue[dict[str, Any] | None],
+        on_call: Callable[[Any], None] | None = None,
+        workdir: str = "",
+        env: dict[str, str] | None = None,
+        cols: int = 80,
+        rows: int = 24,
+        timeout: float | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        """Run a command with bidirectional streaming (interactive TTY session).
+
+        The first wire message carries the exec request; subsequent messages are
+        drained from *inbound* — ``{"type": "stdin", "data": bytes}`` or
+        ``{"type": "resize", "cols": int, "rows": int}`` — until a ``None``
+        sentinel half-closes the request stream. Output events are yielded as
+        dicts. ``ExecSandboxInteractive`` always allocates a TTY.
+
+        Args:
+            sandbox_id: Sandbox identifier.
+            command: Command and arguments to execute.
+            inbound: Thread-safe queue of stdin/resize frames; ``None`` ends input.
+            on_call: Optional callback handed the live gRPC call so the caller can
+                cancel it on teardown.
+            workdir: Working directory inside the sandbox.
+            env: Optional environment variables for the command.
+            cols: Initial terminal columns.
+            rows: Initial terminal rows.
+            timeout: Optional gRPC deadline in seconds; ``None`` for no deadline.
+
+        Yields:
+            dict[str, Any]: ``{"type": "stdout"|"stderr", "data": bytes}`` or
+                ``{"type": "exit", "exit_code": int}``.
+        """
+        request_iter = _exec_input_iter(
+            sandbox_id, command, inbound, workdir=workdir, env=env, cols=cols, rows=rows
+        )
+        call = self._stub.ExecSandboxInteractive(request_iter, timeout=timeout)
+        if on_call is not None:
+            on_call(call)
+        try:
+            for event in call:
+                payload = event.WhichOneof("payload")
+                if payload == "stdout":
+                    yield {"type": "stdout", "data": bytes(event.stdout.data)}
+                elif payload == "stderr":
+                    yield {"type": "stderr", "data": bytes(event.stderr.data)}
+                elif payload == "exit":
+                    yield {"type": "exit", "exit_code": int(event.exit.exit_code)}
+        finally:
+            call.cancel()
+
+    def forward_tcp(
+        self,
+        *,
+        init: dict[str, Any],
+        inbound: queue.Queue[bytes | None],
+        on_call: Callable[[Any], None] | None = None,
+        timeout: float | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        """Relay a raw TCP/SSH tunnel to a sandbox via bidirectional streaming.
+
+        The first wire frame carries the relay target (``ssh`` or ``tcp``);
+        subsequent frames carry raw bytes from *inbound* until a ``None`` sentinel.
+        Inbound gateway bytes are yielded as ``{"type": "data", "data": bytes}``.
+
+        Args:
+            init: Relay-init mapping (see :func:`_build_tcp_forward_init`).
+            inbound: Thread-safe queue of outbound byte chunks; ``None`` ends it.
+            on_call: Optional callback handed the live gRPC call for cancellation.
+            timeout: Optional gRPC deadline in seconds; ``None`` for no deadline.
+
+        Yields:
+            dict[str, Any]: ``{"type": "data", "data": bytes}`` per inbound chunk.
+        """
+        request_iter = _tcp_forward_iter(init, inbound)
+        call = self._stub.ForwardTcp(request_iter, timeout=timeout)
+        if on_call is not None:
+            on_call(call)
+        try:
+            for frame in call:
+                if frame.WhichOneof("payload") == "data":
+                    yield {"type": "data", "data": bytes(frame.data)}
+        finally:
+            call.cancel()
+
+    def issue_token(self) -> dict[str, Any]:
+        """Mint a gateway JWT bound to the calling mTLS identity.
+
+        Note:
+            The request is empty — the gateway binds the token to the *caller's*
+            identity. Called from ShoreGuard this yields a token for ShoreGuard's
+            own gateway identity (a diagnostic), not one scoped to a sandbox.
+
+        Returns:
+            dict[str, Any]: ``{"token": str, "expires_at_ms": int}`` (0 = non-expiring).
+        """
+        resp = self._stub.IssueSandboxToken(
+            openshell_pb2.IssueSandboxTokenRequest(), timeout=self._timeout
+        )
+        return {"token": resp.token, "expires_at_ms": resp.expires_at_ms}
+
+    def refresh_token(self) -> dict[str, Any]:
+        """Mint a fresh gateway JWT for the calling identity.
+
+        Returns:
+            dict[str, Any]: ``{"token": str, "expires_at_ms": int}`` (0 = non-expiring).
+        """
+        resp = self._stub.RefreshSandboxToken(
+            openshell_pb2.RefreshSandboxTokenRequest(), timeout=self._timeout
+        )
+        return {"token": resp.token, "expires_at_ms": resp.expires_at_ms}
 
     def create_ssh_session(self, sandbox_id: str) -> dict[str, Any]:
         """Create a temporary SSH session for shell access to a sandbox.
