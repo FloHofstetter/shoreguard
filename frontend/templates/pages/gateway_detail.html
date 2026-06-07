@@ -95,11 +95,43 @@
                 </a>
             </div>
             <div class="col">
+                <a :href="gwServicesUrl"
+                   class="btn btn-outline-secondary w-100 py-3"
+                   :class="{ 'disabled': gwNotConnected }">
+                    <i class="bi bi-hdd-network me-2"></i>Services
+                </a>
+            </div>
+            <div class="col">
                 <a :href="gwWizardUrl"
                    class="btn btn-outline-success w-100 py-3"
                    :class="{ 'disabled': gwNotConnected }">
                     <i class="bi bi-plus-circle me-2"></i>New Sandbox
                 </a>
+            </div>
+        </div>
+
+        <!-- Gateway token (diagnostic, admin only) -->
+        <div class="card sg-card-themed mb-4" x-show="$isAdmin" x-cloak
+             x-data="gatewayToken" data-sg-min-role="admin">
+            <div class="card-body">
+                <h6 class="text-muted mb-2"><i class="bi bi-key me-1"></i>Gateway token (diagnostic)</h6>
+                <p class="small text-muted mb-2">
+                    Mints a JWT bound to <strong>ShoreGuard's</strong> own gateway identity. Useful to
+                    verify token issuance against this gateway — it is <em>not</em> a token scoped to a
+                    sandbox (the upstream RPC binds to the calling identity).
+                </p>
+                <div class="d-flex gap-2 align-items-center">
+                    <button class="btn btn-outline-secondary btn-sm" @click="issue()" :disabled="busy">
+                        <i class="bi bi-key me-1"></i>Issue token
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" @click="refresh()" :disabled="busy">
+                        <i class="bi bi-arrow-repeat me-1"></i>Refresh
+                    </button>
+                    <span class="small text-muted" x-show="expiresAt" x-text="expiryLabel"></span>
+                </div>
+                <div x-show="token" class="mt-2">
+                    <textarea class="form-control form-control-sm font-monospace" rows="2" readonly x-text="token"></textarea>
+                </div>
             </div>
         </div>
 
@@ -420,4 +452,5 @@
 
 {% block extra_js %}
 <script src="/static/js/gateway.js"></script>
+<script src="/static/js/tokens.js"></script>
 {% endblock %}

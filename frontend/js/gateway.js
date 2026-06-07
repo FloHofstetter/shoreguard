@@ -226,6 +226,7 @@ function gatewayDetail(name) {
         get gwSandboxesUrl() { return this.gw?.status === 'connected' ? this.gwUrl('/sandboxes') : null; },
         get gwProvidersUrl() { return this.gw?.status === 'connected' ? this.gwUrl('/providers') : null; },
         get gwProviderProfilesUrl() { return this.gw?.status === 'connected' ? this.gwUrl('/provider-profiles') : null; },
+        get gwServicesUrl() { return this.gw?.status === 'connected' ? this.gwUrl('/services') : null; },
         get gwWizardUrl() { return this.gw?.status === 'connected' ? this.gwUrl('/wizard') : null; },
 
         async load() {
