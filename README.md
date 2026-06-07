@@ -112,7 +112,7 @@ pip install shoreguard
 shoreguard --local --no-auth
 ```
 
-Open [http://localhost:8888](http://localhost:8888). The `--local` flag enables Docker-based gateway management, `--no-auth` skips login.
+Open [http://localhost:8888](http://localhost:8888). The `--local` flag enables Docker-based gateway management, `--no-auth` skips login. New to it? Follow the [Solo Dev guide](https://flohofstetter.github.io/shoreguard/getting-started/solo-dev/) — zero to a sandbox on one box, no certificates.
 
 ### Docker Compose (production)
 

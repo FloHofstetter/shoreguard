@@ -1,6 +1,14 @@
 # Quick Start
 
-Get from zero to a running sandbox in under five minutes.
+Get from zero to a running sandbox in under five minutes. This guide covers the
+**team / remote-gateway** setup: ShoreGuard with login, managing one or more
+OpenShell gateways that run elsewhere.
+
+!!! tip "One machine, just trying it out?"
+
+    If OpenShell runs on **this same box** and you just want to get going, the
+    [Solo Dev guide](solo-dev.md) is shorter — no account, no certificates, no
+    remote gateway.
 
 ## Step 1 — Install and start
 
@@ -46,12 +54,7 @@ Logs stream over WebSocket and are stored for later review.
 
 ---
 
-!!! tip "Local mode"
+!!! tip "No remote gateway yet?"
 
-    If you do not have a remote gateway yet, start ShoreGuard with the
-    `--local` flag. This enables Docker-based gateway lifecycle management
-    on your machine — handy for development and demos.
-
-    ```bash
-    shoreguard --local
-    ```
+    If OpenShell runs on this machine, skip the registration step entirely with
+    local mode — see the [Solo Dev guide](solo-dev.md).

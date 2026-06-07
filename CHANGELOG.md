@@ -5,6 +5,43 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.37.0] — 2026-06-07
+
+### Solo-dev on-ramp
+
+Sharpens the single-box / solo-developer path so it competes with "just run the
+OpenShell TUI". The frictionless path already existed (`shoreguard --local
+--no-auth` → SQLite auto-init → auto-import filesystem gateways → no-credential
+sandbox) but was mis-signposted and had two sharp default edges.
+
+### Added
+
+- **Solo Dev guide** — new `docs/getting-started/solo-dev.md` as the headline
+  single-box on-ramp (in the nav before Quick Start, linked from the README).
+  Quick Start is reframed as the team / remote-gateway flow.
+- **In-app orientation hints** (no new API surface) — the dashboard
+  "No gateways" empty state and the gateway-register form now point single-box
+  users at `shoreguard --local`; the sandbox wizard's image field documents that
+  blank uses the gateway default.
+- **Headless first-admin docs** — `SHOREGUARD_ADMIN_PASSWORD` and
+  `shoreguard create-user` documented in the installation + solo-dev guides for
+  SSH-only boxes.
+- **Boot-time Docker check** — in local mode, a clear startup warning when
+  Docker is unusable, instead of a later opaque gRPC timeout on first sandbox
+  create.
+
+### Changed
+
+- **Local mode connects to a loopback/private gateway without mTLS** when it is
+  registered with no certificate bundle, mirroring the existing private-IP SSRF
+  bypass. Strictly gated on `--local` / `SHOREGUARD_LOCAL_MODE` and a
+  private/loopback host — **production behaviour is unchanged** (mTLS still
+  required by default). Emits a warning so the plaintext connection is visible.
+- **Actionable sandbox ready-timeout** — the warning now names
+  `SHOREGUARD_SANDBOX_READY_TIMEOUT` and points to `/api/gateways/diagnostics`
+  instead of a bare "did not become ready in time".
+- **`--local` help text** notes it requires a running Docker daemon.
+
 ## [0.36.1] — 2026-06-07
 
 ### Security

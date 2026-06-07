@@ -76,6 +76,22 @@ No manual migration step is needed — the schema is applied automatically.
 Once the server is running, open your browser. The **setup wizard** appears on
 the first visit and walks you through creating an admin account.
 
+### Headless first-admin (no browser)
+
+On an SSH-only box you can create the first admin without the browser wizard —
+either seed it from an env var on first start, or create it from the CLI:
+
+```bash
+# Seeds admin@localhost on first start, only while no users exist
+SHOREGUARD_ADMIN_PASSWORD='choose-a-strong-one' shoreguard
+
+# …or create any user explicitly
+shoreguard create-user you@example.com --role admin
+```
+
+Single-box developers can skip auth entirely with `--local --no-auth`; see the
+[Solo Dev guide](solo-dev.md).
+
 ## Using PostgreSQL
 
 For multi-instance deployments, ShoreGuard supports PostgreSQL. See
