@@ -99,6 +99,30 @@ class OpenShellStub(object):
             response_deserializer=openshell__pb2.CreateSshSessionResponse.FromString,
             _registered_method=True,
         )
+        self.ExposeService = channel.unary_unary(
+            "/openshell.v1.OpenShell/ExposeService",
+            request_serializer=openshell__pb2.ExposeServiceRequest.SerializeToString,
+            response_deserializer=openshell__pb2.ServiceEndpointResponse.FromString,
+            _registered_method=True,
+        )
+        self.GetService = channel.unary_unary(
+            "/openshell.v1.OpenShell/GetService",
+            request_serializer=openshell__pb2.GetServiceRequest.SerializeToString,
+            response_deserializer=openshell__pb2.ServiceEndpointResponse.FromString,
+            _registered_method=True,
+        )
+        self.ListServices = channel.unary_unary(
+            "/openshell.v1.OpenShell/ListServices",
+            request_serializer=openshell__pb2.ListServicesRequest.SerializeToString,
+            response_deserializer=openshell__pb2.ListServicesResponse.FromString,
+            _registered_method=True,
+        )
+        self.DeleteService = channel.unary_unary(
+            "/openshell.v1.OpenShell/DeleteService",
+            request_serializer=openshell__pb2.DeleteServiceRequest.SerializeToString,
+            response_deserializer=openshell__pb2.DeleteServiceResponse.FromString,
+            _registered_method=True,
+        )
         self.RevokeSshSession = channel.unary_unary(
             "/openshell.v1.OpenShell/RevokeSshSession",
             request_serializer=openshell__pb2.RevokeSshSessionRequest.SerializeToString,
@@ -108,6 +132,18 @@ class OpenShellStub(object):
         self.ExecSandbox = channel.unary_stream(
             "/openshell.v1.OpenShell/ExecSandbox",
             request_serializer=openshell__pb2.ExecSandboxRequest.SerializeToString,
+            response_deserializer=openshell__pb2.ExecSandboxEvent.FromString,
+            _registered_method=True,
+        )
+        self.ForwardTcp = channel.stream_stream(
+            "/openshell.v1.OpenShell/ForwardTcp",
+            request_serializer=openshell__pb2.TcpForwardFrame.SerializeToString,
+            response_deserializer=openshell__pb2.TcpForwardFrame.FromString,
+            _registered_method=True,
+        )
+        self.ExecSandboxInteractive = channel.stream_stream(
+            "/openshell.v1.OpenShell/ExecSandboxInteractive",
+            request_serializer=openshell__pb2.ExecSandboxInput.SerializeToString,
             response_deserializer=openshell__pb2.ExecSandboxEvent.FromString,
             _registered_method=True,
         )
@@ -157,6 +193,30 @@ class OpenShellStub(object):
             "/openshell.v1.OpenShell/UpdateProvider",
             request_serializer=openshell__pb2.UpdateProviderRequest.SerializeToString,
             response_deserializer=openshell__pb2.ProviderResponse.FromString,
+            _registered_method=True,
+        )
+        self.GetProviderRefreshStatus = channel.unary_unary(
+            "/openshell.v1.OpenShell/GetProviderRefreshStatus",
+            request_serializer=openshell__pb2.GetProviderRefreshStatusRequest.SerializeToString,
+            response_deserializer=openshell__pb2.GetProviderRefreshStatusResponse.FromString,
+            _registered_method=True,
+        )
+        self.ConfigureProviderRefresh = channel.unary_unary(
+            "/openshell.v1.OpenShell/ConfigureProviderRefresh",
+            request_serializer=openshell__pb2.ConfigureProviderRefreshRequest.SerializeToString,
+            response_deserializer=openshell__pb2.ConfigureProviderRefreshResponse.FromString,
+            _registered_method=True,
+        )
+        self.RotateProviderCredential = channel.unary_unary(
+            "/openshell.v1.OpenShell/RotateProviderCredential",
+            request_serializer=openshell__pb2.RotateProviderCredentialRequest.SerializeToString,
+            response_deserializer=openshell__pb2.RotateProviderCredentialResponse.FromString,
+            _registered_method=True,
+        )
+        self.DeleteProviderRefresh = channel.unary_unary(
+            "/openshell.v1.OpenShell/DeleteProviderRefresh",
+            request_serializer=openshell__pb2.DeleteProviderRefreshRequest.SerializeToString,
+            response_deserializer=openshell__pb2.DeleteProviderRefreshResponse.FromString,
             _registered_method=True,
         )
         self.DeleteProvider = channel.unary_unary(
@@ -297,6 +357,18 @@ class OpenShellStub(object):
             response_deserializer=openshell__pb2.GetDraftHistoryResponse.FromString,
             _registered_method=True,
         )
+        self.IssueSandboxToken = channel.unary_unary(
+            "/openshell.v1.OpenShell/IssueSandboxToken",
+            request_serializer=openshell__pb2.IssueSandboxTokenRequest.SerializeToString,
+            response_deserializer=openshell__pb2.IssueSandboxTokenResponse.FromString,
+            _registered_method=True,
+        )
+        self.RefreshSandboxToken = channel.unary_unary(
+            "/openshell.v1.OpenShell/RefreshSandboxToken",
+            request_serializer=openshell__pb2.RefreshSandboxTokenRequest.SerializeToString,
+            response_deserializer=openshell__pb2.RefreshSandboxTokenResponse.FromString,
+            _registered_method=True,
+        )
 
 
 class OpenShellServicer(object):
@@ -364,6 +436,30 @@ class OpenShellServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def ExposeService(self, request, context):
+        """Create or update a sandbox HTTP service endpoint for local routing."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def GetService(self, request, context):
+        """Fetch one sandbox HTTP service endpoint."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def ListServices(self, request, context):
+        """List sandbox HTTP service endpoints."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def DeleteService(self, request, context):
+        """Delete one sandbox HTTP service endpoint."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
     def RevokeSshSession(self, request, context):
         """Revoke a previously issued SSH session."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -372,6 +468,21 @@ class OpenShellServicer(object):
 
     def ExecSandbox(self, request, context):
         """Execute a command in a ready sandbox and stream output."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def ForwardTcp(self, request_iterator, context):
+        """Forward one CLI-side TCP connection to a loopback TCP target in a sandbox."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def ExecSandboxInteractive(self, request_iterator, context):
+        """Execute an interactive command with bidirectional stdin/stdout streaming.
+        The first client message MUST carry an ExecSandboxInput with the start
+        variant. Subsequent messages carry stdin bytes or window resize events.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
@@ -420,6 +531,30 @@ class OpenShellServicer(object):
 
     def UpdateProvider(self, request, context):
         """Update an existing provider by name."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def GetProviderRefreshStatus(self, request, context):
+        """Fetch refresh status for one provider or provider credential."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def ConfigureProviderRefresh(self, request, context):
+        """Configure gateway-owned refresh material for one provider credential."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def RotateProviderCredential(self, request, context):
+        """Record a gateway-owned refresh request for one provider credential."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def DeleteProviderRefresh(self, request, context):
+        """Delete gateway-owned refresh configuration for one provider credential."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
@@ -495,8 +630,9 @@ class OpenShellServicer(object):
 
         The supervisor opens this stream at startup and keeps it alive for the
         sandbox lifetime. The gateway uses it to coordinate relay channels for
-        SSH connect and ExecSandbox. Raw SSH bytes flow over RelayStream calls
-        (separate HTTP/2 streams on the same connection), not over this stream.
+        SSH connect, ExecSandbox, and targetable sandbox services. Raw service
+        bytes flow over RelayStream calls (separate HTTP/2 streams on the same
+        connection), not over this stream.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
@@ -509,8 +645,8 @@ class OpenShellServicer(object):
         on its ConnectSupervisor stream. The first RelayFrame carries a
         RelayInit with the channel_id to associate the new HTTP/2 stream with
         the pending relay slot on the gateway. Subsequent frames carry raw bytes in either
-        direction between the gateway-side waiter (ssh_tunnel / exec handler)
-        and the supervisor-side local SSH daemon bridge.
+        direction between the gateway-side waiter (ForwardTcp / exec handler)
+        and the supervisor-side target bridge.
 
         This rides the same TCP+TLS+HTTP/2 connection as ConnectSupervisor —
         no new TLS handshake, no reverse HTTP CONNECT.
@@ -590,6 +726,29 @@ class OpenShellServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def IssueSandboxToken(self, request, context):
+        """Exchange a sandbox-bootstrap credential (e.g. a Kubernetes projected
+        ServiceAccount token) for a gateway-minted JWT bound to the calling
+        sandbox's UUID. Used by the Kubernetes driver path; singleplayer
+        drivers receive the gateway JWT directly from the create-sandbox flow
+        and never call this RPC.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def RefreshSandboxToken(self, request, context):
+        """Renew the calling sandbox's gateway JWT. Older tokens remain valid
+        until their own expiry; deployments should keep token TTLs short to
+        bound replay exposure. The supervisor calls this from a background
+        task at ~80% of the token's lifetime; the new token is cached in
+        memory only — the on-disk bootstrap file is intentionally not
+        rewritten.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_OpenShellServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -638,6 +797,26 @@ def add_OpenShellServicer_to_server(servicer, server):
             request_deserializer=openshell__pb2.CreateSshSessionRequest.FromString,
             response_serializer=openshell__pb2.CreateSshSessionResponse.SerializeToString,
         ),
+        "ExposeService": grpc.unary_unary_rpc_method_handler(
+            servicer.ExposeService,
+            request_deserializer=openshell__pb2.ExposeServiceRequest.FromString,
+            response_serializer=openshell__pb2.ServiceEndpointResponse.SerializeToString,
+        ),
+        "GetService": grpc.unary_unary_rpc_method_handler(
+            servicer.GetService,
+            request_deserializer=openshell__pb2.GetServiceRequest.FromString,
+            response_serializer=openshell__pb2.ServiceEndpointResponse.SerializeToString,
+        ),
+        "ListServices": grpc.unary_unary_rpc_method_handler(
+            servicer.ListServices,
+            request_deserializer=openshell__pb2.ListServicesRequest.FromString,
+            response_serializer=openshell__pb2.ListServicesResponse.SerializeToString,
+        ),
+        "DeleteService": grpc.unary_unary_rpc_method_handler(
+            servicer.DeleteService,
+            request_deserializer=openshell__pb2.DeleteServiceRequest.FromString,
+            response_serializer=openshell__pb2.DeleteServiceResponse.SerializeToString,
+        ),
         "RevokeSshSession": grpc.unary_unary_rpc_method_handler(
             servicer.RevokeSshSession,
             request_deserializer=openshell__pb2.RevokeSshSessionRequest.FromString,
@@ -646,6 +825,16 @@ def add_OpenShellServicer_to_server(servicer, server):
         "ExecSandbox": grpc.unary_stream_rpc_method_handler(
             servicer.ExecSandbox,
             request_deserializer=openshell__pb2.ExecSandboxRequest.FromString,
+            response_serializer=openshell__pb2.ExecSandboxEvent.SerializeToString,
+        ),
+        "ForwardTcp": grpc.stream_stream_rpc_method_handler(
+            servicer.ForwardTcp,
+            request_deserializer=openshell__pb2.TcpForwardFrame.FromString,
+            response_serializer=openshell__pb2.TcpForwardFrame.SerializeToString,
+        ),
+        "ExecSandboxInteractive": grpc.stream_stream_rpc_method_handler(
+            servicer.ExecSandboxInteractive,
+            request_deserializer=openshell__pb2.ExecSandboxInput.FromString,
             response_serializer=openshell__pb2.ExecSandboxEvent.SerializeToString,
         ),
         "CreateProvider": grpc.unary_unary_rpc_method_handler(
@@ -687,6 +876,26 @@ def add_OpenShellServicer_to_server(servicer, server):
             servicer.UpdateProvider,
             request_deserializer=openshell__pb2.UpdateProviderRequest.FromString,
             response_serializer=openshell__pb2.ProviderResponse.SerializeToString,
+        ),
+        "GetProviderRefreshStatus": grpc.unary_unary_rpc_method_handler(
+            servicer.GetProviderRefreshStatus,
+            request_deserializer=openshell__pb2.GetProviderRefreshStatusRequest.FromString,
+            response_serializer=openshell__pb2.GetProviderRefreshStatusResponse.SerializeToString,
+        ),
+        "ConfigureProviderRefresh": grpc.unary_unary_rpc_method_handler(
+            servicer.ConfigureProviderRefresh,
+            request_deserializer=openshell__pb2.ConfigureProviderRefreshRequest.FromString,
+            response_serializer=openshell__pb2.ConfigureProviderRefreshResponse.SerializeToString,
+        ),
+        "RotateProviderCredential": grpc.unary_unary_rpc_method_handler(
+            servicer.RotateProviderCredential,
+            request_deserializer=openshell__pb2.RotateProviderCredentialRequest.FromString,
+            response_serializer=openshell__pb2.RotateProviderCredentialResponse.SerializeToString,
+        ),
+        "DeleteProviderRefresh": grpc.unary_unary_rpc_method_handler(
+            servicer.DeleteProviderRefresh,
+            request_deserializer=openshell__pb2.DeleteProviderRefreshRequest.FromString,
+            response_serializer=openshell__pb2.DeleteProviderRefreshResponse.SerializeToString,
         ),
         "DeleteProvider": grpc.unary_unary_rpc_method_handler(
             servicer.DeleteProvider,
@@ -802,6 +1011,16 @@ def add_OpenShellServicer_to_server(servicer, server):
             servicer.GetDraftHistory,
             request_deserializer=openshell__pb2.GetDraftHistoryRequest.FromString,
             response_serializer=openshell__pb2.GetDraftHistoryResponse.SerializeToString,
+        ),
+        "IssueSandboxToken": grpc.unary_unary_rpc_method_handler(
+            servicer.IssueSandboxToken,
+            request_deserializer=openshell__pb2.IssueSandboxTokenRequest.FromString,
+            response_serializer=openshell__pb2.IssueSandboxTokenResponse.SerializeToString,
+        ),
+        "RefreshSandboxToken": grpc.unary_unary_rpc_method_handler(
+            servicer.RefreshSandboxToken,
+            request_deserializer=openshell__pb2.RefreshSandboxTokenRequest.FromString,
+            response_serializer=openshell__pb2.RefreshSandboxTokenResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1094,6 +1313,126 @@ class OpenShell(object):
         )
 
     @staticmethod
+    def ExposeService(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/ExposeService",
+            openshell__pb2.ExposeServiceRequest.SerializeToString,
+            openshell__pb2.ServiceEndpointResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def GetService(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/GetService",
+            openshell__pb2.GetServiceRequest.SerializeToString,
+            openshell__pb2.ServiceEndpointResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def ListServices(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/ListServices",
+            openshell__pb2.ListServicesRequest.SerializeToString,
+            openshell__pb2.ListServicesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def DeleteService(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/DeleteService",
+            openshell__pb2.DeleteServiceRequest.SerializeToString,
+            openshell__pb2.DeleteServiceResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
     def RevokeSshSession(
         request,
         target,
@@ -1141,6 +1480,66 @@ class OpenShell(object):
             target,
             "/openshell.v1.OpenShell/ExecSandbox",
             openshell__pb2.ExecSandboxRequest.SerializeToString,
+            openshell__pb2.ExecSandboxEvent.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def ForwardTcp(
+        request_iterator,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.stream_stream(
+            request_iterator,
+            target,
+            "/openshell.v1.OpenShell/ForwardTcp",
+            openshell__pb2.TcpForwardFrame.SerializeToString,
+            openshell__pb2.TcpForwardFrame.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def ExecSandboxInteractive(
+        request_iterator,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.stream_stream(
+            request_iterator,
+            target,
+            "/openshell.v1.OpenShell/ExecSandboxInteractive",
+            openshell__pb2.ExecSandboxInput.SerializeToString,
             openshell__pb2.ExecSandboxEvent.FromString,
             options,
             channel_credentials,
@@ -1382,6 +1781,126 @@ class OpenShell(object):
             "/openshell.v1.OpenShell/UpdateProvider",
             openshell__pb2.UpdateProviderRequest.SerializeToString,
             openshell__pb2.ProviderResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def GetProviderRefreshStatus(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/GetProviderRefreshStatus",
+            openshell__pb2.GetProviderRefreshStatusRequest.SerializeToString,
+            openshell__pb2.GetProviderRefreshStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def ConfigureProviderRefresh(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/ConfigureProviderRefresh",
+            openshell__pb2.ConfigureProviderRefreshRequest.SerializeToString,
+            openshell__pb2.ConfigureProviderRefreshResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def RotateProviderCredential(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/RotateProviderCredential",
+            openshell__pb2.RotateProviderCredentialRequest.SerializeToString,
+            openshell__pb2.RotateProviderCredentialResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def DeleteProviderRefresh(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/DeleteProviderRefresh",
+            openshell__pb2.DeleteProviderRefreshRequest.SerializeToString,
+            openshell__pb2.DeleteProviderRefreshResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -2072,6 +2591,66 @@ class OpenShell(object):
             "/openshell.v1.OpenShell/GetDraftHistory",
             openshell__pb2.GetDraftHistoryRequest.SerializeToString,
             openshell__pb2.GetDraftHistoryResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def IssueSandboxToken(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/IssueSandboxToken",
+            openshell__pb2.IssueSandboxTokenRequest.SerializeToString,
+            openshell__pb2.IssueSandboxTokenResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def RefreshSandboxToken(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/openshell.v1.OpenShell/RefreshSandboxToken",
+            openshell__pb2.RefreshSandboxTokenRequest.SerializeToString,
+            openshell__pb2.RefreshSandboxTokenResponse.FromString,
             options,
             channel_credentials,
             insecure,

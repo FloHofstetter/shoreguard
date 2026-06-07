@@ -144,6 +144,8 @@ class ResolvedRoute(_message.Message):
         "model_id",
         "provider_type",
         "timeout_secs",
+        "model_in_path",
+        "request_path_override",
     )
     NAME_FIELD_NUMBER: _ClassVar[int]
     BASE_URL_FIELD_NUMBER: _ClassVar[int]
@@ -152,6 +154,8 @@ class ResolvedRoute(_message.Message):
     MODEL_ID_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_TYPE_FIELD_NUMBER: _ClassVar[int]
     TIMEOUT_SECS_FIELD_NUMBER: _ClassVar[int]
+    MODEL_IN_PATH_FIELD_NUMBER: _ClassVar[int]
+    REQUEST_PATH_OVERRIDE_FIELD_NUMBER: _ClassVar[int]
     name: str
     base_url: str
     protocols: _containers.RepeatedScalarFieldContainer[str]
@@ -159,6 +163,8 @@ class ResolvedRoute(_message.Message):
     model_id: str
     provider_type: str
     timeout_secs: int
+    model_in_path: bool
+    request_path_override: str
     def __init__(
         self,
         name: _Optional[str] = ...,
@@ -168,6 +174,8 @@ class ResolvedRoute(_message.Message):
         model_id: _Optional[str] = ...,
         provider_type: _Optional[str] = ...,
         timeout_secs: _Optional[int] = ...,
+        model_in_path: bool = ...,
+        request_path_override: _Optional[str] = ...,
     ) -> None: ...
 
 class GetInferenceBundleResponse(_message.Message):
