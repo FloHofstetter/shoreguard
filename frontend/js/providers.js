@@ -101,6 +101,9 @@ function renderProviderRow(provider) {
                 <a class="btn btn-sm text-muted" href="${window.location.pathname}/${escapeHtml(provider.name)}/edit" title="Edit">
                     <i class="bi bi-pencil"></i>
                 </a>
+                <button class="btn btn-sm text-muted" data-action="refresh-creds" data-arg="${escapeHtml(provider.name)}" title="Credential refresh">
+                    <i class="bi bi-arrow-repeat"></i>
+                </button>
                 <button class="btn btn-sm text-muted delete-btn" data-action="delete" data-arg="${escapeHtml(provider.name)}" title="Delete">
                     <i class="bi bi-trash3"></i>
                 </button>` : ''}
@@ -269,6 +272,7 @@ function providersPage() {
             const action = el.dataset.action;
             const arg = el.dataset.arg;
             if (action === 'delete') deleteProvider(arg);
+            if (action === 'refresh-creds') openProviderRefresh(arg);
         },
     };
 }

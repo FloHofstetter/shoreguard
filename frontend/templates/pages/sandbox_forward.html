@@ -1,0 +1,59 @@
+{% extends "pages/sandbox_base.html" %}
+{% block title %}Forward — {{ sandbox_name }} — Shoreguard{% endblock %}
+
+{% block extra_css %}
+<link href="/static/vendor/xterm/xterm.css" rel="stylesheet">
+{% endblock %}
+
+{% block breadcrumb_tail %}
+<li class="breadcrumb-item active">Forward</li>
+{% endblock %}
+
+{% block content %}
+<div x-data='forwardTunnel({{ sandbox_name|tojson }})' data-sg-min-role="operator">
+    <p class="text-muted small">
+        Relay a raw TCP/SSH tunnel into this sandbox. <strong>SSH</strong> opens a short-lived
+        relay session and streams the connection bytes; a full in-browser SSH client is a planned
+        follow-up, so the SSH view shows the raw protocol stream.
+    </p>
+    <div class="row g-2 align-items-end mb-2">
+        <div class="col-auto">
+            <label class="form-label small">Target</label>
+            <select class="form-select form-select-sm" x-model="target" :disabled="connected">
+                <option value="tcp">TCP</option>
+                <option value="ssh">SSH</option>
+            </select>
+        </div>
+        <template x-if="target === 'tcp'">
+            <div class="col-auto d-flex gap-2 align-items-end">
+                <div>
+                    <label class="form-label small">Host</label>
+                    <input class="form-control form-control-sm" x-model="host" placeholder="127.0.0.1" :disabled="connected">
+                </div>
+                <div>
+                    <label class="form-label small">Port</label>
+                    <input type="number" min="1" max="65535" class="form-control form-control-sm" x-model="port" :disabled="connected">
+                </div>
+            </div>
+        </template>
+        <div class="col-auto">
+            <button class="btn btn-success btn-sm" @click="connect()" x-show="!connected">
+                <i class="bi bi-plug me-1"></i>Connect
+            </button>
+            <button class="btn btn-outline-danger btn-sm" @click="disconnect()" x-show="connected">
+                <i class="bi bi-x-circle me-1"></i>Disconnect
+            </button>
+        </div>
+        <div class="col-auto">
+            <span class="badge" :class="connected ? 'text-bg-success' : 'text-bg-secondary'" x-text="status"></span>
+        </div>
+    </div>
+    <div x-ref="terminal" class="sg-surface-log sg-min-h-300" style="padding:4px;"></div>
+</div>
+{% endblock %}
+
+{% block sandbox_js %}
+<script src="/static/vendor/xterm/xterm.js"></script>
+<script src="/static/vendor/xterm/xterm-addon-fit.js"></script>
+<script src="/static/js/forward.js"></script>
+{% endblock %}
