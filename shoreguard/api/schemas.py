@@ -819,6 +819,175 @@ class ProviderEnvResponse(BaseModel):
     env: list[ProviderEnvVar]
 
 
+# ─── Provider credential refresh / rotation ───────────────────────────────────
+
+RefreshStrategy = Literal[
+    "static",
+    "external",
+    "oauth2_refresh_token",
+    "oauth2_client_credentials",
+    "google_service_account_jwt",
+]
+
+
+class ConfigureProviderRefreshRequest(BaseModel):
+    """Body for configuring credential refresh on a provider.
+
+    Attributes:
+        credential_key (str): Credential key within the provider to refresh.
+        strategy (RefreshStrategy): Refresh strategy to apply.
+        material (dict[str, str]): Strategy-specific material (token URLs,
+            client ids, etc.). Secret values must be named in
+            ``secret_material_keys``.
+        secret_material_keys (list[str]): Keys within ``material`` that hold
+            secret values; the gateway stores these encrypted.
+        expires_at_ms (int | None): Optional absolute expiry of the current
+            credential, milliseconds since the epoch.
+    """
+
+    credential_key: str = Field(min_length=1, max_length=253)
+    strategy: RefreshStrategy
+    material: dict[str, str] = Field(default_factory=dict)
+    secret_material_keys: list[str] = Field(default_factory=list)
+    expires_at_ms: int | None = Field(default=None, ge=0)
+
+
+class RotateProviderCredentialRequest(BaseModel):
+    """Body for rotating a single provider credential.
+
+    Attributes:
+        credential_key (str): Credential key to rotate.
+    """
+
+    credential_key: str = Field(min_length=1, max_length=253)
+
+
+class ProviderRefreshStatusResponse(BaseModel):
+    """Refresh status for one provider credential.
+
+    Attributes:
+        provider_name (str): Provider name.
+        provider_id (str): Provider object id.
+        credential_key (str): Credential key this status describes.
+        strategy (str): Refresh strategy in effect.
+        status (str): Gateway-reported status string.
+        expires_at_ms (int): Credential expiry (0 = non-expiring/unset).
+        next_refresh_at_ms (int): Next scheduled refresh (0 = none).
+        last_refresh_at_ms (int): Last successful refresh (0 = never).
+        last_error (str): Last refresh error message, empty when healthy.
+    """
+
+    provider_name: str
+    provider_id: str
+    credential_key: str
+    strategy: str
+    status: str
+    expires_at_ms: int
+    next_refresh_at_ms: int
+    last_refresh_at_ms: int
+    last_error: str
+
+
+class ProviderRefreshStatusListResponse(BaseModel):
+    """List of credential-refresh status entries for a provider.
+
+    Attributes:
+        credentials (list[ProviderRefreshStatusResponse]): One entry per
+            configured credential.
+    """
+
+    credentials: list[ProviderRefreshStatusResponse]
+
+
+class ProviderRefreshDeleteResponse(BaseModel):
+    """Confirmation for deleting a refresh configuration.
+
+    Attributes:
+        deleted (bool): Whether a configuration existed and was deleted.
+    """
+
+    deleted: bool
+
+
+# ─── Service routing ──────────────────────────────────────────────────────────
+
+
+class ExposeServiceRequest(BaseModel):
+    """Body for exposing a sandbox loopback port as a routed service.
+
+    Attributes:
+        sandbox (str): Sandbox name owning the service.
+        service (str): Service name within the sandbox.
+        target_port (int): Loopback TCP port inside the sandbox to publish.
+        domain (bool): Whether to enable the browser-facing service URL.
+    """
+
+    sandbox: str = Field(min_length=1, max_length=253)
+    service: str = Field(min_length=1, max_length=253)
+    target_port: int = Field(ge=1, le=65535)
+    domain: bool = False
+
+
+class ServiceEndpointResponse(BaseModel):
+    """A routed sandbox service endpoint.
+
+    Attributes:
+        id (str): Endpoint object id.
+        created_at_ms (int): Creation timestamp, milliseconds since the epoch.
+        sandbox_id (str): Sandbox object id.
+        sandbox_name (str): Sandbox name.
+        service_name (str): Service name within the sandbox.
+        target_port (int): Loopback TCP port inside the sandbox.
+        domain (bool): Whether browser-facing routing is enabled.
+        url (str): Browser-facing service URL (empty when ``domain`` is false).
+    """
+
+    id: str
+    created_at_ms: int
+    sandbox_id: str
+    sandbox_name: str
+    service_name: str
+    target_port: int
+    domain: bool
+    url: str
+
+
+class ServiceEndpointListResponse(BaseModel):
+    """List of routed sandbox service endpoints.
+
+    Attributes:
+        services (list[ServiceEndpointResponse]): Exposed service endpoints.
+    """
+
+    services: list[ServiceEndpointResponse]
+
+
+class ServiceDeleteResponse(BaseModel):
+    """Confirmation for deleting a service endpoint.
+
+    Attributes:
+        deleted (bool): Whether an endpoint existed and was deleted.
+    """
+
+    deleted: bool
+
+
+# ─── Gateway sandbox tokens (diagnostic) ──────────────────────────────────────
+
+
+class SandboxTokenResponse(BaseModel):
+    """A gateway-minted JWT bound to the caller's mTLS identity.
+
+    Attributes:
+        token (str): The minted JWT.
+        expires_at_ms (int): Absolute expiry, milliseconds since the epoch
+            (0 means the token is non-expiring).
+    """
+
+    token: str
+    expires_at_ms: int
+
+
 # ─── Policies ─────────────────────────────────────────────────────────────────
 
 

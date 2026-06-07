@@ -797,6 +797,65 @@ def require_auth_ws(
     )
 
 
+def require_role_ws(minimum: str) -> Callable[..., None]:
+    """Return a WebSocket dependency enforcing a minimum global role.
+
+    Mirrors :func:`require_auth_ws` identity resolution (SP token or session
+    cookie) but additionally rejects callers whose global role is below
+    *minimum*. Used for mutating WebSocket endpoints such as interactive exec
+    and TCP forwarding. Gateway-scoped overrides are not applied here — the
+    WebSocket path carries the gateway in the URL but the role check is global,
+    matching the conservative default for these data-plane channels.
+
+    Args:
+        minimum: Minimum required role (``admin``, ``operator``, ``viewer``).
+
+    Returns:
+        Callable[..., None]: A FastAPI WebSocket dependency callable.
+    """
+
+    def _dep(
+        websocket: WebSocket,
+        token: str | None = Query(default=None),
+        sg_session: str | None = Cookie(default=None),
+    ) -> None:
+        """Authenticate the WebSocket and enforce the minimum role.
+
+        Args:
+            websocket: The WebSocket connection.
+            token: Optional SP key from ``?token=``.
+            sg_session: Optional session cookie value.
+
+        Raises:
+            HTTPException: 403 if unauthenticated or the role is insufficient.
+        """
+        if _no_auth or not is_setup_complete():
+            return
+        role: str | None = None
+        if token:
+            sp = _lookup_sp_identity(token)
+            if sp:
+                role = sp["role"]
+        if role is None and sg_session:
+            result = verify_session_token(sg_session)
+            if result:
+                user_id, sess_role = result
+                if _lookup_user(user_id) is not None:
+                    role = sess_role
+        if role is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="WebSocket authentication failed",
+            )
+        if _ROLE_RANK.get(role, -1) < _ROLE_RANK[minimum]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"WebSocket requires {minimum} role",
+            )
+
+    return _dep
+
+
 # ─── User CRUD ─────────────────────────────────────────────────────────────
 
 

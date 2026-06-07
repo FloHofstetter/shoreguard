@@ -44,7 +44,9 @@ from .routes import (
     providers,
     sandboxes,
     sbom,
+    services,
     templates,
+    tokens,
     webhooks,
 )
 from .schemas import (
@@ -785,6 +787,8 @@ gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
 gw_api.include_router(
     provider_profiles.router, prefix="/provider-profiles", tags=["provider-profiles"]
 )
+gw_api.include_router(services.router, prefix="/services", tags=["services"])
+gw_api.include_router(tokens.router, prefix="/tokens", tags=["tokens"])
 
 
 @gw_api.get("/health", response_model=None)

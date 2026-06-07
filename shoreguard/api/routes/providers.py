@@ -25,11 +25,16 @@ from pydantic import BaseModel, Field, field_validator
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_actor, get_client, get_gateway_name
 from shoreguard.api.schemas import (
+    ConfigureProviderRefreshRequest,
     PaginatedResponse,
     ProviderDeleteResponse,
     ProviderEnvResponse,
+    ProviderRefreshDeleteResponse,
+    ProviderRefreshStatusListResponse,
+    ProviderRefreshStatusResponse,
     ProviderResponse,
     ProviderTypeResponse,
+    RotateProviderCredentialRequest,
 )
 from shoreguard.api.validation import check_write_rate_limit
 from shoreguard.client import ShoreGuardClient
@@ -330,5 +335,169 @@ async def delete_provider(
         )
         await audit_log(
             request, "provider.delete", "provider", name, gateway=get_gateway_name(request)
+        )
+    return {"deleted": deleted}
+
+
+# ── Credential refresh / rotation (upstream PR #1349, v0.0.57) ──────────────
+
+
+@router.get("/{name}/refresh", response_model=ProviderRefreshStatusListResponse)
+async def get_provider_refresh(
+    name: str,
+    credential_key: str = Query(default="", max_length=253),
+    svc: ProviderService = Depends(_get_provider_service),
+) -> dict[str, Any]:
+    """List credential-refresh status entries for a provider.
+
+    Args:
+        name: Provider name.
+        credential_key: Optional credential key filter; empty returns all.
+        svc: Injected provider service.
+
+    Returns:
+        dict[str, Any]: ``{"credentials": [...]}`` refresh-status records.
+    """
+    creds = await asyncio.to_thread(svc.get_refresh_status, name, credential_key=credential_key)
+    return {"credentials": creds}
+
+
+@router.post(
+    "/{name}/refresh",
+    response_model=ProviderRefreshStatusResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
+async def configure_provider_refresh(
+    name: str,
+    body: ConfigureProviderRefreshRequest,
+    request: Request,
+    svc: ProviderService = Depends(_get_provider_service),
+) -> dict[str, Any]:
+    """Configure automatic refresh for a provider credential.
+
+    Args:
+        name: Provider name.
+        body: Refresh configuration payload.
+        request: Incoming HTTP request.
+        svc: Injected provider service.
+
+    Returns:
+        dict[str, Any]: The resulting refresh status.
+    """
+    check_write_rate_limit(request)
+    result = await asyncio.to_thread(
+        svc.configure_refresh,
+        provider=name,
+        credential_key=body.credential_key,
+        strategy=body.strategy,
+        material=body.material or None,
+        secret_material_keys=body.secret_material_keys or None,
+        expires_at_ms=body.expires_at_ms,
+    )
+    logger.info(
+        "Provider refresh configured (provider=%s, key=%s, actor=%s)",
+        name,
+        body.credential_key,
+        get_actor(request),
+    )
+    # Secret hygiene: log key *names* only — never material values.
+    await audit_log(
+        request,
+        "provider.refresh.configure",
+        "provider",
+        name,
+        gateway=get_gateway_name(request),
+        detail={
+            "credential_key": body.credential_key,
+            "strategy": body.strategy,
+            "material_keys": sorted(body.material.keys()),
+        },
+    )
+    return result
+
+
+@router.post(
+    "/{name}/refresh/rotate",
+    response_model=ProviderRefreshStatusResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
+async def rotate_provider_credential(
+    name: str,
+    body: RotateProviderCredentialRequest,
+    request: Request,
+    svc: ProviderService = Depends(_get_provider_service),
+) -> dict[str, Any]:
+    """Rotate a provider credential immediately.
+
+    Args:
+        name: Provider name.
+        body: Rotation payload naming the credential key.
+        request: Incoming HTTP request.
+        svc: Injected provider service.
+
+    Returns:
+        dict[str, Any]: The refresh status after rotation.
+    """
+    check_write_rate_limit(request)
+    result = await asyncio.to_thread(
+        svc.rotate_credential, provider=name, credential_key=body.credential_key
+    )
+    logger.info(
+        "Provider credential rotated (provider=%s, key=%s, actor=%s)",
+        name,
+        body.credential_key,
+        get_actor(request),
+    )
+    await audit_log(
+        request,
+        "provider.credential.rotate",
+        "provider",
+        name,
+        gateway=get_gateway_name(request),
+        detail={"credential_key": body.credential_key},
+    )
+    return result
+
+
+@router.delete(
+    "/{name}/refresh",
+    response_model=ProviderRefreshDeleteResponse,
+    dependencies=[Depends(require_role("operator"))],
+)
+async def delete_provider_refresh(
+    name: str,
+    request: Request,
+    credential_key: str = Query(min_length=1, max_length=253),
+    svc: ProviderService = Depends(_get_provider_service),
+) -> dict[str, bool]:
+    """Delete a credential-refresh configuration.
+
+    Args:
+        name: Provider name.
+        request: Incoming HTTP request.
+        credential_key: Credential key whose refresh config is removed.
+        svc: Injected provider service.
+
+    Returns:
+        dict[str, bool]: ``{"deleted": bool}``.
+    """
+    check_write_rate_limit(request)
+    deleted = await asyncio.to_thread(
+        svc.delete_refresh, provider=name, credential_key=credential_key
+    )
+    if deleted:
+        logger.info(
+            "Provider refresh deleted (provider=%s, key=%s, actor=%s)",
+            name,
+            credential_key,
+            get_actor(request),
+        )
+        await audit_log(
+            request,
+            "provider.refresh.delete",
+            "provider",
+            name,
+            gateway=get_gateway_name(request),
+            detail={"credential_key": credential_key},
         )
     return {"deleted": deleted}
