@@ -19,6 +19,21 @@ class SandboxPhase(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     SANDBOX_PHASE_DELETING: _ClassVar[SandboxPhase]
     SANDBOX_PHASE_UNKNOWN: _ClassVar[SandboxPhase]
 
+class ProviderCredentialRefreshStrategy(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    PROVIDER_CREDENTIAL_REFRESH_STRATEGY_UNSPECIFIED: _ClassVar[ProviderCredentialRefreshStrategy]
+    PROVIDER_CREDENTIAL_REFRESH_STRATEGY_STATIC: _ClassVar[ProviderCredentialRefreshStrategy]
+    PROVIDER_CREDENTIAL_REFRESH_STRATEGY_EXTERNAL: _ClassVar[ProviderCredentialRefreshStrategy]
+    PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN: _ClassVar[
+        ProviderCredentialRefreshStrategy
+    ]
+    PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_CLIENT_CREDENTIALS: _ClassVar[
+        ProviderCredentialRefreshStrategy
+    ]
+    PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT: _ClassVar[
+        ProviderCredentialRefreshStrategy
+    ]
+
 class ProviderProfileCategory(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     PROVIDER_PROFILE_CATEGORY_UNSPECIFIED: _ClassVar[ProviderProfileCategory]
@@ -51,6 +66,12 @@ SANDBOX_PHASE_READY: SandboxPhase
 SANDBOX_PHASE_ERROR: SandboxPhase
 SANDBOX_PHASE_DELETING: SandboxPhase
 SANDBOX_PHASE_UNKNOWN: SandboxPhase
+PROVIDER_CREDENTIAL_REFRESH_STRATEGY_UNSPECIFIED: ProviderCredentialRefreshStrategy
+PROVIDER_CREDENTIAL_REFRESH_STRATEGY_STATIC: ProviderCredentialRefreshStrategy
+PROVIDER_CREDENTIAL_REFRESH_STRATEGY_EXTERNAL: ProviderCredentialRefreshStrategy
+PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN: ProviderCredentialRefreshStrategy
+PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_CLIENT_CREDENTIALS: ProviderCredentialRefreshStrategy
+PROVIDER_CREDENTIAL_REFRESH_STRATEGY_GOOGLE_SERVICE_ACCOUNT_JWT: ProviderCredentialRefreshStrategy
 PROVIDER_PROFILE_CATEGORY_UNSPECIFIED: ProviderProfileCategory
 PROVIDER_PROFILE_CATEGORY_OTHER: ProviderProfileCategory
 PROVIDER_PROFILE_CATEGORY_INFERENCE: ProviderProfileCategory
@@ -69,6 +90,34 @@ SERVICE_STATUS_HEALTHY: ServiceStatus
 SERVICE_STATUS_DEGRADED: ServiceStatus
 SERVICE_STATUS_UNHEALTHY: ServiceStatus
 
+class IssueSandboxTokenRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class IssueSandboxTokenResponse(_message.Message):
+    __slots__ = ("token", "expires_at_ms")
+    TOKEN_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_MS_FIELD_NUMBER: _ClassVar[int]
+    token: str
+    expires_at_ms: int
+    def __init__(
+        self, token: _Optional[str] = ..., expires_at_ms: _Optional[int] = ...
+    ) -> None: ...
+
+class RefreshSandboxTokenRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class RefreshSandboxTokenResponse(_message.Message):
+    __slots__ = ("token", "expires_at_ms")
+    TOKEN_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_MS_FIELD_NUMBER: _ClassVar[int]
+    token: str
+    expires_at_ms: int
+    def __init__(
+        self, token: _Optional[str] = ..., expires_at_ms: _Optional[int] = ...
+    ) -> None: ...
+
 class HealthRequest(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
@@ -84,24 +133,18 @@ class HealthResponse(_message.Message):
     ) -> None: ...
 
 class Sandbox(_message.Message):
-    __slots__ = ("metadata", "spec", "status", "phase", "current_policy_version")
+    __slots__ = ("metadata", "spec", "status")
     METADATA_FIELD_NUMBER: _ClassVar[int]
     SPEC_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
-    PHASE_FIELD_NUMBER: _ClassVar[int]
-    CURRENT_POLICY_VERSION_FIELD_NUMBER: _ClassVar[int]
     metadata: _datamodel_pb2.ObjectMeta
     spec: SandboxSpec
     status: SandboxStatus
-    phase: SandboxPhase
-    current_policy_version: int
     def __init__(
         self,
         metadata: _Optional[_Union[_datamodel_pb2.ObjectMeta, _Mapping]] = ...,
         spec: _Optional[_Union[SandboxSpec, _Mapping]] = ...,
         status: _Optional[_Union[SandboxStatus, _Mapping]] = ...,
-        phase: _Optional[_Union[SandboxPhase, str]] = ...,
-        current_policy_version: _Optional[int] = ...,
     ) -> None: ...
 
 class SandboxSpec(_message.Message):
@@ -207,17 +250,29 @@ class SandboxTemplate(_message.Message):
     ) -> None: ...
 
 class SandboxStatus(_message.Message):
-    __slots__ = ("sandbox_name", "agent_pod", "agent_fd", "sandbox_fd", "conditions")
+    __slots__ = (
+        "sandbox_name",
+        "agent_pod",
+        "agent_fd",
+        "sandbox_fd",
+        "conditions",
+        "phase",
+        "current_policy_version",
+    )
     SANDBOX_NAME_FIELD_NUMBER: _ClassVar[int]
     AGENT_POD_FIELD_NUMBER: _ClassVar[int]
     AGENT_FD_FIELD_NUMBER: _ClassVar[int]
     SANDBOX_FD_FIELD_NUMBER: _ClassVar[int]
     CONDITIONS_FIELD_NUMBER: _ClassVar[int]
+    PHASE_FIELD_NUMBER: _ClassVar[int]
+    CURRENT_POLICY_VERSION_FIELD_NUMBER: _ClassVar[int]
     sandbox_name: str
     agent_pod: str
     agent_fd: str
     sandbox_fd: str
     conditions: _containers.RepeatedCompositeFieldContainer[SandboxCondition]
+    phase: SandboxPhase
+    current_policy_version: int
     def __init__(
         self,
         sandbox_name: _Optional[str] = ...,
@@ -225,6 +280,8 @@ class SandboxStatus(_message.Message):
         agent_fd: _Optional[str] = ...,
         sandbox_fd: _Optional[str] = ...,
         conditions: _Optional[_Iterable[_Union[SandboxCondition, _Mapping]]] = ...,
+        phase: _Optional[_Union[SandboxPhase, str]] = ...,
+        current_policy_version: _Optional[int] = ...,
     ) -> None: ...
 
 class SandboxCondition(_message.Message):
@@ -331,23 +388,33 @@ class ListSandboxProvidersRequest(_message.Message):
     def __init__(self, sandbox_name: _Optional[str] = ...) -> None: ...
 
 class AttachSandboxProviderRequest(_message.Message):
-    __slots__ = ("sandbox_name", "provider_name")
+    __slots__ = ("sandbox_name", "provider_name", "expected_resource_version")
     SANDBOX_NAME_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
+    EXPECTED_RESOURCE_VERSION_FIELD_NUMBER: _ClassVar[int]
     sandbox_name: str
     provider_name: str
+    expected_resource_version: int
     def __init__(
-        self, sandbox_name: _Optional[str] = ..., provider_name: _Optional[str] = ...
+        self,
+        sandbox_name: _Optional[str] = ...,
+        provider_name: _Optional[str] = ...,
+        expected_resource_version: _Optional[int] = ...,
     ) -> None: ...
 
 class DetachSandboxProviderRequest(_message.Message):
-    __slots__ = ("sandbox_name", "provider_name")
+    __slots__ = ("sandbox_name", "provider_name", "expected_resource_version")
     SANDBOX_NAME_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
+    EXPECTED_RESOURCE_VERSION_FIELD_NUMBER: _ClassVar[int]
     sandbox_name: str
     provider_name: str
+    expected_resource_version: int
     def __init__(
-        self, sandbox_name: _Optional[str] = ..., provider_name: _Optional[str] = ...
+        self,
+        sandbox_name: _Optional[str] = ...,
+        provider_name: _Optional[str] = ...,
+        expected_resource_version: _Optional[int] = ...,
     ) -> None: ...
 
 class DeleteSandboxRequest(_message.Message):
@@ -417,7 +484,6 @@ class CreateSshSessionResponse(_message.Message):
         "gateway_host",
         "gateway_port",
         "gateway_scheme",
-        "connect_path",
         "host_key_fingerprint",
         "expires_at_ms",
     )
@@ -426,7 +492,6 @@ class CreateSshSessionResponse(_message.Message):
     GATEWAY_HOST_FIELD_NUMBER: _ClassVar[int]
     GATEWAY_PORT_FIELD_NUMBER: _ClassVar[int]
     GATEWAY_SCHEME_FIELD_NUMBER: _ClassVar[int]
-    CONNECT_PATH_FIELD_NUMBER: _ClassVar[int]
     HOST_KEY_FINGERPRINT_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_AT_MS_FIELD_NUMBER: _ClassVar[int]
     sandbox_id: str
@@ -434,7 +499,6 @@ class CreateSshSessionResponse(_message.Message):
     gateway_host: str
     gateway_port: int
     gateway_scheme: str
-    connect_path: str
     host_key_fingerprint: str
     expires_at_ms: int
     def __init__(
@@ -444,9 +508,107 @@ class CreateSshSessionResponse(_message.Message):
         gateway_host: _Optional[str] = ...,
         gateway_port: _Optional[int] = ...,
         gateway_scheme: _Optional[str] = ...,
-        connect_path: _Optional[str] = ...,
         host_key_fingerprint: _Optional[str] = ...,
         expires_at_ms: _Optional[int] = ...,
+    ) -> None: ...
+
+class ExposeServiceRequest(_message.Message):
+    __slots__ = ("sandbox", "service", "target_port", "domain")
+    SANDBOX_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    TARGET_PORT_FIELD_NUMBER: _ClassVar[int]
+    DOMAIN_FIELD_NUMBER: _ClassVar[int]
+    sandbox: str
+    service: str
+    target_port: int
+    domain: bool
+    def __init__(
+        self,
+        sandbox: _Optional[str] = ...,
+        service: _Optional[str] = ...,
+        target_port: _Optional[int] = ...,
+        domain: bool = ...,
+    ) -> None: ...
+
+class GetServiceRequest(_message.Message):
+    __slots__ = ("sandbox", "service")
+    SANDBOX_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    sandbox: str
+    service: str
+    def __init__(self, sandbox: _Optional[str] = ..., service: _Optional[str] = ...) -> None: ...
+
+class ListServicesRequest(_message.Message):
+    __slots__ = ("sandbox", "limit", "offset")
+    SANDBOX_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    OFFSET_FIELD_NUMBER: _ClassVar[int]
+    sandbox: str
+    limit: int
+    offset: int
+    def __init__(
+        self,
+        sandbox: _Optional[str] = ...,
+        limit: _Optional[int] = ...,
+        offset: _Optional[int] = ...,
+    ) -> None: ...
+
+class ListServicesResponse(_message.Message):
+    __slots__ = ("services",)
+    SERVICES_FIELD_NUMBER: _ClassVar[int]
+    services: _containers.RepeatedCompositeFieldContainer[ServiceEndpointResponse]
+    def __init__(
+        self, services: _Optional[_Iterable[_Union[ServiceEndpointResponse, _Mapping]]] = ...
+    ) -> None: ...
+
+class DeleteServiceRequest(_message.Message):
+    __slots__ = ("sandbox", "service")
+    SANDBOX_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    sandbox: str
+    service: str
+    def __init__(self, sandbox: _Optional[str] = ..., service: _Optional[str] = ...) -> None: ...
+
+class DeleteServiceResponse(_message.Message):
+    __slots__ = ("deleted",)
+    DELETED_FIELD_NUMBER: _ClassVar[int]
+    deleted: bool
+    def __init__(self, deleted: bool = ...) -> None: ...
+
+class ServiceEndpoint(_message.Message):
+    __slots__ = ("metadata", "sandbox_id", "sandbox_name", "service_name", "target_port", "domain")
+    METADATA_FIELD_NUMBER: _ClassVar[int]
+    SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
+    SANDBOX_NAME_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_NAME_FIELD_NUMBER: _ClassVar[int]
+    TARGET_PORT_FIELD_NUMBER: _ClassVar[int]
+    DOMAIN_FIELD_NUMBER: _ClassVar[int]
+    metadata: _datamodel_pb2.ObjectMeta
+    sandbox_id: str
+    sandbox_name: str
+    service_name: str
+    target_port: int
+    domain: bool
+    def __init__(
+        self,
+        metadata: _Optional[_Union[_datamodel_pb2.ObjectMeta, _Mapping]] = ...,
+        sandbox_id: _Optional[str] = ...,
+        sandbox_name: _Optional[str] = ...,
+        service_name: _Optional[str] = ...,
+        target_port: _Optional[int] = ...,
+        domain: bool = ...,
+    ) -> None: ...
+
+class ServiceEndpointResponse(_message.Message):
+    __slots__ = ("endpoint", "url")
+    ENDPOINT_FIELD_NUMBER: _ClassVar[int]
+    URL_FIELD_NUMBER: _ClassVar[int]
+    endpoint: ServiceEndpoint
+    url: str
+    def __init__(
+        self,
+        endpoint: _Optional[_Union[ServiceEndpoint, _Mapping]] = ...,
+        url: _Optional[str] = ...,
     ) -> None: ...
 
 class RevokeSshSessionRequest(_message.Message):
@@ -470,6 +632,8 @@ class ExecSandboxRequest(_message.Message):
         "timeout_seconds",
         "stdin",
         "tty",
+        "cols",
+        "rows",
     )
     class EnvironmentEntry(_message.Message):
         __slots__ = ("key", "value")
@@ -486,6 +650,8 @@ class ExecSandboxRequest(_message.Message):
     TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
     STDIN_FIELD_NUMBER: _ClassVar[int]
     TTY_FIELD_NUMBER: _ClassVar[int]
+    COLS_FIELD_NUMBER: _ClassVar[int]
+    ROWS_FIELD_NUMBER: _ClassVar[int]
     sandbox_id: str
     command: _containers.RepeatedScalarFieldContainer[str]
     workdir: str
@@ -493,6 +659,8 @@ class ExecSandboxRequest(_message.Message):
     timeout_seconds: int
     stdin: bytes
     tty: bool
+    cols: int
+    rows: int
     def __init__(
         self,
         sandbox_id: _Optional[str] = ...,
@@ -502,6 +670,8 @@ class ExecSandboxRequest(_message.Message):
         timeout_seconds: _Optional[int] = ...,
         stdin: _Optional[bytes] = ...,
         tty: bool = ...,
+        cols: _Optional[int] = ...,
+        rows: _Optional[int] = ...,
     ) -> None: ...
 
 class ExecSandboxStdout(_message.Message):
@@ -536,6 +706,60 @@ class ExecSandboxEvent(_message.Message):
         stderr: _Optional[_Union[ExecSandboxStderr, _Mapping]] = ...,
         exit: _Optional[_Union[ExecSandboxExit, _Mapping]] = ...,
     ) -> None: ...
+
+class TcpForwardInit(_message.Message):
+    __slots__ = ("sandbox_id", "service_id", "ssh", "tcp", "authorization_token")
+    SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_ID_FIELD_NUMBER: _ClassVar[int]
+    SSH_FIELD_NUMBER: _ClassVar[int]
+    TCP_FIELD_NUMBER: _ClassVar[int]
+    AUTHORIZATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    sandbox_id: str
+    service_id: str
+    ssh: SshRelayTarget
+    tcp: TcpRelayTarget
+    authorization_token: str
+    def __init__(
+        self,
+        sandbox_id: _Optional[str] = ...,
+        service_id: _Optional[str] = ...,
+        ssh: _Optional[_Union[SshRelayTarget, _Mapping]] = ...,
+        tcp: _Optional[_Union[TcpRelayTarget, _Mapping]] = ...,
+        authorization_token: _Optional[str] = ...,
+    ) -> None: ...
+
+class TcpForwardFrame(_message.Message):
+    __slots__ = ("init", "data")
+    INIT_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    init: TcpForwardInit
+    data: bytes
+    def __init__(
+        self, init: _Optional[_Union[TcpForwardInit, _Mapping]] = ..., data: _Optional[bytes] = ...
+    ) -> None: ...
+
+class ExecSandboxInput(_message.Message):
+    __slots__ = ("start", "stdin", "resize")
+    START_FIELD_NUMBER: _ClassVar[int]
+    STDIN_FIELD_NUMBER: _ClassVar[int]
+    RESIZE_FIELD_NUMBER: _ClassVar[int]
+    start: ExecSandboxRequest
+    stdin: bytes
+    resize: ExecSandboxWindowResize
+    def __init__(
+        self,
+        start: _Optional[_Union[ExecSandboxRequest, _Mapping]] = ...,
+        stdin: _Optional[bytes] = ...,
+        resize: _Optional[_Union[ExecSandboxWindowResize, _Mapping]] = ...,
+    ) -> None: ...
+
+class ExecSandboxWindowResize(_message.Message):
+    __slots__ = ("cols", "rows")
+    COLS_FIELD_NUMBER: _ClassVar[int]
+    ROWS_FIELD_NUMBER: _ClassVar[int]
+    cols: int
+    rows: int
+    def __init__(self, cols: _Optional[int] = ..., rows: _Optional[int] = ...) -> None: ...
 
 class SshSession(_message.Message):
     __slots__ = ("metadata", "sandbox_id", "token", "expires_at_ms", "revoked")
@@ -690,11 +914,23 @@ class ListProvidersRequest(_message.Message):
     def __init__(self, limit: _Optional[int] = ..., offset: _Optional[int] = ...) -> None: ...
 
 class UpdateProviderRequest(_message.Message):
-    __slots__ = ("provider",)
+    __slots__ = ("provider", "credential_expires_at_ms")
+    class CredentialExpiresAtMsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: int
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[int] = ...) -> None: ...
+
     PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_EXPIRES_AT_MS_FIELD_NUMBER: _ClassVar[int]
     provider: _datamodel_pb2.Provider
+    credential_expires_at_ms: _containers.ScalarMap[str, int]
     def __init__(
-        self, provider: _Optional[_Union[_datamodel_pb2.Provider, _Mapping]] = ...
+        self,
+        provider: _Optional[_Union[_datamodel_pb2.Provider, _Mapping]] = ...,
+        credential_expires_at_ms: _Optional[_Mapping[str, int]] = ...,
     ) -> None: ...
 
 class DeleteProviderRequest(_message.Message):
@@ -775,6 +1011,7 @@ class ProviderProfileCredential(_message.Message):
         "auth_style",
         "header_name",
         "query_param",
+        "refresh",
     )
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -783,6 +1020,7 @@ class ProviderProfileCredential(_message.Message):
     AUTH_STYLE_FIELD_NUMBER: _ClassVar[int]
     HEADER_NAME_FIELD_NUMBER: _ClassVar[int]
     QUERY_PARAM_FIELD_NUMBER: _ClassVar[int]
+    REFRESH_FIELD_NUMBER: _ClassVar[int]
     name: str
     description: str
     env_vars: _containers.RepeatedScalarFieldContainer[str]
@@ -790,6 +1028,7 @@ class ProviderProfileCredential(_message.Message):
     auth_style: str
     header_name: str
     query_param: str
+    refresh: ProviderCredentialRefresh
     def __init__(
         self,
         name: _Optional[str] = ...,
@@ -799,7 +1038,285 @@ class ProviderProfileCredential(_message.Message):
         auth_style: _Optional[str] = ...,
         header_name: _Optional[str] = ...,
         query_param: _Optional[str] = ...,
+        refresh: _Optional[_Union[ProviderCredentialRefresh, _Mapping]] = ...,
     ) -> None: ...
+
+class ProviderCredentialRefreshMaterial(_message.Message):
+    __slots__ = ("name", "description", "required", "secret")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    REQUIRED_FIELD_NUMBER: _ClassVar[int]
+    SECRET_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    description: str
+    required: bool
+    secret: bool
+    def __init__(
+        self,
+        name: _Optional[str] = ...,
+        description: _Optional[str] = ...,
+        required: bool = ...,
+        secret: bool = ...,
+    ) -> None: ...
+
+class ProviderCredentialRefresh(_message.Message):
+    __slots__ = (
+        "strategy",
+        "token_url",
+        "scopes",
+        "refresh_before_seconds",
+        "max_lifetime_seconds",
+        "material",
+    )
+    STRATEGY_FIELD_NUMBER: _ClassVar[int]
+    TOKEN_URL_FIELD_NUMBER: _ClassVar[int]
+    SCOPES_FIELD_NUMBER: _ClassVar[int]
+    REFRESH_BEFORE_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    MAX_LIFETIME_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    MATERIAL_FIELD_NUMBER: _ClassVar[int]
+    strategy: ProviderCredentialRefreshStrategy
+    token_url: str
+    scopes: _containers.RepeatedScalarFieldContainer[str]
+    refresh_before_seconds: int
+    max_lifetime_seconds: int
+    material: _containers.RepeatedCompositeFieldContainer[ProviderCredentialRefreshMaterial]
+    def __init__(
+        self,
+        strategy: _Optional[_Union[ProviderCredentialRefreshStrategy, str]] = ...,
+        token_url: _Optional[str] = ...,
+        scopes: _Optional[_Iterable[str]] = ...,
+        refresh_before_seconds: _Optional[int] = ...,
+        max_lifetime_seconds: _Optional[int] = ...,
+        material: _Optional[_Iterable[_Union[ProviderCredentialRefreshMaterial, _Mapping]]] = ...,
+    ) -> None: ...
+
+class ProviderCredentialRefreshStatus(_message.Message):
+    __slots__ = (
+        "provider_name",
+        "provider_id",
+        "credential_key",
+        "strategy",
+        "status",
+        "expires_at_ms",
+        "next_refresh_at_ms",
+        "last_refresh_at_ms",
+        "last_error",
+    )
+    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_ID_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_KEY_FIELD_NUMBER: _ClassVar[int]
+    STRATEGY_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_MS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_REFRESH_AT_MS_FIELD_NUMBER: _ClassVar[int]
+    LAST_REFRESH_AT_MS_FIELD_NUMBER: _ClassVar[int]
+    LAST_ERROR_FIELD_NUMBER: _ClassVar[int]
+    provider_name: str
+    provider_id: str
+    credential_key: str
+    strategy: ProviderCredentialRefreshStrategy
+    status: str
+    expires_at_ms: int
+    next_refresh_at_ms: int
+    last_refresh_at_ms: int
+    last_error: str
+    def __init__(
+        self,
+        provider_name: _Optional[str] = ...,
+        provider_id: _Optional[str] = ...,
+        credential_key: _Optional[str] = ...,
+        strategy: _Optional[_Union[ProviderCredentialRefreshStrategy, str]] = ...,
+        status: _Optional[str] = ...,
+        expires_at_ms: _Optional[int] = ...,
+        next_refresh_at_ms: _Optional[int] = ...,
+        last_refresh_at_ms: _Optional[int] = ...,
+        last_error: _Optional[str] = ...,
+    ) -> None: ...
+
+class ProviderProfileDiscovery(_message.Message):
+    __slots__ = ("credentials",)
+    CREDENTIALS_FIELD_NUMBER: _ClassVar[int]
+    credentials: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, credentials: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class StoredProviderCredentialRefreshState(_message.Message):
+    __slots__ = (
+        "metadata",
+        "provider_id",
+        "provider_name",
+        "credential_key",
+        "strategy",
+        "material",
+        "secret_material_keys",
+        "expires_at_ms",
+        "next_refresh_at_ms",
+        "last_refresh_at_ms",
+        "status",
+        "last_error",
+        "token_url",
+        "scopes",
+        "refresh_before_seconds",
+        "max_lifetime_seconds",
+    )
+    class MaterialEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+
+    METADATA_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_ID_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_KEY_FIELD_NUMBER: _ClassVar[int]
+    STRATEGY_FIELD_NUMBER: _ClassVar[int]
+    MATERIAL_FIELD_NUMBER: _ClassVar[int]
+    SECRET_MATERIAL_KEYS_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_MS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_REFRESH_AT_MS_FIELD_NUMBER: _ClassVar[int]
+    LAST_REFRESH_AT_MS_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    LAST_ERROR_FIELD_NUMBER: _ClassVar[int]
+    TOKEN_URL_FIELD_NUMBER: _ClassVar[int]
+    SCOPES_FIELD_NUMBER: _ClassVar[int]
+    REFRESH_BEFORE_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    MAX_LIFETIME_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    metadata: _datamodel_pb2.ObjectMeta
+    provider_id: str
+    provider_name: str
+    credential_key: str
+    strategy: ProviderCredentialRefreshStrategy
+    material: _containers.ScalarMap[str, str]
+    secret_material_keys: _containers.RepeatedScalarFieldContainer[str]
+    expires_at_ms: int
+    next_refresh_at_ms: int
+    last_refresh_at_ms: int
+    status: str
+    last_error: str
+    token_url: str
+    scopes: _containers.RepeatedScalarFieldContainer[str]
+    refresh_before_seconds: int
+    max_lifetime_seconds: int
+    def __init__(
+        self,
+        metadata: _Optional[_Union[_datamodel_pb2.ObjectMeta, _Mapping]] = ...,
+        provider_id: _Optional[str] = ...,
+        provider_name: _Optional[str] = ...,
+        credential_key: _Optional[str] = ...,
+        strategy: _Optional[_Union[ProviderCredentialRefreshStrategy, str]] = ...,
+        material: _Optional[_Mapping[str, str]] = ...,
+        secret_material_keys: _Optional[_Iterable[str]] = ...,
+        expires_at_ms: _Optional[int] = ...,
+        next_refresh_at_ms: _Optional[int] = ...,
+        last_refresh_at_ms: _Optional[int] = ...,
+        status: _Optional[str] = ...,
+        last_error: _Optional[str] = ...,
+        token_url: _Optional[str] = ...,
+        scopes: _Optional[_Iterable[str]] = ...,
+        refresh_before_seconds: _Optional[int] = ...,
+        max_lifetime_seconds: _Optional[int] = ...,
+    ) -> None: ...
+
+class GetProviderRefreshStatusRequest(_message.Message):
+    __slots__ = ("provider", "credential_key")
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_KEY_FIELD_NUMBER: _ClassVar[int]
+    provider: str
+    credential_key: str
+    def __init__(
+        self, provider: _Optional[str] = ..., credential_key: _Optional[str] = ...
+    ) -> None: ...
+
+class GetProviderRefreshStatusResponse(_message.Message):
+    __slots__ = ("credentials",)
+    CREDENTIALS_FIELD_NUMBER: _ClassVar[int]
+    credentials: _containers.RepeatedCompositeFieldContainer[ProviderCredentialRefreshStatus]
+    def __init__(
+        self,
+        credentials: _Optional[_Iterable[_Union[ProviderCredentialRefreshStatus, _Mapping]]] = ...,
+    ) -> None: ...
+
+class ConfigureProviderRefreshRequest(_message.Message):
+    __slots__ = (
+        "provider",
+        "credential_key",
+        "strategy",
+        "material",
+        "secret_material_keys",
+        "expires_at_ms",
+    )
+    class MaterialEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_KEY_FIELD_NUMBER: _ClassVar[int]
+    STRATEGY_FIELD_NUMBER: _ClassVar[int]
+    MATERIAL_FIELD_NUMBER: _ClassVar[int]
+    SECRET_MATERIAL_KEYS_FIELD_NUMBER: _ClassVar[int]
+    EXPIRES_AT_MS_FIELD_NUMBER: _ClassVar[int]
+    provider: str
+    credential_key: str
+    strategy: ProviderCredentialRefreshStrategy
+    material: _containers.ScalarMap[str, str]
+    secret_material_keys: _containers.RepeatedScalarFieldContainer[str]
+    expires_at_ms: int
+    def __init__(
+        self,
+        provider: _Optional[str] = ...,
+        credential_key: _Optional[str] = ...,
+        strategy: _Optional[_Union[ProviderCredentialRefreshStrategy, str]] = ...,
+        material: _Optional[_Mapping[str, str]] = ...,
+        secret_material_keys: _Optional[_Iterable[str]] = ...,
+        expires_at_ms: _Optional[int] = ...,
+    ) -> None: ...
+
+class ConfigureProviderRefreshResponse(_message.Message):
+    __slots__ = ("status",)
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    status: ProviderCredentialRefreshStatus
+    def __init__(
+        self, status: _Optional[_Union[ProviderCredentialRefreshStatus, _Mapping]] = ...
+    ) -> None: ...
+
+class RotateProviderCredentialRequest(_message.Message):
+    __slots__ = ("provider", "credential_key")
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_KEY_FIELD_NUMBER: _ClassVar[int]
+    provider: str
+    credential_key: str
+    def __init__(
+        self, provider: _Optional[str] = ..., credential_key: _Optional[str] = ...
+    ) -> None: ...
+
+class RotateProviderCredentialResponse(_message.Message):
+    __slots__ = ("status",)
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    status: ProviderCredentialRefreshStatus
+    def __init__(
+        self, status: _Optional[_Union[ProviderCredentialRefreshStatus, _Mapping]] = ...
+    ) -> None: ...
+
+class DeleteProviderRefreshRequest(_message.Message):
+    __slots__ = ("provider", "credential_key")
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_KEY_FIELD_NUMBER: _ClassVar[int]
+    provider: str
+    credential_key: str
+    def __init__(
+        self, provider: _Optional[str] = ..., credential_key: _Optional[str] = ...
+    ) -> None: ...
+
+class DeleteProviderRefreshResponse(_message.Message):
+    __slots__ = ("deleted",)
+    DELETED_FIELD_NUMBER: _ClassVar[int]
+    deleted: bool
+    def __init__(self, deleted: bool = ...) -> None: ...
 
 class ProviderProfile(_message.Message):
     __slots__ = (
@@ -811,6 +1328,7 @@ class ProviderProfile(_message.Message):
         "endpoints",
         "binaries",
         "inference_capable",
+        "discovery",
     )
     ID_FIELD_NUMBER: _ClassVar[int]
     DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -820,6 +1338,7 @@ class ProviderProfile(_message.Message):
     ENDPOINTS_FIELD_NUMBER: _ClassVar[int]
     BINARIES_FIELD_NUMBER: _ClassVar[int]
     INFERENCE_CAPABLE_FIELD_NUMBER: _ClassVar[int]
+    DISCOVERY_FIELD_NUMBER: _ClassVar[int]
     id: str
     display_name: str
     description: str
@@ -828,6 +1347,7 @@ class ProviderProfile(_message.Message):
     endpoints: _containers.RepeatedCompositeFieldContainer[_sandbox_pb2.NetworkEndpoint]
     binaries: _containers.RepeatedCompositeFieldContainer[_sandbox_pb2.NetworkBinary]
     inference_capable: bool
+    discovery: ProviderProfileDiscovery
     def __init__(
         self,
         id: _Optional[str] = ...,
@@ -838,6 +1358,7 @@ class ProviderProfile(_message.Message):
         endpoints: _Optional[_Iterable[_Union[_sandbox_pb2.NetworkEndpoint, _Mapping]]] = ...,
         binaries: _Optional[_Iterable[_Union[_sandbox_pb2.NetworkBinary, _Mapping]]] = ...,
         inference_capable: bool = ...,
+        discovery: _Optional[_Union[ProviderProfileDiscovery, _Mapping]] = ...,
     ) -> None: ...
 
 class StoredProviderProfile(_message.Message):
@@ -934,7 +1455,7 @@ class GetSandboxProviderEnvironmentRequest(_message.Message):
     def __init__(self, sandbox_id: _Optional[str] = ...) -> None: ...
 
 class GetSandboxProviderEnvironmentResponse(_message.Message):
-    __slots__ = ("environment", "provider_env_revision")
+    __slots__ = ("environment", "provider_env_revision", "credential_expires_at_ms")
     class EnvironmentEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -943,14 +1464,25 @@ class GetSandboxProviderEnvironmentResponse(_message.Message):
         value: str
         def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
 
+    class CredentialExpiresAtMsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: int
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[int] = ...) -> None: ...
+
     ENVIRONMENT_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_ENV_REVISION_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_EXPIRES_AT_MS_FIELD_NUMBER: _ClassVar[int]
     environment: _containers.ScalarMap[str, str]
     provider_env_revision: int
+    credential_expires_at_ms: _containers.ScalarMap[str, int]
     def __init__(
         self,
         environment: _Optional[_Mapping[str, str]] = ...,
         provider_env_revision: _Optional[int] = ...,
+        credential_expires_at_ms: _Optional[_Mapping[str, int]] = ...,
     ) -> None: ...
 
 class UpdateConfigRequest(_message.Message):
@@ -961,6 +1493,7 @@ class UpdateConfigRequest(_message.Message):
         "setting_value",
         "delete_setting",
         "merge_operations",
+        "expected_resource_version",
     )
     NAME_FIELD_NUMBER: _ClassVar[int]
     POLICY_FIELD_NUMBER: _ClassVar[int]
@@ -969,12 +1502,14 @@ class UpdateConfigRequest(_message.Message):
     DELETE_SETTING_FIELD_NUMBER: _ClassVar[int]
     GLOBAL_FIELD_NUMBER: _ClassVar[int]
     MERGE_OPERATIONS_FIELD_NUMBER: _ClassVar[int]
+    EXPECTED_RESOURCE_VERSION_FIELD_NUMBER: _ClassVar[int]
     name: str
     policy: _sandbox_pb2.SandboxPolicy
     setting_key: str
     setting_value: _sandbox_pb2.SettingValue
     delete_setting: bool
     merge_operations: _containers.RepeatedCompositeFieldContainer[PolicyMergeOperation]
+    expected_resource_version: int
     def __init__(
         self,
         name: _Optional[str] = ...,
@@ -983,6 +1518,7 @@ class UpdateConfigRequest(_message.Message):
         setting_value: _Optional[_Union[_sandbox_pb2.SettingValue, _Mapping]] = ...,
         delete_setting: bool = ...,
         merge_operations: _Optional[_Iterable[_Union[PolicyMergeOperation, _Mapping]]] = ...,
+        expected_resource_version: _Optional[int] = ...,
         **kwargs,
     ) -> None: ...
 
@@ -1336,10 +1872,34 @@ class GatewayHeartbeat(_message.Message):
     def __init__(self) -> None: ...
 
 class RelayOpen(_message.Message):
-    __slots__ = ("channel_id",)
+    __slots__ = ("channel_id", "ssh", "tcp", "service_id")
     CHANNEL_ID_FIELD_NUMBER: _ClassVar[int]
+    SSH_FIELD_NUMBER: _ClassVar[int]
+    TCP_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_ID_FIELD_NUMBER: _ClassVar[int]
     channel_id: str
-    def __init__(self, channel_id: _Optional[str] = ...) -> None: ...
+    ssh: SshRelayTarget
+    tcp: TcpRelayTarget
+    service_id: str
+    def __init__(
+        self,
+        channel_id: _Optional[str] = ...,
+        ssh: _Optional[_Union[SshRelayTarget, _Mapping]] = ...,
+        tcp: _Optional[_Union[TcpRelayTarget, _Mapping]] = ...,
+        service_id: _Optional[str] = ...,
+    ) -> None: ...
+
+class SshRelayTarget(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class TcpRelayTarget(_message.Message):
+    __slots__ = ("host", "port")
+    HOST_FIELD_NUMBER: _ClassVar[int]
+    PORT_FIELD_NUMBER: _ClassVar[int]
+    host: str
+    port: int
+    def __init__(self, host: _Optional[str] = ..., port: _Optional[int] = ...) -> None: ...
 
 class RelayInit(_message.Message):
     __slots__ = ("channel_id",)
@@ -1470,6 +2030,31 @@ class DenialSummary(_message.Message):
         l7_inspection_active: bool = ...,
     ) -> None: ...
 
+class DenialGroupCount(_message.Message):
+    __slots__ = ("deny_group", "denied_count")
+    DENY_GROUP_FIELD_NUMBER: _ClassVar[int]
+    DENIED_COUNT_FIELD_NUMBER: _ClassVar[int]
+    deny_group: str
+    denied_count: int
+    def __init__(
+        self, deny_group: _Optional[str] = ..., denied_count: _Optional[int] = ...
+    ) -> None: ...
+
+class NetworkActivitySummary(_message.Message):
+    __slots__ = ("network_activity_count", "denied_action_count", "denials_by_group")
+    NETWORK_ACTIVITY_COUNT_FIELD_NUMBER: _ClassVar[int]
+    DENIED_ACTION_COUNT_FIELD_NUMBER: _ClassVar[int]
+    DENIALS_BY_GROUP_FIELD_NUMBER: _ClassVar[int]
+    network_activity_count: int
+    denied_action_count: int
+    denials_by_group: _containers.RepeatedCompositeFieldContainer[DenialGroupCount]
+    def __init__(
+        self,
+        network_activity_count: _Optional[int] = ...,
+        denied_action_count: _Optional[int] = ...,
+        denials_by_group: _Optional[_Iterable[_Union[DenialGroupCount, _Mapping]]] = ...,
+    ) -> None: ...
+
 class PolicyChunk(_message.Message):
     __slots__ = (
         "id",
@@ -1488,6 +2073,8 @@ class PolicyChunk(_message.Message):
         "first_seen_ms",
         "last_seen_ms",
         "binary",
+        "validation_result",
+        "rejection_reason",
     )
     ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
@@ -1505,6 +2092,8 @@ class PolicyChunk(_message.Message):
     FIRST_SEEN_MS_FIELD_NUMBER: _ClassVar[int]
     LAST_SEEN_MS_FIELD_NUMBER: _ClassVar[int]
     BINARY_FIELD_NUMBER: _ClassVar[int]
+    VALIDATION_RESULT_FIELD_NUMBER: _ClassVar[int]
+    REJECTION_REASON_FIELD_NUMBER: _ClassVar[int]
     id: str
     status: str
     rule_name: str
@@ -1521,6 +2110,8 @@ class PolicyChunk(_message.Message):
     first_seen_ms: int
     last_seen_ms: int
     binary: str
+    validation_result: str
+    rejection_reason: str
     def __init__(
         self,
         id: _Optional[str] = ...,
@@ -1539,6 +2130,8 @@ class PolicyChunk(_message.Message):
         first_seen_ms: _Optional[int] = ...,
         last_seen_ms: _Optional[int] = ...,
         binary: _Optional[str] = ...,
+        validation_result: _Optional[str] = ...,
+        rejection_reason: _Optional[str] = ...,
     ) -> None: ...
 
 class DraftPolicyUpdate(_message.Message):
@@ -1560,36 +2153,50 @@ class DraftPolicyUpdate(_message.Message):
     ) -> None: ...
 
 class SubmitPolicyAnalysisRequest(_message.Message):
-    __slots__ = ("summaries", "proposed_chunks", "analysis_mode", "name")
+    __slots__ = (
+        "summaries",
+        "proposed_chunks",
+        "analysis_mode",
+        "name",
+        "network_activity_summaries",
+    )
     SUMMARIES_FIELD_NUMBER: _ClassVar[int]
     PROPOSED_CHUNKS_FIELD_NUMBER: _ClassVar[int]
     ANALYSIS_MODE_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
+    NETWORK_ACTIVITY_SUMMARIES_FIELD_NUMBER: _ClassVar[int]
     summaries: _containers.RepeatedCompositeFieldContainer[DenialSummary]
     proposed_chunks: _containers.RepeatedCompositeFieldContainer[PolicyChunk]
     analysis_mode: str
     name: str
+    network_activity_summaries: _containers.RepeatedCompositeFieldContainer[NetworkActivitySummary]
     def __init__(
         self,
         summaries: _Optional[_Iterable[_Union[DenialSummary, _Mapping]]] = ...,
         proposed_chunks: _Optional[_Iterable[_Union[PolicyChunk, _Mapping]]] = ...,
         analysis_mode: _Optional[str] = ...,
         name: _Optional[str] = ...,
+        network_activity_summaries: _Optional[
+            _Iterable[_Union[NetworkActivitySummary, _Mapping]]
+        ] = ...,
     ) -> None: ...
 
 class SubmitPolicyAnalysisResponse(_message.Message):
-    __slots__ = ("accepted_chunks", "rejected_chunks", "rejection_reasons")
+    __slots__ = ("accepted_chunks", "rejected_chunks", "rejection_reasons", "accepted_chunk_ids")
     ACCEPTED_CHUNKS_FIELD_NUMBER: _ClassVar[int]
     REJECTED_CHUNKS_FIELD_NUMBER: _ClassVar[int]
     REJECTION_REASONS_FIELD_NUMBER: _ClassVar[int]
+    ACCEPTED_CHUNK_IDS_FIELD_NUMBER: _ClassVar[int]
     accepted_chunks: int
     rejected_chunks: int
     rejection_reasons: _containers.RepeatedScalarFieldContainer[str]
+    accepted_chunk_ids: _containers.RepeatedScalarFieldContainer[str]
     def __init__(
         self,
         accepted_chunks: _Optional[int] = ...,
         rejected_chunks: _Optional[int] = ...,
         rejection_reasons: _Optional[_Iterable[str]] = ...,
+        accepted_chunk_ids: _Optional[_Iterable[str]] = ...,
     ) -> None: ...
 
 class GetDraftPolicyRequest(_message.Message):
@@ -1794,6 +2401,8 @@ class DraftChunkPayload(_message.Message):
         "port",
         "binary",
         "draft_version",
+        "validation_result",
+        "rejection_reason",
     )
     RULE_NAME_FIELD_NUMBER: _ClassVar[int]
     PROPOSED_RULE_FIELD_NUMBER: _ClassVar[int]
@@ -1805,6 +2414,8 @@ class DraftChunkPayload(_message.Message):
     PORT_FIELD_NUMBER: _ClassVar[int]
     BINARY_FIELD_NUMBER: _ClassVar[int]
     DRAFT_VERSION_FIELD_NUMBER: _ClassVar[int]
+    VALIDATION_RESULT_FIELD_NUMBER: _ClassVar[int]
+    REJECTION_REASON_FIELD_NUMBER: _ClassVar[int]
     rule_name: str
     proposed_rule: _sandbox_pb2.NetworkPolicyRule
     rationale: str
@@ -1815,6 +2426,8 @@ class DraftChunkPayload(_message.Message):
     port: int
     binary: str
     draft_version: int
+    validation_result: str
+    rejection_reason: str
     def __init__(
         self,
         rule_name: _Optional[str] = ...,
@@ -1827,6 +2440,8 @@ class DraftChunkPayload(_message.Message):
         port: _Optional[int] = ...,
         binary: _Optional[str] = ...,
         draft_version: _Optional[int] = ...,
+        validation_result: _Optional[str] = ...,
+        rejection_reason: _Optional[str] = ...,
     ) -> None: ...
 
 class StoredPolicyRevision(_message.Message):
@@ -1891,6 +2506,8 @@ class StoredDraftChunk(_message.Message):
         "hit_count",
         "first_seen_ms",
         "last_seen_ms",
+        "validation_result",
+        "rejection_reason",
     )
     ID_FIELD_NUMBER: _ClassVar[int]
     SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
@@ -1909,6 +2526,8 @@ class StoredDraftChunk(_message.Message):
     HIT_COUNT_FIELD_NUMBER: _ClassVar[int]
     FIRST_SEEN_MS_FIELD_NUMBER: _ClassVar[int]
     LAST_SEEN_MS_FIELD_NUMBER: _ClassVar[int]
+    VALIDATION_RESULT_FIELD_NUMBER: _ClassVar[int]
+    REJECTION_REASON_FIELD_NUMBER: _ClassVar[int]
     id: str
     sandbox_id: str
     draft_version: int
@@ -1926,6 +2545,8 @@ class StoredDraftChunk(_message.Message):
     hit_count: int
     first_seen_ms: int
     last_seen_ms: int
+    validation_result: str
+    rejection_reason: str
     def __init__(
         self,
         id: _Optional[str] = ...,
@@ -1945,4 +2566,6 @@ class StoredDraftChunk(_message.Message):
         hit_count: _Optional[int] = ...,
         first_seen_ms: _Optional[int] = ...,
         last_seen_ms: _Optional[int] = ...,
+        validation_result: _Optional[str] = ...,
+        rejection_reason: _Optional[str] = ...,
     ) -> None: ...

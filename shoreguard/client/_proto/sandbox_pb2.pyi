@@ -122,6 +122,9 @@ class NetworkEndpoint(_message.Message):
         "graphql_persisted_queries",
         "graphql_max_body_bytes",
         "path",
+        "websocket_credential_rewrite",
+        "request_body_credential_rewrite",
+        "advisor_proposed",
     )
     class GraphqlPersistedQueriesEntry(_message.Message):
         __slots__ = ("key", "value")
@@ -150,6 +153,9 @@ class NetworkEndpoint(_message.Message):
     GRAPHQL_PERSISTED_QUERIES_FIELD_NUMBER: _ClassVar[int]
     GRAPHQL_MAX_BODY_BYTES_FIELD_NUMBER: _ClassVar[int]
     PATH_FIELD_NUMBER: _ClassVar[int]
+    WEBSOCKET_CREDENTIAL_REWRITE_FIELD_NUMBER: _ClassVar[int]
+    REQUEST_BODY_CREDENTIAL_REWRITE_FIELD_NUMBER: _ClassVar[int]
+    ADVISOR_PROPOSED_FIELD_NUMBER: _ClassVar[int]
     host: str
     port: int
     protocol: str
@@ -165,6 +171,9 @@ class NetworkEndpoint(_message.Message):
     graphql_persisted_queries: _containers.MessageMap[str, GraphqlOperation]
     graphql_max_body_bytes: int
     path: str
+    websocket_credential_rewrite: bool
+    request_body_credential_rewrite: bool
+    advisor_proposed: bool
     def __init__(
         self,
         host: _Optional[str] = ...,
@@ -182,6 +191,9 @@ class NetworkEndpoint(_message.Message):
         graphql_persisted_queries: _Optional[_Mapping[str, GraphqlOperation]] = ...,
         graphql_max_body_bytes: _Optional[int] = ...,
         path: _Optional[str] = ...,
+        websocket_credential_rewrite: bool = ...,
+        request_body_credential_rewrite: bool = ...,
+        advisor_proposed: bool = ...,
     ) -> None: ...
 
 class GraphqlOperation(_message.Message):
