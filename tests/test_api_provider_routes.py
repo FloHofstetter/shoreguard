@@ -107,6 +107,94 @@ async def test_delete_nonexistent_provider(api_client, mock_client):
     assert resp.status_code == 404
 
 
+# ─── Credential refresh / rotation ───────────────────────────────────────────
+
+_REFRESH_STATUS = {
+    "provider_name": "my-prov",
+    "provider_id": "pid-1",
+    "credential_key": "ANTHROPIC_API_KEY",
+    "strategy": "oauth2_refresh_token",
+    "status": "active",
+    "expires_at_ms": 1000,
+    "next_refresh_at_ms": 2000,
+    "last_refresh_at_ms": 500,
+    "last_error": "",
+}
+
+
+async def test_get_provider_refresh(api_client, mock_client):
+    """GET /providers/{name}/refresh returns the credential list."""
+    mock_client.providers.get_refresh_status.return_value = [_REFRESH_STATUS]
+
+    resp = await api_client.get(f"{BASE}/my-prov/refresh")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["credentials"]) == 1
+    assert data["credentials"][0]["strategy"] == "oauth2_refresh_token"
+
+
+async def test_configure_provider_refresh(api_client, mock_client):
+    """POST /providers/{name}/refresh configures refresh and returns the status."""
+    mock_client.providers.configure_refresh.return_value = _REFRESH_STATUS
+
+    resp = await api_client.post(
+        f"{BASE}/my-prov/refresh",
+        json={
+            "credential_key": "ANTHROPIC_API_KEY",
+            "strategy": "oauth2_refresh_token",
+            "material": {"token_url": "https://x"},
+            "secret_material_keys": ["client_secret"],
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["credential_key"] == "ANTHROPIC_API_KEY"
+    # The service must receive the friendly strategy string.
+    _, kwargs = mock_client.providers.configure_refresh.call_args
+    assert kwargs["strategy"] == "oauth2_refresh_token"
+
+
+async def test_configure_provider_refresh_rejects_bad_strategy(api_client):
+    """POST /providers/{name}/refresh 422s on an unknown strategy."""
+    resp = await api_client.post(
+        f"{BASE}/my-prov/refresh",
+        json={"credential_key": "K", "strategy": "definitely-not-a-strategy"},
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_rotate_provider_credential(api_client, mock_client):
+    """POST /providers/{name}/refresh/rotate rotates and returns status."""
+    mock_client.providers.rotate_credential.return_value = _REFRESH_STATUS
+
+    resp = await api_client.post(
+        f"{BASE}/my-prov/refresh/rotate",
+        json={"credential_key": "ANTHROPIC_API_KEY"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "active"
+
+
+async def test_delete_provider_refresh(api_client, mock_client):
+    """DELETE /providers/{name}/refresh removes a refresh configuration."""
+    mock_client.providers.delete_refresh.return_value = True
+
+    resp = await api_client.delete(f"{BASE}/my-prov/refresh?credential_key=ANTHROPIC_API_KEY")
+
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] is True
+
+
+async def test_delete_provider_refresh_requires_credential_key(api_client):
+    """DELETE /providers/{name}/refresh 422s when credential_key is missing."""
+    resp = await api_client.delete(f"{BASE}/my-prov/refresh")
+
+    assert resp.status_code == 422
+
+
 async def test_update_nonexistent_provider(api_client, mock_client):
     """PUT /providers/{name} returns 404 for unknown provider."""
     mock_client.providers.update.side_effect = NotFoundError("Provider not found")

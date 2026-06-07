@@ -142,3 +142,59 @@ def test_list_community_sandboxes():
     result = ProviderService.list_community_sandboxes()
 
     assert isinstance(result, list)
+
+
+# ─── Credential refresh / rotation delegation ────────────────────────────────
+
+
+def test_configure_refresh_delegates(provider_svc, mock_client):
+    """configure_refresh forwards every argument to the client manager."""
+    mock_client.providers.configure_refresh.return_value = {"status": "active"}
+
+    provider_svc.configure_refresh(
+        provider="p1",
+        credential_key="K",
+        strategy="oauth2_refresh_token",
+        material={"token_url": "https://x"},
+        secret_material_keys=["client_secret"],
+        expires_at_ms=42,
+    )
+
+    mock_client.providers.configure_refresh.assert_called_once_with(
+        provider="p1",
+        credential_key="K",
+        strategy="oauth2_refresh_token",
+        material={"token_url": "https://x"},
+        secret_material_keys=["client_secret"],
+        expires_at_ms=42,
+    )
+
+
+def test_get_refresh_status_delegates(provider_svc, mock_client):
+    """get_refresh_status forwards provider and credential_key."""
+    mock_client.providers.get_refresh_status.return_value = []
+
+    provider_svc.get_refresh_status("p1", credential_key="K")
+
+    mock_client.providers.get_refresh_status.assert_called_once_with("p1", credential_key="K")
+
+
+def test_rotate_credential_delegates(provider_svc, mock_client):
+    """rotate_credential forwards provider and credential_key."""
+    mock_client.providers.rotate_credential.return_value = {"status": "active"}
+
+    provider_svc.rotate_credential(provider="p1", credential_key="K")
+
+    mock_client.providers.rotate_credential.assert_called_once_with(
+        provider="p1", credential_key="K"
+    )
+
+
+def test_delete_refresh_delegates(provider_svc, mock_client):
+    """delete_refresh forwards provider and credential_key and returns the bool."""
+    mock_client.providers.delete_refresh.return_value = True
+
+    result = provider_svc.delete_refresh(provider="p1", credential_key="K")
+
+    assert result is True
+    mock_client.providers.delete_refresh.assert_called_once_with(provider="p1", credential_key="K")
