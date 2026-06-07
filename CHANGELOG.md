@@ -5,6 +5,23 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.36.1] — 2026-06-07
+
+### Security
+
+Dependency-only patch that clears **8 CVEs** flagged by `pip-audit` in four
+locked dependencies. These are time-based advisories unrelated to the M38 sync;
+the failing `ci/audit` job had blocked the v0.36.0 publish pipeline (GHCR / PyPI
+/ sigstore never ran). No source changes — `fastapi 0.135.1` already allows
+`starlette>=0.46.0`, so the starlette bump needs no framework change, and the
+full suite (3225 tests) passes unchanged under starlette 1.2.x.
+
+- **`pyjwt` 2.12.1 → 2.13.0** — PYSEC-2026-175 / -177 / -178 / -179. Direct
+  dependency; the `PyJWT[crypto]` floor is raised to `>=2.13`.
+- **`starlette` 0.52.1 → 1.2.1** — PYSEC-2026-161 (transitive via `fastapi`).
+- **`idna` 3.11 → 3.18** — CVE-2026-45409 (transitive via `httpx`/`requests`).
+- **`pip` 26.1.1 → 26.1.2** — PYSEC-2026-196 (transitive, dev/CI tooling only).
+
 ## [0.36.0] — 2026-06-07
 
 ### M38 Upstream-Sync
