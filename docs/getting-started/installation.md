@@ -4,17 +4,24 @@
 
 - **Python 3.14** or newer
 - A running [NVIDIA OpenShell](https://docs.nvidia.com/openshell/) gateway
-  (or use `--local` mode for local Docker-based gateways). ShoreGuard
-  **v0.35.0** requires OpenShell **`v0.0.37` or newer** (effectively
-  `origin/main` until the next upstream tag is cut), because the
-  `Provider` and `Sandbox` wire schemas were migrated to the upstream
-  `ObjectMeta` convention in M37 — there is no compat shim for the
-  pre-`ObjectMeta` shape. Individual features still trace back to the
-  release that first introduced them; see the compatibility matrix.
+  (or use `--local` mode for local Docker-based gateways). After the M38
+  upstream-sync ShoreGuard requires OpenShell **`v0.0.57` or newer**: the
+  generated stubs expect the v0.0.57 wire shapes, and in particular
+  [PR #1565](https://github.com/NVIDIA/OpenShell/pull/1565) moved
+  `Sandbox.phase` / `current_policy_version` into the `SandboxStatus`
+  sub-message, so an older gateway reports an empty phase and stalls
+  sandbox-ready waits. There is no compat shim. Individual features still
+  trace back to the release that first introduced them; see the matrix.
 
 !!! info "Compatibility matrix"
     | Feature | Minimum gateway version |
     | --- | --- |
+    | `Sandbox.status.phase` / `current_policy_version` move | `v0.0.57` (PR #1565) |
+    | Provider credential refresh / rotation (`*ProviderRefresh`, `RotateProviderCredential`) | `v0.0.57` (PR #1349) |
+    | Local-domain service routing (`ExposeService` / `*Service`) | `v0.0.57` (PR #1101) |
+    | Interactive exec (`ExecSandboxInteractive`) | `v0.0.57` (PR #1331) |
+    | TCP / SSH forward (`ForwardTcp`) | `v0.0.57` (PR #1029) |
+    | Gateway sandbox tokens (`IssueSandboxToken` / `RefreshSandboxToken`) | `v0.0.57` (PR #1404) |
     | Core wire surface (post-`ObjectMeta`) | `v0.0.37` |
     | Sandbox-provider attach lifecycle (`*SandboxProvider`) | `v0.0.37` (PR #1242) |
     | Provider-profile registry (`*ProviderProfile`) | `v0.0.37` (PR #1170) |

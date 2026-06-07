@@ -73,8 +73,8 @@ uv run python scripts/check_coverage.py
 Expected output on success:
 
 ```
-Surface coverage OK: 42 upstream RPCs, 38 client-consumed,
-137 REST routes, 77 UI apiFetch calls.
+Surface coverage OK: 54 upstream RPCs, 50 client-consumed,
+145 REST routes, 84 UI apiFetch calls.
 ```
 
 On failure, the script prints a summary to stderr and exits non-zero,
@@ -82,15 +82,19 @@ matching the CI job's behaviour.
 
 ## Current state
 
-As of v0.35.0 (M37 upstream-sync against `origin/main @ 57a80ed2`):
+As of the M38 upstream-sync against the `v0.0.57` release tag:
 
-- 42 upstream RPCs; 38 consumed by the client (4 allowlisted as
-  supervisor-path).
-- Eight new RPCs land in this release — `ListSandboxProviders`,
-  `AttachSandboxProvider`, `DetachSandboxProvider` (PR #1242), and
-  `ListProviderProfiles`, `GetProviderProfile`, `ImportProviderProfiles`,
-  `LintProviderProfiles`, `DeleteProviderProfile` (PR #1170). Each has
-  client + REST + UI coverage.
+- 54 upstream RPCs; 50 consumed by the client (4 allowlisted as
+  supervisor-path: `PushSandboxLogs`, `ReportPolicyStatus`,
+  `ConnectSupervisor`, `RelayStream`).
+- Twelve new RPCs land in this sync, each with client + REST/WebSocket + UI
+  coverage — provider credential refresh/rotation (4, PR #1349), local-domain
+  service routing (4, PR #1101), interactive exec (`ExecSandboxInteractive`,
+  PR #1331), TCP/SSH forward (`ForwardTcp`, PR #1029), and the diagnostic
+  gateway-token pair (`IssueSandboxToken` / `RefreshSandboxToken`, PR #1404).
+  The two streaming RPCs are reached through WebSocket bridges
+  (`/ws/{gw}/{sandbox}/exec` and `/ws/{gw}/{sandbox}/forward`) rather than
+  `apiFetch`.
 - Every non-supervisor RPC has a client method that unit tests
   exercise.
 - REST surface covers every client method that is meaningful for an

@@ -5,6 +5,58 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### M38 Upstream-Sync
+
+Synced ShoreGuard against the `NVIDIA/OpenShell` **`v0.0.57`** release tag
+(stub regen via `scripts/generate_proto.py --ref v0.0.57`). Twelve new RPCs
+wired end-to-end and one wire-breaking field move handled. Every non-supervisor
+RPC again has client + REST + UI coverage — the coverage allowlist is back to
+the original four supervisor-path RPCs.
+
+**Fixed — wire-breaking field move (`SandboxStatus`).** Upstream
+[PR #1565](https://github.com/NVIDIA/OpenShell/pull/1565) moved `Sandbox.phase`
+and `Sandbox.current_policy_version` into the `SandboxStatus` sub-message.
+Against a `v0.0.57` gateway the previous code read empty fields, so every
+sandbox showed phase `unknown` and `wait_for_ready` hung until timeout.
+`_sandbox_to_dict` now reads `status.phase` / `status.current_policy_version`.
+
+### Added
+
+- **WS38.1 — Provider credential refresh / rotation.** Four RPCs
+  ([PR #1349](https://github.com/NVIDIA/OpenShell/pull/1349)) —
+  `ConfigureProviderRefresh`, `GetProviderRefreshStatus`,
+  `RotateProviderCredential`, `DeleteProviderRefresh` — wired through
+  `ProviderManager`, REST under `/providers/{name}/refresh`, and a
+  Credential-Refresh modal on the providers page. Secret material is passed
+  through to the gateway and never written to the audit log (key names only).
+- **WS38.2 — Local-domain service routing.** Four RPCs
+  ([PR #1101](https://github.com/NVIDIA/OpenShell/pull/1101)) —
+  `ExposeService`, `GetService`, `ListServices`, `DeleteService` — via a new
+  `ServiceManager`, `/services` REST surface, and a Service Routing page.
+- **WS38.3 — Interactive terminal.** `ExecSandboxInteractive`
+  ([PR #1331](https://github.com/NVIDIA/OpenShell/pull/1331)) — a true
+  bidirectional TTY over a new `/ws/{gw}/{sandbox}/exec` WebSocket bridge
+  (`api/ws_bridge.py`) driving a vendored **xterm.js** terminal
+  (`frontend/vendor/xterm/`), replacing the one-shot command runner.
+- **WS38.4 — TCP / SSH forward.** `ForwardTcp`
+  ([PR #1029](https://github.com/NVIDIA/OpenShell/pull/1029)) — a raw bidi
+  tunnel over `/ws/{gw}/{sandbox}/forward` reusing the WebSocket bridge, with a
+  Forward sub-tab (TCP target or SSH, the latter minting a relay session via
+  the existing `CreateSshSession`). A full in-browser SSH client remains a
+  follow-up; the SSH view streams the raw relay bytes.
+- **WS38.5 — Gateway token (diagnostic).** `IssueSandboxToken` /
+  `RefreshSandboxToken` ([PR #1404](https://github.com/NVIDIA/OpenShell/pull/1404))
+  under `/tokens`. These RPCs bind the minted JWT to the *caller's* identity, so
+  from ShoreGuard they mint a token for ShoreGuard's own gateway identity — an
+  admin-only diagnostic, not a sandbox-scoped token (documented in the UI).
+- New WebSocket RBAC dependency `require_role_ws` gates the mutating exec/forward
+  channels at operator level.
+- Additive v0.0.57 fields surfaced in the client projections:
+  `ObjectMeta.resource_version` (on sandbox + provider — foundation for
+  compare-and-swap on `UpdateConfig`) and `Provider.credential_expires_at_ms`.
+
 ## [0.35.0] — 2026-05-09
 
 ### M37 Upstream-Sync
