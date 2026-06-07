@@ -5,7 +5,7 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.37.0] — 2026-06-07
+## [0.36.2] — 2026-06-07
 
 ### Solo-dev on-ramp
 
@@ -41,6 +41,10 @@ sandbox) but was mis-signposted and had two sharp default edges.
   `SHOREGUARD_SANDBOX_READY_TIMEOUT` and points to `/api/gateways/diagnostics`
   instead of a bare "did not become ready in time".
 - **`--local` help text** notes it requires a running Docker daemon.
+
+### Security
+
+- Bumped `pymdown-extensions` 10.21.2 → 10.21.3 (CVE-2026-46338, docs toolchain only).
 
 ## [0.36.1] — 2026-06-07
 
