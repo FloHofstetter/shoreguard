@@ -30,6 +30,7 @@ def mock_client():
     client.providers = MagicMock()
     client.provider_profiles = MagicMock()
     client.approvals = MagicMock()
+    client.services = MagicMock()
     return client
 
 

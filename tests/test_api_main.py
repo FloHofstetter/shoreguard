@@ -954,3 +954,96 @@ def test_resolve_frontend_dir_missing():
     with patch("pathlib.Path.is_dir", return_value=False):
         with pytest.raises(FileNotFoundError, match="Frontend directory not found"):
             _resolve_frontend_dir()
+
+
+def test_ws_exec_interactive_streams_output():
+    """Interactive-exec WebSocket relays stdout/exit frames from the gRPC stream."""
+    import base64
+
+    from starlette.testclient import TestClient
+
+    from shoreguard.api.main import app
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.get.return_value = {"id": "sb-1", "name": "test-sb"}
+
+    def _fake_exec(*args, **kwargs):
+        return iter(
+            [
+                {"type": "stdout", "data": b"hello"},
+                {"type": "exit", "exit_code": 0},
+            ]
+        )
+
+    mock_client.sandboxes.exec_interactive.side_effect = _fake_exec
+
+    with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
+        mock_gw_svc.return_value.get_client.return_value = mock_client
+        client = TestClient(app)
+        with client.websocket_connect("/ws/test-gw/test-sb/exec") as ws:
+            ws.send_json({"type": "start", "command": ["bash"], "cols": 80, "rows": 24})
+            m1 = ws.receive_json()
+            assert m1["type"] == "stdout"
+            assert base64.b64decode(m1["data"]) == b"hello"
+            m2 = ws.receive_json()
+            assert m2["type"] == "exit"
+            assert m2["exit_code"] == 0
+
+
+def test_ws_exec_interactive_requires_start_command():
+    """Interactive-exec WebSocket rejects a first frame without a command."""
+    from starlette.testclient import TestClient
+
+    from shoreguard.api.main import app
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.get.return_value = {"id": "sb-1", "name": "test-sb"}
+
+    with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
+        mock_gw_svc.return_value.get_client.return_value = mock_client
+        client = TestClient(app)
+        with client.websocket_connect("/ws/test-gw/test-sb/exec") as ws:
+            ws.send_json({"type": "start"})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"
+
+
+def test_ws_forward_relays_bytes():
+    """Forward WebSocket relays gateway bytes back to the client as binary frames."""
+    from starlette.testclient import TestClient
+
+    from shoreguard.api.main import app
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.get.return_value = {"id": "sb-1", "name": "test-sb"}
+
+    def _fake_forward(*args, **kwargs):
+        return iter([{"type": "data", "data": b"banner"}])
+
+    mock_client.sandboxes.forward_tcp.side_effect = _fake_forward
+
+    with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
+        mock_gw_svc.return_value.get_client.return_value = mock_client
+        client = TestClient(app)
+        with client.websocket_connect("/ws/test-gw/test-sb/forward") as ws:
+            ws.send_json({"target": "tcp", "host": "127.0.0.1", "port": 9000})
+            data = ws.receive_bytes()
+            assert data == b"banner"
+
+
+def test_ws_forward_rejects_bad_target():
+    """Forward WebSocket rejects an init frame with an unknown target."""
+    from starlette.testclient import TestClient
+
+    from shoreguard.api.main import app
+
+    mock_client = MagicMock()
+    mock_client.sandboxes.get.return_value = {"id": "sb-1", "name": "test-sb"}
+
+    with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
+        mock_gw_svc.return_value.get_client.return_value = mock_client
+        client = TestClient(app)
+        with client.websocket_connect("/ws/test-gw/test-sb/forward") as ws:
+            ws.send_json({"target": "nope"})
+            msg = ws.receive_json()
+            assert msg["type"] == "error"

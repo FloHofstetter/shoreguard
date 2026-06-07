@@ -41,6 +41,43 @@ class _FakeStub:
         self.request = req
         return SimpleNamespace(deleted=True)
 
+    def ConfigureProviderRefresh(self, req, timeout=None):
+        self.request = req
+        return SimpleNamespace(status=_make_refresh_status(req.provider, req.credential_key))
+
+    def GetProviderRefreshStatus(self, req, timeout=None):
+        self.request = req
+        return SimpleNamespace(
+            credentials=[
+                _make_refresh_status(req.provider, "KEY_A"),
+                _make_refresh_status(req.provider, "KEY_B"),
+            ]
+        )
+
+    def RotateProviderCredential(self, req, timeout=None):
+        self.request = req
+        return SimpleNamespace(status=_make_refresh_status(req.provider, req.credential_key))
+
+    def DeleteProviderRefresh(self, req, timeout=None):
+        self.request = req
+        return SimpleNamespace(deleted=True)
+
+
+def _make_refresh_status(provider: str, key: str):
+    from shoreguard.client._proto import openshell_pb2
+
+    return openshell_pb2.ProviderCredentialRefreshStatus(
+        provider_name=provider,
+        provider_id="pid-1",
+        credential_key=key,
+        strategy=openshell_pb2.PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN,
+        status="active",
+        expires_at_ms=1000,
+        next_refresh_at_ms=2000,
+        last_refresh_at_ms=500,
+        last_error="",
+    )
+
 
 @pytest.fixture
 def stub():
@@ -105,6 +142,91 @@ def test_delete_returns_bool(mgr, stub):
     assert result is True
 
 
+# ─── Credential refresh / rotation ───────────────────────────────────────────
+
+
+def test_configure_refresh_maps_strategy_and_material(mgr, stub):
+    """configure_refresh() sends provider/key/strategy/material and returns status."""
+    result = mgr.configure_refresh(
+        provider="prov-1",
+        credential_key="ANTHROPIC_API_KEY",
+        strategy="oauth2_refresh_token",
+        material={"token_url": "https://x", "client_secret": "s"},
+        secret_material_keys=["client_secret"],
+        expires_at_ms=12345,
+    )
+    from shoreguard.client._proto import openshell_pb2
+
+    assert stub.request.provider == "prov-1"
+    assert stub.request.credential_key == "ANTHROPIC_API_KEY"
+    assert stub.request.strategy == (
+        openshell_pb2.PROVIDER_CREDENTIAL_REFRESH_STRATEGY_OAUTH2_REFRESH_TOKEN
+    )
+    assert dict(stub.request.material) == {"token_url": "https://x", "client_secret": "s"}
+    assert list(stub.request.secret_material_keys) == ["client_secret"]
+    assert stub.request.expires_at_ms == 12345
+    # Strategy is rendered back to the friendly string in the result.
+    assert result["strategy"] == "oauth2_refresh_token"
+    assert result["credential_key"] == "ANTHROPIC_API_KEY"
+
+
+def test_configure_refresh_rejects_unknown_strategy(mgr):
+    """configure_refresh() raises ValueError for an unknown strategy."""
+    with pytest.raises(ValueError, match="Unknown refresh strategy"):
+        mgr.configure_refresh(provider="p", credential_key="k", strategy="bogus")
+
+
+def test_configure_refresh_omits_expiry_when_none(mgr, stub):
+    """configure_refresh() leaves expires_at_ms unset when not provided."""
+    mgr.configure_refresh(provider="p", credential_key="k", strategy="static")
+    assert stub.request.HasField("expires_at_ms") is False
+
+
+def test_get_refresh_status_lists_entries(mgr, stub):
+    """get_refresh_status() forwards provider/key and converts each entry."""
+    result = mgr.get_refresh_status("prov-1", credential_key="")
+    assert stub.request.provider == "prov-1"
+    assert stub.request.credential_key == ""
+    assert [c["credential_key"] for c in result] == ["KEY_A", "KEY_B"]
+    assert result[0]["strategy"] == "oauth2_refresh_token"
+    assert result[0]["status"] == "active"
+    assert result[0]["next_refresh_at_ms"] == 2000
+
+
+def test_rotate_credential_returns_status(mgr, stub):
+    """rotate_credential() sends provider/key and returns the status dict."""
+    result = mgr.rotate_credential(provider="prov-1", credential_key="KEY_A")
+    assert stub.request.provider == "prov-1"
+    assert stub.request.credential_key == "KEY_A"
+    assert result["credential_key"] == "KEY_A"
+    assert result["provider_name"] == "prov-1"
+
+
+def test_delete_refresh_returns_bool(mgr, stub):
+    """delete_refresh() sends provider/key and returns deleted bool."""
+    result = mgr.delete_refresh(provider="prov-1", credential_key="KEY_A")
+    assert stub.request.provider == "prov-1"
+    assert stub.request.credential_key == "KEY_A"
+    assert result is True
+
+
+def test_strategy_round_trip():
+    """_strategy_to_enum and _strategy_to_str round-trip every strategy."""
+    from shoreguard.client._proto import openshell_pb2
+    from shoreguard.client.providers import _strategy_to_enum, _strategy_to_str
+
+    for friendly in (
+        "static",
+        "external",
+        "oauth2_refresh_token",
+        "oauth2_client_credentials",
+        "google_service_account_jwt",
+    ):
+        name = _strategy_to_enum(friendly)
+        value = openshell_pb2.ProviderCredentialRefreshStrategy.Value(name)
+        assert _strategy_to_str(value) == friendly
+
+
 # ─── Mutation-killing tests ──────────────────────────────────────────────────
 
 
@@ -115,20 +237,24 @@ def test_provider_to_dict_all_fields():
             id="id-42",
             name="my-prov",
             created_at_ms=1715000000000,
+            resource_version=7,
             labels={"env": "prod"},
         ),
         type="openai",
         credentials={"API_KEY": "sk-123"},
         config={"region": "us-east-1"},
+        credential_expires_at_ms={"API_KEY": 1800000000000},
     )
     result = _provider_to_dict(provider)
     assert result["id"] == "id-42"
     assert result["name"] == "my-prov"
     assert result["created_at_ms"] == 1715000000000
+    assert result["resource_version"] == 7
     assert result["labels"] == {"env": "prod"}
     assert result["type"] == "openai"
     assert result["credentials"] == {"API_KEY": "sk-123"}
     assert result["config"] == {"region": "us-east-1"}
+    assert result["credential_expires_at_ms"] == {"API_KEY": 1800000000000}
 
 
 def test_create_with_config(mgr, stub):
@@ -226,10 +352,12 @@ class TestProviderToDictMutations:
             "id",
             "name",
             "created_at_ms",
+            "resource_version",
             "labels",
             "type",
             "credentials",
             "config",
+            "credential_expires_at_ms",
         }
 
 

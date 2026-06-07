@@ -295,7 +295,7 @@ def test_sandbox_manager_retries_list_on_unavailable(monkeypatch):
                 sandboxes=[
                     openshell_pb2.Sandbox(
                         metadata=datamodel_pb2.ObjectMeta(id="id1", name="sb1"),
-                        phase=_PHASE_READY,
+                        status=openshell_pb2.SandboxStatus(phase=_PHASE_READY),
                     )
                 ]  # type: ignore[arg-type]
             )
