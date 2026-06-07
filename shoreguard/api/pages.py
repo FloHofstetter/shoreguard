@@ -1892,6 +1892,9 @@ async def gateway_detail_or_sub(
         if sb_rest == "terminal":
             ctx["active_tab"] = "terminal"
             return templates.TemplateResponse(request, "pages/sandbox_terminal.html", ctx)
+        if sb_rest == "forward":
+            ctx["active_tab"] = "forward"
+            return templates.TemplateResponse(request, "pages/sandbox_forward.html", ctx)
         if sb_rest == "bypass":
             ctx["active_tab"] = "bypass"
             return templates.TemplateResponse(request, "pages/sandbox_bypass.html", ctx)
@@ -1982,6 +1985,11 @@ async def gateway_detail_or_sub(
     if rest == "provider-profiles":
         ctx["active_page"] = "provider-profiles"
         return templates.TemplateResponse(request, "pages/provider_profiles.html", ctx)
+
+    # Service routing (M38 / OpenShell PR #1101 — local-domain service endpoints)
+    if rest == "services":
+        ctx["active_page"] = "services"
+        return templates.TemplateResponse(request, "pages/services.html", ctx)
 
     # Wizard
     if rest == "wizard":

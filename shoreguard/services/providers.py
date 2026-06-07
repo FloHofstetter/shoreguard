@@ -131,6 +131,80 @@ class ProviderService:
         """
         return self._client.providers.delete(name)
 
+    def configure_refresh(
+        self,
+        *,
+        provider: str,
+        credential_key: str,
+        strategy: str,
+        material: dict[str, str] | None = None,
+        secret_material_keys: list[str] | None = None,
+        expires_at_ms: int | None = None,
+    ) -> dict[str, Any]:
+        """Configure automatic refresh for a provider credential.
+
+        Args:
+            provider: Provider name.
+            credential_key: Credential key within the provider to refresh.
+            strategy: Refresh strategy (e.g. ``static``, ``oauth2_refresh_token``).
+            material: Strategy-specific material (token URLs, client ids, etc.).
+            secret_material_keys: Keys within *material* that hold secret values.
+            expires_at_ms: Optional absolute expiry of the current credential.
+
+        Returns:
+            dict[str, Any]: The resulting refresh status.
+        """
+        return self._client.providers.configure_refresh(
+            provider=provider,
+            credential_key=credential_key,
+            strategy=strategy,
+            material=material,
+            secret_material_keys=secret_material_keys,
+            expires_at_ms=expires_at_ms,
+        )
+
+    def get_refresh_status(
+        self, provider: str, *, credential_key: str = ""
+    ) -> list[dict[str, Any]]:
+        """List credential-refresh status entries for a provider.
+
+        Args:
+            provider: Provider name.
+            credential_key: Optional credential key; empty returns all entries.
+
+        Returns:
+            list[dict[str, Any]]: One status dict per configured credential.
+        """
+        return self._client.providers.get_refresh_status(provider, credential_key=credential_key)
+
+    def rotate_credential(self, *, provider: str, credential_key: str) -> dict[str, Any]:
+        """Rotate a provider credential immediately.
+
+        Args:
+            provider: Provider name.
+            credential_key: Credential key to rotate.
+
+        Returns:
+            dict[str, Any]: The refresh status after rotation.
+        """
+        return self._client.providers.rotate_credential(
+            provider=provider, credential_key=credential_key
+        )
+
+    def delete_refresh(self, *, provider: str, credential_key: str) -> bool:
+        """Delete a credential-refresh configuration.
+
+        Args:
+            provider: Provider name.
+            credential_key: Credential key whose refresh config is removed.
+
+        Returns:
+            bool: True if a configuration existed and was deleted.
+        """
+        return self._client.providers.delete_refresh(
+            provider=provider, credential_key=credential_key
+        )
+
     def get_env(self, name: str) -> dict[str, Any]:
         """Get the redacted environment projection for a provider.
 
