@@ -72,6 +72,7 @@ _task_health: dict[str, dict[str, Any]] = {
     "cleanup": {"last_success": None, "consecutive_failures": 0, "alive": False},
     "health_monitor": {"last_success": None, "consecutive_failures": 0, "alive": False},
     "discovery": {"last_success": None, "consecutive_failures": 0, "alive": False},
+    "drift_detection": {"last_success": None, "consecutive_failures": 0, "alive": False},
 }
 
 
