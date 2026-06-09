@@ -29,6 +29,11 @@ shoreguard --local --no-auth
   your local gateway** — no endpoint or certificates to enter.
 - `--no-auth` skips login entirely. Perfect for a single-user box; drop it when
   you want authentication (see [below](#optional-light-auth-on-a-headless-box)).
+  With `--no-auth`, ShoreGuard binds to **127.0.0.1** — the UI is reachable
+  from this machine only. To open an *unauthenticated* UI to your network you
+  must say so twice (`--host 0.0.0.0 --unsafe-lan`); the safer way to reach
+  the UI from another device is to enable authentication — with auth on,
+  ShoreGuard serves on all interfaces by default.
 
 If Docker isn't running, ShoreGuard still starts but logs a clear warning at
 boot — fix Docker, then reload. The full check is at
@@ -61,6 +66,35 @@ knob for slow first-time image pulls).
 ## 4. Open a terminal
 
 Click the sandbox, then **Terminal** for a full in-browser xterm session.
+
+---
+
+## Use your local model server (Ollama, vLLM, LM Studio, …)
+
+If an OpenAI-compatible inference server is running on this machine, the
+**Providers** page detects it automatically in local mode (Ollama, vLLM/NIM,
+llama.cpp, LM Studio on their default ports) and offers a one-click
+**Create provider** with the right `base_url` prefilled. Agents then reach
+your local models through OpenShell's `inference.local/v1` proxy — no cloud
+API key ever exists.
+
+Local servers ignore the API key, but the field must be set — the prefill
+uses `local` as a placeholder.
+
+!!! note "Gateway in a container?"
+
+    The gateway dials the `base_url`, not ShoreGuard. If your gateway
+    container does not use host networking, replace `127.0.0.1` with
+    `host.docker.internal` (or the Docker bridge IP, typically `172.17.0.1`
+    on Linux) in the provider config.
+
+## Phone notifications for approvals
+
+Subscribe to a topic in the [ntfy](https://ntfy.sh) app, then register a
+webhook on the **Webhooks** page with channel type `ntfy` and your topic URL
+(e.g. `https://ntfy.sh/my-shoreguard-topic`), subscribed to
+`approval.pending`. Overnight agent runs now buzz your phone the moment they
+need a human decision — see [Webhooks](../guides/webhooks.md#ntfy-channel-push-notifications).
 
 ---
 

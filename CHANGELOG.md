@@ -5,6 +5,53 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.37.0] — 2026-06-10
+
+### Solo-dev quality of life
+
+Builds out the single-box path (homelab, DGX Spark): safe-by-default no-auth
+binding, one-click local inference providers, and phone push notifications
+for approvals.
+
+### Added
+
+- **`--unsafe-lan` / `SHOREGUARD_UNSAFE_LAN`** — explicit opt-in required to
+  combine `--no-auth` with a non-loopback bind address. Without it, the CLI
+  refuses the combination and `enforce_production_safety()` blocks startup
+  (override still possible via `SHOREGUARD_ALLOW_UNSAFE_CONFIG`).
+- **Local inference auto-detect** — in local mode, the Providers page probes
+  the default loopback ports of Ollama (11434), vLLM/NIM (8000), llama.cpp
+  (8080), and LM Studio (1234), and offers one-click provider creation with
+  the right OpenAI-compatible `base_url` prefilled
+  (`GET /api/gateway/local-inference`). Agents reach local models through
+  `inference.local/v1` — no cloud API key ever exists.
+- **ntfy webhook channel** — new `channel_type: ntfy` posts JSON publishes
+  to an [ntfy](https://ntfy.sh) topic URL (ntfy.sh or self-hosted; optional
+  access token via `extra_config.token`). Approval events arrive as
+  high-priority pushes (`approval.pending` = high, `approval.escalated` =
+  urgent) — overnight agent runs can ping your phone for a decision. For a
+  self-hosted ntfy on a LAN address, combine with
+  `SHOREGUARD_SSRF_ALLOWED_IPS`.
+
+### Changed
+
+- **`--no-auth` now binds to `127.0.0.1`** instead of `0.0.0.0` when no
+  explicit `--host`/`SHOREGUARD_HOST` is given. Previously the unauthenticated
+  admin UI was reachable from the entire network by default. Containerised
+  no-auth deployments must now pass `--host 0.0.0.0 --unsafe-lan` explicitly.
+
+### Fixed
+
+- **CLI flags now reach the uvicorn reload worker.** Under `--reload` (the
+  default), uvicorn spawns the server as a fresh process that re-reads
+  settings from the environment — flags like `--local` and `--no-auth`
+  silently vanished there, and since the worker then looked prod-like,
+  `shoreguard --local --no-auth` crashed at boot with prod-readiness errors.
+  The CLI now exports its resolved flags to the environment.
+- The `drift_detection` background task was missing from the task-health
+  supervision map; its done-callback raised a `KeyError` whenever the loop
+  exited (e.g. drift detection disabled).
+
 ## [0.36.3] — 2026-06-10
 
 ### Added
