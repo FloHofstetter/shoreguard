@@ -75,6 +75,63 @@ async function loadProvidersPage() {
     } catch (e) {
         container.innerHTML = `<div class="alert alert-danger">${escapeHtml(e.message)}</div>`;
     }
+
+    // Fire-and-forget: offer one-click setup for local inference servers
+    // (Ollama, vLLM, …) detected on the ShoreGuard host in local mode.
+    renderLocalInferenceHint();
+}
+
+async function renderLocalInferenceHint() {
+    const hint = document.getElementById('local-inference-hint');
+    if (!hint || !_sgHasRole('operator')) return;
+    let detected;
+    try {
+        const resp = await apiFetch(`${API_GLOBAL}/gateway/local-inference`);
+        detected = resp.detected || [];
+    } catch {
+        return; // detection is best-effort decoration, never an error state
+    }
+    // Skip servers that already have a provider pointing at them.
+    const knownUrls = new Set(
+        _providerCache.map(p => (p.config || {}).base_url).filter(Boolean)
+    );
+    const fresh = detected.filter(d => !knownUrls.has(d.base_url));
+    if (fresh.length === 0) {
+        hint.innerHTML = '';
+        return;
+    }
+
+    const rows = fresh.map(d => {
+        const models = (d.models || []).slice(0, 3).map(escapeHtml).join(', ');
+        const modelInfo = models
+            ? `<span class="text-muted small">serving ${models}${d.models.length > 3 ? ', …' : ''}</span>`
+            : '';
+        const params = new URLSearchParams({
+            name: d.suggested_name,
+            type: d.provider_type,
+            base_url: d.base_url,
+        });
+        return `
+            <div class="d-flex align-items-center justify-content-between py-1">
+                <div>
+                    <i class="bi bi-cpu me-2"></i><strong>${escapeHtml(d.label)}</strong>
+                    <span class="font-monospace small text-muted ms-2">${escapeHtml(d.base_url)}</span>
+                    ${modelInfo}
+                </div>
+                <a class="btn btn-sm btn-outline-success ms-3"
+                   href="${window.location.pathname}/new?${params.toString()}">
+                    <i class="bi bi-plus-lg me-1"></i>Create provider
+                </a>
+            </div>`;
+    }).join('');
+
+    hint.innerHTML = `
+        <div class="alert alert-info py-2 mb-3">
+            <div class="small fw-semibold mb-1">
+                <i class="bi bi-lightbulb me-1"></i>Local inference detected on this machine
+            </div>
+            ${rows}
+        </div>`;
 }
 
 function renderProviderRow(provider) {
@@ -143,6 +200,21 @@ function providerForm(mode, providerName) {
 
         async init() {
             await _ensureProviderTypes();
+            if (this.mode === 'create') {
+                // Prefill from query params — used by the local-inference
+                // detection banner on the providers page. Local servers
+                // ignore the API key, but the gateway wants one set.
+                const params = new URLSearchParams(window.location.search);
+                if (params.get('type')) {
+                    this.fName = params.get('name') || '';
+                    this.fType = params.get('type');
+                    this.onTypeChange();
+                    if (params.get('base_url')) {
+                        this.fConfig = `base_url=${params.get('base_url')}`;
+                        if (!this.fApiKey) this.fApiKey = 'local';
+                    }
+                }
+            }
             if (this.mode === 'edit' && this.providerName) {
                 try {
                     const resp = await apiFetch(`${API}/providers`);

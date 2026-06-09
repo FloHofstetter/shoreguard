@@ -48,6 +48,15 @@ gateway configurations and imports them automatically. This means gateways
 you created with the OpenShell CLI appear in the ShoreGuard dashboard without
 any manual registration.
 
+## Local inference detection
+
+In local mode, the Providers page probes the default loopback ports of
+common OpenAI-compatible servers — Ollama (`11434`), vLLM/NIM (`8000`),
+llama.cpp (`8080`), and LM Studio (`1234`) — and offers a one-click
+provider setup with the right `base_url` prefilled
+(`GET /api/gateway/local-inference`). See
+[Solo Dev](../getting-started/solo-dev.md#use-your-local-model-server-ollama-vllm-lm-studio-) for details.
+
 ## Network restrictions
 
 In local mode, ShoreGuard relaxes the SSRF check for private IP addresses

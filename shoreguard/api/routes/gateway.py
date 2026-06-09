@@ -736,6 +736,26 @@ async def gateway_diagnostics() -> dict[str, Any]:
     return await asyncio.to_thread(mgr.diagnostics)
 
 
+@router.get("/local-inference", dependencies=[Depends(require_role("operator"))])
+async def gateway_local_inference() -> dict[str, Any]:
+    """Detect OpenAI-compatible inference servers running on this machine.
+
+    Probes the well-known loopback ports of Ollama, vLLM/NIM, llama.cpp and
+    LM Studio so the UI can offer one-click provider setup on a solo box.
+    Probing only happens in local mode; otherwise the result is empty.
+
+    Returns:
+        dict[str, Any]: ``{"local_mode": bool, "detected": [...]}`` where each
+            detection carries label, base_url, provider_type, suggested_name,
+            and the models the server reported.
+    """
+    if not get_settings().server.local_mode:
+        return {"local_mode": False, "detected": []}
+    from shoreguard.services.local_inference import detect_local_inference
+
+    return {"local_mode": True, "detected": await asyncio.to_thread(detect_local_inference)}
+
+
 @router.post("/{name}/start", dependencies=[Depends(require_role("admin"))])
 async def gateway_start_named(name: str, request: Request) -> dict[str, Any]:
     """Start a specific gateway by name (local mode).
