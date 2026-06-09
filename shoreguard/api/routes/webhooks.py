@@ -40,17 +40,38 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-VALID_CHANNEL_TYPES = ("generic", "slack", "discord", "email")
+VALID_CHANNEL_TYPES = ("generic", "slack", "discord", "email", "ntfy")
+
+
+def _require_ntfy_topic(url: str) -> None:
+    """Reject ntfy URLs without a topic path segment.
+
+    Args:
+        url: The webhook target URL.
+
+    Raises:
+        HTTPException: 400 when the URL has no topic
+            (e.g. ``https://ntfy.sh`` instead of ``https://ntfy.sh/my-topic``).
+    """
+    from urllib.parse import urlsplit
+
+    if not urlsplit(url).path.strip("/"):
+        raise HTTPException(
+            400,
+            "ntfy webhooks need the topic in the URL, e.g. https://ntfy.sh/my-topic",
+        )
 
 
 class WebhookCreateRequest(BaseModel):
     """Request body for creating a webhook.
 
     Attributes:
-        url: Target URL for POST requests.
+        url: Target URL for POST requests. For ntfy this is the topic URL
+            (e.g. ``https://ntfy.sh/my-topic``).
         event_types: List of event type strings to subscribe to.
-        channel_type: Channel type (generic, slack, discord, email).
-        extra_config: Optional channel-specific config (e.g. SMTP settings).
+        channel_type: Channel type (generic, slack, discord, email, ntfy).
+        extra_config: Optional channel-specific config (e.g. SMTP settings,
+            or ``{"token": "tk_..."}`` for ntfy access tokens).
     """
 
     url: str = Field(max_length=2048)
@@ -195,6 +216,8 @@ async def create_webhook(body: WebhookCreateRequest, request: Request) -> dict[s
         if "smtp_host" not in body.extra_config or "to_addrs" not in body.extra_config:
             raise HTTPException(400, "Email extra_config must include smtp_host and to_addrs")
         validate_smtp_host(str(body.extra_config["smtp_host"]))
+    if body.channel_type == "ntfy":
+        _require_ntfy_topic(body.url)
 
     extra_config_json = json.dumps(body.extra_config) if body.extra_config else None
     actor = getattr(request.state, "user_id", "unknown")
@@ -268,6 +291,8 @@ async def update_webhook(
     svc = _get_svc()
     if body.url is not None:
         validate_webhook_url(body.url)
+        if body.channel_type == "ntfy":
+            _require_ntfy_topic(body.url)
     if body.extra_config and "smtp_host" in body.extra_config:
         validate_smtp_host(str(body.extra_config["smtp_host"]))
 

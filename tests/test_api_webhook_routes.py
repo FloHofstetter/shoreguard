@@ -134,6 +134,28 @@ class TestCreateWebhook:
         )
         assert resp.status_code == 422
 
+    async def test_create_ntfy_with_topic_url(self, admin_client):
+        data = await _create_webhook(
+            admin_client,
+            url="https://example.com/my-topic",
+            channel_type="ntfy",
+            extra_config={"token": "tk_x"},
+        )
+        assert data["channel_type"] == "ntfy"
+        assert data["extra_config"]["token"] == "tk_x"
+
+    async def test_create_ntfy_without_topic_rejected(self, admin_client):
+        resp = await admin_client.post(
+            "/api/webhooks",
+            json={
+                "url": "https://example.com",
+                "event_types": ["*"],
+                "channel_type": "ntfy",
+            },
+        )
+        assert resp.status_code == 400
+        assert "topic" in resp.json()["detail"]
+
     async def test_create_email_missing_config(self, admin_client):
         resp = await admin_client.post(
             "/api/webhooks",

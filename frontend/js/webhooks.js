@@ -20,6 +20,7 @@ function webhooksPage() {
         newChannel: 'generic',
         newSmtpHost: '',
         newToAddrs: '',
+        newNtfyToken: '',
         createError: '',
 
         // Last-created webhook secret reveal (cleared on dismiss)
@@ -89,6 +90,9 @@ function webhooksPage() {
                 }
                 body.extra_config = { smtp_host: host, to_addrs: to };
             }
+            if (this.newChannel === 'ntfy' && (this.newNtfyToken || '').trim()) {
+                body.extra_config = { token: this.newNtfyToken.trim() };
+            }
 
             try {
                 const created = await apiFetch('/api/webhooks', {
@@ -107,6 +111,7 @@ function webhooksPage() {
                 this.newChannel = 'generic';
                 this.newSmtpHost = '';
                 this.newToAddrs = '';
+                this.newNtfyToken = '';
                 this.showCreate = false;
                 this.load();
             } catch (e) {

@@ -298,6 +298,48 @@ class TestDeliveryRetry:
         self._svc._inc_delivery_counter.assert_called_once_with("failed")
         self._mock_sleep.assert_not_called()
 
+    async def test_ntfy_posts_to_root_with_topic_and_token(self):
+        from shoreguard.services.formatters import format_ntfy
+
+        target = _make_target(
+            url="https://ntfy.example.com/alerts",
+            channel_type="ntfy",
+            extra_config='{"token": "tk_secret"}',
+        )
+        body = format_ntfy("approval.pending", {"sandbox": "sb-1"}, "2026-06-10T00:00:00+00:00")
+        mock_resp = httpx.Response(200)
+        with patch("shoreguard.services.webhooks.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_resp
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await self._svc._deliver_http_with_retry(target, body, 42)
+
+        args, kwargs = mock_client.post.call_args
+        assert args[0] == "https://ntfy.example.com"
+        sent = json.loads(kwargs["content"])
+        assert sent["topic"] == "alerts"
+        assert sent["priority"] == 4
+        assert kwargs["headers"]["Authorization"] == "Bearer tk_secret"
+        assert self._svc._update_delivery.call_args.kwargs["status"] == "success"
+
+    async def test_ntfy_without_token_has_no_auth_header(self):
+        target = _make_target(url="https://ntfy.example.com/alerts", channel_type="ntfy")
+        body = '{"topic": "", "title": "t", "message": "m", "priority": 3}'
+        mock_resp = httpx.Response(200)
+        with patch("shoreguard.services.webhooks.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_resp
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await self._svc._deliver_http_with_retry(target, body, 42)
+
+        _, kwargs = mock_client.post.call_args
+        assert "Authorization" not in kwargs["headers"]
+        assert "X-Shoreguard-Signature" not in kwargs["headers"]
+
     async def test_timeout_retries_then_exhausted(self):
         max_attempts = len(RETRY_DELAYS) + 1
         with patch("shoreguard.services.webhooks.httpx.AsyncClient") as mock_cls:

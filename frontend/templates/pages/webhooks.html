@@ -71,6 +71,7 @@
                                 <option value="slack">slack</option>
                                 <option value="discord">discord</option>
                                 <option value="email">email</option>
+                                <option value="ntfy">ntfy</option>
                             </select>
                         </div>
                         <div class="col-md-3 d-flex align-items-end">
@@ -108,6 +109,26 @@
                                         </label>
                                         <input type="text" class="form-control form-control-sm"
                                                x-model="newToAddrs" placeholder="ops@example.com">
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="newChannel === 'ntfy'">
+                            <div class="col-12">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted mb-1">
+                                            Access token <span class="text-muted">(optional)</span>
+                                        </label>
+                                        <input type="password" class="form-control form-control-sm"
+                                               x-model="newNtfyToken" placeholder="tk_...">
+                                    </div>
+                                    <div class="col-md-6 d-flex align-items-end">
+                                        <div class="form-text small">
+                                            Target URL is the topic URL you subscribe to,
+                                            e.g. <code>https://ntfy.sh/my-topic</code>.
+                                            Approvals arrive as high-priority pushes.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -224,6 +245,7 @@
                             <option value="slack">slack</option>
                             <option value="discord">discord</option>
                             <option value="email">email</option>
+                            <option value="ntfy">ntfy</option>
                         </select>
                     </div>
                     <div class="mb-2">

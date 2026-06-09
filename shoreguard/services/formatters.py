@@ -1,11 +1,11 @@
 """Channel-specific payload formatters for webhook notifications.
 
-Each supported channel (Slack, Discord, Email, generic JSON)
+Each supported channel (Slack, Discord, Email, ntfy, generic JSON)
 expects a different payload shape. Rather than branch inside the
 delivery pipeline, these formatters take a uniform
 ``(event, resource)`` input and produce the channel-appropriate
 body: Slack Block Kit, Discord embed fields, plain-text email,
-or signed generic JSON.
+an ntfy JSON publish, or signed generic JSON.
 
 Pure functions with no I/O so the delivery pipeline in
 :mod:`shoreguard.services.webhooks` can render and sign a
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 _EVENT_LABELS: dict[str, str] = {
     "approval.pending": "Approval Pending",
@@ -172,6 +173,84 @@ def format_discord(event_type: str, payload: dict[str, Any], timestamp: str) -> 
     return json.dumps({"embeds": [embed]})
 
 
+# ntfy priorities: 5 = urgent (bypasses do-not-disturb on most phones),
+# 4 = high, 3 = default. Approvals are the events a solo operator wants
+# their phone to buzz for.
+_NTFY_PRIORITIES: dict[str, int] = {
+    "approval.pending": 4,
+    "approval.escalated": 5,
+    "approval.rejected": 4,
+}
+
+# ntfy tags: leading entries that are emoji shortcodes render as emoji.
+_NTFY_TAGS: dict[str, str] = {
+    "approval.pending": "hourglass_flowing_sand",
+    "approval.approved": "white_check_mark",
+    "approval.rejected": "x",
+    "approval.escalated": "rotating_light",
+    "sandbox.created": "package",
+    "sandbox.deleted": "wastebasket",
+    "gateway.registered": "satellite",
+    "gateway.unregistered": "satellite",
+    "policy.updated": "shield",
+    "webhook.test": "bell",
+}
+
+
+def format_ntfy(event_type: str, payload: dict[str, Any], timestamp: str) -> str:
+    """Format an ntfy JSON publish message (topic injected at delivery time).
+
+    The ``topic`` field is left empty here — it is parsed from the webhook's
+    topic URL by :func:`prepare_ntfy_request` so this formatter stays a pure
+    function of the event.
+
+    Args:
+        event_type: Machine-readable event type.
+        payload: Event data payload.
+        timestamp: ISO-8601 timestamp string.
+
+    Returns:
+        str: JSON-encoded ntfy publish body.
+    """
+    label = _event_label(event_type)
+    lines = [f"{k}: {v}" for k, v in _payload_fields(payload)]
+    lines.append(f"at {timestamp}")
+    message: dict[str, Any] = {
+        "topic": "",
+        "title": f"ShoreGuard — {label}",
+        "message": "\n".join(lines),
+        "priority": _NTFY_PRIORITIES.get(event_type, 3),
+    }
+    tag = _NTFY_TAGS.get(event_type)
+    if tag:
+        message["tags"] = [tag]
+    return json.dumps(message)
+
+
+def prepare_ntfy_request(url: str, body: str) -> tuple[str, str]:
+    """Split an ntfy topic URL into the server root and a body with topic set.
+
+    ntfy's JSON publish endpoint is the server *root* with the topic inside
+    the body, but operators naturally enter the topic URL they subscribe to
+    (e.g. ``https://ntfy.sh/shoreguard``). The last path segment is the topic.
+
+    Args:
+        url: The webhook's topic URL.
+        body: JSON body produced by :func:`format_ntfy`.
+
+    Returns:
+        tuple[str, str]: ``(post_url, body)`` — the server root to POST to
+            and the body with the ``topic`` field filled in.
+    """
+    parsed = urlsplit(url)
+    path = parsed.path.strip("/")
+    topic = path.split("/")[-1] if path else ""
+    root = urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+    data = json.loads(body)
+    data["topic"] = topic
+    return root, json.dumps(data)
+
+
 def format_email_body(event_type: str, payload: dict[str, Any], timestamp: str) -> str:
     """Format a plain-text email body.
 
@@ -195,4 +274,5 @@ FORMATTERS: dict[str, Any] = {
     "slack": format_slack,
     "discord": format_discord,
     "email": format_email_body,
+    "ntfy": format_ntfy,
 }

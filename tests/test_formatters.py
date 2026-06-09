@@ -11,7 +11,9 @@ from shoreguard.services.formatters import (
     format_discord,
     format_email_body,
     format_generic,
+    format_ntfy,
     format_slack,
+    prepare_ntfy_request,
 )
 
 _SAMPLE_PAYLOAD = {"sandbox": "test-sb", "gateway": "dev", "actor": "admin@test.com"}
@@ -365,9 +367,55 @@ class TestFormatEmail:
 # ── FORMATTERS dict ──────────────────────────────────────────────────────────
 
 
+class TestFormatNtfy:
+    def test_produces_valid_json_with_empty_topic(self):
+        body = json.loads(format_ntfy("sandbox.created", _SAMPLE_PAYLOAD, _SAMPLE_TIMESTAMP))
+        assert body["topic"] == ""
+        assert body["title"] == "ShoreGuard — Sandbox Created"
+        assert "Sandbox: test-sb" in body["message"]
+        assert _SAMPLE_TIMESTAMP in body["message"]
+
+    def test_approval_pending_is_high_priority(self):
+        body = json.loads(format_ntfy("approval.pending", _SAMPLE_PAYLOAD, _SAMPLE_TIMESTAMP))
+        assert body["priority"] == 4
+        assert body["tags"] == ["hourglass_flowing_sand"]
+
+    def test_escalation_is_urgent(self):
+        body = json.loads(format_ntfy("approval.escalated", {}, _SAMPLE_TIMESTAMP))
+        assert body["priority"] == 5
+
+    def test_unknown_event_default_priority_no_tags(self):
+        body = json.loads(format_ntfy("custom.event", {}, _SAMPLE_TIMESTAMP))
+        assert body["priority"] == 3
+        assert "tags" not in body
+
+
+class TestPrepareNtfyRequest:
+    def test_splits_topic_url(self):
+        body = format_ntfy("webhook.test", {}, _SAMPLE_TIMESTAMP)
+        post_url, new_body = prepare_ntfy_request("https://ntfy.sh/my-topic", body)
+        assert post_url == "https://ntfy.sh"
+        assert json.loads(new_body)["topic"] == "my-topic"
+
+    def test_self_hosted_with_port_and_nested_path(self):
+        body = format_ntfy("webhook.test", {}, _SAMPLE_TIMESTAMP)
+        post_url, new_body = prepare_ntfy_request("http://ntfy.lan:8080/sub/alerts", body)
+        assert post_url == "http://ntfy.lan:8080"
+        assert json.loads(new_body)["topic"] == "alerts"
+
+    def test_url_without_topic_keeps_empty_topic(self):
+        body = format_ntfy("webhook.test", {}, _SAMPLE_TIMESTAMP)
+        post_url, new_body = prepare_ntfy_request("https://ntfy.sh", body)
+        assert post_url == "https://ntfy.sh"
+        assert json.loads(new_body)["topic"] == ""
+
+
 class TestFormattersDict:
     def test_all_keys_present(self):
-        assert set(FORMATTERS.keys()) == {"generic", "slack", "discord", "email"}
+        assert set(FORMATTERS.keys()) == {"generic", "slack", "discord", "email", "ntfy"}
+
+    def test_ntfy_is_format_ntfy(self):
+        assert FORMATTERS["ntfy"] is format_ntfy
 
     def test_generic_is_format_generic(self):
         assert FORMATTERS["generic"] is format_generic

@@ -41,6 +41,30 @@ Each webhook has a `channel_type` that controls payload formatting and delivery:
 | `slack` | HTTP POST to Slack incoming webhook URL | Slack Block Kit with mrkdwn and color coding |
 | `discord` | HTTP POST to Discord webhook URL | Discord embed with color-coded fields |
 | `email` | SMTP delivery | Plain-text email |
+| `ntfy` | HTTP POST to an [ntfy](https://ntfy.sh) server | ntfy JSON publish with title, priority, and tags |
+
+### ntfy channel (push notifications)
+
+Point the webhook URL at the **topic URL you subscribe to** on your phone —
+either ntfy.sh or a self-hosted server:
+
+```json
+{
+  "url": "https://ntfy.sh/my-shoreguard-topic",
+  "channel_type": "ntfy",
+  "event_types": ["approval.pending", "approval.escalated"],
+  "extra_config": {"token": "tk_..."}
+}
+```
+
+`extra_config.token` is optional and sent as a `Bearer` token for servers with
+access control. Approval events arrive as high-priority pushes
+(`approval.pending` = high, `approval.escalated` = urgent), so an overnight
+agent run can ping your phone the moment it needs a human decision.
+
+A self-hosted ntfy on a LAN address is blocked by SSRF protection by default —
+exempt it via `SHOREGUARD_SSRF_ALLOWED_IPS` (see
+[SSRF protection](../concepts/security.md#ssrf-protection)).
 
 ### Email channel
 
@@ -92,8 +116,9 @@ X-Shoreguard-Signature: sha256=<hex-digest>
 ```
 
 Verify by computing `HMAC-SHA256(secret, request_body)` and comparing the hex
-digest. Slack and Discord channels do not use signing — they rely on the
-provider's built-in URL validation.
+digest. Slack, Discord, and ntfy channels do not use signing — they rely on
+the provider's built-in URL validation (or, for ntfy, the optional access
+token).
 
 ### Python example
 

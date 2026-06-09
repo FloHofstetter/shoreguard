@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from shoreguard.settings import WebhookSettings
 
 from shoreguard.models import Webhook, WebhookDelivery
-from shoreguard.services.formatters import FORMATTERS
+from shoreguard.services.formatters import FORMATTERS, prepare_ntfy_request
 
 logger = logging.getLogger(__name__)
 
@@ -428,6 +428,24 @@ class WebhookService:
             return
         await self._deliver_http_with_retry(target, body, delivery_id)
 
+    @staticmethod
+    def _extra_config_value(target: _Target, key: str) -> str | None:
+        """Read one string value from a target's extra_config JSON.
+
+        Args:
+            target: Delivery target whose ``extra_config`` to inspect.
+            key: Top-level key to look up.
+
+        Returns:
+            str | None: The value if present and a non-empty string,
+                otherwise ``None`` (including on unparsable config).
+        """
+        try:
+            value = json.loads(target.extra_config or "{}").get(key)
+        except TypeError, ValueError:
+            return None
+        return value if isinstance(value, str) and value else None
+
     async def _deliver_http_with_retry(self, target: _Target, body: str, delivery_id: int) -> None:
         """POST a payload with retry on 5xx and network errors.
 
@@ -458,9 +476,17 @@ class WebhookService:
             return
 
         headers: dict[str, str] = {"Content-Type": "application/json"}
+        post_url = target.url
         if target.channel_type == "generic":
             signature = hmac.new(target.secret.encode(), body.encode(), hashlib.sha256).hexdigest()
             headers["X-Shoreguard-Signature"] = f"sha256={signature}"
+        elif target.channel_type == "ntfy":
+            # ntfy's JSON publish goes to the server root with the topic in
+            # the body — the registered URL is the human-facing topic URL.
+            post_url, body = prepare_ntfy_request(target.url, body)
+            token = self._extra_config_value(target, "token")
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
 
         wh_cfg = _webhook_settings()
         retry_delays = wh_cfg.retry_delays
@@ -470,7 +496,7 @@ class WebhookService:
         for attempt in range(1, max_attempts + 1):
             try:
                 async with httpx.AsyncClient(timeout=wh_cfg.delivery_timeout) as client:
-                    resp = await client.post(target.url, content=body, headers=headers)
+                    resp = await client.post(post_url, content=body, headers=headers)
                     if resp.status_code < 400:
                         await asyncio.to_thread(
                             self._update_delivery,
