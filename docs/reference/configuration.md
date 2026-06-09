@@ -31,7 +31,8 @@ environment variables, which override built-in defaults.
 
 | Variable | CLI Flag | Default | Description |
 |----------|----------|---------|-------------|
-| `SHOREGUARD_HOST` | `--host` | `0.0.0.0` | Bind address |
+| `SHOREGUARD_HOST` | `--host` | `0.0.0.0` | Bind address. With `--no-auth` and no explicit host, the CLI binds `127.0.0.1` instead |
+| `SHOREGUARD_UNSAFE_LAN` | `--unsafe-lan` | `false` | Allow `--no-auth` on a non-loopback bind address. **Everyone on the network gets unauthenticated admin access** — use only on trusted networks |
 | `SHOREGUARD_PORT` | `--port` | `8888` | HTTP port |
 | `SHOREGUARD_LOG_LEVEL` | `--log-level` | `info` | Log verbosity (`debug`, `info`, `warning`, `error`) |
 | `SHOREGUARD_LOG_FORMAT` | — | `text` | Log output format (`text`, `json`) |
@@ -48,7 +49,7 @@ environment variables, which override built-in defaults.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SHOREGUARD_NO_AUTH` | `false` | Disable all authentication (**development only**) |
+| `SHOREGUARD_NO_AUTH` | `false` | Disable all authentication (**development only**). The CLI then binds to `127.0.0.1` unless a host is given explicitly; a non-loopback host additionally requires `SHOREGUARD_UNSAFE_LAN` |
 | `SHOREGUARD_SECRET_KEY` | auto-generated | HMAC secret for session cookies. **Set this in production** — otherwise a random key is generated on each restart, invalidating all sessions |
 | `SHOREGUARD_ALLOW_REGISTRATION` | `false` | Allow self-registration for new users (viewer role) |
 | `SHOREGUARD_ADMIN_PASSWORD` | — | Bootstrap admin account password for headless setup (skip wizard) |

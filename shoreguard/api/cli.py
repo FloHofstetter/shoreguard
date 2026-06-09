@@ -106,7 +106,18 @@ def main(
         typer.Option(
             "--no-auth/--auth",
             envvar="SHOREGUARD_NO_AUTH",
-            help="Disable authentication entirely (local development only).",
+            help="Disable authentication entirely (local development only). "
+            "Binds to 127.0.0.1 unless --host is given explicitly.",
+            rich_help_panel="Development",
+        ),
+    ] = False,
+    unsafe_lan: Annotated[
+        bool,
+        typer.Option(
+            "--unsafe-lan/--no-unsafe-lan",
+            envvar="SHOREGUARD_UNSAFE_LAN",
+            help="Allow --no-auth on a non-loopback --host. Everyone on the "
+            "network gets unauthenticated admin access — use only on trusted networks.",
             rich_help_panel="Development",
         ),
     ] = False,
@@ -139,17 +150,40 @@ def main(
         reload: Auto-reload on code changes.
         local: Enable local mode with Docker lifecycle management.
         no_auth: Disable authentication entirely.
+        unsafe_lan: Allow no_auth on a non-loopback bind address.
         database_url: SQLAlchemy database URL override.
         version: Print version and exit (handled by callback).
+
+    Raises:
+        typer.BadParameter: If ``--no-auth`` is combined with an explicit
+            non-loopback ``--host`` without ``--unsafe-lan``.
     """
     # If a subcommand (e.g. `shoreguard config show`) was invoked, the
     # callback still runs — but we must not start the server.
     if ctx.invoked_subcommand is not None:
         return
 
-    import uvicorn
+    import os
 
-    from shoreguard.settings import get_settings, override_settings
+    import uvicorn
+    from click.core import ParameterSource
+
+    from shoreguard.settings import LOOPBACK_HOSTS, get_settings, override_settings
+
+    # Without auth, an exposed bind address hands admin access to the whole
+    # network — default to loopback and require an explicit double opt-in
+    # (--host plus --unsafe-lan) to expose the UI anyway.
+    if no_auth:
+        host_explicit = ctx.get_parameter_source("host") != ParameterSource.DEFAULT
+        if not host_explicit:
+            host = "127.0.0.1"
+        elif host not in LOOPBACK_HOSTS and not unsafe_lan:
+            raise typer.BadParameter(
+                f"--no-auth with --host {host} would serve an unauthenticated admin UI "
+                "to everyone on the network. Bind to 127.0.0.1, enable authentication, "
+                "or pass --unsafe-lan if you accept the risk.",
+                param_hint="--host",
+            )
 
     # Push CLI-resolved values into the Settings singleton so the rest of
     # the application (lifespan, services, routes) reads from one place.
@@ -164,6 +198,7 @@ def main(
                         "log_level": log_level,
                         "reload": reload,
                         "local_mode": local,
+                        "unsafe_lan": unsafe_lan,
                         "database_url": database_url or settings.server.database_url,
                     },
                 ),
@@ -172,6 +207,20 @@ def main(
         ),
     )
     settings = get_settings()
+
+    # The override above only mutates THIS process. Under --reload uvicorn
+    # spawns the actual server as a fresh subprocess ("spawn" context) that
+    # re-reads settings from the environment — without this export, flags
+    # like --local and --no-auth silently vanish in the worker.
+    os.environ["SHOREGUARD_HOST"] = host
+    os.environ["SHOREGUARD_PORT"] = str(port)
+    os.environ["SHOREGUARD_LOG_LEVEL"] = log_level
+    os.environ["SHOREGUARD_RELOAD"] = "true" if reload else "false"
+    os.environ["SHOREGUARD_LOCAL_MODE"] = "true" if local else "false"
+    os.environ["SHOREGUARD_NO_AUTH"] = "true" if no_auth else "false"
+    os.environ["SHOREGUARD_UNSAFE_LAN"] = "true" if unsafe_lan else "false"
+    if database_url:
+        os.environ["SHOREGUARD_DATABASE_URL"] = database_url
 
     use_json = settings.server.log_format == "json"
 
@@ -208,6 +257,12 @@ def main(
 
     if no_auth:
         logger.warning("Authentication DISABLED — do not use in production")
+        if host in LOOPBACK_HOSTS:
+            logger.info(
+                "no-auth: binding to %s (reachable from this machine only); "
+                "pass --host and --unsafe-lan to expose on the network",
+                host,
+            )
     if local:
         logger.info("Local mode enabled")
     if database_url:

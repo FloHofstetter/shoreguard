@@ -880,7 +880,9 @@ def test_cli_defaults():
     from shoreguard.api.cli import cli
 
     runner = _cli_runner()
-    with patch("uvicorn.run") as mock_run:
+    # main() exports resolved flags into os.environ for the reload worker;
+    # patch.dict snapshots and restores so tests stay isolated.
+    with patch.dict("os.environ"), patch("uvicorn.run") as mock_run:
         result = runner.invoke(cli, [])
         assert result.exit_code == 0
         assert mock_run.call_args[1]["host"] == "0.0.0.0"
@@ -892,7 +894,7 @@ def test_cli_all_flags():
     from shoreguard.api.cli import cli
 
     runner = _cli_runner()
-    with patch("uvicorn.run") as mock_run:
+    with patch.dict("os.environ"), patch("uvicorn.run") as mock_run:
         result = runner.invoke(
             cli,
             ["--host", "127.0.0.1", "--port", "9000", "--log-level", "debug", "--no-reload"],
@@ -934,6 +936,82 @@ def test_cli_overrides_env():
             result = runner.invoke(cli, ["--host", "127.0.0.1"])
             assert result.exit_code == 0
             assert mock_run.call_args[1]["host"] == "127.0.0.1"
+
+
+# ─── 3D2: CLI no-auth bind safety ────────────────────────────────────────────
+
+
+def test_cli_no_auth_defaults_to_loopback():
+    """--no-auth without an explicit --host must not expose the UI on 0.0.0.0."""
+    from shoreguard.api.cli import cli
+
+    runner = _cli_runner()
+    with patch.dict("os.environ"), patch("uvicorn.run") as mock_run:
+        result = runner.invoke(cli, ["--no-auth"])
+        assert result.exit_code == 0
+        assert mock_run.call_args[1]["host"] == "127.0.0.1"
+
+
+def test_cli_no_auth_explicit_lan_host_refused():
+    from shoreguard.api.cli import cli
+
+    runner = _cli_runner()
+    with patch.dict("os.environ"), patch("uvicorn.run") as mock_run:
+        result = runner.invoke(cli, ["--no-auth", "--host", "0.0.0.0"])
+        assert result.exit_code != 0
+        mock_run.assert_not_called()
+
+
+def test_cli_no_auth_env_lan_host_refused():
+    """A non-loopback host from SHOREGUARD_HOST counts as explicit too."""
+    from shoreguard.api.cli import cli
+
+    runner = _cli_runner()
+    with patch.dict("os.environ", {"SHOREGUARD_HOST": "10.0.0.1"}):
+        with patch("uvicorn.run") as mock_run:
+            result = runner.invoke(cli, ["--no-auth"])
+            assert result.exit_code != 0
+            mock_run.assert_not_called()
+
+
+def test_cli_no_auth_lan_host_with_unsafe_lan_allowed():
+    from shoreguard.api.cli import cli
+
+    runner = _cli_runner()
+    with patch.dict("os.environ"), patch("uvicorn.run") as mock_run:
+        result = runner.invoke(cli, ["--no-auth", "--host", "0.0.0.0", "--unsafe-lan"])
+        assert result.exit_code == 0
+        assert mock_run.call_args[1]["host"] == "0.0.0.0"
+
+
+def test_cli_no_auth_explicit_loopback_host_ok():
+    from shoreguard.api.cli import cli
+
+    runner = _cli_runner()
+    with patch.dict("os.environ"), patch("uvicorn.run") as mock_run:
+        result = runner.invoke(cli, ["--no-auth", "--host", "::1"])
+        assert result.exit_code == 0
+        assert mock_run.call_args[1]["host"] == "::1"
+
+
+def test_cli_exports_resolved_flags_to_env():
+    """CLI flags must reach the uvicorn reload worker via the environment.
+
+    Under --reload uvicorn spawns the server as a fresh process that re-reads
+    settings from env — without the export, --local/--no-auth silently vanish.
+    """
+    import os
+
+    from shoreguard.api.cli import cli
+
+    runner = _cli_runner()
+    with patch.dict("os.environ"), patch("uvicorn.run"):
+        result = runner.invoke(cli, ["--local", "--no-auth", "--port", "9001"])
+        assert result.exit_code == 0
+        assert os.environ["SHOREGUARD_LOCAL_MODE"] == "true"
+        assert os.environ["SHOREGUARD_NO_AUTH"] == "true"
+        assert os.environ["SHOREGUARD_HOST"] == "127.0.0.1"
+        assert os.environ["SHOREGUARD_PORT"] == "9001"
 
 
 # ─── 3E: Frontend Resolution ─────────────────────────────────────────────────

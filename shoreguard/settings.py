@@ -25,6 +25,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+# Bind addresses that only expose the server on the local machine.
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
 
 def _validate_cidr_list(value: str, env_var: str) -> str:
     """Parse each entry of a comma-separated CIDR list so misconfigurations fail fast.
@@ -83,6 +86,9 @@ class ServerSettings(BaseSettings):
             private/loopback SSRF rejection. Matched against the resolved address;
             entries in always_blocked_ips take precedence. Parsed once at startup;
             an invalid entry hard-fails boot.
+        unsafe_lan (bool): Allow serving without authentication (no_auth) on a
+            non-loopback bind address. Off by default — an unauthenticated UI on
+            a network interface gives everyone on that network admin access.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_")
@@ -144,6 +150,12 @@ class ServerSettings(BaseSettings):
         "Matched against the resolved address, so hostnames are exempt only if they resolve "
         "into an allowlisted range. SHOREGUARD_ALWAYS_BLOCKED_IPS takes precedence. Parsed "
         "once at startup; an invalid entry hard-fails boot.",
+    )
+    unsafe_lan: bool = Field(
+        default=False,
+        description="Allow serving without authentication (SHOREGUARD_NO_AUTH) on a "
+        "non-loopback bind address. Off by default — an unauthenticated UI on a network "
+        "interface gives everyone on that network admin access.",
     )
 
     @field_validator("always_blocked_ips")
@@ -1085,7 +1097,7 @@ class Settings(BaseSettings):
         return (
             not self.server.local_mode
             and not self.auth.no_auth
-            and self.server.host not in {"127.0.0.1", "localhost", "::1"}
+            and self.server.host not in LOOPBACK_HOSTS
         )
 
     def check_production_readiness(self) -> list[str]:
@@ -1112,6 +1124,21 @@ class Settings(BaseSettings):
 
         if not (0 < self.server.port < 65536):
             warnings.append(f"WARN: server.port={self.server.port} is out of range")
+
+        if self.auth.no_auth and self.server.host not in LOOPBACK_HOSTS:
+            if not self.server.unsafe_lan:
+                warnings.append(
+                    f"ERROR: no_auth is enabled while binding to {self.server.host!r} — an "
+                    "unauthenticated admin UI on a network interface gives everyone on that "
+                    "network full control. Bind to 127.0.0.1, enable authentication, or set "
+                    "SHOREGUARD_UNSAFE_LAN=true (--unsafe-lan) if you accept the risk."
+                )
+            else:
+                warnings.append(
+                    f"WARN: unsafe_lan is set — serving an UNAUTHENTICATED admin UI on "
+                    f"{self.server.host!r}; everyone who can reach this interface has full "
+                    "control over all gateways and sandboxes"
+                )
 
         if not self.auth.no_auth:
             if self.auth.secret_key is None:

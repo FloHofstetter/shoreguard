@@ -19,6 +19,7 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_FORWARDED_ALLOW_IPS` | `127.0.0.1` | Comma-separated IPs (or '*') whose X-Forwarded-* headers uvicorn trusts. Set to '*' when serving behind a k8s Ingress — the default only trusts loopback, which means TLS-terminating proxies are ignored. |
 | `SHOREGUARD_ALWAYS_BLOCKED_IPS` | `` | Comma-separated IPs or CIDR ranges that are always blocked as SSRF targets regardless of local_mode. Mirrors upstream OpenShell #814. Parsed once at startup; an invalid entry hard-fails boot. |
 | `SHOREGUARD_SSRF_ALLOWED_IPS` | `` | Comma-separated IPs or CIDR ranges exempted from the private/loopback SSRF rejection — e.g. a homelab OIDC provider or webhook target on a LAN address. Matched against the resolved address, so hostnames are exempt only if they resolve into an allowlisted range. SHOREGUARD_ALWAYS_BLOCKED_IPS takes precedence. Parsed once at startup; an invalid entry hard-fails boot. |
+| `SHOREGUARD_UNSAFE_LAN` | `false` | Allow serving without authentication (SHOREGUARD_NO_AUTH) on a non-loopback bind address. Off by default — an unauthenticated UI on a network interface gives everyone on that network admin access. |
 ## `database`
 
 | Environment variable | Default | Description |

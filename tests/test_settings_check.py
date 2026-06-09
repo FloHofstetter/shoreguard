@@ -256,3 +256,34 @@ def test_no_prod_warnings_in_local_mode(monkeypatch: pytest.MonkeyPatch) -> None
     assert not any("hsts_enabled" in w for w in warnings)
     assert not any("SQLite" in w for w in warnings)
     assert not any("log_format" in w for w in warnings)
+
+
+# ── no_auth bind safety ─────────────────────────────────────────────────────
+
+
+def test_errors_on_no_auth_with_lan_bind() -> None:
+    s = _make_settings(
+        server=ServerSettings(host="0.0.0.0", log_format="text"),
+        auth=AuthSettings(no_auth=True),
+    )
+    warnings = s.check_production_readiness()
+    assert any(w.startswith("ERROR:") and "unauthenticated admin UI" in w for w in warnings)
+
+
+def test_no_auth_lan_bind_with_unsafe_lan_downgrades_to_warn() -> None:
+    s = _make_settings(
+        server=ServerSettings(host="0.0.0.0", log_format="text", unsafe_lan=True),
+        auth=AuthSettings(no_auth=True),
+    )
+    warnings = s.check_production_readiness()
+    assert not any(w.startswith("ERROR:") and "unauthenticated" in w for w in warnings)
+    assert any(w.startswith("WARN:") and "UNAUTHENTICATED" in w for w in warnings)
+
+
+def test_no_auth_on_loopback_is_silent() -> None:
+    s = _make_settings(
+        server=ServerSettings(host="127.0.0.1", log_format="text"),
+        auth=AuthSettings(no_auth=True),
+    )
+    warnings = s.check_production_readiness()
+    assert not any("unauthenticated" in w.lower() for w in warnings)
