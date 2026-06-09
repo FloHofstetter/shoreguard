@@ -16,6 +16,9 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_GRACEFUL_SHUTDOWN_TIMEOUT` | `15` | Seconds uvicorn waits for in-flight requests on SIGTERM |
 | `SHOREGUARD_GZIP_MINIMUM_SIZE` | `1000` | Minimum response body size in bytes before gzip compression kicks in |
 | `SHOREGUARD_READYZ_TIMEOUT` | `5.0` | Timeout in seconds for /readyz dependency probes |
+| `SHOREGUARD_FORWARDED_ALLOW_IPS` | `127.0.0.1` | Comma-separated IPs (or '*') whose X-Forwarded-* headers uvicorn trusts. Set to '*' when serving behind a k8s Ingress — the default only trusts loopback, which means TLS-terminating proxies are ignored. |
+| `SHOREGUARD_ALWAYS_BLOCKED_IPS` | `` | Comma-separated IPs or CIDR ranges that are always blocked as SSRF targets regardless of local_mode. Mirrors upstream OpenShell #814. Parsed once at startup; an invalid entry hard-fails boot. |
+| `SHOREGUARD_SSRF_ALLOWED_IPS` | `` | Comma-separated IPs or CIDR ranges exempted from the private/loopback SSRF rejection — e.g. a homelab OIDC provider or webhook target on a LAN address. Matched against the resolved address, so hostnames are exempt only if they resolve into an allowlisted range. SHOREGUARD_ALWAYS_BLOCKED_IPS takes precedence. Parsed once at startup; an invalid entry hard-fails boot. |
 ## `database`
 
 | Environment variable | Default | Description |
@@ -55,8 +58,9 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_METRICS_PUBLIC` | `false` | Expose /metrics without authentication (default: admin-only) |
 | `SHOREGUARD_HSTS_ENABLED` | `false` | Emit Strict-Transport-Security header (enable behind HTTPS proxy) |
 | `SHOREGUARD_HSTS_MAX_AGE` | `63072000` | HSTS max-age in seconds (default: 2 years) |
-| `SHOREGUARD_CSP_STRICT` | `true` | Enforce strict CSP with per-request nonce and no `'unsafe-*'` directives (default since v0.27.0) |
-| `SHOREGUARD_CSP_POLICY` | `default-src 'self'; script-src 'self'...` | Legacy Content-Security-Policy header value (only used when `SHOREGUARD_CSP_STRICT=false`) |
+| `SHOREGUARD_CSP_POLICY` | `default-src 'self'; script-src 'self'...` | Content-Security-Policy header value (used when csp_strict=False) |
+| `SHOREGUARD_CSP_STRICT` | `true` | Enforce strict CSP with per-request nonce, no 'unsafe-inline', and frame-ancestors 'none'. Default as of v0.27.0 — blocks inline scripts, inline event handlers, and inline styles (M1–M3 + M2.1). 'unsafe-eval' is retained in script-src because Alpine.js uses the Function() constructor; the regular Alpine build is used in both modes. Set SHOREGUARD_CSP_STRICT=false to fall back to the legacy 'unsafe-inline' policy in `csp_policy`. |
+| `SHOREGUARD_CSP_POLICY_STRICT` | `default-src 'self'; script-src 'self'...` | CSP template used when csp_strict=True. Must contain a '{nonce}' placeholder that is replaced per-request. |
 ## `gateway`
 
 | Environment variable | Default | Description |
@@ -65,6 +69,12 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_GATEWAY_BACKOFF_MAX` | `60.0` | Maximum reconnect backoff in seconds |
 | `SHOREGUARD_GATEWAY_BACKOFF_FACTOR` | `2.0` | Exponential backoff multiplier between attempts |
 | `SHOREGUARD_GATEWAY_GRPC_TIMEOUT` | `30.0` | Default timeout for gRPC calls to gateways |
+| `SHOREGUARD_GATEWAY_GRPC_RETRY_MAX_ATTEMPTS` | `4` | Maximum number of attempts (including the first) for a retryable gRPC call |
+| `SHOREGUARD_GATEWAY_GRPC_RETRY_INITIAL_BACKOFF` | `0.25` | Initial exponential backoff between retries in seconds |
+| `SHOREGUARD_GATEWAY_GRPC_RETRY_MAX_BACKOFF` | `4.0` | Maximum exponential backoff between retries in seconds |
+| `SHOREGUARD_GATEWAY_GRPC_RETRY_DEADLINE` | `60.0` | Total wall-clock budget in seconds for a single logical RPC including all retries. Retries will not exceed this deadline. |
+| `SHOREGUARD_GATEWAY_REQUIRE_MTLS` | `true` | Reject plaintext gRPC channels to gateways. Disable only for local development against an insecure gateway. |
+| `SHOREGUARD_GATEWAY_CERT_EXPIRY_WARN_DAYS` | `14` | Warn (but do not reject) when a gateway certificate expires within this many days. A structured log warning is emitted per affected channel. |
 ## `ops`
 
 | Environment variable | Default | Description |
@@ -80,6 +90,12 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 |---|---|---|
 | `SHOREGUARD_AUDIT_RETENTION_DAYS` | `90` | Days to retain audit log entries before cleanup |
 | `SHOREGUARD_AUDIT_EXPORT_LIMIT` | `10000` | Maximum rows returned by /audit/export in a single call |
+| `SHOREGUARD_AUDIT_EXPORT_STDOUT_JSON` | `false` | Emit each audit entry as a JSON line on stdout (Loki/Vector lane) |
+| `SHOREGUARD_AUDIT_EXPORT_SYSLOG_ENABLED` | `false` | Ship each audit entry to a remote syslog receiver as JSON body |
+| `SHOREGUARD_AUDIT_EXPORT_SYSLOG_HOST` | `localhost` | Syslog server host when export_syslog_enabled=true |
+| `SHOREGUARD_AUDIT_EXPORT_SYSLOG_PORT` | `514` | Syslog server port when export_syslog_enabled=true |
+| `SHOREGUARD_AUDIT_EXPORT_SYSLOG_FACILITY` | `user` | Syslog facility name (user, local0..local7, daemon, ...) |
+| `SHOREGUARD_AUDIT_EXPORT_WEBHOOK_ENABLED` | `false` | Bridge audit entries into the existing webhook pipeline as 'audit.entry' events; individual targets are configured per Webhook record |
 ## `webhooks`
 
 | Environment variable | Default | Description |
@@ -160,3 +176,43 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_CORS_ALLOW_METHODS` | `["*"]` | HTTP methods allowed by CORS (default: all) |
 | `SHOREGUARD_CORS_ALLOW_HEADERS` | `["*"]` | Request headers allowed by CORS (default: all) |
 | `SHOREGUARD_CORS_MAX_AGE` | `600` | CORS preflight cache duration in seconds |
+## `prover`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_PROVER_TIMEOUT_MS` | `5000` | Z3 solver timeout per query in milliseconds |
+| `SHOREGUARD_PROVER_MAX_QUERIES_PER_REQUEST` | `10` | Maximum queries per verify request |
+| `SHOREGUARD_PROVER_ENABLED` | `true` | Enable/disable the prover feature |
+## `discovery`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_DISCOVERY_ENABLED` | `false` | Enable the gateway discovery background loop |
+| `SHOREGUARD_DISCOVERY_DOMAINS` | `[]` | Base domains to scan for `_openshell._tcp` SRV records |
+| `SHOREGUARD_DISCOVERY_INTERVAL_SECONDS` | `300` | Background re-scan interval in seconds (>= 30) |
+| `SHOREGUARD_DISCOVERY_DEFAULT_SCHEME` | `grpc+tls` | Connection scheme assigned to auto-registered gateways |
+| `SHOREGUARD_DISCOVERY_AUTO_REGISTER` | `true` | If false, discovery only lists endpoints without registering |
+| `SHOREGUARD_DISCOVERY_RESOLVER_TIMEOUT_SECONDS` | `5.0` | Per-query DNS resolver timeout in seconds |
+## `drift_detection`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_DRIFT_DETECTION_ENABLED` | `false` | Enable the policy drift detection background loop |
+| `SHOREGUARD_DRIFT_DETECTION_INTERVAL_SECONDS` | `300` | Re-scan interval in seconds (>= 60) |
+## `tracing`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_TRACING_ENABLED` | `false` | Enable OpenTelemetry auto-instrumentation for FastAPI and gRPC client |
+| `SHOREGUARD_TRACING_SERVICE_NAME` | `shoreguard` | service.name resource attribute attached to every span |
+| `SHOREGUARD_TRACING_OTLP_ENDPOINT` | `` | OTLP/HTTP traces endpoint URL; if unset, spans go to stdout console exporter |
+| `SHOREGUARD_TRACING_SAMPLE_RATIO` | `1.0` | Head-based sampling ratio between 0.0 (off) and 1.0 (all) |
+## `cert_rotation`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_CERT_ROTATION_ENABLED` | `true` | Enable the background proactive cert-rotation service |
+| `SHOREGUARD_CERT_ROTATION_THRESHOLD_DAYS` | `7` | Rotate when remaining validity drops below this many days |
+| `SHOREGUARD_CERT_ROTATION_POLL_INTERVAL_S` | `3600` | Seconds between rotation-check passes across gateways |
+| `SHOREGUARD_CERT_ROTATION_MAX_RETRIES` | `3` | Retry attempts per rotation before deferring to the next cycle |
+

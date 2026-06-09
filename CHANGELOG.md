@@ -5,6 +5,35 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.36.3] — 2026-06-10
+
+### Added
+
+- **SSRF allowlist `SHOREGUARD_SSRF_ALLOWED_IPS`** ([#13]) — comma-separated
+  IPs/CIDR ranges exempted from the private/loopback SSRF rejection, so a
+  homelab OIDC provider (Authelia, Keycloak, authentik) or an internal
+  webhook/SMTP target on a LAN address can be used without `--local`.
+  Applies consistently to OIDC issuer/JWKS/token endpoints, webhook URLs
+  (registration *and* delivery-time DNS-rebinding re-checks — private-address
+  webhook delivery was previously impossible even in local mode), SMTP hosts,
+  and gateway endpoints. Matching happens against the **resolved** address;
+  `SHOREGUARD_ALWAYS_BLOCKED_IPS` always takes precedence. Invalid entries
+  hard-fail boot; a `/0` entry and the redundant local-mode combination
+  surface prod-readiness warnings. SSRF rejection messages now name the
+  setting as the remedy.
+
+### Changed
+
+- Combining local mode with an allowlisted private gateway endpoint now
+  requires an mTLS bundle for that gateway (the certificate-free plaintext
+  connection no longer applies to allowlisted hosts) — fail-closed edge of
+  the new allowlist, flagged by a prod-readiness warning.
+- `docs/reference/settings.md` regenerated; it was missing several
+  previously-added settings (tracing, discovery, cert rotation, prover,
+  audit export, …).
+
+[#13]: https://github.com/FloHofstetter/shoreguard/issues/13
+
 ## [0.36.2] — 2026-06-07
 
 ### Solo-dev on-ramp

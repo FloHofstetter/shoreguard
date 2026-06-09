@@ -82,7 +82,8 @@ def _validate_endpoint_format(endpoint: str) -> None:
         return
     if is_private_ip(host) and not get_settings().server.local_mode:
         raise ValueError(
-            "endpoint must not point to a private/loopback address; use a routable IP or hostname"
+            "endpoint must not point to a private/loopback address; use a routable IP "
+            "or hostname, or exempt specific ranges via SHOREGUARD_SSRF_ALLOWED_IPS"
         )
 
 

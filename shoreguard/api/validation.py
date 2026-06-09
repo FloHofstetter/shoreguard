@@ -76,7 +76,10 @@ def validate_webhook_url(url: str) -> str:
     if parsed.username or parsed.password:
         raise DomainValidationError("URL must not contain credentials")
     if is_private_ip(parsed.hostname) and not get_settings().server.local_mode:
-        raise DomainValidationError("URL must not point to a private/loopback address")
+        raise DomainValidationError(
+            "URL must not point to a private/loopback address "
+            "(exempt specific ranges via SHOREGUARD_SSRF_ALLOWED_IPS)"
+        )
     return url
 
 
@@ -90,7 +93,10 @@ def validate_smtp_host(host: str) -> None:
         DomainValidationError: If the host resolves to a private address.
     """
     if is_private_ip(host) and not get_settings().server.local_mode:
-        raise DomainValidationError("SMTP host must not point to a private/loopback address")
+        raise DomainValidationError(
+            "SMTP host must not point to a private/loopback address "
+            "(exempt specific ranges via SHOREGUARD_SSRF_ALLOWED_IPS)"
+        )
 
 
 def check_write_rate_limit(request: Request) -> None:

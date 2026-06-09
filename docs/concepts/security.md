@@ -125,10 +125,38 @@ checks) and stored in the database.
 
 ## SSRF protection
 
-When registering gateways, ShoreGuard validates that the endpoint does not
-point to private IP ranges (`10.x`, `172.16-31.x`, `192.168.x`, `127.x`).
-This prevents server-side request forgery attacks. The check is relaxed in
-[local mode](../admin/local-mode.md) where `127.0.0.1` is expected.
+ShoreGuard validates every outbound target an operator can configure —
+gateway endpoints, webhook URLs, SMTP hosts, and OIDC provider URLs
+(issuer, JWKS, token endpoint) — and rejects private IP ranges (`10.x`,
+`172.16-31.x`, `192.168.x`, `127.x`, link-local, reserved). This prevents
+server-side request forgery attacks. Hostnames are resolved first, so a DNS
+name pointing into a private range is rejected too (only the first DNS
+result is checked). Webhook and SMTP targets are re-checked at delivery
+time as DNS-rebinding protection. Kubernetes Service DNS
+(`*.svc.cluster.local`) bypasses the gateway-endpoint check, since only
+kube-dns/CoreDNS can own that suffix.
+
+Two settings tune the check:
+
+- **`SHOREGUARD_SSRF_ALLOWED_IPS`** — comma-separated IPs/CIDR ranges that
+  are *exempted* from the private/loopback rejection. Use this when a
+  legitimate dependency lives on a private address, e.g. a homelab OIDC
+  provider (`SHOREGUARD_SSRF_ALLOWED_IPS=192.168.1.10/32`) or an internal
+  webhook receiver. Matching happens against the **resolved** address, so a
+  hostname is exempt only if it resolves into an allowlisted range — DNS
+  cannot widen the exemption. The literal hostname `localhost` is always
+  treated as private; to exempt loopback, use an IP literal and allowlist
+  `127.0.0.1`/`::1`. IPv4-mapped IPv6 forms (`::ffff:192.168.1.10`) are not
+  normalised — allowlist the form you actually connect to.
+- **`SHOREGUARD_ALWAYS_BLOCKED_IPS`** — ranges that are **always** blocked
+  (cloud metadata VIPs, management subnets). Takes precedence over the
+  allowlist and over local mode.
+
+The check is also relaxed globally in [local mode](../admin/local-mode.md)
+where `127.0.0.1` is expected — but for a real deployment that merely needs
+one private dependency reachable, prefer the allowlist over `--local`.
+Note: webhook/SMTP *delivery-time* re-checks are not relaxed by local mode;
+the allowlist is the supported way to deliver to private addresses.
 
 ---
 

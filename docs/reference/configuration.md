@@ -40,6 +40,8 @@ environment variables, which override built-in defaults.
 | `SHOREGUARD_LOCAL_MODE` | `--local` | `false` | Enable Docker-based gateway lifecycle management |
 | `SHOREGUARD_GRACEFUL_SHUTDOWN_TIMEOUT` | — | `5` | Seconds to wait for in-flight requests during shutdown |
 | `SHOREGUARD_GZIP_MINIMUM_SIZE` | — | `1000` | Minimum response size (bytes) before gzip compression kicks in |
+| `SHOREGUARD_SSRF_ALLOWED_IPS` | — | _(empty)_ | Comma-separated IPs/CIDR ranges exempted from the private/loopback SSRF rejection (e.g. a homelab OIDC provider: `192.168.1.10/32`). Matched against the **resolved** address; `SHOREGUARD_ALWAYS_BLOCKED_IPS` takes precedence. See [SSRF protection](../concepts/security.md#ssrf-protection) |
+| `SHOREGUARD_ALWAYS_BLOCKED_IPS` | — | _(empty)_ | Comma-separated IPs/CIDR ranges that are **always** blocked as SSRF targets, regardless of local mode or the allowlist (cloud metadata VIPs, internal management subnets) |
 | `SHOREGUARD_ALLOW_UNSAFE_CONFIG` | — | `false` | **Emergency override.** When `true`, `enforce_production_safety()` logs `ERROR:`-severity config issues at `CRITICAL` and continues startup instead of refusing. Use only to bring a broken stack up for debugging — every start-up under this flag leaves a loud audit trail in the logs. |
 
 ## Authentication & Sessions {: #auth }

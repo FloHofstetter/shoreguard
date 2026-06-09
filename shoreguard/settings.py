@@ -25,6 +25,35 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+
+def _validate_cidr_list(value: str, env_var: str) -> str:
+    """Parse each entry of a comma-separated CIDR list so misconfigurations fail fast.
+
+    Keeps the original string representation but rejects the whole setting
+    if any entry is unparsable — the alternative (silent drop) would mean
+    an operator who typo'd a CIDR would get the opposite of the security
+    guarantee they asked for.
+
+    Args:
+        value: Raw comma-separated CIDR string from the environment.
+        env_var: Environment variable name, used in the error message.
+
+    Returns:
+        str: The unchanged input when every entry is parseable.
+
+    Raises:
+        ValueError: If any comma-separated entry fails to parse as an
+            IPv4/IPv6 network literal.
+    """
+    for entry in (p.strip() for p in value.split(",") if p.strip()):
+        try:
+            ipaddress.ip_network(entry, strict=False)
+        except ValueError as exc:
+            msg = f"invalid CIDR in {env_var}: {entry!r} ({exc})"
+            raise ValueError(msg) from exc
+    return value
+
+
 # ─── Sub-models ───────────────────────────────────────────────────────────────
 
 
@@ -49,6 +78,10 @@ class ServerSettings(BaseSettings):
             (or the ingress controller's pod CIDR) when serving behind a TLS-terminating proxy.
         always_blocked_ips (str): Comma-separated IPs or CIDR ranges that are always
             blocked as SSRF targets regardless of local_mode. Parsed once at startup;
+            an invalid entry hard-fails boot.
+        ssrf_allowed_ips (str): Comma-separated IPs or CIDR ranges exempted from the
+            private/loopback SSRF rejection. Matched against the resolved address;
+            entries in always_blocked_ips take precedence. Parsed once at startup;
             an invalid entry hard-fails boot.
     """
 
@@ -104,34 +137,46 @@ class ServerSettings(BaseSettings):
         "targets regardless of local_mode. Mirrors upstream OpenShell #814. Parsed once "
         "at startup; an invalid entry hard-fails boot.",
     )
+    ssrf_allowed_ips: str = Field(
+        default="",
+        description="Comma-separated IPs or CIDR ranges exempted from the private/loopback "
+        "SSRF rejection — e.g. a homelab OIDC provider or webhook target on a LAN address. "
+        "Matched against the resolved address, so hostnames are exempt only if they resolve "
+        "into an allowlisted range. SHOREGUARD_ALWAYS_BLOCKED_IPS takes precedence. Parsed "
+        "once at startup; an invalid entry hard-fails boot.",
+    )
 
     @field_validator("always_blocked_ips")
     @classmethod
     def _validate_always_blocked_ips(cls, value: str) -> str:
-        """Parse each CIDR at load time so misconfigurations fail fast.
+        """Validate the always-blocked CIDR list at load time.
 
-        Keeps the original string representation but rejects the whole
-        setting if any entry is unparsable — the alternative (silent
-        drop) would mean an operator who typo'd a CIDR would get the
-        opposite of the security guarantee they asked for.
+        Propagates ``ValueError`` from :func:`_validate_cidr_list` for
+        unparsable entries.
 
         Args:
             value: Raw comma-separated CIDR string from the environment.
 
         Returns:
             str: The unchanged input when every entry is parseable.
-
-        Raises:
-            ValueError: If any comma-separated entry fails to parse as
-                an IPv4/IPv6 network literal.
         """
-        for entry in (p.strip() for p in value.split(",") if p.strip()):
-            try:
-                ipaddress.ip_network(entry, strict=False)
-            except ValueError as exc:
-                msg = f"invalid CIDR in SHOREGUARD_ALWAYS_BLOCKED_IPS: {entry!r} ({exc})"
-                raise ValueError(msg) from exc
-        return value
+        return _validate_cidr_list(value, "SHOREGUARD_ALWAYS_BLOCKED_IPS")
+
+    @field_validator("ssrf_allowed_ips")
+    @classmethod
+    def _validate_ssrf_allowed_ips(cls, value: str) -> str:
+        """Validate the SSRF allowlist CIDR list at load time.
+
+        Propagates ``ValueError`` from :func:`_validate_cidr_list` for
+        unparsable entries.
+
+        Args:
+            value: Raw comma-separated CIDR string from the environment.
+
+        Returns:
+            str: The unchanged input when every entry is parseable.
+        """
+        return _validate_cidr_list(value, "SHOREGUARD_SSRF_ALLOWED_IPS")
 
 
 class DatabaseSettings(BaseSettings):
@@ -1030,7 +1075,7 @@ class Settings(BaseSettings):
         would be noise in local development.  Returns ``True`` when all
         three signals indicate non-dev use:
 
-        * ``local_mode`` is off (SSRF allow-list for private IPs disabled)
+        * ``local_mode`` is off (private-IP SSRF bypass disabled)
         * ``no_auth`` is off (auth is actually required)
         * ``host`` is not bound to the loopback interface
 
@@ -1094,6 +1139,25 @@ class Settings(BaseSettings):
 
         if self.database.pool_size < 1:
             warnings.append(f"WARN: database.pool_size={self.database.pool_size} must be >= 1")
+
+        # ── SSRF allowlist sanity ───────────────────────────────────────
+        allowlist_entries = [
+            p.strip() for p in self.server.ssrf_allowed_ips.split(",") if p.strip()
+        ]
+        for entry in allowlist_entries:
+            # Entries are guaranteed parseable by the field validator.
+            if ipaddress.ip_network(entry, strict=False).prefixlen == 0:
+                warnings.append(
+                    f"WARN: ssrf_allowed_ips contains {entry!r} — a /0 entry exempts every "
+                    "address from the private/loopback SSRF rejection; allowlist only the "
+                    "specific hosts or subnets you need"
+                )
+        if allowlist_entries and self.server.local_mode:
+            warnings.append(
+                "WARN: ssrf_allowed_ips is set while local_mode is on — local mode already "
+                "bypasses the private-IP rejection, and an allowlisted private gateway is "
+                "no longer eligible for the local-mode plaintext (no-mTLS) connection"
+            )
 
         # ── CSP unsafe-* (only relevant when strict mode is off) ────────
         # When csp_strict=True the legacy csp_policy field is not used; the

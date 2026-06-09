@@ -136,6 +136,11 @@ sequenceDiagram
 - **JWT verification via JWKS** — cryptographic signature check
 - **Issuer + audience checks** — ensures the token is for ShoreGuard
 - **Open redirect protection** — the `next` URL must start with `/`
+- **SSRF protection** — issuer, JWKS, and token-endpoint URLs must not point
+  to private/loopback addresses, so a malicious provider config cannot reach
+  internal services. Exempt a legitimately private provider (e.g. a homelab
+  IdP) via `SHOREGUARD_SSRF_ALLOWED_IPS` — see
+  [SSRF protection](../concepts/security.md#ssrf-protection)
 
 ---
 
@@ -195,6 +200,21 @@ See [Configuration](../reference/configuration.md#oidc) for all settings.
   clock sync between client and server.
 - **Missing scopes** — ensure `openid` and `email` are in the provider's
   allowed scopes.
+
+### "URL must not point to a private/loopback address"
+
+Your provider's issuer (or its JWKS / token endpoint) resolves to a private
+IP, and ShoreGuard's SSRF protection rejects it. Common in homelabs running
+Authelia, Keycloak, or authentik on a LAN address. Exempt the provider's
+address explicitly:
+
+```bash
+export SHOREGUARD_SSRF_ALLOWED_IPS="192.168.1.10/32"   # your IdP's IP or CIDR
+```
+
+Matching happens against the **resolved** address, so an issuer like
+`https://auth.homelab.lan` works as long as it resolves into the allowlisted
+range. `SHOREGUARD_ALWAYS_BLOCKED_IPS` always wins over the allowlist.
 
 ### "Login was denied by the identity provider"
 

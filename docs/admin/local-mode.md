@@ -59,6 +59,15 @@ running on the same machine.
 > deployments, run gateways on dedicated hosts and register them as remote
 > gateways instead.
 
+> [!TIP]
+> If you only need *one* private dependency reachable — say an OIDC provider
+> or webhook receiver on your LAN — don't reach for `--local`. Exempt that
+> address explicitly with `SHOREGUARD_SSRF_ALLOWED_IPS` (see
+> [SSRF protection](../concepts/security.md#ssrf-protection)) and keep the
+> rest of the protections on. Note that combining local mode with the
+> allowlist removes the allowlisted host from local mode's certificate-free
+> plaintext gateway connection — an allowlisted gateway needs an mTLS bundle.
+
 ## Developer workflow
 
 For day-to-day development, combine local mode with `--no-auth` to skip login:

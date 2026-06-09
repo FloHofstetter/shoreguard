@@ -450,7 +450,8 @@ class WebhookService:
                 self._update_delivery,
                 delivery_id,
                 status="failed",
-                error_message="SSRF blocked: target resolves to private address",
+                error_message="SSRF blocked: target resolves to private address "
+                "(exempt via SHOREGUARD_SSRF_ALLOWED_IPS)",
                 attempt=1,
             )
             self._inc_delivery_counter("failed")
@@ -563,7 +564,8 @@ class WebhookService:
                     self._update_delivery,
                     delivery_id,
                     status="failed",
-                    error_message="SSRF blocked: SMTP host resolves to private address",
+                    error_message="SSRF blocked: SMTP host resolves to private address "
+                    "(exempt via SHOREGUARD_SSRF_ALLOWED_IPS)",
                     attempt=1,
                 )
                 self._inc_delivery_counter("failed")

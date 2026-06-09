@@ -128,9 +128,12 @@ def _disable_auth():
     """
     from shoreguard.api import auth
     from shoreguard.api.ratelimit import reset_limiters
+    from shoreguard.config import _always_blocked_networks, _ssrf_allowed_networks
     from shoreguard.settings import reset_settings
 
     reset_settings()
+    _always_blocked_networks.cache_clear()
+    _ssrf_allowed_networks.cache_clear()
     auth.reset()
     reset_limiters()
     auth._no_auth = True  # noqa: SLF001
@@ -138,6 +141,8 @@ def _disable_auth():
     auth.reset()
     reset_limiters()
     reset_settings()
+    _always_blocked_networks.cache_clear()
+    _ssrf_allowed_networks.cache_clear()
 
 
 @pytest.fixture

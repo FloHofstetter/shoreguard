@@ -368,7 +368,11 @@ def _import_filesystem_gateways(
         clean_endpoint = f"{host}:{port}"
 
         if is_private_ip(host) and not get_settings().server.local_mode:
-            _log(f"  skip  {name} (private/loopback address: '{host}')", level=logging.WARNING)
+            _log(
+                f"  skip  {name} (private/loopback address: '{host}' — exempt via "
+                "SHOREGUARD_SSRF_ALLOWED_IPS or run with --local)",
+                level=logging.WARNING,
+            )
             skipped += 1
             continue
         if not _ENDPOINT_RE.match(clean_endpoint):
