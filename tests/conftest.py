@@ -111,7 +111,7 @@ def _disable_auth():
     _ssrf_allowed_networks.cache_clear()
     auth.reset()
     reset_limiters()
-    auth._no_auth = True  # noqa: SLF001
+    auth.state.no_auth = True  # noqa: SLF001
     yield
     auth.reset()
     reset_limiters()

@@ -26,13 +26,6 @@ from sqlalchemy.pool import StaticPool
 
 from shoreguard.api import auth
 from shoreguard.api.auth import (
-    _account_failures,
-    _GatewayRoleLookupError,
-    _lookup_gateway_role,
-    _lookup_group_global_role,
-    _lookup_sp,
-    _lookup_sp_identity,
-    _lookup_user,
     accept_invite,
     authenticate_user,
     check_request_auth,
@@ -50,6 +43,17 @@ from shoreguard.api.auth import (
     reset_lockouts,
     verify_password,
     verify_session_token,
+)
+from shoreguard.api.auth.core import (
+    _account_failures,
+    _lookup_sp,
+    _lookup_sp_identity,
+    _lookup_user,
+)
+from shoreguard.api.auth.rbac import (
+    _GatewayRoleLookupError,
+    _lookup_gateway_role,
+    _lookup_group_global_role,
 )
 from shoreguard.models import Base
 
@@ -124,7 +128,7 @@ class TestSessionTokenEdges:
 
     def test_expired_token_rejected(self):
         """JWT-style expiry: a token generated with a past ``expiry`` is rejected."""
-        with patch("shoreguard.api.auth.time") as mock_time:
+        with patch("shoreguard.api.auth.core.time") as mock_time:
             mock_time.time.return_value = time.time() - 86400 * 30
             token = create_session_token(user_id=1, role="admin")
         assert verify_session_token(token) is None
@@ -136,7 +140,7 @@ class TestSessionTokenEdges:
         payload = f"{nonce}.{expiry}.not-an-int.admin"
         import hashlib
 
-        sig = hmac.new(auth._hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
+        sig = hmac.new(auth.state.hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
         token = f"{payload}.{sig}"
         assert verify_session_token(token) is None
 
@@ -145,7 +149,7 @@ class TestSessionTokenEdges:
         payload = f"{nonce}.not-a-time.1.admin"
         import hashlib
 
-        sig = hmac.new(auth._hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
+        sig = hmac.new(auth.state.hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
         token = f"{payload}.{sig}"
         assert verify_session_token(token) is None
 
@@ -185,20 +189,17 @@ class TestServicePrincipalExpiry:
         assert _lookup_sp_identity("sg_not-a-real-key") is None
 
     def test_lookup_sp_session_factory_none_returns_none(self):
-        auth._session_factory = None  # type: ignore[assignment]
+        auth.state.session_factory = None  # type: ignore[assignment]
         assert _lookup_sp_identity("anything") is None
 
     def test_lookup_sp_db_error_returns_none(self, db):
         """A SQLAlchemyError in the SP lookup returns ``None`` and is logged."""
-        with patch.object(auth, "_session_factory") as mock_factory:
-            mock_session = MagicMock()
-            mock_session.__enter__ = MagicMock(return_value=mock_session)
-            mock_session.__exit__ = MagicMock(return_value=None)
-            mock_session.query.side_effect = SQLAlchemyError("boom")
-            mock_factory.return_value = mock_session
-            # Re-point session factory to our mock
-            auth._session_factory = lambda: mock_session  # type: ignore[assignment]
-            assert _lookup_sp_identity("any-key") is None
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=None)
+        mock_session.query.side_effect = SQLAlchemyError("boom")
+        auth.state.session_factory = lambda: mock_session  # type: ignore[assignment]
+        assert _lookup_sp_identity("any-key") is None
 
 
 # ─── Account lockout recovery ─────────────────────────────────────────────
@@ -231,9 +232,9 @@ class TestAccountLockoutRecovery:
 
         reset_settings()
         base = time.monotonic()
-        with patch("shoreguard.api.auth.time.monotonic", return_value=base):
+        with patch("shoreguard.api.auth.core.time.monotonic", return_value=base):
             record_failed_login("carol@example.com")
-        with patch("shoreguard.api.auth.time.monotonic", return_value=base + 99):
+        with patch("shoreguard.api.auth.core.time.monotonic", return_value=base + 99):
             locked, _ = is_account_locked("carol@example.com")
             assert not locked
         assert "carol@example.com" not in _account_failures
@@ -297,7 +298,7 @@ class TestFindOrCreateOIDCUser:
         assert res["user"]["role"] == "operator"
 
     def test_session_factory_none_raises_runtime_error(self):
-        auth._session_factory = None  # type: ignore[assignment]
+        auth.state.session_factory = None  # type: ignore[assignment]
         with pytest.raises(RuntimeError, match="Database not available"):
             find_or_create_oidc_user(
                 email="a@b.com", oidc_provider="g", oidc_sub="s", role="viewer"
@@ -322,7 +323,7 @@ class TestAcceptInviteExpiry:
         # Shift the created_at timestamp far into the past by poking the row
         from shoreguard.models import User
 
-        with auth._session_factory() as session:  # type: ignore[misc]
+        with auth.state.session_factory() as session:  # type: ignore[misc]
             user = session.query(User).filter(User.email == "invited@x.com").first()
             user.created_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=999)
             session.commit()
@@ -345,13 +346,13 @@ class TestAcceptInviteExpiry:
 
 class TestCheckRequestAuthBranches:
     def test_no_auth_mode(self, db):
-        auth._no_auth = True  # type: ignore[assignment]
+        auth.state.no_auth = True  # type: ignore[assignment]
         try:
             req = _make_request()
             assert check_request_auth(req) == "admin"
             assert req.state.user_id == "no-auth"
         finally:
-            auth._no_auth = False  # type: ignore[assignment]
+            auth.state.no_auth = False  # type: ignore[assignment]
 
     def test_no_session_factory_raises_503(self):
         auth.reset()  # clears _session_factory
@@ -376,7 +377,7 @@ class TestCheckRequestAuthBranches:
 
     def test_expired_session_cookie_rejected(self, db):
         create_user("u@x.com", "pass123", "admin")
-        with patch("shoreguard.api.auth.time") as mock_time:
+        with patch("shoreguard.api.auth.core.time") as mock_time:
             mock_time.time.return_value = time.time() - 86400 * 30
             token = create_session_token(user_id=1, role="admin")
         req = _make_request(cookies={"sg_session": token})
@@ -465,7 +466,7 @@ class TestRequireRoleBranches:
         req = _make_request(cookies={"sg_session": token}, path="/api/gateways/foo/thing")
         req.state._gateway = "foo"
         with patch(
-            "shoreguard.api.auth._lookup_gateway_role",
+            "shoreguard.api.auth.rbac._lookup_gateway_role",
             side_effect=_GatewayRoleLookupError("boom"),
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -478,7 +479,7 @@ class TestRequireRoleBranches:
         dep = require_role("viewer")
         req = _make_request(cookies={"sg_session": token})
         with patch(
-            "shoreguard.api.auth._lookup_group_global_role",
+            "shoreguard.api.auth.rbac._lookup_group_global_role",
             side_effect=_GatewayRoleLookupError("boom"),
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -497,11 +498,11 @@ class TestRequireAuthWebSocket:
         return ws
 
     def test_no_auth_mode_passes(self, db):
-        auth._no_auth = True  # type: ignore[assignment]
+        auth.state.no_auth = True  # type: ignore[assignment]
         try:
             require_auth_ws(self._ws(), token=None, sg_session=None)
         finally:
-            auth._no_auth = False  # type: ignore[assignment]
+            auth.state.no_auth = False  # type: ignore[assignment]
 
     def test_setup_incomplete_passes(self, db):
         # No users → setup incomplete → WS is permitted (UI bootstrap flow)
@@ -557,26 +558,22 @@ class TestGatewayRoleLookupEdges:
         assert _lookup_gateway_role(user_id=info["id"], gateway="ghost-gw") is None
 
     def test_lookup_gateway_role_db_error_raises(self):
-        with patch.object(auth, "_session_factory") as mock_factory:
-            mock_session = MagicMock()
-            mock_session.__enter__ = MagicMock(return_value=mock_session)
-            mock_session.__exit__ = MagicMock(return_value=None)
-            mock_session.query.side_effect = SQLAlchemyError("boom")
-            mock_factory.return_value = mock_session
-            auth._session_factory = lambda: mock_session  # type: ignore[assignment]
-            with pytest.raises(_GatewayRoleLookupError):
-                _lookup_gateway_role(user_id=1, gateway="gw")
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=None)
+        mock_session.query.side_effect = SQLAlchemyError("boom")
+        auth.state.session_factory = lambda: mock_session  # type: ignore[assignment]
+        with pytest.raises(_GatewayRoleLookupError):
+            _lookup_gateway_role(user_id=1, gateway="gw")
 
     def test_lookup_group_global_role_db_error_raises(self):
-        with patch.object(auth, "_session_factory") as mock_factory:
-            mock_session = MagicMock()
-            mock_session.__enter__ = MagicMock(return_value=mock_session)
-            mock_session.__exit__ = MagicMock(return_value=None)
-            mock_session.query.side_effect = SQLAlchemyError("boom")
-            mock_factory.return_value = mock_session
-            auth._session_factory = lambda: mock_session  # type: ignore[assignment]
-            with pytest.raises(_GatewayRoleLookupError):
-                _lookup_group_global_role(user_id=1)
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=None)
+        mock_session.query.side_effect = SQLAlchemyError("boom")
+        auth.state.session_factory = lambda: mock_session  # type: ignore[assignment]
+        with pytest.raises(_GatewayRoleLookupError):
+            _lookup_group_global_role(user_id=1)
 
     def test_lookup_group_global_role_no_groups_returns_none(self):
         info = create_user("lone@x.com", "pw", "viewer")
@@ -620,7 +617,7 @@ class TestAuthenticateUserEdges:
         info = create_user("inactive@x.com", "pw", "viewer")
         from shoreguard.models import User
 
-        with auth._session_factory() as session:  # type: ignore[misc]
+        with auth.state.session_factory() as session:  # type: ignore[misc]
             user = session.query(User).filter(User.id == info["id"]).first()
             user.is_active = False
             session.commit()
@@ -650,8 +647,8 @@ class TestInitAuth:
         reset_settings()
         factory = MagicMock()
         auth.init_auth(factory)
-        assert auth._session_factory is factory
-        assert len(auth._hmac_secret) == 32  # sha256 digest
+        assert auth.state.session_factory is factory
+        assert len(auth.state.hmac_secret) == 32  # sha256 digest
 
     def test_init_auth_generates_and_loads_secret_file(self, monkeypatch, tmp_path):
         """First call creates the key file; second call reads it back."""
@@ -662,14 +659,14 @@ class TestInitAuth:
         reset_settings()
         factory = MagicMock()
         auth.init_auth(factory)
-        first_secret = auth._hmac_secret
+        first_secret = auth.state.hmac_secret
         assert len(first_secret) == 32
 
         # Second init should read the same file
         auth.reset()
         reset_settings()
         auth.init_auth(factory)
-        assert auth._hmac_secret == first_secret
+        assert auth.state.hmac_secret == first_secret
 
 
 # ─── DB-error rollback paths (create_user / CRUD) ─────────────────────────
@@ -696,61 +693,61 @@ class TestDBErrorPaths:
         pass
 
     def test_is_setup_complete_db_error_returns_false(self):
-        auth._session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
+        auth.state.session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
         assert is_setup_complete() is False
 
     def test_list_users_db_error_returns_empty(self):
         from shoreguard.api.auth import list_users
 
-        auth._session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
+        auth.state.session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
         assert list_users() == []
 
     def test_list_service_principals_db_error_returns_empty(self):
         from shoreguard.api.auth import list_service_principals
 
-        auth._session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
+        auth.state.session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
         assert list_service_principals() == []
 
     def test_list_gateway_roles_for_user_db_error(self):
         from shoreguard.api.auth import list_gateway_roles_for_user
 
-        auth._session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
+        auth.state.session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
         assert list_gateway_roles_for_user(1) == []
 
     def test_list_gateway_roles_for_sp_db_error(self):
         from shoreguard.api.auth import list_gateway_roles_for_sp
 
-        auth._session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
+        auth.state.session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
         assert list_gateway_roles_for_sp(1) == []
 
     def test_list_groups_db_error(self):
         from shoreguard.api.auth import list_groups
 
-        auth._session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
+        auth.state.session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
         assert list_groups() == []
 
     def test_get_group_db_error(self):
         from shoreguard.api.auth import get_group
 
-        auth._session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
+        auth.state.session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
         assert get_group(1) is None
 
     def test_list_group_members_db_error(self):
         from shoreguard.api.auth import list_group_members
 
-        auth._session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
+        auth.state.session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
         assert list_group_members(1) == []
 
     def test_list_user_groups_db_error(self):
         from shoreguard.api.auth import list_user_groups
 
-        auth._session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
+        auth.state.session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
         assert list_user_groups(1) == []
 
     def test_list_group_gateway_roles_db_error(self):
         from shoreguard.api.auth import list_group_gateway_roles
 
-        auth._session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
+        auth.state.session_factory = _mock_factory_with_error(SQLAlchemyError("boom"))  # type: ignore[assignment]
         assert list_group_gateway_roles(1) == []
 
 
@@ -965,7 +962,7 @@ class TestNotFoundBranches:
         # Create gateway first so the early-return for unknown gateway does not fire
         from shoreguard.models import Gateway
 
-        with auth._session_factory() as session:  # type: ignore[misc]
+        with auth.state.session_factory() as session:  # type: ignore[misc]
             session.add(
                 Gateway(
                     name="realgw",
@@ -1041,7 +1038,7 @@ class TestRequireRoleGatewayOverride:
         from shoreguard.models import Gateway
 
         info = create_user("u@x.com", "pw", "viewer")
-        with auth._session_factory() as session:  # type: ignore[misc]
+        with auth.state.session_factory() as session:  # type: ignore[misc]
             session.add(
                 Gateway(
                     name="prod",
@@ -1081,7 +1078,7 @@ class TestRequireRoleGatewayOverride:
 
         create_user("a@b.com", "pw", "admin")
         key, info = create_service_principal("ci-sp", "viewer")
-        with auth._session_factory() as session:  # type: ignore[misc]
+        with auth.state.session_factory() as session:  # type: ignore[misc]
             session.add(
                 Gateway(
                     name="stage",
@@ -1161,6 +1158,6 @@ class TestBootstrapError:
         monkeypatch.setenv("SHOREGUARD_ADMIN_PASSWORD", "pw12345")
         reset_settings()
 
-        with patch("shoreguard.api.auth.create_user", side_effect=RuntimeError("broke")):
+        with patch("shoreguard.api.auth.users.create_user", side_effect=RuntimeError("broke")):
             with pytest.raises(RuntimeError, match="broke"):
                 bootstrap_admin_user()

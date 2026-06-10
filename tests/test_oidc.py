@@ -139,7 +139,9 @@ class TestStateCookie:
         import hashlib
         import hmac as hmac_mod
 
-        new_sig = hmac_mod.new(auth._hmac_secret, new_payload.encode(), hashlib.sha256).hexdigest()
+        new_sig = hmac_mod.new(
+            auth.state.hmac_secret, new_payload.encode(), hashlib.sha256
+        ).hexdigest()
         result = verify_state_cookie(f"{new_encoded}.{new_sig}")
         assert result is None
 
@@ -1841,7 +1843,7 @@ class TestVerifyStateCookieMutationKillers:
         data = {"p": "test", "s": "s", "n": "n", "v": "v", "x": "/", "e": int(time.time()) + 300}
         payload = json.dumps(data, separators=(",", ":"))
         encoded = base64.urlsafe_b64encode(payload.encode()).decode()
-        sig = hmac_mod.new(auth._hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
+        sig = hmac_mod.new(auth.state.hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
         # Add extra dots to sig to test split behavior
         cookie = f"{encoded}.{sig}"
         result = verify_state_cookie(cookie)
@@ -1867,7 +1869,7 @@ class TestVerifyStateCookieMutationKillers:
 
         payload = b"not json at all"
         encoded = base64.urlsafe_b64encode(payload).decode()
-        sig = hmac_mod.new(auth._hmac_secret, payload, hashlib.sha256).hexdigest()
+        sig = hmac_mod.new(auth.state.hmac_secret, payload, hashlib.sha256).hexdigest()
         result = verify_state_cookie(f"{encoded}.{sig}")
         assert result is None
 
@@ -1879,7 +1881,7 @@ class TestVerifyStateCookieMutationKillers:
         data = {"p": "test", "s": "s", "n": "n", "v": "v", "x": "/", "e": int(time.time()) - 1}
         payload = json.dumps(data, separators=(",", ":"))
         encoded = base64.urlsafe_b64encode(payload.encode()).decode()
-        sig = hmac_mod.new(auth._hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
+        sig = hmac_mod.new(auth.state.hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
         result = verify_state_cookie(f"{encoded}.{sig}")
         assert result is None
 
@@ -1939,7 +1941,9 @@ class TestBuildStateCookieMutationKillers:
         cookie = build_state_cookie("p", "s", "n", "v", "/")
         encoded, sig = cookie.split(".", 1)
         payload_bytes = base64.urlsafe_b64decode(encoded)
-        expected_sig = hmac_mod.new(auth._hmac_secret, payload_bytes, hashlib.sha256).hexdigest()
+        expected_sig = hmac_mod.new(
+            auth.state.hmac_secret, payload_bytes, hashlib.sha256
+        ).hexdigest()
         assert sig == expected_sig
 
 

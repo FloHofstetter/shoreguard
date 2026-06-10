@@ -13,8 +13,6 @@ from sqlalchemy.pool import StaticPool
 import shoreguard.services.audit as audit_mod
 from shoreguard.api import auth
 from shoreguard.api.auth import (
-    _GatewayRoleLookupError,
-    _lookup_gateway_role,
     create_service_principal,
     create_user,
     list_gateway_roles_for_sp,
@@ -22,6 +20,7 @@ from shoreguard.api.auth import (
     remove_gateway_role,
     set_gateway_role,
 )
+from shoreguard.api.auth.rbac import _GatewayRoleLookupError, _lookup_gateway_role
 from shoreguard.api.deps import _current_gateway
 from shoreguard.container import get_container
 from shoreguard.exceptions import ValidationError as DomainValidationError
@@ -190,12 +189,12 @@ class TestListGatewayRolesForUser:
     def test_empty_when_session_factory_is_none(self, db):
         user = create_user("u@test.com", "password1", "viewer")
         # Temporarily clear the session factory
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert list_gateway_roles_for_user(user["id"]) == []
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
 
 # ─── Unit tests: list_gateway_roles_for_sp ────────────────────────────────
@@ -215,12 +214,12 @@ class TestListGatewayRolesForSP:
 
     def test_empty_when_session_factory_is_none(self, db):
         _key, sp = create_service_principal("test-sp", "viewer")
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert list_gateway_roles_for_sp(sp["id"]) == []
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
 
 # ─── Unit tests: _lookup_gateway_role ─────────────────────────────────────
@@ -240,12 +239,12 @@ class TestLookupGatewayRole:
         assert _lookup_gateway_role(gateway=GW_NAME) is None
 
     def test_returns_none_when_session_factory_is_none(self, db):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert _lookup_gateway_role(user_id=1, gateway=GW_NAME) is None
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
     def test_raises_on_db_error(self, db, _with_gateway, monkeypatch):
         """Simulate a SQLAlchemyError during the query — should raise _GatewayRoleLookupError."""
@@ -253,7 +252,7 @@ class TestLookupGatewayRole:
 
         user = create_user("u@test.com", "password1", "viewer")
 
-        original_factory = auth._session_factory
+        original_factory = auth.state.session_factory
         assert original_factory is not None
 
         def broken_factory():
@@ -266,12 +265,12 @@ class TestLookupGatewayRole:
             session.query = patched_query
             return session
 
-        auth._session_factory = broken_factory
+        auth.state.session_factory = broken_factory  # type: ignore[assignment]
         try:
             with pytest.raises(_GatewayRoleLookupError):
                 _lookup_gateway_role(user_id=user["id"], gateway=GW_NAME)
         finally:
-            auth._session_factory = original_factory
+            auth.state.session_factory = original_factory
 
 
 # ─── Integration tests: role resolution in require_role() ─────────────────

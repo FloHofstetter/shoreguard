@@ -154,7 +154,7 @@ async def logout(request: Request) -> JSONResponse:
         if result:
             user_id = result[0]
             # Resolve email for consistent audit logging
-            from shoreguard.api.auth import _lookup_user
+            from shoreguard.api.auth.core import _lookup_user
 
             u = _lookup_user(user_id)
             user_info = u["email"] if u else f"user_id={user_id}"
@@ -192,11 +192,11 @@ async def auth_check(request: Request) -> dict[str, Any]:
     if cookie and role:
         result = verify_session_token(cookie)
         if result:
-            from shoreguard.api.auth import _session_factory
+            from shoreguard.api.auth import state
             from shoreguard.models import User
 
-            if _session_factory:
-                session = _session_factory()
+            if state.session_factory:
+                session = state.session_factory()
                 try:
                     user = session.query(User).filter(User.id == result[0]).first()
                     if user:

@@ -18,13 +18,10 @@ from sqlalchemy.pool import StaticPool
 
 from shoreguard.api import auth
 from shoreguard.api.auth import (
-    _ROLE_RANK,
     COOKIE_NAME,
     INVITE_MAX_AGE,
     ROLES,
     SESSION_MAX_AGE,
-    _hash_key,
-    _lookup_sp_identity,
     accept_invite,
     add_group_member,
     authenticate_user,
@@ -58,6 +55,7 @@ from shoreguard.api.auth import (
     verify_password,
     verify_session_token,
 )
+from shoreguard.api.auth.core import _ROLE_RANK, _hash_key, _lookup_sp_identity
 from shoreguard.exceptions import NotFoundError
 from shoreguard.exceptions import ValidationError as DomainValidationError
 from shoreguard.models import Base, Gateway
@@ -375,8 +373,8 @@ class TestDeleteUserExact:
         admin1 = create_user("admin1@test.com", "password1", "admin")
         admin2 = create_user("admin2@test.com", "password1", "admin")
         # Deactivate admin2
-        assert auth._session_factory is not None
-        session = auth._session_factory()
+        assert auth.state.session_factory is not None
+        session = auth.state.session_factory()
         user = session.query(User).filter(User.id == admin2["id"]).first()
         assert user is not None
         user.is_active = False
@@ -532,12 +530,12 @@ class TestListServicePrincipalsExact:
         assert "2030-01-01" in sps[0]["expires_at"]
 
     def test_session_factory_none_returns_empty(self):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert list_service_principals() == []
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
 
 # ─── delete_service_principal: exact returns ─────────────────────────────
@@ -609,12 +607,12 @@ class TestLookupSpIdentityExact:
 
     def test_session_factory_none(self):
         key, _ = create_service_principal("sp", "viewer")
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert _lookup_sp_identity(key) is None
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
     def test_updates_last_used(self):
         key, info = create_service_principal("sp", "viewer")
@@ -665,13 +663,13 @@ class TestCreateUserExact:
             create_user("u@test.com", "password1", "")
 
     def test_no_session_factory_raises_runtime(self):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             with pytest.raises(RuntimeError, match="Database not available"):
                 create_user("u@test.com", "password1", "viewer")
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
 
 # ─── list_users: exact dict keys ─────────────────────────────────────────
@@ -718,12 +716,12 @@ class TestListUsersExact:
         assert users[0]["pending_invite"] is True
 
     def test_session_factory_none_returns_empty(self):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert list_users() == []
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
 
 # ─── accept_invite: exact return values ──────────────────────────────────
@@ -761,19 +759,19 @@ class TestAcceptInviteExact:
         assert accept_invite(token, "newpass12") is None
 
     def test_session_factory_none_returns_none(self):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert accept_invite("any-token", "password1") is None
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
     def test_expired_invite_returns_none(self):
         from shoreguard.models import User
 
         info = create_user("u@test.com", None, "viewer")
-        assert auth._session_factory is not None
-        session = auth._session_factory()
+        assert auth.state.session_factory is not None
+        session = auth.state.session_factory()
         user = session.query(User).filter(User.id == info["id"]).first()
         assert user is not None
         user.created_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=8)
@@ -815,8 +813,8 @@ class TestAuthenticateUserExact:
         from shoreguard.models import User
 
         create_user("u@test.com", "password1", "viewer")
-        assert auth._session_factory is not None
-        session = auth._session_factory()
+        assert auth.state.session_factory is not None
+        session = auth.state.session_factory()
         user = session.query(User).filter(User.email == "u@test.com").first()
         assert user is not None
         user.is_active = False
@@ -831,12 +829,12 @@ class TestAuthenticateUserExact:
         assert result["email"] == "u@test.com"
 
     def test_session_factory_none(self):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert authenticate_user("u@test.com", "password1") is None
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
 
 # ─── session token: exact values ─────────────────────────────────────────
@@ -869,7 +867,7 @@ class TestSessionTokenExact:
             assert result[1] == role
 
     def test_expired_token_returns_none(self):
-        with patch("shoreguard.api.auth.time") as mock_time:
+        with patch("shoreguard.api.auth.core.time") as mock_time:
             mock_time.time.return_value = time.time() - 86400 * 8
             token = create_session_token(user_id=1, role="admin")
         assert verify_session_token(token) is None
@@ -1090,12 +1088,12 @@ class TestGetGroupExact:
         assert get_group(99999) is None
 
     def test_session_factory_none(self):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert get_group(1) is None
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
     def test_members_ordered_by_email(self):
         g = create_group("devs")
@@ -1143,12 +1141,12 @@ class TestListGroupMembersExact:
         assert members[1]["role"] == "viewer"
 
     def test_session_factory_none(self):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert list_group_members(1) == []
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
 
 # ─── list_user_groups: exact return values ───────────────────────────────
@@ -1185,12 +1183,12 @@ class TestListUserGroupsExact:
         assert groups[1]["role"] == "admin"
 
     def test_session_factory_none(self):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert list_user_groups(1) == []
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
 
 # ─── list_groups: exact return values ────────────────────────────────────
@@ -1241,12 +1239,12 @@ class TestListGroupsExact:
         assert names == ["alpha", "middle", "zebra"]
 
     def test_session_factory_none(self):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert list_groups() == []
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
 
 # ─── delete_group: exact return values ───────────────────────────────────
@@ -1495,12 +1493,12 @@ class TestListGroupGatewayRolesExact:
         assert roles[1] == {"gateway_name": "gw-b", "role": "admin"}
 
     def test_session_factory_none(self):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert list_group_gateway_roles(1) == []
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
 
 # ─── bootstrap_admin_user: exact behavior ────────────────────────────────
@@ -1559,12 +1557,12 @@ class TestBootstrapAdminUserExact:
         from shoreguard.settings import reset_settings
 
         reset_settings()
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             bootstrap_admin_user()
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
         # No crash, no users created
 
 
@@ -1584,12 +1582,12 @@ class TestIsSetupCompleteExact:
         assert is_setup_complete() is True
 
     def test_session_factory_none_returns_false(self):
-        original = auth._session_factory
-        auth._session_factory = None
+        original = auth.state.session_factory
+        auth.state.session_factory = None
         try:
             assert is_setup_complete() is False
         finally:
-            auth._session_factory = original
+            auth.state.session_factory = original
 
 
 # ─── Password hashing ────────────────────────────────────────────────────
@@ -1655,7 +1653,7 @@ class TestRecordFailedLoginExact:
         reset_lockouts()
 
     def test_increments_counter(self):
-        from shoreguard.api.auth import _account_failures
+        from shoreguard.api.auth.core import _account_failures
 
         record_failed_login = auth.record_failed_login
         record_failed_login("user@example.com")
@@ -1664,7 +1662,7 @@ class TestRecordFailedLoginExact:
         assert _account_failures["user@example.com"][0] == 2
 
     def test_case_insensitive(self):
-        from shoreguard.api.auth import _account_failures
+        from shoreguard.api.auth.core import _account_failures
 
         auth.record_failed_login("User@Example.COM")
         assert "user@example.com" in _account_failures

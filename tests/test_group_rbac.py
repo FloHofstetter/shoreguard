@@ -14,8 +14,6 @@ from sqlalchemy.pool import StaticPool
 import shoreguard.services.audit as audit_mod
 from shoreguard.api import auth
 from shoreguard.api.auth import (
-    _lookup_gateway_role,
-    _lookup_group_global_role,
     add_group_member,
     create_group,
     create_user,
@@ -30,6 +28,7 @@ from shoreguard.api.auth import (
     set_group_gateway_role,
     update_group,
 )
+from shoreguard.api.auth.rbac import _lookup_gateway_role, _lookup_group_global_role
 from shoreguard.container import get_container
 from shoreguard.exceptions import NotFoundError
 from shoreguard.exceptions import ValidationError as DomainValidationError

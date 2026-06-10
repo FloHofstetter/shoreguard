@@ -501,13 +501,14 @@ def test_ws_auth_rejects_without_token(monkeypatch):
     from starlette.websockets import WebSocketDisconnect
 
     from shoreguard.api import auth as auth_mod
+    from shoreguard.api.auth import rbac as rbac_mod
     from shoreguard.api.main import app
 
     # Disable no-auth and force setup-complete so the dep actually rejects.
-    monkeypatch.setattr(auth_mod, "_no_auth", False)
-    monkeypatch.setattr(auth_mod, "is_setup_complete", lambda: True)
-    monkeypatch.setattr(auth_mod, "_lookup_sp_identity", lambda _k: None)
-    monkeypatch.setattr(auth_mod, "verify_session_token", lambda _t: None)
+    monkeypatch.setattr(auth_mod.state, "no_auth", False)
+    monkeypatch.setattr(rbac_mod, "is_setup_complete", lambda: True)
+    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", lambda _k: None)
+    monkeypatch.setattr(rbac_mod, "verify_session_token", lambda _t: None)
 
     client = TestClient(app)
     with pytest.raises(WebSocketDisconnect):
@@ -521,12 +522,13 @@ def test_ws_auth_rejects_invalid_token(monkeypatch):
     from starlette.websockets import WebSocketDisconnect
 
     from shoreguard.api import auth as auth_mod
+    from shoreguard.api.auth import rbac as rbac_mod
     from shoreguard.api.main import app
 
-    monkeypatch.setattr(auth_mod, "_no_auth", False)
-    monkeypatch.setattr(auth_mod, "is_setup_complete", lambda: True)
-    monkeypatch.setattr(auth_mod, "_lookup_sp_identity", lambda _k: None)
-    monkeypatch.setattr(auth_mod, "verify_session_token", lambda _t: None)
+    monkeypatch.setattr(auth_mod.state, "no_auth", False)
+    monkeypatch.setattr(rbac_mod, "is_setup_complete", lambda: True)
+    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", lambda _k: None)
+    monkeypatch.setattr(rbac_mod, "verify_session_token", lambda _t: None)
 
     client = TestClient(app)
     with pytest.raises(WebSocketDisconnect):
@@ -540,13 +542,14 @@ def test_ws_auth_rejects_expired_session(monkeypatch):
     from starlette.websockets import WebSocketDisconnect
 
     from shoreguard.api import auth as auth_mod
+    from shoreguard.api.auth import rbac as rbac_mod
     from shoreguard.api.main import app
 
-    monkeypatch.setattr(auth_mod, "_no_auth", False)
-    monkeypatch.setattr(auth_mod, "is_setup_complete", lambda: True)
-    monkeypatch.setattr(auth_mod, "_lookup_sp_identity", lambda _k: None)
+    monkeypatch.setattr(auth_mod.state, "no_auth", False)
+    monkeypatch.setattr(rbac_mod, "is_setup_complete", lambda: True)
+    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", lambda _k: None)
     # Expired / invalid session → verify returns None.
-    monkeypatch.setattr(auth_mod, "verify_session_token", lambda _t: None)
+    monkeypatch.setattr(rbac_mod, "verify_session_token", lambda _t: None)
 
     client = TestClient(app)
     with pytest.raises(WebSocketDisconnect):
@@ -563,14 +566,15 @@ def test_ws_auth_rejects_deleted_user(monkeypatch):
     from starlette.websockets import WebSocketDisconnect
 
     from shoreguard.api import auth as auth_mod
+    from shoreguard.api.auth import rbac as rbac_mod
     from shoreguard.api.main import app
 
-    monkeypatch.setattr(auth_mod, "_no_auth", False)
-    monkeypatch.setattr(auth_mod, "is_setup_complete", lambda: True)
-    monkeypatch.setattr(auth_mod, "_lookup_sp_identity", lambda _k: None)
+    monkeypatch.setattr(auth_mod.state, "no_auth", False)
+    monkeypatch.setattr(rbac_mod, "is_setup_complete", lambda: True)
+    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", lambda _k: None)
     # Session verifies, but user row no longer exists.
-    monkeypatch.setattr(auth_mod, "verify_session_token", lambda _t: (42, "operator"))
-    monkeypatch.setattr(auth_mod, "_lookup_user", lambda _uid: None)
+    monkeypatch.setattr(rbac_mod, "verify_session_token", lambda _t: (42, "operator"))
+    monkeypatch.setattr(rbac_mod, "_lookup_user", lambda _uid: None)
 
     client = TestClient(app)
     with pytest.raises(WebSocketDisconnect):
@@ -586,12 +590,13 @@ def test_ws_auth_accepts_valid_sp_token(monkeypatch):
     from starlette.testclient import TestClient
 
     from shoreguard.api import auth as auth_mod
+    from shoreguard.api.auth import rbac as rbac_mod
     from shoreguard.api.main import app
 
-    monkeypatch.setattr(auth_mod, "_no_auth", False)
-    monkeypatch.setattr(auth_mod, "is_setup_complete", lambda: True)
+    monkeypatch.setattr(auth_mod.state, "no_auth", False)
+    monkeypatch.setattr(rbac_mod, "is_setup_complete", lambda: True)
     monkeypatch.setattr(
-        auth_mod,
+        rbac_mod,
         "_lookup_sp_identity",
         lambda _k: {"role": "operator", "name": "ci-bot"},
     )

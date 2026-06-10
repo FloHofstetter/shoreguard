@@ -49,13 +49,13 @@ class TestAccountLockout:
 
         reset_settings()
         base = time.monotonic()
-        with patch("shoreguard.api.auth.time.monotonic", return_value=base):
+        with patch("shoreguard.api.auth.core.time.monotonic", return_value=base):
             record_failed_login("user@example.com")
             record_failed_login("user@example.com")
-        with patch("shoreguard.api.auth.time.monotonic", return_value=base):
+        with patch("shoreguard.api.auth.core.time.monotonic", return_value=base):
             locked, _ = is_account_locked("user@example.com")
             assert locked
-        with patch("shoreguard.api.auth.time.monotonic", return_value=base + 11):
+        with patch("shoreguard.api.auth.core.time.monotonic", return_value=base + 11):
             locked, _ = is_account_locked("user@example.com")
             assert not locked
 

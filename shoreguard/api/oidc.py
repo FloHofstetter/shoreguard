@@ -407,7 +407,7 @@ def map_role(provider: OIDCProvider, claims: dict) -> str:
     if not isinstance(claim_value, list):
         return default
     # Return the highest-ranking matched role
-    from shoreguard.api.auth import _ROLE_RANK
+    from shoreguard.api.auth.core import _ROLE_RANK
 
     best_role = default
     best_rank = _ROLE_RANK.get(default, 0)
@@ -430,9 +430,9 @@ def _get_hmac_secret() -> bytes:
     Returns:
         bytes: The shared HMAC secret used to sign OIDC state cookies.
     """
-    from shoreguard.api.auth import _hmac_secret
+    from shoreguard.api.auth import state
 
-    return _hmac_secret
+    return state.hmac_secret
 
 
 def build_state_cookie(

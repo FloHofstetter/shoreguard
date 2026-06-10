@@ -161,10 +161,10 @@ def _require_page_auth(request: Request) -> RedirectResponse | None:
     Returns:
         RedirectResponse | None: Redirect if unauthenticated, or None if authorized.
     """
-    from shoreguard.api.auth import _session_factory
+    from shoreguard.api.auth import state
 
     # If a DB is configured but no users exist yet → setup wizard
-    if _session_factory is not None and not is_setup_complete():
+    if state.session_factory is not None and not is_setup_complete():
         from urllib.parse import quote
 
         return RedirectResponse(url=f"/setup?next={quote(request.url.path)}", status_code=302)

@@ -225,7 +225,7 @@ class TestSingleUserMode:
         create_user("admin@test.com", "adminpass", "admin")
 
         # Enable no-auth mode
-        monkeypatch.setattr(auth_mod, "_no_auth", True)
+        monkeypatch.setattr(auth_mod.state, "no_auth", True)
 
         app.dependency_overrides[get_client] = lambda: mock_client
         try:

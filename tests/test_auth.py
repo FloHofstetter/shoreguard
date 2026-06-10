@@ -12,7 +12,6 @@ from sqlalchemy.pool import StaticPool
 
 from shoreguard.api.auth import (
     ROLES,
-    _hash_key,
     authenticate_user,
     create_service_principal,
     create_session_token,
@@ -24,6 +23,7 @@ from shoreguard.api.auth import (
     verify_password,
     verify_session_token,
 )
+from shoreguard.api.auth.core import _hash_key
 from shoreguard.models import Base
 
 
@@ -89,7 +89,7 @@ class TestSessionToken:
         assert verify_session_token(".".join(parts)) is None
 
     def test_expired_token(self):
-        with patch("shoreguard.api.auth.time") as mock_time:
+        with patch("shoreguard.api.auth.core.time") as mock_time:
             mock_time.time.return_value = time.time() - 86400 * 8
             token = create_session_token(user_id=1, role="admin")
         assert verify_session_token(token) is None

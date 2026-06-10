@@ -61,7 +61,7 @@ def _auth_db():
     auth.init_auth_for_test(factory)
     yield factory
     auth.reset()
-    auth._no_auth = True  # noqa: SLF001 — restore default test state
+    auth.state.no_auth = True  # noqa: SLF001 — restore default test state
     engine.dispose()
 
 

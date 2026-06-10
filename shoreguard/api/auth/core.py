@@ -1,0 +1,522 @@
+"""Auth core: passwords, sessions, lockout, credential resolution, state."""
+
+from __future__ import annotations
+
+import datetime
+import hashlib
+import hmac
+import logging
+import os
+import secrets
+import time
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from fastapi import HTTPException, Request
+from pwdlib import PasswordHash
+from pwdlib.exceptions import PwdlibError
+from pwdlib.hashers.bcrypt import BcryptHasher
+from sqlalchemy.exc import SQLAlchemyError
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import sessionmaker as SessionMaker
+
+    from shoreguard.settings import AuthSettings
+
+logger = logging.getLogger(__name__)
+
+# ─── Roles ──────────────────────────────────────────────────────────────────
+
+ROLES = ("admin", "operator", "viewer")
+_ROLE_RANK: dict[str, int] = {"admin": 2, "operator": 1, "viewer": 0}
+
+_SENTINEL = object()  # default marker for optional kwargs
+
+# ─── Password hashing ──────────────────────────────────────────────────────
+
+_hasher = PasswordHash((BcryptHasher(),))
+
+
+def hash_password(password: str) -> str:
+    """Hash a plaintext password.
+
+    Args:
+        password: The plaintext password to hash.
+
+    Returns:
+        str: Bcrypt-hashed password string.
+    """
+    return _hasher.hash(password)
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify a plaintext password against a hash.
+
+    Args:
+        password: The plaintext password to verify.
+        hashed: The bcrypt hash to verify against.
+
+    Returns:
+        bool: ``True`` if the password matches.
+    """
+    try:
+        return _hasher.verify(password, hashed)
+    except ValueError, TypeError, PwdlibError:
+        # Corrupt or unrecognised hash format — treat as non-match.
+        # PwdlibError covers UnknownHashError (garbage hash strings) and
+        # HasherNotAvailable (hash format from a disabled hasher).
+        logger.warning("Password verification error (corrupt hash?)", exc_info=True)
+        return False
+
+
+# ─── Module state ──────────────────────────────────────────────────────────
+
+
+@dataclass
+class _AuthState:
+    """Mutable auth runtime state, shared by all auth submodules.
+
+    Attributes:
+        session_factory: DB session factory, set by :func:`init_auth`.
+        hmac_secret: Secret for session-token HMAC signatures.
+        no_auth: When True, every request is treated as an admin
+            (``--no-auth`` development mode).
+    """
+
+    session_factory: SessionMaker | None = None
+    hmac_secret: bytes = b""
+    no_auth: bool = False
+
+
+state = _AuthState()
+
+
+def set_no_auth(value: bool) -> None:
+    """Enable or disable the global auth bypass (dev mode / tests).
+
+    Args:
+        value: True to treat every request as an admin.
+    """
+    state.no_auth = value
+
+
+def _get_auth_settings() -> AuthSettings:
+    """Return auth settings from the central Settings singleton.
+
+    Returns:
+        AuthSettings: The auth subsection of the central Settings singleton.
+    """
+    from shoreguard.settings import get_settings
+
+    return get_settings().auth
+
+
+# Module-level aliases so existing ``from .auth import COOKIE_NAME`` works.
+# The values are read once at import time; if they ever need to vary at
+# runtime, call ``_get_auth_settings()`` directly instead.
+COOKIE_NAME = "sg_session"
+SESSION_MAX_AGE = 86400 * 7  # 7 days
+
+
+def _load_or_create_secret_key() -> bytes:
+    """Load or generate the HMAC secret key for session cookies.
+
+    Returns:
+        bytes: 32-byte HMAC signing key.
+    """
+    auth_cfg = _get_auth_settings()
+    if auth_cfg.secret_key:
+        return hashlib.sha256(auth_cfg.secret_key.encode()).digest()
+
+    from shoreguard.config import shoreguard_config_dir
+
+    key_file = shoreguard_config_dir() / ".secret_key"
+    if key_file.exists():
+        return key_file.read_bytes()
+
+    key_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    secret = secrets.token_bytes(32)
+    fd = os.open(str(key_file), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, secret)
+    finally:
+        os.close(fd)
+    logger.info("Generated new secret key at %s", key_file)
+    return secret
+
+
+def init_auth(session_factory: SessionMaker) -> None:
+    """Initialise the auth module with a DB session factory.
+
+    Called once from the application lifespan.
+
+    Args:
+        session_factory: SQLAlchemy session factory bound to the engine.
+    """
+    state.session_factory = session_factory
+    state.hmac_secret = _load_or_create_secret_key()
+    state.no_auth = _get_auth_settings().no_auth
+
+
+def reset() -> None:
+    """Reset all auth state. For test teardown only."""
+    state.session_factory = None
+    state.hmac_secret = b""
+    state.no_auth = False
+    _account_failures.clear()
+
+
+def init_auth_for_test(session_factory: SessionMaker) -> None:
+    """Initialise auth with a test DB and a fixed HMAC secret.
+
+    Args:
+        session_factory: SQLAlchemy session factory for the test database.
+    """
+    state.session_factory = session_factory
+    state.hmac_secret = b"test-secret-key-for-unit-tests!!"
+    state.no_auth = False
+
+
+def is_registration_enabled() -> bool:
+    """Return True when self-registration is allowed.
+
+    Returns:
+        bool: ``True`` if ``SHOREGUARD_ALLOW_REGISTRATION`` is set.
+    """
+    return _get_auth_settings().allow_registration
+
+
+def is_setup_complete() -> bool:
+    """Return True when at least one user exists in the database.
+
+    Returns:
+        bool: ``True`` if at least one user row exists.
+    """
+    if state.session_factory is None:
+        return False
+    from shoreguard.models import User
+
+    with state.session_factory() as session:
+        try:
+            return session.query(User).count() > 0
+        except SQLAlchemyError:
+            logger.exception("Failed to check setup status")
+            return False
+
+
+# ─── Key hashing (for service principals) ───────────────────────────────────
+
+
+def _hash_key(key: str) -> str:
+    """Return the SHA-256 hex digest of a service principal key.
+
+    Args:
+        key: Plaintext API key.
+
+    Returns:
+        str: Hex-encoded SHA-256 digest.
+    """
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+# ─── Session cookie helpers ─────────────────────────────────────────────────
+
+
+def create_session_token(user_id: int, role: str) -> str:
+    """Create an HMAC-signed session token.
+
+    Format: ``<nonce>.<expiry>.<user_id>.<role>.<signature>``
+
+    Args:
+        user_id: Database ID of the authenticated user.
+        role: The user's current role.
+
+    Returns:
+        str: Signed session token string.
+    """
+    nonce = secrets.token_urlsafe(24)
+    expiry = str(int(time.time()) + _get_auth_settings().session_max_age)
+    payload = f"{nonce}.{expiry}.{user_id}.{role}"
+    sig = hmac.new(state.hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def verify_session_token(token: str) -> tuple[int, str] | None:
+    """Verify a session token and return ``(user_id, role)`` or None.
+
+    Args:
+        token: The session token string to verify.
+
+    Returns:
+        tuple[int, str] | None: ``(user_id, role)`` if valid, else ``None``.
+    """
+    parts = token.split(".")
+    if len(parts) != 5:
+        return None
+    nonce, expiry_str, user_id_str, role, sig = parts
+    if role not in ROLES:
+        return None
+    payload = f"{nonce}.{expiry_str}.{user_id_str}.{role}"
+    expected = hmac.new(state.hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return None
+    try:
+        if int(expiry_str) < int(time.time()):
+            return None
+        user_id = int(user_id_str)
+    except ValueError:
+        return None
+    return user_id, role
+
+
+# ─── DB lookups ─────────────────────────────────────────────────────────────
+
+
+def _lookup_sp(key: str) -> str | None:
+    """Look up a service principal by Bearer token. Returns role or None.
+
+    .. deprecated:: Use :func:`_lookup_sp_identity` for new code.
+
+    Args:
+        key: Plaintext API key from the Bearer header.
+
+    Returns:
+        str | None: Role string or ``None`` if not found.
+    """
+    result = _lookup_sp_identity(key)
+    return result["role"] if result else None
+
+
+def authenticate_user(email: str, password: str) -> dict | None:
+    """Verify user credentials. Returns user info dict or None.
+
+    Uses constant-time comparison to prevent timing-based email enumeration:
+    a dummy bcrypt hash is verified when the user does not exist so that the
+    response time is indistinguishable from a wrong-password attempt.
+
+    Args:
+        email: User email address.
+        password: Plaintext password to verify.
+
+    Returns:
+        dict | None: ``{id, email, role}`` on success, else ``None``.
+    """
+    if state.session_factory is None:
+        return None
+    from shoreguard.models import User
+
+    email = email.strip().lower()
+    with state.session_factory() as session:
+        user = session.query(User).filter(User.email == email).first()
+
+        # Always run bcrypt to prevent timing-based user enumeration.
+        # The dummy hash is a valid bcrypt hash that will never match.
+        _DUMMY_HASH = "$2b$12$LJ3m4ys3Lg2VBe50VdnCJOIBbGMkGLWMFwxL8MKGqUVAyGYQz/mPa"
+        valid_user = (
+            user is not None
+            and user.is_active
+            and user.invite_token_hash is None
+            and user.hashed_password is not None
+        )
+        password_ok = verify_password(password, user.hashed_password if valid_user else _DUMMY_HASH)
+
+        if not valid_user or not password_ok:
+            logger.warning("Auth failed: invalid credentials (email=%s)", email)
+            return None
+        return {"id": user.id, "email": user.email, "role": user.role}
+
+
+# ── Account lockout ──────────────────────────────────────────────────────────
+# In-memory tracking of failed login attempts per (normalized) email.
+# Complements IP-based rate limiting: rate limiting blocks one IP attacking
+# many accounts; account lockout blocks many IPs attacking one account.
+
+_account_failures: dict[str, tuple[int, float]] = {}
+
+
+def record_failed_login(email: str) -> None:
+    """Increment the failure counter for *email*.
+
+    Args:
+        email: The email that failed authentication (will be lowered).
+    """
+    import time
+
+    key = email.strip().lower()
+    count, _ = _account_failures.get(key, (0, 0.0))
+    _account_failures[key] = (count + 1, time.monotonic())
+
+
+def is_account_locked(email: str) -> tuple[bool, int]:
+    """Check whether *email* is temporarily locked due to repeated failures.
+
+    Args:
+        email: The email to check.
+
+    Returns:
+        tuple[bool, int]: ``(locked, retry_after_seconds)``. When *locked* is
+        ``True``, *retry_after* indicates how long the caller should wait.
+    """
+    import time
+
+    from shoreguard.settings import get_settings
+
+    key = email.strip().lower()
+    entry = _account_failures.get(key)
+    if entry is None:
+        return False, 0
+
+    count, last_failure = entry
+    settings = get_settings().auth
+    if count < settings.account_lockout_attempts:
+        return False, 0
+
+    elapsed = time.monotonic() - last_failure
+    remaining = settings.account_lockout_duration - elapsed
+    if remaining <= 0:
+        # Lockout expired — clear
+        _account_failures.pop(key, None)
+        return False, 0
+
+    return True, int(remaining) + 1
+
+
+def clear_lockout(email: str) -> None:
+    """Clear the failure counter on successful login.
+
+    Args:
+        email: The email to clear.
+    """
+    _account_failures.pop(email.strip().lower(), None)
+
+
+def reset_lockouts() -> None:
+    """Clear all lockout state (for tests)."""
+    _account_failures.clear()
+
+
+def _lookup_user(user_id: int) -> dict | None:
+    """Return ``{id, email, role}`` if the user exists and is active, else None.
+
+    Args:
+        user_id: Database ID of the user.
+
+    Returns:
+        dict | None: User info dict or ``None``.
+    """
+    if state.session_factory is None:
+        return None
+    from shoreguard.models import User
+
+    with state.session_factory() as session:
+        user = session.query(User).filter(User.id == user_id).first()
+        if user is None or not user.is_active:
+            return None
+        return {"id": user.id, "email": user.email, "role": user.role}
+
+
+def _lookup_sp_identity(key: str) -> dict | None:
+    """Look up a service principal by Bearer token. Returns ``{name, role}`` or None.
+
+    Args:
+        key: Plaintext API key from the Bearer header.
+
+    Returns:
+        dict | None: ``{id, name, role}`` or ``None`` if not found.
+    """
+    if state.session_factory is None:
+        return None
+    from shoreguard.models import ServicePrincipal
+
+    key_hash = _hash_key(key)
+    with state.session_factory() as session:
+        try:
+            row = (
+                session.query(ServicePrincipal)
+                .filter(ServicePrincipal.key_hash == key_hash)
+                .first()
+            )
+            if row is None:
+                return None
+            if row.expires_at is not None and row.expires_at.replace(
+                tzinfo=row.expires_at.tzinfo or datetime.UTC,
+            ) <= datetime.datetime.now(datetime.UTC):
+                logger.info("Service principal '%s' has expired", row.name)
+                return None
+            row.last_used = datetime.datetime.now(datetime.UTC)
+            session.commit()
+            return {"id": row.id, "name": row.name, "role": row.role}
+        except SQLAlchemyError:
+            session.rollback()
+            logger.exception("SP key lookup failed")
+            return None
+
+
+# ─── Credential resolution ──────────────────────────────────────────────────
+
+
+def check_request_auth(request: Request) -> str | None:
+    """Return the role for the request, or None if unauthenticated.
+
+    Sets ``request.state.role`` and ``request.state.user_id`` on success.
+    The role is always read from the **database** (not the session token)
+    so that demotions / deactivations take effect immediately.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        str | None: Role string or ``None`` if unauthenticated.
+
+    Raises:
+        HTTPException: 503 if the database session factory is not initialised.
+    """
+    if state.no_auth:
+        request.state.user_id = "no-auth"
+        return "admin"
+    if state.session_factory is None:
+        logger.error("Auth check with no DB session factory — denying request")
+        raise HTTPException(status_code=503, detail="Service not ready")
+    if not is_setup_complete():
+        request.state.user_id = "setup-pending"
+        # Only allow setup-related paths before first user is created
+        path = request.url.path
+        if path in ("/api/auth/setup", "/api/auth/check", "/setup") or path.startswith(
+            ("/static/", "/favicon")
+        ):
+            return "admin"
+        return None  # block all other API access until setup is complete
+
+    # 1. Bearer token → service principal
+    auth_header = request.headers.get("authorization", "")
+    if auth_header[:7].lower() == "bearer ":
+        token = auth_header[7:]
+        sp = _lookup_sp_identity(token)
+        if sp:
+            request.state.user_id = f"sp:{sp['name']}"
+            request.state.sp_db_id = sp["id"]
+            logger.debug(
+                "Auth via SP Bearer token (path=%s, role=%s)", request.url.path, sp["role"]
+            )
+            return sp["role"]
+
+    # 2. Session cookie → user
+    cookie = request.cookies.get(COOKIE_NAME)
+    if cookie:
+        result = verify_session_token(cookie)
+        if result:
+            user_id, _token_role = result
+            user_info = _lookup_user(user_id)
+            if user_info:
+                request.state.user_id = user_info["email"]
+                request.state.user_db_id = user_info["id"]
+                logger.debug(
+                    "Auth via session cookie (path=%s, role=%s, user=%s)",
+                    request.url.path,
+                    user_info["role"],
+                    user_info["email"],
+                )
+                return user_info["role"]
+            logger.warning("Session for inactive/deleted user_id=%d", user_id)
+
+    return None

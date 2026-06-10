@@ -12,7 +12,6 @@ from sqlalchemy.pool import StaticPool
 
 from shoreguard.api import auth
 from shoreguard.api.auth import (
-    _ROLE_RANK,
     ROLES,
     bootstrap_admin_user,
     create_service_principal,
@@ -22,6 +21,7 @@ from shoreguard.api.auth import (
     list_service_principals,
     list_users,
 )
+from shoreguard.api.auth.core import _ROLE_RANK
 from shoreguard.models import Base
 
 # ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -233,7 +233,7 @@ class TestBootstrap:
     def test_bootstrap_propagates_exception(self, monkeypatch):
         monkeypatch.setenv("SHOREGUARD_ADMIN_PASSWORD", "secret")
         monkeypatch.setattr(
-            "shoreguard.api.auth.create_user",
+            "shoreguard.api.auth.users.create_user",
             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("db down")),
         )
         with pytest.raises(RuntimeError, match="db down"):
