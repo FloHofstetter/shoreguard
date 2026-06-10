@@ -29,7 +29,7 @@ def _alembic_dir() -> str:
     Returns:
         str: Absolute path to the embedded alembic directory.
     """
-    return str(Path(__file__).parent / "alembic")
+    return str(Path(__file__).parent.parent / "alembic")
 
 
 def _alembic_config(url: str) -> AlembicConfig:
