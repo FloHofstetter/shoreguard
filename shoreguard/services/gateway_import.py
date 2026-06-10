@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 def import_filesystem_gateways(
     registry: GatewayRegistry,
     *,
@@ -182,4 +183,3 @@ def import_filesystem_gateways(
         imported += 1
 
     return imported, skipped
-

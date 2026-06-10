@@ -99,20 +99,20 @@ class TestVersionEndpoint:
         assert body["version"]
 
     async def test_defaults_to_unknown_outside_ci(self, client, monkeypatch):
-        import shoreguard.api.main as main_mod
+        import shoreguard.api.routes.health as health_mod
 
-        monkeypatch.setattr(main_mod, "__git_sha__", "unknown")
-        monkeypatch.setattr(main_mod, "__build_time__", "unknown")
+        monkeypatch.setattr(health_mod, "__git_sha__", "unknown")
+        monkeypatch.setattr(health_mod, "__build_time__", "unknown")
         resp = await client.get("/version")
         body = resp.json()
         assert body["git_sha"] == "unknown"
         assert body["build_time"] == "unknown"
 
     async def test_reflects_build_args_when_set(self, client, monkeypatch):
-        import shoreguard.api.main as main_mod
+        import shoreguard.api.routes.health as health_mod
 
-        monkeypatch.setattr(main_mod, "__git_sha__", "a1b2c3d")
-        monkeypatch.setattr(main_mod, "__build_time__", "2026-04-10T12:00:00Z")
+        monkeypatch.setattr(health_mod, "__git_sha__", "a1b2c3d")
+        monkeypatch.setattr(health_mod, "__build_time__", "2026-04-10T12:00:00Z")
         resp = await client.get("/version")
         body = resp.json()
         assert body["git_sha"] == "a1b2c3d"
@@ -123,7 +123,7 @@ class TestHealthEndpoints:
     async def test_readyz_logs_warning_on_db_failure(self, client, caplog):
         with (
             patch("shoreguard.db.get_engine", side_effect=RuntimeError("connection refused")),
-            caplog.at_level(logging.WARNING, logger="shoreguard.api.main"),
+            caplog.at_level(logging.WARNING, logger="shoreguard.api.routes.health"),
         ):
             resp = await client.get("/readyz")
         assert resp.status_code == 503

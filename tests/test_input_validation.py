@@ -181,7 +181,7 @@ class TestExecRequest:
 
 class TestSetInferenceRequest:
     def _cls(self):
-        from shoreguard.api.main import SetInferenceRequest
+        from shoreguard.api.routes.inference import SetInferenceRequest
 
         return SetInferenceRequest
 

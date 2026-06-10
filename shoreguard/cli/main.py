@@ -296,7 +296,6 @@ def main(
     )
 
 
-
 def _cli_init_db(database_url: str | None) -> Engine:
     """Init DB + auth for CLI commands.
 

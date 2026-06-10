@@ -274,15 +274,11 @@ def test_ws_gateway_not_connected():
 
     from shoreguard.api.main import app
 
-    with patch(
-        "shoreguard.api.main.get_client",
-        side_effect=GatewayNotConnectedError("not connected"),
-    ):
-        client = TestClient(app)
-        with client.websocket_connect("/ws/test-gw/sb1") as ws:
-            data = ws.receive_json()
-            assert data["type"] == "error"
-            assert "not connected" in data["data"]["message"]
+    client = TestClient(app)
+    with client.websocket_connect("/ws/test-gw/sb1") as ws:
+        data = ws.receive_json()
+        assert data["type"] == "error"
+        assert "not connected" in data["data"]["message"]
 
 
 def test_ws_streams_sandbox_events():
@@ -1131,14 +1127,14 @@ def test_warn_if_docker_unusable_logs_when_inaccessible(caplog):
     """Boot-time helper warns (once, non-fatally) when Docker is not accessible."""
     import logging
 
-    from shoreguard.api.main import _warn_if_docker_unusable
+    from shoreguard.app import _warn_if_docker_unusable
 
     manager = MagicMock()
     manager.diagnostics.return_value = {
         "docker_accessible": False,
         "docker_error": "Docker daemon is not running",
     }
-    with caplog.at_level(logging.WARNING, logger="shoreguard.api.main"):
+    with caplog.at_level(logging.WARNING, logger="shoreguard.app"):
         _warn_if_docker_unusable(manager)
     messages = [r.getMessage() for r in caplog.records]
     assert any("Docker is not usable" in m for m in messages)
@@ -1149,10 +1145,10 @@ def test_warn_if_docker_unusable_silent_when_accessible(caplog):
     """Helper stays silent when Docker is accessible."""
     import logging
 
-    from shoreguard.api.main import _warn_if_docker_unusable
+    from shoreguard.app import _warn_if_docker_unusable
 
     manager = MagicMock()
     manager.diagnostics.return_value = {"docker_accessible": True, "docker_error": None}
-    with caplog.at_level(logging.WARNING, logger="shoreguard.api.main"):
+    with caplog.at_level(logging.WARNING, logger="shoreguard.app"):
         _warn_if_docker_unusable(manager)
     assert not any("Docker is not usable" in r.getMessage() for r in caplog.records)
