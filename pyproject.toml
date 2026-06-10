@@ -82,7 +82,7 @@ Documentation = "https://flohofstetter.github.io/shoreguard/"
 Issues = "https://github.com/FloHofstetter/shoreguard/issues"
 
 [project.scripts]
-shoreguard = "shoreguard.api.main:cli"
+shoreguard = "shoreguard.cli:cli"
 
 [tool.hatch.build.targets.wheel.force-include]
 "frontend" = "shoreguard/_frontend"

@@ -8,8 +8,8 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
-import shoreguard.api.cli_policy as cli_policy_mod
-from shoreguard.api.cli_policy import policy_app
+import shoreguard.cli.policy as cli_policy_mod
+from shoreguard.cli.policy import policy_app
 
 
 @pytest.fixture

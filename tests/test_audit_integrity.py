@@ -115,7 +115,7 @@ def test_audit_export_cli_writes_three_files(
 
     # The CLI calls get_engine() which in tests is not initialised.  We
     # patch the CLI's lazy imports so it uses our in-memory fixture.
-    from shoreguard.api import cli_audit
+    from shoreguard.cli import audit as cli_audit
 
     engine = audit_svc._session_factory.kw["bind"]
 
@@ -136,7 +136,7 @@ def test_audit_export_cli_writes_three_files(
 
     from typer.testing import CliRunner
 
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     out_file = tmp_path / "audit.json"
     result = CliRunner().invoke(

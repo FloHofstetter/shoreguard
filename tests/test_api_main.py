@@ -877,7 +877,7 @@ def _cli_runner():
 
 
 def test_cli_defaults():
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     runner = _cli_runner()
     # main() exports resolved flags into os.environ for the reload worker;
@@ -891,7 +891,7 @@ def test_cli_defaults():
 
 
 def test_cli_all_flags():
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     runner = _cli_runner()
     with patch.dict("os.environ"), patch("uvicorn.run") as mock_run:
@@ -907,7 +907,7 @@ def test_cli_all_flags():
 
 
 def test_cli_version():
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     runner = _cli_runner()
     result = runner.invoke(cli, ["--version"])
@@ -916,7 +916,7 @@ def test_cli_version():
 
 
 def test_cli_env_fallback():
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     runner = _cli_runner()
     with patch.dict("os.environ", {"SHOREGUARD_HOST": "10.0.0.1", "SHOREGUARD_PORT": "7777"}):
@@ -928,7 +928,7 @@ def test_cli_env_fallback():
 
 
 def test_cli_overrides_env():
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     runner = _cli_runner()
     with patch.dict("os.environ", {"SHOREGUARD_HOST": "10.0.0.1"}):
@@ -943,7 +943,7 @@ def test_cli_overrides_env():
 
 def test_cli_no_auth_defaults_to_loopback():
     """--no-auth without an explicit --host must not expose the UI on 0.0.0.0."""
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     runner = _cli_runner()
     with patch.dict("os.environ"), patch("uvicorn.run") as mock_run:
@@ -953,7 +953,7 @@ def test_cli_no_auth_defaults_to_loopback():
 
 
 def test_cli_no_auth_explicit_lan_host_refused():
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     runner = _cli_runner()
     with patch.dict("os.environ"), patch("uvicorn.run") as mock_run:
@@ -964,7 +964,7 @@ def test_cli_no_auth_explicit_lan_host_refused():
 
 def test_cli_no_auth_env_lan_host_refused():
     """A non-loopback host from SHOREGUARD_HOST counts as explicit too."""
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     runner = _cli_runner()
     with patch.dict("os.environ", {"SHOREGUARD_HOST": "10.0.0.1"}):
@@ -975,7 +975,7 @@ def test_cli_no_auth_env_lan_host_refused():
 
 
 def test_cli_no_auth_lan_host_with_unsafe_lan_allowed():
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     runner = _cli_runner()
     with patch.dict("os.environ"), patch("uvicorn.run") as mock_run:
@@ -985,7 +985,7 @@ def test_cli_no_auth_lan_host_with_unsafe_lan_allowed():
 
 
 def test_cli_no_auth_explicit_loopback_host_ok():
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     runner = _cli_runner()
     with patch.dict("os.environ"), patch("uvicorn.run") as mock_run:
@@ -1002,7 +1002,7 @@ def test_cli_exports_resolved_flags_to_env():
     """
     import os
 
-    from shoreguard.api.cli import cli
+    from shoreguard.cli import cli
 
     runner = _cli_runner()
     with patch.dict("os.environ"), patch("uvicorn.run"):

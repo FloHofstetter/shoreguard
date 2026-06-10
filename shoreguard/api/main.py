@@ -19,8 +19,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from shoreguard import __build_time__, __git_sha__, __version__
+from shoreguard.cli import cli  # noqa: F401 — re-exported for backwards compatibility
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import GatewayNotConnectedError
+from shoreguard.services.gateway_import import import_filesystem_gateways
 
 from .auth import (
     bootstrap_admin_user,
@@ -29,7 +31,6 @@ from .auth import (
     require_auth,
     require_role,
 )
-from .cli import _import_filesystem_gateways, cli  # noqa: F401 — cli re-exported for entry point
 from .deps import get_client, resolve_gateway
 from .errors import register_error_handlers
 from .metrics import RequestIdFilter, metrics_middleware, shoreguard_info
@@ -158,7 +159,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         # Auto-import filesystem gateways so locally managed gateways
         # appear in the DB without a manual import-gateways step.
-        imported, skipped = _import_filesystem_gateways(container.registry)
+        imported, skipped = import_filesystem_gateways(container.registry)
         if imported:
             logger.info("Auto-imported %d gateway(s) from filesystem", imported)
 

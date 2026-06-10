@@ -8,7 +8,7 @@ from collections.abc import Generator
 import pytest
 from typer.testing import CliRunner
 
-from shoreguard.api.cli import cli
+from shoreguard.cli import cli
 from shoreguard.settings import reset_settings
 
 runner = CliRunner()
