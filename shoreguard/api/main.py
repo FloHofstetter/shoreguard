@@ -128,9 +128,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if init_tracing():
         instrument_fastapi(app)
 
-    import shoreguard.services.gateway as gw_mod
-    from shoreguard.db import init_db
-    from shoreguard.services.registry import GatewayRegistry
+    from shoreguard.container import build_container, install, uninstall
+    from shoreguard.db import get_async_session_factory, init_async_db, init_db
+    from shoreguard.services.audit_export import AuditExporter
 
     try:
         engine = init_db()
@@ -138,168 +138,43 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.exception("Failed to initialise database")
         raise
     session_factory = sa_sessionmaker(bind=engine)
-    registry = GatewayRegistry(session_factory)
-    gw_mod.gateway_service = gw_mod.GatewayService(registry)
-    logger.info("Gateway service initialised")
+    init_async_db(str(engine.url))
 
-    if settings.server.local_mode:
-        import shoreguard.services.local_gateway as local_mod
+    # The exporter needs the running loop to schedule webhook dispatch
+    # from the sync ``AuditService.log`` path, so it is built here rather
+    # than inside ``build_container``.
+    audit_exporter = AuditExporter(settings.audit, loop=asyncio.get_running_loop())
+    container = build_container(
+        settings,
+        session_factory,
+        get_async_session_factory(),
+        audit_exporter=audit_exporter,
+    )
+    install(container)
+    app.state.container = container
+    logger.info(
+        "Service container initialised (local_mode=%s, discovery=%s, drift=%s, cert_rotation=%s)",
+        settings.server.local_mode,
+        settings.discovery.enabled,
+        settings.drift_detection.enabled,
+        settings.cert_rotation.enabled,
+    )
 
-        local_mod.local_gateway_manager = local_mod.LocalGatewayManager(gw_mod.gateway_service)
-        logger.info("Local gateway mode enabled")
-
+    if container.local_gateway is not None:
         # Surface Docker problems at boot instead of as an opaque gRPC timeout
         # later, when a solo dev first tries to create a sandbox. ``diagnostics``
         # shells out to ``docker``, so run it off the event loop.
-        await asyncio.to_thread(_warn_if_docker_unusable, local_mod.local_gateway_manager)
+        await asyncio.to_thread(_warn_if_docker_unusable, container.local_gateway)
 
         # Auto-import filesystem gateways so locally managed gateways
         # appear in the DB without a manual import-gateways step.
-        imported, skipped = _import_filesystem_gateways(registry)
+        imported, skipped = _import_filesystem_gateways(container.registry)
         if imported:
             logger.info("Auto-imported %d gateway(s) from filesystem", imported)
 
-    # ── Sandbox metadata ───────────────────────────────────────────────
-    import shoreguard.services.sandbox_meta as sandbox_meta_mod
-
-    sandbox_meta_mod.sandbox_meta_store = sandbox_meta_mod.SandboxMetaStore(session_factory)
-    logger.info("Sandbox metadata store initialised")
-
-    # ── Operations ──────────────────────────────────────────────────────
-    import shoreguard.services.operations as ops_mod
-    from shoreguard.db import get_async_session_factory, init_async_db
-
-    init_async_db(str(engine.url))
-    async_sf = get_async_session_factory()
-    ops_mod.operation_service = ops_mod.AsyncOperationService(
-        async_sf,
-        running_ttl=settings.ops.running_ttl,
-        retention_days=settings.ops.retention_days,
-    )
-    orphaned = await ops_mod.operation_service.recover_orphans()
+    orphaned = await container.operations.recover_orphans()
     if orphaned:
         logger.info("Recovered %d orphaned operations from previous run", orphaned)
-    logger.info("Operation service initialised (async)")
-
-    # ── Audit ────────────────────────────────────────────────────────────
-    import shoreguard.services.audit as audit_mod
-    from shoreguard.services.audit_export import AuditExporter
-
-    audit_exporter = AuditExporter(settings.audit, loop=asyncio.get_running_loop())
-    audit_mod.audit_service = audit_mod.AuditService(session_factory, exporter=audit_exporter)
-    logger.info(
-        "Audit service initialised (export lanes: stdout=%s syslog=%s webhook=%s)",
-        settings.audit.export_stdout_json,
-        settings.audit.export_syslog_enabled,
-        settings.audit.export_webhook_enabled,
-    )
-
-    # ── Webhooks ────────────────────────────────────────────────────────
-    import shoreguard.services.webhooks as webhook_mod
-
-    webhook_mod.webhook_service = webhook_mod.WebhookService(session_factory)
-    logger.info("Webhook service initialised")
-
-    # ── Bypass detection ────────────────────────────────────────────────
-    import shoreguard.services.bypass as bypass_mod
-
-    bypass_mod.bypass_service = bypass_mod.BypassService()
-    logger.info("Bypass detection service initialised")
-
-    # ── SBOM viewer ─────────────────────────────────────────────────────
-    import shoreguard.services.sbom as sbom_mod
-
-    sbom_mod.sbom_service = sbom_mod.SBOMService(session_factory)
-    logger.info("SBOM service initialised")
-
-    # ── Boot hooks ──────────────────────────────────────────────────────
-    import shoreguard.services.boot_hooks as boot_hooks_mod
-
-    def _resolve_sandbox_service(gateway_name: str):  # type: ignore[no-untyped-def]  # noqa: D103
-        # Build a SandboxService for post-create hook dispatch.
-        from shoreguard.services.sandbox import SandboxService
-
-        gw_svc = gw_mod.gateway_service
-        if gw_svc is None:
-            return None
-        client = gw_svc.get_client(gateway_name)
-        if client is None:
-            return None
-        return SandboxService(
-            client,
-            meta_store=sandbox_meta_mod.sandbox_meta_store,
-            gateway_name=gateway_name,
-        )
-
-    boot_hooks_mod.boot_hook_service = boot_hooks_mod.BootHookService(
-        session_factory,
-        sandbox_service_provider=_resolve_sandbox_service,
-    )
-    logger.info("Boot hook service initialised")
-
-    # ── Gateway discovery ───────────────────────────────────────────────
-    import shoreguard.services.discovery as discovery_mod
-
-    discovery_mod.discovery_service = discovery_mod.DiscoveryService(
-        registry,
-        gw_mod.gateway_service,
-        settings.discovery,
-    )
-    logger.info(
-        "Discovery service initialised (enabled=%s, domains=%s)",
-        settings.discovery.enabled,
-        settings.discovery.domains,
-    )
-
-    # ── Policy pin service ────────────────────────────────────────────
-    import shoreguard.services.policy_pin as pin_mod
-
-    pin_mod.policy_pin_service = pin_mod.PolicyPinService(session_factory)
-    logger.info("Policy pin service initialised")
-
-    # ── Approval workflow service ─────────────────────────────────────
-    import shoreguard.services.approval_workflow as wf_mod
-
-    wf_mod.approval_workflow_service = wf_mod.ApprovalWorkflowService(session_factory)
-    logger.info("Approval workflow service initialised")
-
-    # ── GitOps apply proposals ────────────────────────────────────────
-    import shoreguard.services.policy_apply_proposal as apply_mod
-
-    apply_mod.policy_apply_proposal_service = apply_mod.PolicyApplyProposalService(session_factory)
-    logger.info("Policy apply proposal service initialised")
-
-    # ── Drift detection ───────────────────────────────────────────────
-    import shoreguard.services.drift_detection as drift_mod
-
-    drift_mod.drift_detection_service = drift_mod.DriftDetectionService(
-        gw_mod.gateway_service,
-        settings.drift_detection,
-    )
-    logger.info(
-        "Drift detection service initialised (enabled=%s)",
-        settings.drift_detection.enabled,
-    )
-
-    # ── Proactive cert rotation ───────────────────────────────────────
-    import shoreguard.services.cert_rotation as cert_rotation_mod
-
-    cert_rotation_mod.init_cert_rotation_service(
-        gw_mod.gateway_service,
-        threshold_days=settings.cert_rotation.threshold_days,
-        max_retries=settings.cert_rotation.max_retries,
-    )
-    logger.info(
-        "Cert rotation service initialised (enabled=%s, threshold_days=%d)",
-        settings.cert_rotation.enabled,
-        settings.cert_rotation.threshold_days,
-    )
-
-    # ── Denial context cache ───────────────────────────────────────────
-    import shoreguard.services.denial_context as dc_mod
-
-    dc_mod.denial_context_service = dc_mod.DenialContextService()
-    logger.info("Denial context cache initialised")
 
     # ── Metrics ─────────────────────────────────────────────────────────
     shoreguard_info.info(
@@ -333,13 +208,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(interval)
             try:
-                op_svc = ops_mod.operation_service
-                if op_svc is not None:
-                    await op_svc.cleanup()
-                if audit_mod.audit_service:
-                    await asyncio.to_thread(audit_mod.audit_service.cleanup)
-                if webhook_mod.webhook_service:
-                    await asyncio.to_thread(webhook_mod.webhook_service.cleanup_old_deliveries)
+                await container.operations.cleanup()
+                await asyncio.to_thread(container.audit.cleanup)
+                await asyncio.to_thread(container.webhooks.cleanup_old_deliveries)
                 consecutive_failures = 0
                 interval = base_interval
                 _task_health["cleanup"]["last_success"] = time.time()
@@ -372,10 +243,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(interval)
             try:
-                gw_svc = gw_mod.gateway_service
-                if gw_svc is None:
-                    continue
-                await asyncio.to_thread(gw_svc.check_all_health)
+                await asyncio.to_thread(container.gateway.check_all_health)
                 consecutive_failures = 0
                 interval = base_interval
                 _task_health["health_monitor"]["last_success"] = time.time()
@@ -429,10 +297,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(interval)
             try:
-                svc = discovery_mod.discovery_service
-                if svc is None:
-                    continue
-                await asyncio.to_thread(svc.run_once)
+                await asyncio.to_thread(container.discovery.run_once)
                 consecutive_failures = 0
                 interval = base_interval
                 _task_health["discovery"]["last_success"] = time.time()
@@ -462,10 +327,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(interval)
             try:
-                svc = drift_mod.drift_detection_service
-                if svc is None:
-                    continue
-                await svc.run_once()
+                await container.drift_detection.run_once()
             except Exception:
                 logger.exception("Drift detection loop error")
 
@@ -480,12 +342,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         while True:
             await asyncio.sleep(interval)
             try:
-                from shoreguard.services import cert_rotation as cert_rotation_mod
-
-                svc = cert_rotation_mod.cert_rotation_service
-                if svc is None:
-                    continue
-                outcomes = await svc.run_once()
+                outcomes = await container.cert_rotation.run_once()
                 if any(outcomes.get(k) for k in ("success", "failure")):
                     logger.info(
                         "Cert rotation cycle: %s",
@@ -516,10 +373,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("Cancelled %d LRO task(s)", lro_count)
 
     # 3. Cancel in-flight webhook deliveries
-    if webhook_mod.webhook_service:
-        wh_count = await webhook_mod.webhook_service.shutdown(timeout=3.0)
-        if wh_count:
-            logger.info("Cancelled %d webhook delivery task(s)", wh_count)
+    wh_count = await container.webhooks.shutdown(timeout=3.0)
+    if wh_count:
+        logger.info("Cancelled %d webhook delivery task(s)", wh_count)
 
     # 4. Await background task cancellation with a hard deadline so a
     #    task that swallows CancelledError cannot block shutdown forever.
@@ -533,7 +389,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             len(pending),
         )
 
-    # 5. Dispose DB engines
+    # 5. Dispose DB engines and drop the container
+    uninstall()
     engine.dispose()
     from shoreguard.db import dispose_async_engine
 
@@ -614,7 +471,7 @@ async def readyz(verbose: bool = False) -> JSONResponse:
     Returns:
         JSONResponse: 200 with check details when ready, 503 otherwise.
     """
-    import shoreguard.services.gateway as gw_mod
+    from shoreguard.container import try_get_container
     from shoreguard.db import get_engine
     from shoreguard.settings import get_settings
 
@@ -637,11 +494,12 @@ async def readyz(verbose: bool = False) -> JSONResponse:
         healthy = False
 
     # ── Gateway service ───────────────────────────────────────────
-    if gw_mod.gateway_service is not None:
+    container = try_get_container()
+    if container is not None:
         checks["gateway_service"] = "ok"
         try:
             gateways = await asyncio.wait_for(
-                asyncio.to_thread(gw_mod.gateway_service._registry.list_all),
+                asyncio.to_thread(container.registry.list_all),
                 timeout=readyz_timeout,
             )
             total = len(gateways)

@@ -37,9 +37,9 @@ import grpc
 from fastapi import HTTPException
 from starlette.responses import JSONResponse
 
+from shoreguard.api.deps import get_services
 from shoreguard.exceptions import friendly_grpc_error
 from shoreguard.models import OperationRecord
-from shoreguard.services import operations as _ops_mod
 from shoreguard.services.operations import AsyncOperationService
 from shoreguard.services.operations_types import ErrorCode, OpStatus
 
@@ -101,7 +101,7 @@ async def run_lro(
         HTTPException: 503 if the operation service is not initialised,
             409 if *unique* is set and a duplicate is detected.
     """
-    svc: AsyncOperationService = _ops_mod.operation_service  # type: ignore[assignment]
+    svc: AsyncOperationService = get_services().operations
     if svc is None:
         raise HTTPException(503, "Operation service not initialised")
 

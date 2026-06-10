@@ -28,8 +28,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-drift_detection_service: DriftDetectionService | None = None
-
 
 class DriftDetectionService:
     """Background policy hash poller.

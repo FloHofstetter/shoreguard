@@ -19,14 +19,6 @@ from shoreguard.services.registry import GatewayRegistry
 GW = "test-gw"
 
 
-@pytest.fixture(autouse=True)
-def _reset_gateway_state():
-    """Reset module-level gateway state before each test."""
-    gw_module._reset_clients()
-    yield
-    gw_module._reset_clients()
-
-
 @pytest.fixture
 def registry():
     engine = create_engine(
@@ -118,7 +110,7 @@ def test_get_client_backoff_escalation(svc):
         with pytest.raises(GatewayNotConnectedError):
             svc.get_client(name=GW)
 
-    entry = gw_module._clients[GW]
+    entry = svc._clients[GW]
     from shoreguard.settings import get_settings
 
     gw_cfg = get_settings().gateway
@@ -148,17 +140,17 @@ def test_backoff_prevents_rapid_reconnect(svc):
 def test_set_client_none_pops(svc):
     """set_client(None) removes the gateway entry."""
     svc.set_client(MagicMock(), name=GW)
-    assert GW in gw_module._clients
+    assert GW in svc._clients
     svc.set_client(None, name=GW)
-    assert GW not in gw_module._clients
+    assert GW not in svc._clients
 
 
 def test_set_client_creates_entry(svc):
     """set_client for new gateway creates entry."""
     mock = MagicMock()
     svc.set_client(mock, name="new-gw")
-    assert gw_module._clients["new-gw"].client is mock
-    assert gw_module._clients["new-gw"].backoff == 0.0
+    assert svc._clients["new-gw"].client is mock
+    assert svc._clients["new-gw"].backoff == 0.0
 
 
 def test_reset_backoff_existing(svc):
@@ -166,7 +158,7 @@ def test_reset_backoff_existing(svc):
     entry = gw_module._ClientEntry()
     entry.backoff = 30.0
     entry.last_attempt = 12345.0
-    gw_module._clients[GW] = entry
+    svc._clients[GW] = entry
 
     svc.reset_backoff(name=GW)
 
@@ -309,7 +301,7 @@ def test_unregister_clears_client(svc):
     mock_client = MagicMock()
     svc.set_client(mock_client, name=GW)
     svc.unregister(GW)
-    assert GW not in gw_module._clients
+    assert GW not in svc._clients
 
 
 # ─── test_connection ─────────────────────────────────────────────────────────
@@ -1089,30 +1081,30 @@ class TestSetClient:
     def test_set_client_stores_exact_client(self, svc):
         mock = MagicMock()
         svc.set_client(mock, name=GW)
-        assert gw_module._clients[GW].client is mock
+        assert svc._clients[GW].client is mock
 
     def test_set_client_resets_backoff_to_zero(self, svc):
         """Setting a client must reset backoff to exactly 0.0."""
         entry = gw_module._ClientEntry()
         entry.backoff = 99.0
         entry.client = None
-        gw_module._clients[GW] = entry
+        svc._clients[GW] = entry
 
         mock = MagicMock()
         svc.set_client(mock, name=GW)
-        assert gw_module._clients[GW].backoff == 0.0
+        assert svc._clients[GW].backoff == 0.0
 
     def test_set_client_none_removes_entry_completely(self, svc):
         """set_client(None) must pop the entry, not just set client=None."""
         svc.set_client(MagicMock(), name=GW)
-        assert GW in gw_module._clients
+        assert GW in svc._clients
         svc.set_client(None, name=GW)
-        assert GW not in gw_module._clients
+        assert GW not in svc._clients
 
     def test_set_client_none_on_missing_is_noop(self, svc):
         """set_client(None) on nonexistent gateway doesn't raise."""
         svc.set_client(None, name="nonexistent")
-        assert "nonexistent" not in gw_module._clients
+        assert "nonexistent" not in svc._clients
 
     def test_set_client_overwrites_existing(self, svc):
         """Setting a new client replaces the old one."""
@@ -1120,14 +1112,14 @@ class TestSetClient:
         mock2 = MagicMock()
         svc.set_client(mock1, name=GW)
         svc.set_client(mock2, name=GW)
-        assert gw_module._clients[GW].client is mock2
+        assert svc._clients[GW].client is mock2
 
     def test_set_client_creates_new_entry_if_needed(self, svc):
         """Setting client for unknown gateway creates new _ClientEntry."""
-        assert "brand-new" not in gw_module._clients
+        assert "brand-new" not in svc._clients
         mock = MagicMock()
         svc.set_client(mock, name="brand-new")
-        entry = gw_module._clients["brand-new"]
+        entry = svc._clients["brand-new"]
         assert entry.client is mock
         assert entry.backoff == 0.0
 
@@ -1137,8 +1129,8 @@ class TestSetClient:
         svc.set_client(mock1, name="gw-a")
         svc.set_client(mock2, name="gw-b")
         svc.set_client(None, name="gw-a")
-        assert "gw-a" not in gw_module._clients
-        assert gw_module._clients["gw-b"].client is mock2
+        assert "gw-a" not in svc._clients
+        assert svc._clients["gw-b"].client is mock2
 
 
 # ─── reset_backoff: detailed ─────────────────────────────────────────────────
@@ -1150,14 +1142,14 @@ class TestResetBackoff:
     def test_resets_backoff_to_zero(self, svc):
         entry = gw_module._ClientEntry()
         entry.backoff = 60.0
-        gw_module._clients[GW] = entry
+        svc._clients[GW] = entry
         svc.reset_backoff(name=GW)
         assert entry.backoff == 0.0
 
     def test_resets_last_attempt_to_zero(self, svc):
         entry = gw_module._ClientEntry()
         entry.last_attempt = 999.0
-        gw_module._clients[GW] = entry
+        svc._clients[GW] = entry
         svc.reset_backoff(name=GW)
         assert entry.last_attempt == 0.0
 
@@ -1173,7 +1165,7 @@ class TestResetBackoff:
         entry = gw_module._ClientEntry()
         entry.backoff = 30.0
         entry.last_attempt = 500.0
-        gw_module._clients[GW] = entry
+        svc._clients[GW] = entry
         svc.reset_backoff(name=GW)
         assert entry.backoff == 0.0
         assert entry.last_attempt == 0.0
@@ -1183,10 +1175,10 @@ class TestResetBackoff:
         entry = gw_module._ClientEntry()
         entry.backoff = 10.0
         entry.client = MagicMock()
-        gw_module._clients[GW] = entry
+        svc._clients[GW] = entry
         svc.reset_backoff(name=GW)
-        assert GW in gw_module._clients
-        assert gw_module._clients[GW].client is not None
+        assert GW in svc._clients
+        assert svc._clients[GW].client is not None
 
 
 # ─── test_connection: detailed ───────────────────────────────────────────────
@@ -1323,7 +1315,7 @@ class TestGetInfo:
 
         result = svc.get_info(GW)
         assert result["connected"] is False
-        assert GW not in gw_module._clients
+        assert GW not in svc._clients
 
     def test_status_uses_derive_status(self, svc, registry):
         """Status is derived from connected + last_status."""
@@ -1407,14 +1399,14 @@ class TestGetCachedClient:
     def test_returns_none_when_client_is_none(self, svc):
         entry = gw_module._ClientEntry()
         entry.client = None
-        gw_module._clients[GW] = entry
+        svc._clients[GW] = entry
         assert svc.get_cached_client(GW) is None
 
     def test_returns_exact_client(self, svc):
         mock = MagicMock()
         entry = gw_module._ClientEntry()
         entry.client = mock
-        gw_module._clients[GW] = entry
+        svc._clients[GW] = entry
         assert svc.get_cached_client(GW) is mock
 
     def test_does_not_modify_state(self, svc):
@@ -1422,7 +1414,7 @@ class TestGetCachedClient:
         entry = gw_module._ClientEntry()
         entry.client = mock
         entry.backoff = 42.0
-        gw_module._clients[GW] = entry
+        svc._clients[GW] = entry
         svc.get_cached_client(GW)
         assert entry.backoff == 42.0
         assert entry.client is mock
@@ -1441,7 +1433,7 @@ class TestGetClientBackoff:
         with patch.object(svc, "_try_connect", return_value=None):
             with pytest.raises(GatewayNotConnectedError):
                 svc.get_client(name=GW)
-        assert gw_module._clients[GW].backoff == cfg.backoff_min
+        assert svc._clients[GW].backoff == cfg.backoff_min
 
     def test_second_failure_doubles_backoff(self, svc):
         from shoreguard.settings import get_settings
@@ -1451,11 +1443,11 @@ class TestGetClientBackoff:
             with pytest.raises(GatewayNotConnectedError):
                 svc.get_client(name=GW)
         # Force past backoff
-        gw_module._clients[GW].last_attempt = 0.0
+        svc._clients[GW].last_attempt = 0.0
         with patch.object(svc, "_try_connect", return_value=None):
             with pytest.raises(GatewayNotConnectedError):
                 svc.get_client(name=GW)
-        assert gw_module._clients[GW].backoff == cfg.backoff_min * cfg.backoff_factor
+        assert svc._clients[GW].backoff == cfg.backoff_min * cfg.backoff_factor
 
     def test_backoff_caps_at_max(self, svc):
         from shoreguard.settings import get_settings
@@ -1466,14 +1458,14 @@ class TestGetClientBackoff:
                 svc.get_client(name=GW)
 
         # Set backoff close to max
-        gw_module._clients[GW].backoff = cfg.backoff_max
-        gw_module._clients[GW].last_attempt = 0.0
+        svc._clients[GW].backoff = cfg.backoff_max
+        svc._clients[GW].last_attempt = 0.0
 
         with patch.object(svc, "_try_connect", return_value=None):
             with pytest.raises(GatewayNotConnectedError):
                 svc.get_client(name=GW)
 
-        assert gw_module._clients[GW].backoff == cfg.backoff_max
+        assert svc._clients[GW].backoff == cfg.backoff_max
 
     def test_successful_reconnect_clears_backoff(self, svc):
         """After backoff, successful reconnect resets backoff to 0."""
@@ -1481,18 +1473,18 @@ class TestGetClientBackoff:
             with pytest.raises(GatewayNotConnectedError):
                 svc.get_client(name=GW)
 
-        assert gw_module._clients[GW].backoff > 0
+        assert svc._clients[GW].backoff > 0
 
         # Force past backoff
-        gw_module._clients[GW].last_attempt = 0.0
+        svc._clients[GW].last_attempt = 0.0
         new_client = MagicMock()
         new_client.health.return_value = {"status": "ok"}
         with patch.object(svc, "_try_connect", return_value=new_client):
             result = svc.get_client(name=GW)
 
         assert result is new_client
-        assert gw_module._clients[GW].backoff == 0.0
-        assert gw_module._clients[GW].client is new_client
+        assert svc._clients[GW].backoff == 0.0
+        assert svc._clients[GW].client is new_client
 
     def test_within_backoff_window_skips_connect(self, svc):
         """Within backoff window, _try_connect is never called."""
@@ -1514,7 +1506,7 @@ class TestGetClientBackoff:
             with pytest.raises(GatewayNotConnectedError):
                 svc.get_client(name=GW)
         after = time.monotonic()
-        assert before <= gw_module._clients[GW].last_attempt <= after
+        assert before <= svc._clients[GW].last_attempt <= after
 
 
 # ─── register: connection attempt ────────────────────────────────────────────
@@ -1554,11 +1546,11 @@ class TestUnregister:
         registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         mock = MagicMock()
         svc.set_client(mock, name=GW)
-        assert GW in gw_module._clients
+        assert GW in svc._clients
 
         result = svc.unregister(GW)
         assert result is True
-        assert GW not in gw_module._clients
+        assert GW not in svc._clients
         assert registry.get(GW) is None
 
     def test_unregister_returns_false_for_missing(self, svc):
@@ -1621,17 +1613,6 @@ class TestClientEntry:
         entry = gw_module._ClientEntry()
         with pytest.raises(AttributeError):
             entry.nonexistent = "x"  # type: ignore[attr-defined]
-
-
-# ─── _reset_clients ─────────────────────────────────────────────────────────
-
-
-class TestResetClients:
-    def test_clears_all(self):
-        gw_module._clients["a"] = gw_module._ClientEntry()
-        gw_module._clients["b"] = gw_module._ClientEntry()
-        gw_module._reset_clients()
-        assert len(gw_module._clients) == 0
 
 
 # ─── registry property ──────────────────────────────────────────────────────

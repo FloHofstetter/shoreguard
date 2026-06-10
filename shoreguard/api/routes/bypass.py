@@ -17,10 +17,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import get_gateway_name
+from shoreguard.api.deps import get_gateway_name, get_services
 
 if TYPE_CHECKING:
     from shoreguard.services.bypass import BypassService
@@ -31,19 +31,12 @@ router = APIRouter()
 
 
 def _get_bypass_service() -> BypassService:
-    """Return the global BypassService singleton.
-
-    Raises:
-        HTTPException: If the service has not been initialised.
+    """Return the bypass service from the container.
 
     Returns:
         BypassService: The active bypass service instance.
     """
-    from shoreguard.services.bypass import bypass_service
-
-    if bypass_service is None:
-        raise HTTPException(503, "BypassService not initialised")
-    return bypass_service
+    return get_services().bypass
 
 
 @router.get(

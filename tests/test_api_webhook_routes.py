@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 import shoreguard.services.webhooks as webhook_mod
 from shoreguard.api import auth
 from shoreguard.api.auth import create_user
+from shoreguard.container import get_container, install, uninstall
 from shoreguard.models import Base
 
 ADMIN_EMAIL = "admin@test.com"
@@ -25,10 +26,9 @@ def db():
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     auth.init_auth_for_test(factory)
-    webhook_mod.webhook_service = webhook_mod.WebhookService(factory)
+    get_container().webhooks = webhook_mod.WebhookService(factory)
     yield factory
     auth.reset()
-    webhook_mod.webhook_service = None
     engine.dispose()
 
 
@@ -334,7 +334,7 @@ class TestAuditHookup:
     async def audit_admin_client(self, db, _with_admin):
         import shoreguard.services.audit as audit_mod
 
-        audit_mod.audit_service = audit_mod.AuditService(db)
+        get_container().audit = audit_mod.AuditService(db)
         from shoreguard.api.main import app
 
         async with AsyncClient(
@@ -347,7 +347,6 @@ class TestAuditHookup:
             )
             assert resp.status_code == 200
             yield client
-        audit_mod.audit_service = None
 
     async def _audit_actions(
         self, client: AsyncClient, resource_type: str = "webhook"
@@ -393,8 +392,7 @@ class TestAuditHookup:
 
 
 class TestServiceNotInitialised:
-    async def test_503_when_service_missing(self, db, _with_admin):
-        webhook_mod.webhook_service = None
+    async def test_503_when_container_missing(self, db, _with_admin):
         from shoreguard.api.main import app
 
         async with AsyncClient(
@@ -406,5 +404,10 @@ class TestServiceNotInitialised:
                 json={"email": ADMIN_EMAIL, "password": ADMIN_PASS},
             )
             assert resp.status_code == 200
-            resp = await client.get("/api/webhooks")
-            assert resp.status_code == 503
+            container = get_container()
+            uninstall()
+            try:
+                resp = await client.get("/api/webhooks")
+                assert resp.status_code == 503
+            finally:
+                install(container)

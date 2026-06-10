@@ -281,7 +281,3 @@ class DenialContextService:
         """
         with self._lock:
             self._caches.pop(sandbox_name.strip(), None)
-
-
-#: Module-level singleton, initialised during app lifespan.
-denial_context_service: DenialContextService | None = None

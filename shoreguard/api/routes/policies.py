@@ -26,11 +26,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-import shoreguard.services.approval_workflow as _wf_mod
-import shoreguard.services.policy_apply_proposal as _apply_mod
-import shoreguard.services.policy_pin as _pin_mod
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import get_actor, get_client, get_gateway_name
+from shoreguard.api.deps import get_actor, get_client, get_gateway_name, get_services
 from shoreguard.api.schemas import (
     PolicyAnalysisRequest,
     PolicyAnalysisResponse,
@@ -79,11 +76,8 @@ def _check_policy_pin(request: Request, sandbox_name: str) -> None:
     Raises:
         HTTPException: 423 Locked if an active pin exists.
     """
-    svc = _pin_mod.policy_pin_service
-    if svc is None:
-        return
     try:
-        svc.check_pin(get_gateway_name(request), sandbox_name)
+        get_services().policy_pin.check_pin(get_gateway_name(request), sandbox_name)
     except PolicyLockedError as exc:
         raise HTTPException(status_code=423, detail=str(exc)) from exc
 
@@ -413,20 +407,18 @@ async def apply_policy(
     diff_summary_payload = diff_summary(diff)
 
     # ── Approval workflow gate ───────────────────────────────────────────
-    wf_svc = _wf_mod.approval_workflow_service
-    workflow = wf_svc.get_workflow(gw, name) if wf_svc is not None else None
-    if wf_svc is not None and workflow is not None:
-        proposal_svc = _apply_mod.policy_apply_proposal_service
-        if proposal_svc is not None:
-            await asyncio.to_thread(
-                proposal_svc.upsert,
-                gw,
-                name,
-                chunk_id,
-                yaml_text=body.yaml,
-                expected_hash=current_hash,
-                proposed_by=actor,
-            )
+    wf_svc = get_services().approval_workflow
+    workflow = wf_svc.get_workflow(gw, name)
+    if workflow is not None:
+        await asyncio.to_thread(
+            get_services().policy_apply_proposal.upsert,
+            gw,
+            name,
+            chunk_id,
+            yaml_text=body.yaml,
+            expected_hash=current_hash,
+            proposed_by=actor,
+        )
         try:
             vote = await asyncio.to_thread(
                 wf_svc.record_decision,
@@ -479,8 +471,7 @@ async def apply_policy(
             )
 
         # Quorum met — clear proposal, fall through to write
-        if proposal_svc is not None:
-            await asyncio.to_thread(proposal_svc.delete, gw, name, chunk_id)
+        await asyncio.to_thread(get_services().policy_apply_proposal.delete, gw, name, chunk_id)
         await fire_webhook(
             "approval.quorum_met",
             {
@@ -880,9 +871,7 @@ async def get_policy_pin(
     Raises:
         HTTPException: 404 if no active pin exists.
     """
-    if _pin_mod.policy_pin_service is None:
-        raise HTTPException(status_code=503, detail="Policy pin service not initialised")
-    pin = _pin_mod.policy_pin_service.get_pin(get_gateway_name(request), name)
+    pin = get_services().policy_pin.get_pin(get_gateway_name(request), name)
     if pin is None:
         raise HTTPException(status_code=404, detail="No active pin for this sandbox")
     return pin
@@ -914,12 +903,9 @@ async def pin_policy(
         dict[str, Any]: Created pin data.
 
     Raises:
-        HTTPException: 503 if service not initialised, 400 if version unreadable.
+        HTTPException: 400 if the active policy version cannot be read.
     """
     import datetime
-
-    if _pin_mod.policy_pin_service is None:
-        raise HTTPException(status_code=503, detail="Policy pin service not initialised")
 
     # Read current version from gateway
     current = await asyncio.to_thread(svc.get, name)
@@ -937,7 +923,7 @@ async def pin_policy(
         if body.expires_at:
             expires_at = datetime.datetime.fromisoformat(body.expires_at)
 
-    pin = _pin_mod.policy_pin_service.pin(
+    pin = get_services().policy_pin.pin(
         gw, name, version, actor, reason=reason, expires_at=expires_at
     )
     logger.info("Policy pinned (sandbox=%s, version=%d, actor=%s)", name, version, actor)
@@ -974,10 +960,8 @@ async def unpin_policy(
     Raises:
         HTTPException: 404 if no active pin exists.
     """
-    if _pin_mod.policy_pin_service is None:
-        raise HTTPException(status_code=503, detail="Policy pin service not initialised")
     gw = get_gateway_name(request)
-    removed = _pin_mod.policy_pin_service.unpin(gw, name)
+    removed = get_services().policy_pin.unpin(gw, name)
     if not removed:
         raise HTTPException(status_code=404, detail="No active pin for this sandbox")
     actor = get_actor(request)

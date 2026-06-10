@@ -463,10 +463,9 @@ async def test_create_sandbox_invalid_name(api_client, mock_client):
 
 async def test_get_operation_found(api_client):
     """GET /api/operations/{id} returns 200 for an existing operation."""
-    from shoreguard.services.operations import operation_service
+    from shoreguard.container import get_container
 
-    svc: Any = operation_service
-    assert svc is not None
+    svc: Any = get_container().operations
     op = await svc.create("sandbox", "test-sb")
     await svc.start(op.id)
     await svc.complete(op.id, {"name": "test-sb"})
@@ -541,10 +540,9 @@ async def test_create_sandbox_empty_name(api_client, mock_client):
     )
     assert resp.status_code == 202
     op_id = resp.json()["operation_id"]
-    from shoreguard.services.operations import operation_service
+    from shoreguard.container import get_container
 
-    svc: Any = operation_service
-    assert svc is not None
+    svc: Any = get_container().operations
     op = await svc.get(op_id)
     assert op.resource_key == "unnamed"
 
@@ -896,21 +894,18 @@ class TestParseLabelFilters:
 # ── operations _get_svc ─────────────────────────────────────────────────────
 
 
-async def test_operations_503_when_service_none(api_client):
-    """GET /api/operations returns 503 when operation_service is None."""
-    import shoreguard.services.operations as ops_mod
+async def test_operations_503_when_container_missing(api_client):
+    """GET /api/operations returns 503 when no container is installed."""
+    from shoreguard.container import get_container, install, uninstall
 
-    original = ops_mod.operation_service
-    ops_mod.operation_service = None
+    original = get_container()
+    uninstall()
     try:
         resp = await api_client.get("/api/operations")
         assert resp.status_code == 503
-        assert (
-            "not initialised" in resp.json()["detail"].lower()
-            or "not initialised" in resp.json()["detail"]
-        )
+        assert "not initialised" in resp.json()["detail"].lower()
     finally:
-        ops_mod.operation_service = original
+        install(original)
 
 
 async def test_operations_get_404_detail(api_client):

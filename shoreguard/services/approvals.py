@@ -45,10 +45,11 @@ class ApprovalService:
         """
         result = self._client.approvals.get_draft(sandbox_name, status_filter=status_filter)
 
-        from shoreguard.services.denial_context import denial_context_service
+        from shoreguard.container import try_get_container
 
-        if denial_context_service is not None:
-            denial_context_service.enrich_chunks(sandbox_name, result.get("chunks", []))
+        container = try_get_container()
+        if container is not None:
+            container.denial_context.enrich_chunks(sandbox_name, result.get("chunks", []))
 
         return result
 
@@ -63,10 +64,11 @@ class ApprovalService:
         """
         chunks = self._client.approvals.get_pending(sandbox_name)
 
-        from shoreguard.services.denial_context import denial_context_service
+        from shoreguard.container import try_get_container
 
-        if denial_context_service is not None:
-            denial_context_service.enrich_chunks(sandbox_name, chunks)
+        container = try_get_container()
+        if container is not None:
+            container.denial_context.enrich_chunks(sandbox_name, chunks)
 
         return chunks
 

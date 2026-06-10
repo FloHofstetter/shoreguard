@@ -19,7 +19,7 @@ from typing import Any
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
-import shoreguard.services.audit as audit_mod
+from shoreguard.api.deps import get_services
 from shoreguard.api.schemas import AuditListResponse
 
 logger = logging.getLogger(__name__)
@@ -53,10 +53,8 @@ async def list_audit_entries(
     Returns:
         dict[str, Any]: Paginated entries with total count.
     """
-    if audit_mod.audit_service is None:
-        return {"entries": [], "total": 0}
     entries, total = await asyncio.to_thread(
-        audit_mod.audit_service.list_with_count,
+        get_services().audit.list_with_count,
         limit=limit,
         offset=offset,
         actor=actor,
@@ -93,14 +91,9 @@ async def export_audit(
     Returns:
         Response: The exported audit data as a downloadable response.
     """
-    if audit_mod.audit_service is None:
-        if fmt == "csv":
-            return Response(content="", media_type="text/csv")
-        return Response(content="[]", media_type="application/json")
-
     if fmt == "csv":
         csv_data = await asyncio.to_thread(
-            audit_mod.audit_service.export_csv,
+            get_services().audit.export_csv,
             actor=actor,
             action=action,
             resource_type=resource_type,
@@ -115,7 +108,7 @@ async def export_audit(
         )
 
     entries = await asyncio.to_thread(
-        audit_mod.audit_service.list,
+        get_services().audit.list,
         limit=10000,
         actor=actor,
         action=action,

@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import get_actor, get_gateway_name
+from shoreguard.api.deps import get_actor, get_gateway_name, get_services
 from shoreguard.exceptions import ValidationError
 from shoreguard.services.audit import audit_log
 
@@ -34,15 +34,8 @@ def _service() -> BootHookService:
 
     Returns:
         BootHookService: The active boot hook service instance.
-
-    Raises:
-        HTTPException: ``503`` if the service has not been initialised.
     """
-    from shoreguard.services import boot_hooks as bh_mod
-
-    if bh_mod.boot_hook_service is None:
-        raise HTTPException(503, "BootHookService not initialised")
-    return bh_mod.boot_hook_service
+    return get_services().boot_hooks
 
 
 class BootHookCreate(BaseModel):

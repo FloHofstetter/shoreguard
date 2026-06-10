@@ -27,8 +27,6 @@ logger = logging.getLogger(__name__)
 
 _UNSET: object = object()
 
-sandbox_meta_store: SandboxMetaStore | None = None
-
 
 class SandboxMetaStore:
     """Persistence layer for sandbox metadata.

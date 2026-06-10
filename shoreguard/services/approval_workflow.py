@@ -34,9 +34,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Module-level singleton — set during app lifespan (see shoreguard.api.main).
-approval_workflow_service: ApprovalWorkflowService | None = None
-
 
 @dataclass
 class VoteResult:

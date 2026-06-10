@@ -209,7 +209,3 @@ class BypassService:
         key = (gateway_name, sandbox_name)
         with self._lock:
             self._buffers.pop(key, None)
-
-
-#: Module-level singleton, initialised during app lifespan.
-bypass_service: BypassService | None = None

@@ -23,6 +23,7 @@ from shoreguard.api.auth import (
     set_gateway_role,
 )
 from shoreguard.api.deps import _current_gateway
+from shoreguard.container import get_container
 from shoreguard.exceptions import ValidationError as DomainValidationError
 from shoreguard.models import Base, Gateway
 
@@ -50,10 +51,9 @@ def db():
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     auth.init_auth_for_test(factory)
-    audit_mod.audit_service = audit_mod.AuditService(factory)
+    get_container().audit = audit_mod.AuditService(factory)
     yield factory
     auth.reset()
-    audit_mod.audit_service = None
     engine.dispose()
 
 

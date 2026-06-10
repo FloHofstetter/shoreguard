@@ -23,6 +23,7 @@ from shoreguard.client import ShoreGuardClient
 from shoreguard.config import VALID_GATEWAY_NAME_RE
 
 if TYPE_CHECKING:
+    from shoreguard.container import ServiceContainer
     from shoreguard.services.gateway import GatewayService
 
 logger = logging.getLogger(__name__)
@@ -33,20 +34,30 @@ _current_gateway: ContextVar[str | None] = ContextVar("_current_gateway", defaul
 _VALID_GW_RE = VALID_GATEWAY_NAME_RE
 
 
-def _get_gateway_service() -> GatewayService:
-    """Return the global gateway service singleton.
+def get_services() -> ServiceContainer:
+    """Return the installed service container for use in route handlers.
 
     Raises:
-        HTTPException: If the gateway service has not been initialised.
+        HTTPException: If no container is installed (lifespan not started).
+
+    Returns:
+        ServiceContainer: The process-wide service container.
+    """
+    from shoreguard.container import try_get_container
+
+    container = try_get_container()
+    if container is None:
+        raise HTTPException(503, "Services not initialised — app lifespan has not started")
+    return container
+
+
+def _get_gateway_service() -> GatewayService:
+    """Return the gateway service from the container.
 
     Returns:
         GatewayService: The active gateway service instance.
     """
-    from shoreguard.services.gateway import gateway_service
-
-    if gateway_service is None:
-        raise HTTPException(503, "GatewayService not initialised — app lifespan has not started")
-    return gateway_service
+    return get_services().gateway
 
 
 def get_actor(request: Request) -> str:

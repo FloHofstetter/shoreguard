@@ -23,8 +23,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.responses import JSONResponse, StreamingResponse
 
 from shoreguard.api.auth import require_role
+from shoreguard.api.deps import get_services
 from shoreguard.api.schemas import OperationListResponse, OperationResponse
-from shoreguard.services import operations as _ops_mod
 from shoreguard.services.operations import AsyncOperationService
 from shoreguard.services.operations_types import ACTIVE_STATES, TERMINAL_STATES
 
@@ -59,9 +59,7 @@ def _format_sse_event(event: str | None, payload: dict[str, Any]) -> str:
 
 
 def _get_svc() -> AsyncOperationService:
-    if _ops_mod.operation_service is None:
-        raise HTTPException(503, "Operation service not initialised")
-    return _ops_mod.operation_service
+    return get_services().operations
 
 
 @router.get("", response_model=OperationListResponse)

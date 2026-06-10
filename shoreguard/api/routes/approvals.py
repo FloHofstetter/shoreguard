@@ -25,10 +25,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-import shoreguard.services.approval_workflow as _wf_mod
-import shoreguard.services.policy_pin as _pin_mod
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import get_actor, get_client, get_gateway_name
+from shoreguard.api.deps import get_actor, get_client, get_gateway_name, get_services
 from shoreguard.api.schemas import (
     ApprovalBulkResponse,
     ApprovalChunkResponse,
@@ -62,11 +60,8 @@ def _check_policy_pin(request: Request, sandbox_name: str) -> None:
     Raises:
         HTTPException: 423 Locked if an active pin exists.
     """
-    svc = _pin_mod.policy_pin_service
-    if svc is None:
-        return
     try:
-        svc.check_pin(get_gateway_name(request), sandbox_name)
+        get_services().policy_pin.check_pin(get_gateway_name(request), sandbox_name)
     except PolicyLockedError as exc:
         raise HTTPException(status_code=423, detail=str(exc)) from exc
 
@@ -255,9 +250,9 @@ async def approve_chunk(
     role = _get_actor_role(request)
     gateway = get_gateway_name(request)
 
-    wf_svc = _wf_mod.approval_workflow_service
-    workflow = wf_svc.get_workflow(gateway, name) if wf_svc is not None else None
-    if wf_svc is not None and workflow is not None:
+    wf_svc = get_services().approval_workflow
+    workflow = wf_svc.get_workflow(gateway, name)
+    if workflow is not None:
         try:
             vote = await asyncio.to_thread(
                 wf_svc.record_decision,
@@ -373,9 +368,9 @@ async def reject_chunk(
     role = _get_actor_role(request)
     gateway = get_gateway_name(request)
 
-    wf_svc = _wf_mod.approval_workflow_service
-    workflow = wf_svc.get_workflow(gateway, name) if wf_svc is not None else None
-    if wf_svc is not None and workflow is not None:
+    wf_svc = get_services().approval_workflow
+    workflow = wf_svc.get_workflow(gateway, name)
+    if workflow is not None:
         try:
             await asyncio.to_thread(
                 wf_svc.record_decision,
@@ -452,8 +447,7 @@ async def approve_all(
     role = _get_actor_role(request)
     gateway = get_gateway_name(request)
 
-    wf_svc = _wf_mod.approval_workflow_service
-    workflow = wf_svc.get_workflow(gateway, name) if wf_svc is not None else None
+    workflow = get_services().approval_workflow.get_workflow(gateway, name)
     if workflow is not None and role != "admin":
         raise HTTPException(
             status_code=409,
@@ -623,10 +617,7 @@ async def get_approval_workflow(request: Request, name: str) -> dict[str, Any]:
     Returns:
         dict[str, Any]: Workflow config, or ``{}`` if unconfigured.
     """
-    wf_svc = _wf_mod.approval_workflow_service
-    if wf_svc is None:
-        return {}
-    workflow = wf_svc.get_workflow(get_gateway_name(request), name)
+    workflow = get_services().approval_workflow.get_workflow(get_gateway_name(request), name)
     return workflow or {}
 
 
@@ -651,12 +642,9 @@ async def upsert_approval_workflow(
         dict[str, Any]: Stored workflow config.
 
     Raises:
-        HTTPException: 400 on invalid config, 503 if the workflow service is
-            not initialised.
+        HTTPException: 400 if the configuration is invalid.
     """
-    wf_svc = _wf_mod.approval_workflow_service
-    if wf_svc is None:
-        raise HTTPException(status_code=503, detail="Approval workflow service unavailable")
+    wf_svc = get_services().approval_workflow
     gateway = get_gateway_name(request)
     actor = get_actor(request)
     try:
@@ -699,12 +687,9 @@ async def delete_approval_workflow(request: Request, name: str) -> dict[str, str
         dict[str, str]: Deletion status.
 
     Raises:
-        HTTPException: 404 if no workflow exists, 503 if the workflow
-            service is not initialised.
+        HTTPException: 404 if no workflow is configured.
     """
-    wf_svc = _wf_mod.approval_workflow_service
-    if wf_svc is None:
-        raise HTTPException(status_code=503, detail="Approval workflow service unavailable")
+    wf_svc = get_services().approval_workflow
     gateway = get_gateway_name(request)
     removed = await asyncio.to_thread(wf_svc.delete_workflow, gateway, name)
     if not removed:
@@ -734,9 +719,7 @@ async def get_chunk_decisions(request: Request, name: str, chunk_id: str) -> dic
     Returns:
         dict[str, Any]: Vote state with status/votes/needed/decisions.
     """
-    wf_svc = _wf_mod.approval_workflow_service
-    if wf_svc is None:
-        return {"status": "no_workflow", "votes": 0, "needed": 0, "decisions": []}
+    wf_svc = get_services().approval_workflow
     gateway = get_gateway_name(request)
     workflow = wf_svc.get_workflow(gateway, name)
     if workflow is None:

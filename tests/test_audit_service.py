@@ -865,30 +865,30 @@ class TestCleanupDetailed:
 class TestAuditLogHelper:
     """Tests for the module-level audit_log() async helper."""
 
-    def test_audit_log_when_service_is_none(self):
-        """audit_log() returns immediately when audit_service is None."""
+    def test_audit_log_when_container_missing(self):
+        """audit_log() returns immediately when no container is installed."""
         import asyncio
 
-        import shoreguard.services.audit as audit_mod
+        from shoreguard.container import get_container, install, uninstall
         from shoreguard.services.audit import audit_log
 
-        original = audit_mod.audit_service
-        audit_mod.audit_service = None
+        original = get_container()
+        uninstall()
         try:
             request = _make_mock_request()
             # Should not raise
             asyncio.run(audit_log(request, "test", "test"))
         finally:
-            audit_mod.audit_service = original
+            install(original)
 
     def test_audit_log_extracts_request_fields(self, audit_svc):
         """audit_log() extracts actor, role, and client IP from request."""
         import asyncio
 
-        import shoreguard.services.audit as audit_mod
+        from shoreguard.container import get_container
 
-        original = audit_mod.audit_service
-        audit_mod.audit_service = audit_svc
+        original = get_container().audit
+        get_container().audit = audit_svc
         try:
             request = _make_mock_request(
                 user_id="alice@test.com",
@@ -916,16 +916,16 @@ class TestAuditLogHelper:
             assert entries[0]["detail"] == {"key": "val"}
             assert entries[0]["client_ip"] == "10.0.0.5"
         finally:
-            audit_mod.audit_service = original
+            get_container().audit = original
 
     def test_audit_log_missing_user_id(self, audit_svc):
         """audit_log() uses 'unknown' when request.state has no user_id."""
         import asyncio
 
-        import shoreguard.services.audit as audit_mod
+        from shoreguard.container import get_container
 
-        original = audit_mod.audit_service
-        audit_mod.audit_service = audit_svc
+        original = get_container().audit
+        get_container().audit = audit_svc
         try:
             request = _make_mock_request()
             asyncio.run(audit_log(request, "test", "test"))
@@ -933,23 +933,23 @@ class TestAuditLogHelper:
             assert entries[0]["actor"] == "unknown"
             assert entries[0]["actor_role"] == "unknown"
         finally:
-            audit_mod.audit_service = original
+            get_container().audit = original
 
     def test_audit_log_no_client(self, audit_svc):
         """audit_log() with no request.client sets client_ip to None."""
         import asyncio
 
-        import shoreguard.services.audit as audit_mod
+        from shoreguard.container import get_container
 
-        original = audit_mod.audit_service
-        audit_mod.audit_service = audit_svc
+        original = get_container().audit
+        get_container().audit = audit_svc
         try:
             request = _make_mock_request(client_host=None)
             asyncio.run(audit_log(request, "test", "test"))
             entries = audit_svc.list()
             assert entries[0]["client_ip"] is None
         finally:
-            audit_mod.audit_service = original
+            get_container().audit = original
 
 
 class TestListDbError:

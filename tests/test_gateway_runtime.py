@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from shoreguard.container import get_container
 from shoreguard.gateway_runtime import (
     GATEWAY_RUNTIME_DOCKER,
     GATEWAY_RUNTIME_KUBERNETES,
@@ -85,7 +86,7 @@ class TestValidateRuntime:
 
 @pytest.fixture
 def mock_gw_svc():
-    with patch("shoreguard.services.gateway.gateway_service") as mock:
+    with patch.object(get_container(), "gateway") as mock:
         yield mock
 
 

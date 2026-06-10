@@ -17,9 +17,9 @@ def sandbox_svc(mock_client):
 @pytest.fixture
 def meta_store():
     """Real SandboxMetaStore backed by the in-memory test DB."""
-    import shoreguard.services.sandbox_meta as mod
+    from shoreguard.container import get_container
 
-    return mod.sandbox_meta_store
+    return get_container().sandbox_meta
 
 
 @pytest.fixture

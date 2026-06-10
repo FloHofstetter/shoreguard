@@ -20,6 +20,7 @@ from starlette.templating import _TemplateResponse as TemplateResponse
 if TYPE_CHECKING:
     from shoreguard.services._openshell_meta import OpenShellMeta
 
+from shoreguard.api.deps import get_services
 from shoreguard.config import VALID_GATEWAY_NAME_RE
 from shoreguard.services.audit import audit_log
 
@@ -338,7 +339,6 @@ async def auth_check(request: Request) -> dict[str, Any]:
                         email = user.email
                 finally:
                     session.close()
-    import shoreguard.services.local_gateway as local_mod
     from shoreguard.api.oidc import get_providers
 
     return {
@@ -348,7 +348,7 @@ async def auth_check(request: Request) -> dict[str, Any]:
         "email": email,
         "needs_setup": False,
         "registration_enabled": is_registration_enabled(),
-        "local_mode": local_mod.local_gateway_manager is not None,
+        "local_mode": get_services().local_gateway is not None,
         "oidc_providers": [
             {"name": p.name, "display_name": p.display_name} for p in get_providers()
         ],

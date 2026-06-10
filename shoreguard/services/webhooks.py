@@ -39,9 +39,6 @@ from shoreguard.services.formatters import FORMATTERS, prepare_ntfy_request
 
 logger = logging.getLogger(__name__)
 
-# Module-level singleton — set during app lifespan (see shoreguard.api.main).
-webhook_service: WebhookService | None = None
-
 
 def _webhook_settings() -> WebhookSettings:
     from shoreguard.settings import get_settings
@@ -773,6 +770,9 @@ async def fire_webhook(event_type: str, payload: dict[str, Any]) -> None:
         event_type: Type of event.
         payload: Event data payload.
     """
-    if webhook_service is None:
+    from shoreguard.container import try_get_container
+
+    container = try_get_container()
+    if container is None:
         return
-    await webhook_service.fire(event_type, payload)
+    await container.webhooks.fire(event_type, payload)

@@ -653,7 +653,3 @@ class LocalGatewayManager:
         except grpc.RpcError, OSError, ConnectionError:
             logger.debug("Failed to list resources via %s", list_fn, exc_info=True)
             return None
-
-
-# Module-level reference — set during app lifespan when SHOREGUARD_LOCAL_MODE=1
-local_gateway_manager: LocalGatewayManager | None = None

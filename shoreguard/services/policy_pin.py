@@ -30,9 +30,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Module-level singleton — set during app lifespan (see shoreguard.api.main).
-policy_pin_service: PolicyPinService | None = None
-
 
 class PolicyPinService:
     """Database-backed CRUD and enforcement of policy pins.

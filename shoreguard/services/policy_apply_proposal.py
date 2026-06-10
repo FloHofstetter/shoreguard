@@ -29,8 +29,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-policy_apply_proposal_service: PolicyApplyProposalService | None = None
-
 
 class PolicyApplyProposalService:
     """Database-backed cache of in-flight policy-apply proposals.

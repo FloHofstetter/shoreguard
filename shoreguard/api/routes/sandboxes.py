@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field, field_validator
 from starlette.responses import JSONResponse
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import get_actor, get_client, get_gateway_name
+from shoreguard.api.deps import get_actor, get_client, get_gateway_name, get_services
 from shoreguard.api.lro import run_lro
 from shoreguard.api.schemas import (
     AttachSandboxProviderRequest,
@@ -46,8 +46,6 @@ from shoreguard.api.schemas import (
 from shoreguard.api.validation import check_write_rate_limit, validate_description, validate_labels
 from shoreguard.client import ShoreGuardClient
 from shoreguard.exceptions import ValidationError
-from shoreguard.services import operations as _ops_mod
-from shoreguard.services import sandbox_meta as _sandbox_meta_mod
 from shoreguard.services.audit import audit_log
 from shoreguard.services.ocsf import parse_log_line as parse_ocsf_log
 from shoreguard.services.sandbox import SandboxService
@@ -92,12 +90,10 @@ def _get_sandbox_service(
     Returns:
         SandboxService: Service instance bound to the client.
     """
-    from shoreguard.services import boot_hooks as _boot_hooks_mod
-
     return SandboxService(
         client,
-        meta_store=_sandbox_meta_mod.sandbox_meta_store,
-        boot_hooks=_boot_hooks_mod.boot_hook_service,
+        meta_store=get_services().sandbox_meta,
+        boot_hooks=get_services().boot_hooks,
         gateway_name=gateway_name,
     )
 
@@ -289,7 +285,6 @@ async def create_sandbox(
 
     Raises:
         HTTPException: If sandbox name is invalid or creation is already in progress.
-        AssertionError: If the operation service is not initialized.
     """
     check_write_rate_limit(request)
     if body.name and not _VALID_NAME_RE.match(body.name):
@@ -319,8 +314,7 @@ async def create_sandbox(
             log_level=body.log_level,
         )
         sb_name = result.get("name", body.name)
-        assert _ops_mod.operation_service is not None
-        await _ops_mod.operation_service.update_progress(op.id, 30, "Waiting for ready state")  # type: ignore[misc]
+        await get_services().operations.update_progress(op.id, 30, "Waiting for ready state")
         if sb_name:
             from shoreguard.settings import get_settings
 

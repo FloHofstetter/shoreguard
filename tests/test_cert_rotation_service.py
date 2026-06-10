@@ -40,15 +40,9 @@ def _gateway_service(
     return svc
 
 
-def _install_clients(monkeypatch: pytest.MonkeyPatch, mapping: dict[str, MagicMock | None]) -> None:
-    """Stub the module-level client cache used by _resolve_client."""
-    import shoreguard.services.gateway as gateway_mod
-
-    pool = {}
-    for name, client in mapping.items():
-        entry = SimpleNamespace(client=client, backoff=0.0, last_attempt=0.0)
-        pool[name] = entry
-    monkeypatch.setattr(gateway_mod, "_clients", pool, raising=True)
+def _install_clients(gw_svc: MagicMock, mapping: dict[str, MagicMock | None]) -> None:
+    """Stub the gateway-service client cache used by _resolve_client."""
+    gw_svc.get_cached_client = MagicMock(side_effect=lambda name: mapping.get(name))
 
 
 # ---------------------------------------------------------------------------
@@ -63,10 +57,10 @@ async def test_skipped_not_due_when_cert_has_plenty_of_time(
     """A cert with 30 days left is not rotated under a 7-day threshold."""
     gw_svc = _gateway_service([{"name": "gw1"}])
     _install_clients(
-        monkeypatch,
+        gw_svc,
         {"gw1": _client(_cert_info(seconds_until_expiry=30 * 86400))},
     )
-    svc = CertRotationService(gw_svc, threshold_days=7, max_retries=3)
+    svc = CertRotationService(gw_svc, MagicMock(), threshold_days=7, max_retries=3)
     outcomes = await svc.run_once()
     assert outcomes["skipped_not_due"] == 1
     assert outcomes["success"] == 0
@@ -76,8 +70,8 @@ async def test_skipped_not_due_when_cert_has_plenty_of_time(
 async def test_skipped_no_cert_for_plaintext_gateway(monkeypatch: pytest.MonkeyPatch) -> None:
     """A plaintext gateway (``cert_info is None``) is a no-op."""
     gw_svc = _gateway_service([{"name": "gw1"}])
-    _install_clients(monkeypatch, {"gw1": _client(cert_info=None)})
-    svc = CertRotationService(gw_svc, threshold_days=7, max_retries=3)
+    _install_clients(gw_svc, {"gw1": _client(cert_info=None)})
+    svc = CertRotationService(gw_svc, MagicMock(), threshold_days=7, max_retries=3)
     outcomes = await svc.run_once()
     assert outcomes["skipped_no_cert"] == 1
 
@@ -86,8 +80,8 @@ async def test_skipped_no_cert_for_plaintext_gateway(monkeypatch: pytest.MonkeyP
 async def test_skipped_no_cert_when_client_unresolvable(monkeypatch: pytest.MonkeyPatch) -> None:
     """No live client in the pool also counts as skipped_no_cert."""
     gw_svc = _gateway_service([{"name": "gw1"}])
-    _install_clients(monkeypatch, {"gw1": None})
-    svc = CertRotationService(gw_svc, threshold_days=7, max_retries=3)
+    _install_clients(gw_svc, {"gw1": None})
+    svc = CertRotationService(gw_svc, MagicMock(), threshold_days=7, max_retries=3)
     outcomes = await svc.run_once()
     assert outcomes["skipped_no_cert"] == 1
 
@@ -108,13 +102,13 @@ async def test_rotates_when_below_threshold_and_creds_available(
             }
         },
     )
-    _install_clients(monkeypatch, {"gw1": client})
+    _install_clients(gw_svc, {"gw1": client})
     # Don't actually fire webhooks or audits.
     monkeypatch.setattr(
         "shoreguard.services.cert_rotation.fire_webhook",
         AsyncMock(),
     )
-    svc = CertRotationService(gw_svc, threshold_days=7, max_retries=3)
+    svc = CertRotationService(gw_svc, MagicMock(), threshold_days=7, max_retries=3)
     outcomes = await svc.run_once()
     assert outcomes["success"] == 1
     client.reload_credentials.assert_called_once_with(
@@ -139,7 +133,7 @@ async def test_failure_after_retries_fires_webhook(monkeypatch: pytest.MonkeyPat
             }
         },
     )
-    _install_clients(monkeypatch, {"gw1": client})
+    _install_clients(gw_svc, {"gw1": client})
     # Avoid real backoff delays during retries.
     monkeypatch.setattr(
         "shoreguard.services.cert_rotation.asyncio.sleep",
@@ -150,7 +144,7 @@ async def test_failure_after_retries_fires_webhook(monkeypatch: pytest.MonkeyPat
         "shoreguard.services.cert_rotation.fire_webhook",
         webhook_mock,
     )
-    svc = CertRotationService(gw_svc, threshold_days=7, max_retries=2)
+    svc = CertRotationService(gw_svc, MagicMock(), threshold_days=7, max_retries=2)
     outcomes = await svc.run_once()
     assert outcomes["failure"] == 1
     assert client.reload_credentials.call_count == 2
@@ -169,7 +163,7 @@ async def test_failure_when_registry_has_no_creds(monkeypatch: pytest.MonkeyPatc
     """Missing registry creds produce a ``failure`` outcome, not a crash."""
     client = _client(_cert_info(seconds_until_expiry=2 * 86400))
     gw_svc = _gateway_service([{"name": "gw1"}], creds={})
-    _install_clients(monkeypatch, {"gw1": client})
+    _install_clients(gw_svc, {"gw1": client})
     monkeypatch.setattr(
         "shoreguard.services.cert_rotation.asyncio.sleep",
         AsyncMock(),
@@ -178,7 +172,7 @@ async def test_failure_when_registry_has_no_creds(monkeypatch: pytest.MonkeyPatc
         "shoreguard.services.cert_rotation.fire_webhook",
         AsyncMock(),
     )
-    svc = CertRotationService(gw_svc, threshold_days=7, max_retries=1)
+    svc = CertRotationService(gw_svc, MagicMock(), threshold_days=7, max_retries=1)
     outcomes = await svc.run_once()
     assert outcomes["failure"] == 1
     client.reload_credentials.assert_not_called()
@@ -188,8 +182,8 @@ async def test_failure_when_registry_has_no_creds(monkeypatch: pytest.MonkeyPatc
 async def test_gateways_without_name_are_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     """A malformed registry row without a ``name`` field is skipped silently."""
     gw_svc = _gateway_service([{"name": ""}])
-    _install_clients(monkeypatch, {})
-    svc = CertRotationService(gw_svc, threshold_days=7, max_retries=1)
+    _install_clients(gw_svc, {})
+    svc = CertRotationService(gw_svc, MagicMock(), threshold_days=7, max_retries=1)
     outcomes = await svc.run_once()
     # No outcome recorded because the row had no name.
     assert sum(outcomes.values()) == 0

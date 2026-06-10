@@ -577,29 +577,31 @@ class TestEmailDelivery:
 class TestFireWebhookConvenience:
     """Tests for the module-level fire_webhook function."""
 
-    async def test_fire_webhook_noop_when_no_service(self):
-        """fire_webhook does nothing when webhook_service is None."""
+    async def test_fire_webhook_noop_when_no_container(self):
+        """fire_webhook does nothing when no container is installed."""
         import shoreguard.services.webhooks as mod
+        from shoreguard.container import get_container, install, uninstall
 
-        original = mod.webhook_service
-        mod.webhook_service = None
+        original = get_container()
+        uninstall()
         try:
             await mod.fire_webhook("sandbox.created", {"sandbox": "test"})
         finally:
-            mod.webhook_service = original
+            install(original)
 
     async def test_fire_webhook_delegates_to_service(self, webhook_svc):
-        """fire_webhook delegates to the module-level service."""
+        """fire_webhook delegates to the container's webhook service."""
         import shoreguard.services.webhooks as mod
+        from shoreguard.container import get_container
 
-        original = mod.webhook_service
-        mod.webhook_service = webhook_svc
+        original = get_container().webhooks
+        get_container().webhooks = webhook_svc
         try:
             with patch.object(webhook_svc, "fire", new_callable=AsyncMock) as mock_fire:
                 await mod.fire_webhook("sandbox.created", {"sandbox": "test"})
                 mock_fire.assert_called_once_with("sandbox.created", {"sandbox": "test"})
         finally:
-            mod.webhook_service = original
+            get_container().webhooks = original
 
 
 # ─── Comprehensive mutation-killing tests ──────────────────────────────────────

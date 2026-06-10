@@ -14,6 +14,7 @@ from shoreguard.api.deps import (
     resolve_gateway,
     set_client,
 )
+from shoreguard.container import get_container
 
 
 def _fake_request(gateway: str | None = None) -> MagicMock:
@@ -31,7 +32,7 @@ def _fake_request(gateway: str | None = None) -> MagicMock:
 def test_get_client_delegates():
     """get_client() reads gateway from request.state and delegates to gateway_service."""
     req = _fake_request("my-gw")
-    with patch("shoreguard.services.gateway.gateway_service") as mock_svc:
+    with patch.object(get_container(), "gateway") as mock_svc:
         mock_svc.get_client.return_value = MagicMock()
         get_client(req)
         mock_svc.get_client.assert_called_once_with(name="my-gw")
@@ -41,7 +42,7 @@ def test_set_client_delegates():
     """set_client() reads gateway from request.state and delegates to gateway_service.set_client."""
     req = _fake_request("my-gw")
     mock_client = MagicMock()
-    with patch("shoreguard.services.gateway.gateway_service") as mock_svc:
+    with patch.object(get_container(), "gateway") as mock_svc:
         set_client(mock_client, req)
         mock_svc.set_client.assert_called_once_with(mock_client, name="my-gw")
 
@@ -49,7 +50,7 @@ def test_set_client_delegates():
 def test_reset_backoff_delegates():
     """reset_backoff() reads gateway from request.state and delegates."""
     req = _fake_request("my-gw")
-    with patch("shoreguard.services.gateway.gateway_service") as mock_svc:
+    with patch.object(get_container(), "gateway") as mock_svc:
         reset_backoff(req)
         mock_svc.reset_backoff.assert_called_once_with(name="my-gw")
 
@@ -94,7 +95,7 @@ def test_get_client_falls_back_to_contextvar():
     """get_client falls back to ContextVar when request.state has no gateway."""
     _current_gateway.set("fallback-gw")
     req = _fake_request()  # no gateway on state
-    with patch("shoreguard.services.gateway.gateway_service") as mock_svc:
+    with patch.object(get_container(), "gateway") as mock_svc:
         mock_svc.get_client.return_value = MagicMock()
         get_client(req)
         mock_svc.get_client.assert_called_once_with(name="fallback-gw")
@@ -104,16 +105,21 @@ def test_get_client_falls_back_to_contextvar():
 # ─── _get_gateway_service None check ──────────────────────────────────────
 
 
-def test_get_gateway_service_raises_when_none():
-    """_get_gateway_service raises HTTPException(503) if gateway_service is None."""
+def test_get_gateway_service_raises_when_no_container():
+    """_get_gateway_service raises HTTPException(503) without a container."""
     from fastapi import HTTPException
 
     from shoreguard.api.deps import _get_gateway_service
+    from shoreguard.container import get_container, install, uninstall
 
-    with patch("shoreguard.services.gateway.gateway_service", None):
+    original = get_container()
+    uninstall()
+    try:
         with pytest.raises(HTTPException) as exc_info:
             _get_gateway_service()
         assert exc_info.value.status_code == 503
+    finally:
+        install(original)
 
 
 # ─── ShoreGuardClient.from_active_cluster error handling ──────────────────

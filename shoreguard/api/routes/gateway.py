@@ -28,7 +28,7 @@ from pydantic import BaseModel, field_validator
 from starlette.responses import JSONResponse
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import _get_gateway_service, get_actor
+from shoreguard.api.deps import _get_gateway_service, get_actor, get_services
 from shoreguard.api.lro import run_lro
 from shoreguard.api.schemas import (
     ConnectionTestResponse,
@@ -39,7 +39,6 @@ from shoreguard.api.schemas import (
 from shoreguard.api.validation import validate_description, validate_labels
 from shoreguard.config import ENDPOINT_RE, VALID_GATEWAY_NAME_RE, is_private_ip
 from shoreguard.gateway_runtime import METADATA_RUNTIME_KEY, get_runtime, validate_runtime
-from shoreguard.services import operations as _ops_mod
 from shoreguard.services.audit import audit_log
 from shoreguard.services.webhooks import fire_webhook
 from shoreguard.settings import get_settings
@@ -93,11 +92,7 @@ def _get_local_manager() -> LocalGatewayManager | None:
     Returns:
         LocalGatewayManager | None: Manager instance or None if not in local mode.
     """
-    if not get_settings().server.local_mode:
-        return None
-    from shoreguard.services.local_gateway import local_gateway_manager
-
-    return local_gateway_manager
+    return get_services().local_gateway
 
 
 # ─── Request / Response models ─────────────────────────────────────────────
@@ -258,15 +253,8 @@ async def discover_gateways(
 
     Returns:
         dict[str, Any]: ``{discovered, registered, skipped, errors}``.
-
-    Raises:
-        HTTPException: ``503`` if the service is not initialised.
     """
-    from shoreguard.services import discovery as discovery_mod
-
-    svc = discovery_mod.discovery_service
-    if svc is None:
-        raise HTTPException(503, "DiscoveryService not initialised")
+    svc = get_services().discovery
     result = await asyncio.to_thread(svc.run_once, domains=body.domains)
     await audit_log(
         request,
@@ -288,16 +276,8 @@ async def discovery_status() -> dict[str, Any]:
 
     Returns:
         dict[str, Any]: Status object from ``DiscoveryService.status``.
-
-    Raises:
-        HTTPException: ``503`` if the service is not initialised.
     """
-    from shoreguard.services import discovery as discovery_mod
-
-    svc = discovery_mod.discovery_service
-    if svc is None:
-        raise HTTPException(503, "DiscoveryService not initialised")
-    return svc.status()
+    return get_services().discovery.status()
 
 
 @router.get("/list", response_model=PaginatedResponse)
@@ -874,7 +854,6 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> JSONRe
     Raises:
         HTTPException: If not in local mode, name is invalid, or creation is
             already in progress.
-        AssertionError: If the operation service is not initialized.
     """
     mgr = _get_local_manager()
     if mgr is None:
@@ -887,8 +866,7 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> JSONRe
 
     async def work(op):
         logger.info("Starting gateway creation: '%s' (op=%s, actor=%s)", body.name, op.id, actor)
-        assert _ops_mod.operation_service is not None
-        await _ops_mod.operation_service.update_progress(op.id, 10, "Starting gateway container")  # type: ignore[misc]
+        await get_services().operations.update_progress(op.id, 10, "Starting gateway container")
         result = await asyncio.to_thread(
             mgr.create,
             name=body.name,

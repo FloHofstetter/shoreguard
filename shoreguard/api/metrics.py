@@ -284,24 +284,24 @@ async def metrics_middleware(request: Request, call_next: object) -> Response:
 
 async def _collect_gauges() -> None:
     """Update gauge values from current service state."""
-    import shoreguard.services.gateway as gw_mod
-    import shoreguard.services.operations as ops_mod
+    from shoreguard.container import try_get_container
+
+    container = try_get_container()
+    if container is None:
+        return
 
     # Gateway status counts
-    if gw_mod.gateway_service is not None:
-        all_gw = await asyncio.to_thread(gw_mod.gateway_service.list_all)
-        counts: dict[str, int] = {}
-        for g in all_gw:
-            status = g.get("status", "unknown")
-            counts[status] = counts.get(status, 0) + 1
-        gateways_total._metrics.clear()
-        for status, count in counts.items():
-            gateways_total.labels(status=status).set(count)
+    all_gw = await asyncio.to_thread(container.gateway.list_all)
+    counts: dict[str, int] = {}
+    for g in all_gw:
+        status = g.get("status", "unknown")
+        counts[status] = counts.get(status, 0) + 1
+    gateways_total._metrics.clear()
+    for status, count in counts.items():
+        gateways_total.labels(status=status).set(count)
 
     # Operation status counts
     operations_total._metrics.clear()
-    op_svc = ops_mod.operation_service
-    if op_svc is not None:
-        op_counts = await op_svc.status_counts()
-        for status, count in op_counts.items():
-            operations_total.labels(status=status).set(count)
+    op_counts = await container.operations.status_counts()
+    for status, count in op_counts.items():
+        operations_total.labels(status=status).set(count)

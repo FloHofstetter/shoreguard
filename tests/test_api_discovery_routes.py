@@ -8,10 +8,8 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _init_discovery():
-    """Wire DiscoveryService into the global module so the route can find it."""
-    import shoreguard.services.discovery as discovery_mod
-    import shoreguard.services.gateway as gw_mod
+def _init_discovery(container):
+    """Install a DiscoveryService with test settings in the container."""
     from shoreguard.services.discovery import DiscoveryService
     from shoreguard.settings import DiscoverySettings
 
@@ -21,14 +19,11 @@ def _init_discovery():
         interval_seconds=60,
         auto_register=True,
     )
-    assert gw_mod.gateway_service is not None
-    discovery_mod.discovery_service = DiscoveryService(
-        gw_mod.gateway_service._registry,
-        gw_mod.gateway_service,
+    container.discovery = DiscoveryService(
+        container.registry,
+        container.gateway,
         settings,
     )
-    yield
-    discovery_mod.discovery_service = None
 
 
 class TestDiscoverEndpoint:

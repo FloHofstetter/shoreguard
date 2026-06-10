@@ -37,9 +37,6 @@ from shoreguard.services.operations_types import (
 
 logger = logging.getLogger(__name__)
 
-# Module-level singleton — set during app lifespan (see shoreguard.api.main).
-operation_service: AsyncOperationService | None = None
-
 
 def _truncate_result(result: dict[str, Any], max_bytes: int | None = None) -> str:
     """Serialize *result* to JSON, truncating large string fields if needed.

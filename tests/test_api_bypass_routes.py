@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-import shoreguard.services.bypass as bypass_mod
 from shoreguard.services.bypass import BypassService
 
 GW = "test"
@@ -13,11 +12,9 @@ BASE = f"/api/gateways/{GW}/sandboxes/{SB}/bypass"
 
 
 @pytest.fixture(autouse=True)
-def _init_bypass_service():
-    """Initialise a fresh BypassService per test."""
-    bypass_mod.bypass_service = BypassService(ring_size=100)
-    yield
-    bypass_mod.bypass_service = None
+def _init_bypass_service(container):
+    """Install a small-ring BypassService in the test container."""
+    container.bypass = BypassService(ring_size=100)
 
 
 def _feed_bypass_event(svc: BypassService, msg: str, ts: int = 1000) -> None:
@@ -44,8 +41,9 @@ async def test_get_bypass_events_empty(api_client, mock_client):
 
 async def test_get_bypass_events_populated(api_client, mock_client):
     """GET /bypass returns events after ingestion."""
-    svc = bypass_mod.bypass_service
-    assert svc is not None
+    from shoreguard.container import get_container
+
+    svc = get_container().bypass
     _feed_bypass_event(svc, 'FINDING:BLOCKED [HIGH] "bypass attempt"', ts=1000)
     _feed_bypass_event(svc, 'FINDING:BLOCKED [CRIT] "nsenter escape"', ts=2000)
 
@@ -60,8 +58,9 @@ async def test_get_bypass_events_populated(api_client, mock_client):
 
 async def test_get_bypass_events_since_ms(api_client, mock_client):
     """GET /bypass?since_ms filters by timestamp."""
-    svc = bypass_mod.bypass_service
-    assert svc is not None
+    from shoreguard.container import get_container
+
+    svc = get_container().bypass
     _feed_bypass_event(svc, 'FINDING:BLOCKED [HIGH] "bypass old"', ts=1000)
     _feed_bypass_event(svc, 'FINDING:BLOCKED [HIGH] "bypass new"', ts=5000)
 
@@ -74,8 +73,9 @@ async def test_get_bypass_events_since_ms(api_client, mock_client):
 
 async def test_get_bypass_events_limit(api_client, mock_client):
     """GET /bypass?limit restricts event count."""
-    svc = bypass_mod.bypass_service
-    assert svc is not None
+    from shoreguard.container import get_container
+
+    svc = get_container().bypass
     for i in range(5):
         _feed_bypass_event(svc, f'FINDING:BLOCKED [HIGH] "bypass #{i}"', ts=1000 + i)
 
@@ -97,8 +97,9 @@ async def test_get_bypass_summary_empty(api_client, mock_client):
 
 async def test_get_bypass_summary_populated(api_client, mock_client):
     """GET /bypass/summary returns aggregated counts."""
-    svc = bypass_mod.bypass_service
-    assert svc is not None
+    from shoreguard.container import get_container
+
+    svc = get_container().bypass
     _feed_bypass_event(
         svc,
         "NET:OPEN [HIGH] DENIED dst:evil.com:443 [engine:iptables]",
@@ -123,8 +124,9 @@ async def test_get_bypass_summary_populated(api_client, mock_client):
 
 async def test_bypass_events_isolated_per_sandbox(api_client, mock_client):
     """Events for sandbox B do not appear in sandbox A's response."""
-    svc = bypass_mod.bypass_service
-    assert svc is not None
+    from shoreguard.container import get_container
+
+    svc = get_container().bypass
     # Feed event for a different sandbox.
     log = {
         "timestamp_ms": 1000,

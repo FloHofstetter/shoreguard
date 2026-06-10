@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 import shoreguard.services.audit as audit_mod
 from shoreguard.api import auth
 from shoreguard.api.auth import create_user
+from shoreguard.container import get_container
 from shoreguard.models import Base
 
 GW = "test"
@@ -26,10 +27,9 @@ def db():
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     auth.init_auth_for_test(factory)
-    audit_mod.audit_service = audit_mod.AuditService(factory)
+    get_container().audit = audit_mod.AuditService(factory)
     yield factory
     auth.reset()
-    audit_mod.audit_service = None
     engine.dispose()
 
 
@@ -76,9 +76,8 @@ async def viewer_client(db, _with_viewer):
 
 
 def _seed_audit(count=3):
-    assert audit_mod.audit_service is not None
     for i in range(count):
-        audit_mod.audit_service.log(
+        get_container().audit.log(
             actor=f"user{i}@test.com",
             actor_role="admin",
             action=f"sandbox.action{i}",
@@ -89,13 +88,12 @@ def _seed_audit(count=3):
 
 def _seed_gateway_sequence(gateway: str) -> None:
     """Seed an M7-style story for one gateway: register → create → approve."""
-    assert audit_mod.audit_service is not None
     for action, rt, rid in (
         ("gateway.register", "gateway", gateway),
         ("sandbox.create", "sandbox", "demo-sb"),
         ("approval.approve", "approval", "chunk-1"),
     ):
-        audit_mod.audit_service.log(
+        get_container().audit.log(
             actor="demo@test.com",
             actor_role="admin",
             action=action,

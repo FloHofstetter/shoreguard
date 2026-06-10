@@ -9,11 +9,13 @@ import grpc
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from shoreguard.container import get_container
+
 
 @pytest.fixture
 def mock_gw_svc():
     """Mock the gateway_service used by routes."""
-    with patch("shoreguard.services.gateway.gateway_service") as mock:
+    with patch.object(get_container(), "gateway") as mock:
         yield mock
 
 

@@ -44,16 +44,6 @@ class _ClientEntry:
         self.backoff: float = 0.0
 
 
-_clients: dict[str, _ClientEntry] = {}
-_clients_lock = threading.Lock()
-
-
-def _reset_clients() -> None:
-    """Clear all cached gateway clients. For test teardown only."""
-    with _clients_lock:
-        _clients.clear()
-
-
 def _publish_cert_expiry_gauge(name: str, client: ShoreGuardClient) -> None:
     """Best-effort: publish the cert expiry gauge after a successful connect.
 
@@ -106,6 +96,10 @@ class GatewayService:
 
     def __init__(self, registry: GatewayRegistry) -> None:  # noqa: D107
         self._registry = registry
+        # Per-gateway connection cache with backoff state. Instance state so
+        # each container (prod app, each test) owns its own connections.
+        self._clients: dict[str, _ClientEntry] = {}
+        self._lock = threading.Lock()
 
     @property
     def registry(self) -> GatewayRegistry:
@@ -129,11 +123,11 @@ class GatewayService:
         gw_name = name
 
         # Phase 1: read state under the lock
-        with _clients_lock:
-            entry = _clients.get(gw_name)
+        with self._lock:
+            entry = self._clients.get(gw_name)
             if entry is None:
                 entry = _ClientEntry()
-                _clients[gw_name] = entry
+                self._clients[gw_name] = entry
             existing_client = entry.client
 
         # Phase 2: health-check existing client (blocking I/O, no lock)
@@ -147,13 +141,13 @@ class GatewayService:
                     existing_client.close()
                 except Exception:
                     logger.debug("Error closing stale connection for '%s'", gw_name, exc_info=True)
-                with _clients_lock:
+                with self._lock:
                     entry.client = None
                     entry.backoff = 0.0
 
         # Phase 3: check backoff under the lock
         now = time.monotonic()
-        with _clients_lock:
+        with self._lock:
             if entry.backoff > 0 and (now - entry.last_attempt) < entry.backoff:
                 raise GatewayNotConnectedError(f"Gateway '{gw_name}' not connected.")
             entry.last_attempt = now
@@ -162,7 +156,7 @@ class GatewayService:
         new_client = self._try_connect(gw_name)
 
         # Phase 5: write result under the lock
-        with _clients_lock:
+        with self._lock:
             if new_client is None:
                 gw_cfg = get_settings().gateway
                 if entry.backoff == 0:
@@ -183,15 +177,15 @@ class GatewayService:
             name: Gateway name.
         """
         gw_name = name
-        with _clients_lock:
+        with self._lock:
             if client is None:
-                _clients.pop(gw_name, None)
+                self._clients.pop(gw_name, None)
                 logger.debug("Cleared client for gateway '%s'", gw_name)
             else:
-                entry = _clients.get(gw_name)
+                entry = self._clients.get(gw_name)
                 if entry is None:
                     entry = _ClientEntry()
-                    _clients[gw_name] = entry
+                    self._clients[gw_name] = entry
                 entry.client = client
                 entry.backoff = 0.0
                 logger.debug("Set client for gateway '%s'", gw_name)
@@ -203,10 +197,10 @@ class GatewayService:
             name: Gateway name.
         """
         gw_name = name
-        with _clients_lock:
-            if gw_name and gw_name in _clients:
-                _clients[gw_name].backoff = 0.0
-                _clients[gw_name].last_attempt = 0.0
+        with self._lock:
+            if gw_name and gw_name in self._clients:
+                self._clients[gw_name].backoff = 0.0
+                self._clients[gw_name].last_attempt = 0.0
                 logger.debug("Reset backoff for gateway '%s'", gw_name)
 
     def _try_connect(self, name: str) -> ShoreGuardClient | None:
@@ -489,8 +483,8 @@ class GatewayService:
         gateways = self._registry.list_all(labels_filter=labels_filter)
 
         for gw in gateways:
-            with _clients_lock:
-                cached = _clients.get(gw["name"])
+            with self._lock:
+                cached = self._clients.get(gw["name"])
                 connected = cached is not None and cached.client is not None
 
             gw["connected"] = connected
@@ -515,8 +509,8 @@ class GatewayService:
 
         connected = False
         version = None
-        with _clients_lock:
-            cached = _clients.get(name)
+        with self._lock:
+            cached = self._clients.get(name)
             cached_client = cached.client if cached else None
         if cached_client is not None:
             try:
@@ -599,12 +593,8 @@ class GatewayService:
         Returns:
             ShoreGuardClient | None: Cached client, or None.
         """
-        with _clients_lock:
-            entry = _clients.get(name)
+        with self._lock:
+            entry = self._clients.get(name)
             if entry is not None and entry.client is not None:
                 return entry.client
         return None
-
-
-# Module-level reference — set during app lifespan (see shoreguard.api.main).
-gateway_service: GatewayService | None = None

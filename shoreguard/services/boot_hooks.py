@@ -66,9 +66,6 @@ def _record_hook_metric(hook: dict[str, Any], status: str, duration_s: float) ->
         logger.debug("boot_hooks: failed to record hook metric", exc_info=True)
 
 
-# Module-level singleton populated during app lifespan startup.
-boot_hook_service: BootHookService | None = None
-
 PHASE_PRE = "pre_create"
 PHASE_POST = "post_create"
 _VALID_PHASES = frozenset({PHASE_PRE, PHASE_POST})

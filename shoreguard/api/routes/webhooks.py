@@ -22,6 +22,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
 import shoreguard.services.webhooks as webhook_mod
+from shoreguard.api.deps import get_services
 from shoreguard.api.schemas import (
     MessageResponse,
     PaginatedResponse,
@@ -175,9 +176,7 @@ class WebhookUpdateRequest(BaseModel):
 
 
 def _get_svc() -> webhook_mod.WebhookService:
-    if webhook_mod.webhook_service is None:
-        raise HTTPException(503, "Webhook service not initialised")
-    return webhook_mod.webhook_service
+    return get_services().webhooks
 
 
 @router.get("", response_model=PaginatedResponse)

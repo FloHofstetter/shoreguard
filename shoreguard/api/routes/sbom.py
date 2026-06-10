@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import get_actor, get_gateway_name
+from shoreguard.api.deps import get_actor, get_gateway_name, get_services
 from shoreguard.exceptions import InvalidSBOMError
 from shoreguard.services.audit import audit_log
 
@@ -39,19 +39,12 @@ MAX_SBOM_BYTES = 10 * 1024 * 1024
 
 
 def _get_sbom_service() -> SBOMService:
-    """Return the global ``SBOMService`` singleton.
+    """Return the SBOM service from the container.
 
     Returns:
         SBOMService: The active SBOM service instance.
-
-    Raises:
-        HTTPException: If the service has not been initialised.
     """
-    from shoreguard.services import sbom as sbom_mod
-
-    if sbom_mod.sbom_service is None:
-        raise HTTPException(503, "SBOMService not initialised")
-    return sbom_mod.sbom_service
+    return get_services().sbom
 
 
 @router.post(

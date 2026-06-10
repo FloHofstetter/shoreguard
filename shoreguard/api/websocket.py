@@ -105,10 +105,11 @@ async def sandbox_events(
                                 if ocsf is not None:
                                     data["ocsf"] = ocsf
                                     # Feed bypass detection service.
-                                    from shoreguard.services.bypass import bypass_service
+                                    from shoreguard.container import try_get_container
 
-                                    if bypass_service is not None:
-                                        bypass_service.ingest_log(
+                                    container = try_get_container()
+                                    if container is not None:
+                                        container.bypass.ingest_log(
                                             data,
                                             sandbox_name=sandbox_name,
                                             gateway_name=gw,

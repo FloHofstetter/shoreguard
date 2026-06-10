@@ -39,9 +39,6 @@ from shoreguard.models import AuditEntry, Gateway
 
 logger = logging.getLogger(__name__)
 
-# Module-level singleton — set during app lifespan (see shoreguard.api.main).
-audit_service: AuditService | None = None
-
 
 # ── Append-only enforcement ──────────────────────────────────────────────
 #
@@ -468,14 +465,17 @@ async def audit_log(
         gateway: Optional gateway name for scoping.
         detail: Optional structured detail payload.
     """
-    if audit_service is None:
-        logger.warning("audit_log() called but audit_service is not initialised")
+    from shoreguard.container import try_get_container
+
+    container = try_get_container()
+    if container is None:
+        logger.warning("audit_log() called but the service container is not installed")
         return
     actor = getattr(request.state, "user_id", "unknown")
     actor_role = getattr(request.state, "role", "unknown")
     client_ip = request.client.host if request.client else None
     await asyncio.to_thread(
-        audit_service.log,
+        container.audit.log,
         actor=str(actor),
         actor_role=str(actor_role),
         action=action,

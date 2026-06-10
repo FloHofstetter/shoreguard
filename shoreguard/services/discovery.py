@@ -37,9 +37,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Module-level singleton populated during app lifespan startup.
-discovery_service: DiscoveryService | None = None
-
 _SRV_LABEL = "_openshell._tcp"
 _NAME_SANITIZE = re.compile(r"[^a-zA-Z0-9._-]+")
 

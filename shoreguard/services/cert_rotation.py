@@ -41,20 +41,14 @@ import time
 from typing import TYPE_CHECKING
 
 from shoreguard.api.metrics import record_gateway_cert_rotation
-from shoreguard.services import audit as _audit_mod
 from shoreguard.services.webhooks import fire_webhook
 
 if TYPE_CHECKING:
     from shoreguard.client import ShoreGuardClient
+    from shoreguard.services.audit import AuditService
     from shoreguard.services.gateway import GatewayService
 
 logger = logging.getLogger(__name__)
-
-
-# Module-level handle set from ``api.main`` at startup; the background
-# loop grabs the current instance on every tick so a test can swap a
-# lighter mock in without restarting the app.
-cert_rotation_service: CertRotationService | None = None
 
 
 class CertRotationService:
@@ -63,6 +57,7 @@ class CertRotationService:
     Args:
         gateway_service: Service used to list registered gateways and
             re-fetch credentials from the registry.
+        audit: Audit service used to record successful rotations.
         threshold_days: Rotate when remaining validity drops below this
             many days.
         max_retries: Retry attempts per rotation before giving up for
@@ -72,11 +67,13 @@ class CertRotationService:
     def __init__(  # noqa: D107
         self,
         gateway_service: GatewayService,
+        audit: AuditService,
         *,
         threshold_days: int,
         max_retries: int,
     ) -> None:
         self._gateway_service = gateway_service
+        self._audit = audit
         self._threshold_seconds = threshold_days * 86400
         self._max_retries = max_retries
 
@@ -129,22 +126,21 @@ class CertRotationService:
                 seconds_left_after = (
                     client.cert_info.seconds_until_expiry if client.cert_info is not None else None
                 )
-                if _audit_mod.audit_service is not None:
-                    await asyncio.to_thread(
-                        _audit_mod.audit_service.log,
-                        actor="system",
-                        actor_role="system",
-                        action="gateway.cert_rotated",
-                        resource_type="gateway",
-                        resource_id=name,
-                        gateway=name,
-                        detail={
-                            "before_seconds_until_expiry": seconds_left_before,
-                            "after_seconds_until_expiry": seconds_left_after,
-                            "attempts": attempt,
-                        },
-                        client_ip=None,
-                    )
+                await asyncio.to_thread(
+                    self._audit.log,
+                    actor="system",
+                    actor_role="system",
+                    action="gateway.cert_rotated",
+                    resource_type="gateway",
+                    resource_id=name,
+                    gateway=name,
+                    detail={
+                        "before_seconds_until_expiry": seconds_left_before,
+                        "after_seconds_until_expiry": seconds_left_after,
+                        "attempts": attempt,
+                    },
+                    client_ip=None,
+                )
                 return "success"
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
@@ -180,16 +176,7 @@ class CertRotationService:
             ShoreGuardClient | None: The cached client, or ``None`` when
                 the gateway is not connected.
         """
-        # The module-level ``_clients`` dict in services.gateway holds
-        # the active ShoreGuardClient instances. Import here to avoid
-        # circular imports at module load.
-        from shoreguard.services.gateway import _clients, _clients_lock
-
-        with _clients_lock:
-            cached = _clients.get(name)
-        if cached is None:
-            return None
-        return cached.client
+        return self._gateway_service.get_cached_client(name)
 
     def _rotate(self, name: str, client: ShoreGuardClient) -> None:
         """Re-read credentials from the registry and rebuild the channel.
@@ -235,33 +222,4 @@ def _next_attempt_at() -> float:
     return time.time()
 
 
-def init_cert_rotation_service(
-    gateway_service: GatewayService,
-    *,
-    threshold_days: int,
-    max_retries: int,
-) -> CertRotationService:
-    """Construct and install the module-level service handle.
-
-    Args:
-        gateway_service: Service used to list gateways and fetch creds.
-        threshold_days: Rotate-ahead threshold.
-        max_retries: Retry attempts per rotation.
-
-    Returns:
-        CertRotationService: The freshly installed service instance.
-    """
-    global cert_rotation_service
-    cert_rotation_service = CertRotationService(
-        gateway_service,
-        threshold_days=threshold_days,
-        max_retries=max_retries,
-    )
-    return cert_rotation_service
-
-
-__all__ = (
-    "CertRotationService",
-    "cert_rotation_service",
-    "init_cert_rotation_service",
-)
+__all__ = ("CertRotationService",)

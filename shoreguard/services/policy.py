@@ -120,10 +120,11 @@ class PolicyService:
 
         # Cache denial summaries so the approval detail modal can
         # render binary ancestry + L7 samples without a round-trip.
-        from shoreguard.services.denial_context import denial_context_service
+        from shoreguard.container import try_get_container
 
-        if denial_context_service is not None:
-            denial_context_service.ingest_summaries(sandbox_name, summaries)
+        container = try_get_container()
+        if container is not None:
+            container.denial_context.ingest_summaries(sandbox_name, summaries)
 
         return self._client.policies.submit_analysis(
             sandbox_name,

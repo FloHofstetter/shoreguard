@@ -32,9 +32,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Module-level singleton — set during app lifespan (see shoreguard.api.main).
-sbom_service: SBOMService | None = None
-
 #: Severity ordering, highest first.  ``UNKNOWN`` is treated as the lowest
 #: confident severity but still ranked above ``None`` (no vulns at all).
 _SEVERITY_RANK: dict[str, int] = {
