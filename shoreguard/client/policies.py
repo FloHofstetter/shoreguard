@@ -263,7 +263,7 @@ class PolicyManager:
         self._stub = stub
         self._timeout = timeout
 
-    def get(self, sandbox_name: str) -> dict[str, Any]:
+    async def get(self, sandbox_name: str) -> dict[str, Any]:
         """Get the current active policy for a sandbox.
 
         Args:
@@ -272,7 +272,7 @@ class PolicyManager:
         Returns:
             dict[str, Any]: Active policy status with revision details.
         """
-        resp = self._stub.GetSandboxPolicyStatus(
+        resp = await self._stub.GetSandboxPolicyStatus(
             openshell_pb2.GetSandboxPolicyStatusRequest(name=sandbox_name),
             timeout=self._timeout,
         )
@@ -290,7 +290,7 @@ class PolicyManager:
             result["policy"] = _policy_to_dict(resp.revision.policy)
         return result
 
-    def get_version(self, sandbox_name: str, version: int) -> dict[str, Any]:
+    async def get_version(self, sandbox_name: str, version: int) -> dict[str, Any]:
         """Get a specific policy revision by version number.
 
         Args:
@@ -300,7 +300,7 @@ class PolicyManager:
         Returns:
             dict[str, Any]: Policy status with revision details.
         """
-        resp = self._stub.GetSandboxPolicyStatus(
+        resp = await self._stub.GetSandboxPolicyStatus(
             openshell_pb2.GetSandboxPolicyStatusRequest(name=sandbox_name, version=version),
             timeout=self._timeout,
         )
@@ -318,7 +318,7 @@ class PolicyManager:
             result["policy"] = _policy_to_dict(resp.revision.policy)
         return result
 
-    def list_revisions(
+    async def list_revisions(
         self, sandbox_name: str, *, limit: int = 20, offset: int = 0
     ) -> list[dict[str, Any]]:
         """List policy revision history for a sandbox.
@@ -331,7 +331,7 @@ class PolicyManager:
         Returns:
             list[dict[str, Any]]: List of policy revision summary dicts.
         """
-        resp = self._stub.ListSandboxPolicies(
+        resp = await self._stub.ListSandboxPolicies(
             openshell_pb2.ListSandboxPoliciesRequest(name=sandbox_name, limit=limit, offset=offset),
             timeout=self._timeout,
         )
@@ -347,7 +347,7 @@ class PolicyManager:
             for rev in resp.revisions
         ]
 
-    def update(
+    async def update(
         self, sandbox_name: str, policy: sandbox_pb2.SandboxPolicy, *, global_scope: bool = False
     ) -> dict[str, Any]:
         """Push a new policy version to a sandbox (or globally).
@@ -360,7 +360,7 @@ class PolicyManager:
         Returns:
             dict[str, Any]: Version and policy hash of the new revision.
         """
-        resp = self._stub.UpdateConfig(
+        resp = await self._stub.UpdateConfig(
             openshell_pb2.UpdateConfigRequest(
                 name=sandbox_name,
                 policy=policy,
@@ -373,7 +373,7 @@ class PolicyManager:
             "policy_hash": resp.policy_hash,
         }
 
-    def apply_merge_operations(
+    async def apply_merge_operations(
         self,
         sandbox_name: str,
         operations: list[dict[str, Any]],
@@ -407,7 +407,7 @@ class PolicyManager:
                 downstream code can treat the two as interchangeable.
         """
         merge_ops = [_dict_to_merge_operation(op) for op in operations]
-        resp = self._stub.UpdateConfig(
+        resp = await self._stub.UpdateConfig(
             openshell_pb2.UpdateConfigRequest(
                 name=sandbox_name,
                 merge_operations=merge_ops,
@@ -419,7 +419,7 @@ class PolicyManager:
             "policy_hash": resp.policy_hash,
         }
 
-    def submit_analysis(
+    async def submit_analysis(
         self,
         sandbox_name: str,
         *,
@@ -455,7 +455,7 @@ class PolicyManager:
             summaries=[openshell_pb2.DenialSummary(**s) for s in summaries],
             proposed_chunks=[openshell_pb2.PolicyChunk(**c) for c in proposed_chunks],
         )
-        resp = self._stub.SubmitPolicyAnalysis(req, timeout=self._timeout)
+        resp = await self._stub.SubmitPolicyAnalysis(req, timeout=self._timeout)
         return {
             "accepted_chunks": resp.accepted_chunks,
             "rejected_chunks": resp.rejected_chunks,

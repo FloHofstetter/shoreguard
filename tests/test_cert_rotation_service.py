@@ -22,7 +22,7 @@ def _cert_info(seconds_until_expiry: float | None) -> SimpleNamespace:
 def _client(cert_info: SimpleNamespace | None) -> MagicMock:
     client = MagicMock()
     client.cert_info = cert_info
-    client.reload_credentials = MagicMock()
+    client.reload_credentials = AsyncMock()
     return client
 
 
@@ -32,7 +32,7 @@ def _gateway_service(
     creds: dict[str, dict[str, bytes]] | None = None,
 ) -> MagicMock:
     svc = MagicMock()
-    svc.list_all = MagicMock(return_value=gateways)
+    svc.list_all = AsyncMock(return_value=gateways)
     # Back-door registry access mirrors what cert_rotation uses.
     registry = MagicMock()
     registry.get_credentials = MagicMock(side_effect=lambda name: (creds or {}).get(name))

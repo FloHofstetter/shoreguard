@@ -63,13 +63,13 @@ def valid_bundle():
 # ── validate_bundle ─────────────────────────────────────────────────────────
 
 
-def test_validate_bundle_accepts_matching_san(valid_bundle):
+async def test_validate_bundle_accepts_matching_san(valid_bundle):
     info = validate_bundle(endpoint_host="gateway.local", **valid_bundle)
     assert "gateway.local" in info.san_dns_names
     assert info.seconds_until_expiry > 0
 
 
-def test_validate_bundle_rejects_expired_cert():
+async def test_validate_bundle_rejects_expired_cert():
     cert, key = _make_cert(dns_names=["gateway.local"], not_after_days=1)
     # Simulate being two days past the expiry.
     future = _dt.datetime.now(_dt.UTC) + _dt.timedelta(days=3)
@@ -83,7 +83,7 @@ def test_validate_bundle_rejects_expired_cert():
         )
 
 
-def test_validate_bundle_rejects_san_mismatch():
+async def test_validate_bundle_rejects_san_mismatch():
     cert, key = _make_cert(dns_names=["other.local"], not_after_days=365)
     with pytest.raises(GatewayNotConnectedError, match="SAN"):
         validate_bundle(
@@ -94,7 +94,7 @@ def test_validate_bundle_rejects_san_mismatch():
         )
 
 
-def test_validate_bundle_skips_san_check_for_ip_literal():
+async def test_validate_bundle_skips_san_check_for_ip_literal():
     cert, key = _make_cert(dns_names=["gateway.local"], not_after_days=365)
     info = validate_bundle(
         ca_cert=cert,
@@ -105,7 +105,7 @@ def test_validate_bundle_skips_san_check_for_ip_literal():
     assert info.seconds_until_expiry > 0
 
 
-def test_validate_bundle_warns_when_near_expiry(caplog):
+async def test_validate_bundle_warns_when_near_expiry(caplog):
     cert, key = _make_cert(dns_names=["gateway.local"], not_after_days=3)
     with caplog.at_level("WARNING"):
         validate_bundle(
@@ -118,7 +118,7 @@ def test_validate_bundle_warns_when_near_expiry(caplog):
     assert any("expires soon" in r.message for r in caplog.records)
 
 
-def test_validate_bundle_rejects_unparseable_bytes():
+async def test_validate_bundle_rejects_unparseable_bytes():
     with pytest.raises(GatewayNotConnectedError, match="Failed to parse"):
         validate_bundle(
             ca_cert=b"not-a-cert",
@@ -131,27 +131,27 @@ def test_validate_bundle_rejects_unparseable_bytes():
 # ── require_mtls enforcement ────────────────────────────────────────────────
 
 
-def test_require_mtls_rejects_plaintext_constructor():
+async def test_require_mtls_rejects_plaintext_constructor():
     with pytest.raises(GatewayNotConnectedError, match="mTLS required"):
         ShoreGuardClient("localhost:8080", require_mtls=True)
 
 
-def test_require_mtls_default_constructor_allows_plaintext(monkeypatch):
-    monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+async def test_require_mtls_default_constructor_allows_plaintext(monkeypatch):
+    monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
     c = ShoreGuardClient("localhost:8080")
     assert c._channel is not None
 
 
-def test_from_credentials_rejects_plaintext_when_required(monkeypatch):
+async def test_from_credentials_rejects_plaintext_when_required(monkeypatch):
     monkeypatch.setattr("shoreguard.client._default_require_mtls", lambda: True)
     with pytest.raises(GatewayNotConnectedError, match="mTLS required"):
         ShoreGuardClient.from_credentials("gateway.local:443")
 
 
-def test_from_credentials_accepts_valid_bundle(valid_bundle, monkeypatch):
+async def test_from_credentials_accepts_valid_bundle(valid_bundle, monkeypatch):
     monkeypatch.setattr("shoreguard.client._default_require_mtls", lambda: True)
     monkeypatch.setattr("grpc.ssl_channel_credentials", lambda **kw: MagicMock())
-    monkeypatch.setattr("grpc.secure_channel", lambda ep, creds: MagicMock())
+    monkeypatch.setattr("grpc.aio.secure_channel", lambda ep, creds: MagicMock())
     c = ShoreGuardClient.from_credentials("gateway.local:443", **valid_bundle)
     assert c.cert_info is not None
     assert "gateway.local" in c.cert_info.san_dns_names
@@ -160,28 +160,30 @@ def test_from_credentials_accepts_valid_bundle(valid_bundle, monkeypatch):
 # ── reload_credentials ──────────────────────────────────────────────────────
 
 
-def test_reload_credentials_rebuilds_channel_and_stubs(valid_bundle, monkeypatch):
+async def test_reload_credentials_rebuilds_channel_and_stubs(valid_bundle, monkeypatch):
     monkeypatch.setattr("shoreguard.client._default_require_mtls", lambda: True)
     monkeypatch.setattr("grpc.ssl_channel_credentials", lambda **kw: MagicMock())
-    monkeypatch.setattr("grpc.secure_channel", lambda ep, creds: MagicMock())
+    monkeypatch.setattr("grpc.aio.secure_channel", lambda ep, creds: MagicMock())
 
     c = ShoreGuardClient.from_credentials("gateway.local:443", **valid_bundle)
     original_channel = c._channel
     original_sandboxes = c.sandboxes
 
     new_cert, new_key = _make_cert(dns_names=["gateway.local"], not_after_days=180)
-    c.reload_credentials(ca_cert=new_cert, client_cert=new_cert, client_key=new_key)
+    await c.reload_credentials(ca_cert=new_cert, client_cert=new_cert, client_key=new_key)
 
     assert c._channel is not original_channel
     assert c.sandboxes is not original_sandboxes  # stubs rebuilt → new manager
     original_channel.close.assert_called_once()  # type: ignore[attr-defined]
 
 
-def test_reload_credentials_rejects_bad_bundle(valid_bundle, monkeypatch):
+async def test_reload_credentials_rejects_bad_bundle(valid_bundle, monkeypatch):
     monkeypatch.setattr("shoreguard.client._default_require_mtls", lambda: True)
     monkeypatch.setattr("grpc.ssl_channel_credentials", lambda **kw: MagicMock())
-    monkeypatch.setattr("grpc.secure_channel", lambda ep, creds: MagicMock())
+    monkeypatch.setattr("grpc.aio.secure_channel", lambda ep, creds: MagicMock())
 
     c = ShoreGuardClient.from_credentials("gateway.local:443", **valid_bundle)
     with pytest.raises(GatewayNotConnectedError):
-        c.reload_credentials(ca_cert=b"garbage", client_cert=b"garbage", client_key=b"garbage")
+        await c.reload_credentials(
+            ca_cert=b"garbage", client_cert=b"garbage", client_key=b"garbage"
+        )

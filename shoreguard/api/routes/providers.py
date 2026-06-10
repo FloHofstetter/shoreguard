@@ -15,7 +15,6 @@ forms rather than a generic KV editor.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -178,7 +177,7 @@ async def list_providers(
     Returns:
         dict[str, Any]: Paginated provider records.
     """
-    items = await asyncio.to_thread(svc.list, limit=limit, offset=offset)
+    items = await svc.list(limit=limit, offset=offset)
     return {"items": items, "total": None}
 
 
@@ -204,8 +203,7 @@ async def create_provider(
         dict[str, Any]: Created provider record.
     """
     check_write_rate_limit(request)
-    result = await asyncio.to_thread(
-        svc.create,
+    result = await svc.create(
         name=body.name,
         provider_type=body.type,
         api_key=body.api_key,
@@ -242,7 +240,7 @@ async def get_provider(
     Returns:
         dict[str, Any]: Provider record.
     """
-    return await asyncio.to_thread(svc.get, name)
+    return await svc.get(name)
 
 
 @router.get("/{name}/env", response_model=ProviderEnvResponse)
@@ -264,7 +262,7 @@ async def get_provider_env(
     Returns:
         dict[str, Any]: Provider env projection with keys and sources.
     """
-    return await asyncio.to_thread(svc.get_env, name)
+    return await svc.get_env(name)
 
 
 @router.put(
@@ -290,8 +288,7 @@ async def update_provider(
         dict[str, Any]: Updated provider record.
     """
     check_write_rate_limit(request)
-    result = await asyncio.to_thread(
-        svc.update,
+    result = await svc.update(
         name=name,
         provider_type=body.type,
         credentials=body.credentials or None,
@@ -326,7 +323,7 @@ async def delete_provider(
     Returns:
         dict[str, bool]: Deletion status.
     """
-    deleted = await asyncio.to_thread(svc.delete, name)
+    deleted = await svc.delete(name)
     if deleted:
         logger.info(
             "Provider deleted (provider=%s, actor=%s)",
@@ -358,7 +355,7 @@ async def get_provider_refresh(
     Returns:
         dict[str, Any]: ``{"credentials": [...]}`` refresh-status records.
     """
-    creds = await asyncio.to_thread(svc.get_refresh_status, name, credential_key=credential_key)
+    creds = await svc.get_refresh_status(name, credential_key=credential_key)
     return {"credentials": creds}
 
 
@@ -385,8 +382,7 @@ async def configure_provider_refresh(
         dict[str, Any]: The resulting refresh status.
     """
     check_write_rate_limit(request)
-    result = await asyncio.to_thread(
-        svc.configure_refresh,
+    result = await svc.configure_refresh(
         provider=name,
         credential_key=body.credential_key,
         strategy=body.strategy,
@@ -439,9 +435,7 @@ async def rotate_provider_credential(
         dict[str, Any]: The refresh status after rotation.
     """
     check_write_rate_limit(request)
-    result = await asyncio.to_thread(
-        svc.rotate_credential, provider=name, credential_key=body.credential_key
-    )
+    result = await svc.rotate_credential(provider=name, credential_key=body.credential_key)
     logger.info(
         "Provider credential rotated (provider=%s, key=%s, actor=%s)",
         name,
@@ -482,9 +476,7 @@ async def delete_provider_refresh(
         dict[str, bool]: ``{"deleted": bool}``.
     """
     check_write_rate_limit(request)
-    deleted = await asyncio.to_thread(
-        svc.delete_refresh, provider=name, credential_key=credential_key
-    )
+    deleted = await svc.delete_refresh(provider=name, credential_key=credential_key)
     if deleted:
         logger.info(
             "Provider refresh deleted (provider=%s, key=%s, actor=%s)",

@@ -20,12 +20,12 @@ class _FakeStub:
     def __init__(self) -> None:
         self.request = None
 
-    def GetSandboxPolicyStatus(self, req, timeout=None):
+    async def GetSandboxPolicyStatus(self, req, timeout=None):
         self.request = req
         rev = openshell_pb2.SandboxPolicyRevision(version=3, status=2, policy_hash="abc123")  # type: ignore[arg-type]
         return SimpleNamespace(active_version=3, revision=rev)
 
-    def ListSandboxPolicies(self, req, timeout=None):
+    async def ListSandboxPolicies(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(
             revisions=[
@@ -34,11 +34,11 @@ class _FakeStub:
             ]
         )
 
-    def UpdateConfig(self, req, timeout=None):
+    async def UpdateConfig(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(version=5, policy_hash="new-hash")
 
-    def SubmitPolicyAnalysis(self, req, timeout=None):
+    async def SubmitPolicyAnalysis(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(
             accepted_chunks=2,
@@ -60,9 +60,9 @@ def mgr(stub):
     return m
 
 
-def test_get_sends_sandbox_name(mgr, stub):
+async def test_get_sends_sandbox_name(mgr, stub):
     """get() sends sandbox name and returns revision dict."""
-    result = mgr.get("sb1")
+    result = await mgr.get("sb1")
 
     assert stub.request.name == "sb1"
     assert result["active_version"] == 3
@@ -71,9 +71,9 @@ def test_get_sends_sandbox_name(mgr, stub):
     assert result["revision"]["policy_hash"] == "abc123"
 
 
-def test_list_revisions_pagination(mgr, stub):
+async def test_list_revisions_pagination(mgr, stub):
     """list_revisions() forwards limit/offset and returns list."""
-    result = mgr.list_revisions("sb1", limit=5, offset=10)
+    result = await mgr.list_revisions("sb1", limit=5, offset=10)
 
     assert stub.request.name == "sb1"
     assert stub.request.limit == 5
@@ -83,11 +83,11 @@ def test_list_revisions_pagination(mgr, stub):
     assert result[1]["status"] == "superseded"
 
 
-def test_update_sends_proto(mgr, stub):
+async def test_update_sends_proto(mgr, stub):
     """update() accepts a SandboxPolicy proto and returns version dict."""
     policy = sandbox_pb2.SandboxPolicy(version=4)
 
-    result = mgr.update("sb1", policy)
+    result = await mgr.update("sb1", policy)
 
     assert stub.request.name == "sb1"
     assert stub.request.policy == policy
@@ -95,7 +95,7 @@ def test_update_sends_proto(mgr, stub):
     assert result["policy_hash"] == "new-hash"
 
 
-def test_submit_analysis_forwards_summaries_and_chunks(mgr, stub):
+async def test_submit_analysis_forwards_summaries_and_chunks(mgr, stub):
     """submit_analysis() builds a proto request from plain dicts."""
     summaries = [
         {
@@ -122,7 +122,7 @@ def test_submit_analysis_forwards_summaries_and_chunks(mgr, stub):
         },
     ]
 
-    result = mgr.submit_analysis(
+    result = await mgr.submit_analysis(
         "sb1",
         summaries=summaries,
         proposed_chunks=chunks,
@@ -149,9 +149,9 @@ def test_submit_analysis_forwards_summaries_and_chunks(mgr, stub):
     }
 
 
-def test_submit_analysis_accepts_empty_lists(mgr, stub):
+async def test_submit_analysis_accepts_empty_lists(mgr, stub):
     """Empty summaries + proposed_chunks produce a valid empty request."""
-    result = mgr.submit_analysis("sb1", summaries=[], proposed_chunks=[])
+    result = await mgr.submit_analysis("sb1", summaries=[], proposed_chunks=[])
 
     assert stub.request.name == "sb1"
     assert list(stub.request.summaries) == []
@@ -159,10 +159,10 @@ def test_submit_analysis_accepts_empty_lists(mgr, stub):
     assert result["accepted_chunks"] == 2  # fake stub always returns 2
 
 
-def test_submit_analysis_raises_on_unknown_field(mgr):
+async def test_submit_analysis_raises_on_unknown_field(mgr):
     """Unknown dict keys surface as TypeError from the proto constructor."""
     with pytest.raises((ValueError, TypeError)):
-        mgr.submit_analysis(
+        await mgr.submit_analysis(
             "sb1",
             summaries=[{"bogus_field": "x"}],
             proposed_chunks=[],
@@ -172,14 +172,14 @@ def test_submit_analysis_raises_on_unknown_field(mgr):
 # ─── Proto → Dict conversion tests ──────────────────────────────────────────
 
 
-def test_policy_to_dict_version_only():
+async def test_policy_to_dict_version_only():
     """Minimal policy with only version set."""
     policy = sandbox_pb2.SandboxPolicy(version=5)
     result = _policy_to_dict(policy)
     assert result == {"version": 5}
 
 
-def test_policy_to_dict_filesystem():
+async def test_policy_to_dict_filesystem():
     """Policy with filesystem section."""
     policy = sandbox_pb2.SandboxPolicy(
         version=3,
@@ -195,7 +195,7 @@ def test_policy_to_dict_filesystem():
     assert result["filesystem"]["read_write"] == ["/tmp"]
 
 
-def test_policy_to_dict_process():
+async def test_policy_to_dict_process():
     """Policy with process section."""
     policy = sandbox_pb2.SandboxPolicy(
         version=1,
@@ -206,7 +206,7 @@ def test_policy_to_dict_process():
     assert result["process"]["run_as_group"] == "1000"
 
 
-def test_policy_to_dict_landlock():
+async def test_policy_to_dict_landlock():
     """Policy with landlock section."""
     policy = sandbox_pb2.SandboxPolicy(
         version=1,
@@ -216,7 +216,7 @@ def test_policy_to_dict_landlock():
     assert result["landlock"]["compatibility"] == "best_effort"
 
 
-def test_policy_to_dict_network_policies():
+async def test_policy_to_dict_network_policies():
     """Policy with network_policies map."""
     policy = sandbox_pb2.SandboxPolicy(version=2)
     rule = sandbox_pb2.NetworkPolicyRule(
@@ -230,7 +230,7 @@ def test_policy_to_dict_network_policies():
     assert result["network_policies"]["pypi"]["name"] == "pypi"
 
 
-def test_network_rule_to_dict_full():
+async def test_network_rule_to_dict_full():
     """NetworkPolicyRule with all endpoint fields."""
     rule = sandbox_pb2.NetworkPolicyRule(
         name="test-rule",
@@ -274,7 +274,7 @@ def test_network_rule_to_dict_full():
     assert result["binaries"][0]["path"] == "/usr/bin/curl"
 
 
-def test_network_rule_to_dict_minimal():
+async def test_network_rule_to_dict_minimal():
     """NetworkPolicyRule with only required fields — optional fields omitted."""
     rule = sandbox_pb2.NetworkPolicyRule(
         name="minimal",
@@ -289,7 +289,7 @@ def test_network_rule_to_dict_minimal():
     assert "allow_encoded_slash" not in ep
 
 
-def test_network_rule_to_dict_allow_encoded_slash_surfaced_when_true():
+async def test_network_rule_to_dict_allow_encoded_slash_surfaced_when_true():
     rule = sandbox_pb2.NetworkPolicyRule(
         name="gitlab",
         endpoints=[
@@ -304,13 +304,13 @@ def test_network_rule_to_dict_allow_encoded_slash_surfaced_when_true():
     assert result["endpoints"][0]["allow_encoded_slash"] is True
 
 
-def test_get_with_embedded_policy(stub):
+async def test_get_with_embedded_policy(stub):
     """get() includes policy dict when revision has embedded policy."""
     policy = sandbox_pb2.SandboxPolicy(version=3)
     policy.network_policies["rule1"].CopyFrom(sandbox_pb2.NetworkPolicyRule(name="rule1"))
 
     class _StubWithPolicy(_FakeStub):
-        def GetSandboxPolicyStatus(self, req, timeout=None):
+        async def GetSandboxPolicyStatus(self, req, timeout=None):
             self.request = req
             rev = openshell_pb2.SandboxPolicyRevision(
                 version=3,
@@ -325,7 +325,7 @@ def test_get_with_embedded_policy(stub):
     m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
-    result = m.get("sb1")
+    result = await m.get("sb1")
     assert "policy" in result
     assert result["policy"]["version"] == 3
     assert "rule1" in result["policy"]["network_policies"]
@@ -334,11 +334,11 @@ def test_get_with_embedded_policy(stub):
 # ─── Mutation-killing tests ──────────────────────────────────────────────────
 
 
-def test_get_revision_timestamp_fields(stub):
+async def test_get_revision_timestamp_fields(stub):
     """Assert created_at_ms and loaded_at_ms are returned from get()."""
 
     class _StubWithTimestamps(_FakeStub):
-        def GetSandboxPolicyStatus(self, req, timeout=None):
+        async def GetSandboxPolicyStatus(self, req, timeout=None):
             self.request = req
             rev = openshell_pb2.SandboxPolicyRevision(
                 version=1,
@@ -354,7 +354,7 @@ def test_get_revision_timestamp_fields(stub):
     m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
-    result = m.get("sb1")
+    result = await m.get("sb1")
     assert result["revision"]["created_at_ms"] == 111
     assert result["revision"]["loaded_at_ms"] == 222
 
@@ -368,11 +368,11 @@ def test_get_revision_timestamp_fields(stub):
         (4, "superseded"),
     ],
 )
-def test_get_revision_status_codes(status_code, status_name):
+async def test_get_revision_status_codes(status_code, status_name):
     """get() maps different numeric status codes to correct names."""
 
     class _StubStatus(_FakeStub):
-        def GetSandboxPolicyStatus(self, req, timeout=None):
+        async def GetSandboxPolicyStatus(self, req, timeout=None):
             self.request = req
             rev = openshell_pb2.SandboxPolicyRevision(
                 version=1,
@@ -386,15 +386,15 @@ def test_get_revision_status_codes(status_code, status_name):
     m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
-    result = m.get("sb1")
+    result = await m.get("sb1")
     assert result["revision"]["status"] == status_name
 
 
-def test_list_revisions_load_error():
+async def test_list_revisions_load_error():
     """list_revisions() includes load_error field."""
 
     class _StubWithError(_FakeStub):
-        def ListSandboxPolicies(self, req, timeout=None):
+        async def ListSandboxPolicies(self, req, timeout=None):
             self.request = req
             return SimpleNamespace(
                 revisions=[
@@ -414,17 +414,17 @@ def test_list_revisions_load_error():
     m._stub = s  # type: ignore[assignment]
     m._timeout = 30.0
 
-    result = m.list_revisions("sb1")
+    result = await m.list_revisions("sb1")
     assert result[0]["load_error"] == "parse error"
     assert result[0]["created_at_ms"] == 100
     assert result[0]["loaded_at_ms"] == 200
 
 
-def test_update_global_scope():
+async def test_update_global_scope():
     """update() forwards global_scope parameter."""
 
     class _StubGlobal(_FakeStub):
-        def UpdateConfig(self, req, timeout=None):
+        async def UpdateConfig(self, req, timeout=None):
             self.request = req
             # Capture the global field
             self.global_value = getattr(req, "global")
@@ -436,11 +436,11 @@ def test_update_global_scope():
     m._timeout = 30.0
 
     policy = sandbox_pb2.SandboxPolicy(version=1)
-    m.update("sb1", policy, global_scope=True)
+    await m.update("sb1", policy, global_scope=True)
     assert s.global_value is True
 
 
-def test_policy_to_dict_all_sections():
+async def test_policy_to_dict_all_sections():
     """Policy with filesystem, process, landlock, and network_policies combined."""
     policy = sandbox_pb2.SandboxPolicy(
         version=7,
@@ -470,14 +470,14 @@ def test_policy_to_dict_all_sections():
     assert result["network_policies"]["dns"]["name"] == "dns"
 
 
-def test_policy_to_dict_empty_network_policies_omitted():
+async def test_policy_to_dict_empty_network_policies_omitted():
     """network_policies key is omitted when the map is empty."""
     policy = sandbox_pb2.SandboxPolicy(version=1)
     result = _policy_to_dict(policy)
     assert "network_policies" not in result
 
 
-def test_network_rule_to_dict_empty():
+async def test_network_rule_to_dict_empty():
     """NetworkPolicyRule with no endpoints and no binaries."""
     rule = sandbox_pb2.NetworkPolicyRule(name="empty-rule")
     result = _network_rule_to_dict(rule)
@@ -486,7 +486,7 @@ def test_network_rule_to_dict_empty():
     assert result["binaries"] == []
 
 
-def test_network_rule_to_dict_endpoint_no_optional_fields():
+async def test_network_rule_to_dict_endpoint_no_optional_fields():
     """Endpoint with only host/port — optional fields omitted from dict."""
     rule = sandbox_pb2.NetworkPolicyRule(
         name="basic",
@@ -500,7 +500,7 @@ def test_network_rule_to_dict_endpoint_no_optional_fields():
         assert key not in ep
 
 
-def test_network_rule_to_dict_l7_command():
+async def test_network_rule_to_dict_l7_command():
     """L7 rule includes the command field."""
     rule = sandbox_pb2.NetworkPolicyRule(
         name="cmd-rule",
@@ -537,7 +537,7 @@ class TestPolicyStatusNamesMutations:
             (99, "unknown"),
         ],
     )
-    def test_status_code_mapping(self, code, expected):
+    async def test_status_code_mapping(self, code, expected):
         from shoreguard.client.policies import POLICY_STATUS_NAMES
 
         assert POLICY_STATUS_NAMES.get(code, "unknown") == expected
@@ -546,43 +546,43 @@ class TestPolicyStatusNamesMutations:
 class TestPolicyToDictMutations:
     """Kill mutations in _policy_to_dict."""
 
-    def test_no_filesystem_no_key(self):
+    async def test_no_filesystem_no_key(self):
         policy = sandbox_pb2.SandboxPolicy(version=1)
         result = _policy_to_dict(policy)
         assert "filesystem" not in result
 
-    def test_no_process_no_key(self):
+    async def test_no_process_no_key(self):
         policy = sandbox_pb2.SandboxPolicy(version=1)
         result = _policy_to_dict(policy)
         assert "process" not in result
 
-    def test_no_landlock_no_key(self):
+    async def test_no_landlock_no_key(self):
         policy = sandbox_pb2.SandboxPolicy(version=1)
         result = _policy_to_dict(policy)
         assert "landlock" not in result
 
-    def test_filesystem_include_workdir_true(self):
+    async def test_filesystem_include_workdir_true(self):
         policy = sandbox_pb2.SandboxPolicy(
             filesystem=sandbox_pb2.FilesystemPolicy(include_workdir=True)
         )
         result = _policy_to_dict(policy)
         assert result["filesystem"]["include_workdir"] is True
 
-    def test_filesystem_include_workdir_false(self):
+    async def test_filesystem_include_workdir_false(self):
         policy = sandbox_pb2.SandboxPolicy(
             filesystem=sandbox_pb2.FilesystemPolicy(include_workdir=False)
         )
         result = _policy_to_dict(policy)
         assert result["filesystem"]["include_workdir"] is False
 
-    def test_filesystem_read_only_list(self):
+    async def test_filesystem_read_only_list(self):
         policy = sandbox_pb2.SandboxPolicy(
             filesystem=sandbox_pb2.FilesystemPolicy(read_only=["/a", "/b"])
         )
         result = _policy_to_dict(policy)
         assert result["filesystem"]["read_only"] == ["/a", "/b"]
 
-    def test_filesystem_read_write_list(self):
+    async def test_filesystem_read_write_list(self):
         policy = sandbox_pb2.SandboxPolicy(
             filesystem=sandbox_pb2.FilesystemPolicy(read_write=["/c"])
         )
@@ -593,7 +593,7 @@ class TestPolicyToDictMutations:
 class TestNetworkRuleToDictMutations:
     """Kill mutations in _network_rule_to_dict."""
 
-    def test_multiple_binaries(self):
+    async def test_multiple_binaries(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             name="r",
             binaries=[
@@ -604,49 +604,49 @@ class TestNetworkRuleToDictMutations:
         result = _network_rule_to_dict(rule)
         assert result["binaries"] == [{"path": "/a"}, {"path": "/b"}]
 
-    def test_endpoint_protocol_included_when_set(self):
+    async def test_endpoint_protocol_included_when_set(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=80, protocol="udp")]
         )
         result = _network_rule_to_dict(rule)
         assert result["endpoints"][0]["protocol"] == "udp"
 
-    def test_endpoint_tls_included_when_set(self):
+    async def test_endpoint_tls_included_when_set(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=443, tls="terminate")]
         )
         result = _network_rule_to_dict(rule)
         assert result["endpoints"][0]["tls"] == "terminate"
 
-    def test_endpoint_enforcement_included_when_set(self):
+    async def test_endpoint_enforcement_included_when_set(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=80, enforcement="block")]
         )
         result = _network_rule_to_dict(rule)
         assert result["endpoints"][0]["enforcement"] == "block"
 
-    def test_endpoint_access_included_when_set(self):
+    async def test_endpoint_access_included_when_set(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=80, access="allow")]
         )
         result = _network_rule_to_dict(rule)
         assert result["endpoints"][0]["access"] == "allow"
 
-    def test_endpoint_allowed_ips_included_when_set(self):
+    async def test_endpoint_allowed_ips_included_when_set(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=80, allowed_ips=["10.0.0.1"])]
         )
         result = _network_rule_to_dict(rule)
         assert result["endpoints"][0]["allowed_ips"] == ["10.0.0.1"]
 
-    def test_endpoint_ports_included_when_set(self):
+    async def test_endpoint_ports_included_when_set(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             endpoints=[sandbox_pb2.NetworkEndpoint(host="h", port=80, ports=[80, 8080])]
         )
         result = _network_rule_to_dict(rule)
         assert result["endpoints"][0]["ports"] == [80, 8080]
 
-    def test_multiple_endpoints(self):
+    async def test_multiple_endpoints(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             name="r",
             endpoints=[
@@ -659,7 +659,7 @@ class TestNetworkRuleToDictMutations:
         assert result["endpoints"][0]["host"] == "a"
         assert result["endpoints"][1]["host"] == "b"
 
-    def test_l7_allow_method_path_command(self):
+    async def test_l7_allow_method_path_command(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             endpoints=[
                 sandbox_pb2.NetworkEndpoint(
@@ -679,7 +679,7 @@ class TestNetworkRuleToDictMutations:
         assert allow["path"] == "P"
         assert allow["command"] == "C"
 
-    def test_l7_query_glob_in_result(self):
+    async def test_l7_query_glob_in_result(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             endpoints=[
                 sandbox_pb2.NetworkEndpoint(
@@ -698,7 +698,7 @@ class TestNetworkRuleToDictMutations:
         assert "query" in allow
         assert allow["query"]["param"]["glob"] == "val*"
 
-    def test_l7_query_any_in_result(self):
+    async def test_l7_query_any_in_result(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             endpoints=[
                 sandbox_pb2.NetworkEndpoint(
@@ -714,7 +714,7 @@ class TestNetworkRuleToDictMutations:
         result = _network_rule_to_dict(rule)
         assert result["endpoints"][0]["rules"][0]["allow"]["query"]["p"]["any"] == ["a", "b"]
 
-    def test_l7_query_glob_empty_not_included(self):
+    async def test_l7_query_glob_empty_not_included(self):
         """When glob is empty string, it should not appear in query dict."""
         rule = sandbox_pb2.NetworkPolicyRule(
             endpoints=[
@@ -733,7 +733,7 @@ class TestNetworkRuleToDictMutations:
         assert "glob" not in q
         assert q["any"] == ["x"]
 
-    def test_l7_query_any_empty_not_included(self):
+    async def test_l7_query_any_empty_not_included(self):
         """When any is empty list, it should not appear in query dict."""
         rule = sandbox_pb2.NetworkPolicyRule(
             endpoints=[
@@ -754,9 +754,9 @@ class TestNetworkRuleToDictMutations:
 class TestPolicyManagerMutations:
     """Kill mutations in PolicyManager method arg passing."""
 
-    def test_get_uses_timeout(self):
+    async def test_get_uses_timeout(self):
         class _Stub(_FakeStub):
-            def GetSandboxPolicyStatus(self, req, timeout=None):
+            async def GetSandboxPolicyStatus(self, req, timeout=None):
                 self.timeout = timeout
                 rev = openshell_pb2.SandboxPolicyRevision(version=1, status=2, policy_hash="h")  # type: ignore[arg-type]
                 return SimpleNamespace(active_version=1, revision=rev)
@@ -765,12 +765,12 @@ class TestPolicyManagerMutations:
         m = object.__new__(PolicyManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 55.0
-        m.get("sb")
+        await m.get("sb")
         assert s.timeout == 55.0
 
-    def test_get_version_sends_version(self):
+    async def test_get_version_sends_version(self):
         class _Stub(_FakeStub):
-            def GetSandboxPolicyStatus(self, req, timeout=None):
+            async def GetSandboxPolicyStatus(self, req, timeout=None):
                 self.request = req
                 rev = openshell_pb2.SandboxPolicyRevision(version=3, status=2, policy_hash="h")  # type: ignore[arg-type]
                 return SimpleNamespace(active_version=3, revision=rev)
@@ -779,13 +779,13 @@ class TestPolicyManagerMutations:
         m = object.__new__(PolicyManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        m.get_version("sb", 3)
+        await m.get_version("sb", 3)
         assert s.request.name == "sb"
         assert s.request.version == 3
 
-    def test_get_version_returns_correct_structure(self):
+    async def test_get_version_returns_correct_structure(self):
         class _Stub(_FakeStub):
-            def GetSandboxPolicyStatus(self, req, timeout=None):
+            async def GetSandboxPolicyStatus(self, req, timeout=None):
                 rev = openshell_pb2.SandboxPolicyRevision(
                     version=5,
                     status=1,  # type: ignore[arg-type]
@@ -799,7 +799,7 @@ class TestPolicyManagerMutations:
         m = object.__new__(PolicyManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.get_version("sb", 5)
+        result = await m.get_version("sb", 5)
         assert result["active_version"] == 5
         assert result["revision"]["version"] == 5
         assert result["revision"]["status"] == "pending"
@@ -807,9 +807,9 @@ class TestPolicyManagerMutations:
         assert result["revision"]["created_at_ms"] == 100
         assert result["revision"]["loaded_at_ms"] == 200
 
-    def test_list_revisions_default_params(self):
+    async def test_list_revisions_default_params(self):
         class _Stub(_FakeStub):
-            def ListSandboxPolicies(self, req, timeout=None):
+            async def ListSandboxPolicies(self, req, timeout=None):
                 self.request = req
                 return SimpleNamespace(revisions=[])
 
@@ -817,13 +817,13 @@ class TestPolicyManagerMutations:
         m = object.__new__(PolicyManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        m.list_revisions("sb")
+        await m.list_revisions("sb")
         assert s.request.limit == 20
         assert s.request.offset == 0
 
-    def test_list_revisions_all_fields(self):
+    async def test_list_revisions_all_fields(self):
         class _Stub(_FakeStub):
-            def ListSandboxPolicies(self, req, timeout=None):
+            async def ListSandboxPolicies(self, req, timeout=None):
                 return SimpleNamespace(
                     revisions=[
                         openshell_pb2.SandboxPolicyRevision(
@@ -841,7 +841,7 @@ class TestPolicyManagerMutations:
         m = object.__new__(PolicyManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.list_revisions("sb")
+        result = await m.list_revisions("sb")
         assert result[0] == {
             "version": 1,
             "status": "loaded",
@@ -851,21 +851,21 @@ class TestPolicyManagerMutations:
             "load_error": "",
         }
 
-    def test_update_returns_exact_dict(self):
+    async def test_update_returns_exact_dict(self):
         class _Stub(_FakeStub):
-            def UpdateConfig(self, req, timeout=None):
+            async def UpdateConfig(self, req, timeout=None):
                 return SimpleNamespace(version=99, policy_hash="H99")
 
         s = _Stub()
         m = object.__new__(PolicyManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.update("sb", sandbox_pb2.SandboxPolicy(version=1))
+        result = await m.update("sb", sandbox_pb2.SandboxPolicy(version=1))
         assert result == {"version": 99, "policy_hash": "H99"}
 
-    def test_update_default_global_scope_false(self):
+    async def test_update_default_global_scope_false(self):
         class _Stub(_FakeStub):
-            def UpdateConfig(self, req, timeout=None):
+            async def UpdateConfig(self, req, timeout=None):
                 self.request = req
                 self.global_value = getattr(req, "global")
                 return SimpleNamespace(version=1, policy_hash="h")
@@ -874,15 +874,15 @@ class TestPolicyManagerMutations:
         m = object.__new__(PolicyManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        m.update("sb", sandbox_pb2.SandboxPolicy(version=1))
+        await m.update("sb", sandbox_pb2.SandboxPolicy(version=1))
         assert s.global_value is False
 
-    def test_get_version_with_embedded_policy(self):
+    async def test_get_version_with_embedded_policy(self):
         policy = sandbox_pb2.SandboxPolicy(version=2)
         policy.network_policies["r"].CopyFrom(sandbox_pb2.NetworkPolicyRule(name="r"))
 
         class _Stub(_FakeStub):
-            def GetSandboxPolicyStatus(self, req, timeout=None):
+            async def GetSandboxPolicyStatus(self, req, timeout=None):
                 rev = openshell_pb2.SandboxPolicyRevision(
                     version=2,
                     status=2,  # type: ignore[arg-type]
@@ -895,7 +895,7 @@ class TestPolicyManagerMutations:
         m = object.__new__(PolicyManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.get_version("sb", 2)
+        result = await m.get_version("sb", 2)
         assert "policy" in result
         assert result["policy"]["version"] == 2
         assert "r" in result["policy"]["network_policies"]
@@ -907,7 +907,7 @@ class TestPolicyManagerMutations:
 
 
 class TestDictToMergeOperation:
-    def test_add_rule_round_trip(self) -> None:
+    async def test_add_rule_round_trip(self) -> None:
         op = _dict_to_merge_operation(
             {
                 "type": "add_rule",
@@ -923,12 +923,12 @@ class TestDictToMergeOperation:
         assert op.add_rule.rule.name == "allow-gh"
         assert op.add_rule.rule.endpoints[0].host == "api.github.com"
 
-    def test_remove_rule(self) -> None:
+    async def test_remove_rule(self) -> None:
         op = _dict_to_merge_operation({"type": "remove_rule", "rule_name": "obsolete"})
         assert op.HasField("remove_rule")
         assert op.remove_rule.rule_name == "obsolete"
 
-    def test_remove_endpoint(self) -> None:
+    async def test_remove_endpoint(self) -> None:
         op = _dict_to_merge_operation(
             {
                 "type": "remove_endpoint",
@@ -942,7 +942,7 @@ class TestDictToMergeOperation:
         assert op.remove_endpoint.host == "api.example.com"
         assert op.remove_endpoint.port == 443
 
-    def test_add_allow_rules_wraps_in_l7rule(self) -> None:
+    async def test_add_allow_rules_wraps_in_l7rule(self) -> None:
         op = _dict_to_merge_operation(
             {
                 "type": "add_allow_rules",
@@ -958,7 +958,7 @@ class TestDictToMergeOperation:
         assert op.add_allow_rules.rules[0].allow.method == "GET"
         assert op.add_allow_rules.rules[0].allow.path == "/api/**"
 
-    def test_add_deny_rules(self) -> None:
+    async def test_add_deny_rules(self) -> None:
         op = _dict_to_merge_operation(
             {
                 "type": "add_deny_rules",
@@ -971,7 +971,7 @@ class TestDictToMergeOperation:
         assert op.add_deny_rules.deny_rules[0].method == "DELETE"
         assert op.add_deny_rules.deny_rules[0].path == "/admin/**"
 
-    def test_remove_binary(self) -> None:
+    async def test_remove_binary(self) -> None:
         op = _dict_to_merge_operation(
             {
                 "type": "remove_binary",
@@ -983,22 +983,22 @@ class TestDictToMergeOperation:
         assert op.remove_binary.rule_name == "allow-curl"
         assert op.remove_binary.binary_path == "/usr/bin/curl"
 
-    def test_missing_type_raises(self) -> None:
+    async def test_missing_type_raises(self) -> None:
         with pytest.raises(MergeOperationError, match="unknown or missing"):
             _dict_to_merge_operation({})
 
-    def test_unknown_type_raises(self) -> None:
+    async def test_unknown_type_raises(self) -> None:
         with pytest.raises(MergeOperationError, match="unknown or missing"):
             _dict_to_merge_operation({"type": "update_rule"})
 
 
 class TestApplyMergeOperations:
-    def test_sends_merge_operations_not_policy(self) -> None:
+    async def test_sends_merge_operations_not_policy(self) -> None:
         """UpdateConfigRequest must carry merge_operations with no policy
         attached — the merge semantics are incompatible with a full rewrite."""
 
         class _Stub(_FakeStub):
-            def UpdateConfig(self, req, timeout=None):
+            async def UpdateConfig(self, req, timeout=None):
                 self.request = req
                 return SimpleNamespace(version=7, policy_hash="merged-hash")
 
@@ -1006,7 +1006,7 @@ class TestApplyMergeOperations:
         m = object.__new__(PolicyManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.apply_merge_operations(
+        result = await m.apply_merge_operations(
             "sb",
             [
                 {"type": "remove_rule", "rule_name": "old"},
@@ -1026,9 +1026,9 @@ class TestApplyMergeOperations:
         # No policy attached — merge path is sandbox-scoped and incremental.
         assert not s.request.HasField("policy")
 
-    def test_empty_operations_list_is_noop(self) -> None:
+    async def test_empty_operations_list_is_noop(self) -> None:
         class _Stub(_FakeStub):
-            def UpdateConfig(self, req, timeout=None):
+            async def UpdateConfig(self, req, timeout=None):
                 self.request = req
                 return SimpleNamespace(version=8, policy_hash="noop")
 
@@ -1036,17 +1036,17 @@ class TestApplyMergeOperations:
         m = object.__new__(PolicyManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.apply_merge_operations("sb", [])
+        result = await m.apply_merge_operations("sb", [])
         assert result == {"version": 8, "policy_hash": "noop"}
         assert len(s.request.merge_operations) == 0
 
-    def test_invalid_operation_raises_before_rpc(self) -> None:
+    async def test_invalid_operation_raises_before_rpc(self) -> None:
         """An unknown op type is caught in _dict_to_merge_operation and
         the gRPC call is never issued — the stub's UpdateConfig would
         raise if invoked."""
 
         class _Stub(_FakeStub):
-            def UpdateConfig(self, req, timeout=None):
+            async def UpdateConfig(self, req, timeout=None):
                 raise AssertionError("UpdateConfig must not be called")
 
         s = _Stub()
@@ -1054,4 +1054,4 @@ class TestApplyMergeOperations:
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
         with pytest.raises(MergeOperationError):
-            m.apply_merge_operations("sb", [{"type": "update_rule"}])
+            await m.apply_merge_operations("sb", [{"type": "update_rule"}])

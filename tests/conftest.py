@@ -23,14 +23,26 @@ except RuntimeError:
 
 @pytest.fixture
 def mock_client():
-    """Create a mock ShoreGuardClient with nested manager mocks."""
+    """Create a mock ShoreGuardClient with nested manager mocks.
+
+    The managers are spec'd against the real classes so their async
+    methods automatically become ``AsyncMock``s — `.return_value` set
+    by a test is what the awaited call resolves to.
+    """
+    from shoreguard.client.approvals import ApprovalManager
+    from shoreguard.client.policies import PolicyManager
+    from shoreguard.client.provider_profiles import ProviderProfileManager
+    from shoreguard.client.providers import ProviderManager
+    from shoreguard.client.sandboxes import SandboxManager
+    from shoreguard.client.services import ServiceManager
+
     client = MagicMock(spec=ShoreGuardClient)
-    client.sandboxes = MagicMock()
-    client.policies = MagicMock()
-    client.providers = MagicMock()
-    client.provider_profiles = MagicMock()
-    client.approvals = MagicMock()
-    client.services = MagicMock()
+    client.sandboxes = MagicMock(spec=SandboxManager)
+    client.policies = MagicMock(spec=PolicyManager)
+    client.providers = MagicMock(spec=ProviderManager)
+    client.provider_profiles = MagicMock(spec=ProviderProfileManager)
+    client.approvals = MagicMock(spec=ApprovalManager)
+    client.services = MagicMock(spec=ServiceManager)
     return client
 
 

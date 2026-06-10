@@ -11,12 +11,18 @@ Separating client lifecycle from persistent CRUD means registry
 edits (e.g. rename, label change) never need to tear down an
 in-flight call, and a channel failure only affects the one
 gateway rather than wedging the whole service.
+
+Concurrency: the service is async-native and confined to one event
+loop. Cache reads/writes happen in synchronous sections (atomic under
+asyncio), while connection attempts and health probes await between
+phases — the per-entry backoff state tolerates interleaving exactly as
+it previously tolerated lock releases between phases.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import threading
 import time
 from typing import Any
 
@@ -99,7 +105,6 @@ class GatewayService:
         # Per-gateway connection cache with backoff state. Instance state so
         # each container (prod app, each test) owns its own connections.
         self._clients: dict[str, _ClientEntry] = {}
-        self._lock = threading.Lock()
 
     @property
     def registry(self) -> GatewayRegistry:
@@ -108,7 +113,7 @@ class GatewayService:
 
     # ── Connection management ─────────────────────────────────────────────
 
-    def get_client(self, name: str) -> ShoreGuardClient:
+    async def get_client(self, name: str) -> ShoreGuardClient:
         """Return a client for the given gateway, attempting reconnect with backoff.
 
         Args:
@@ -122,50 +127,46 @@ class GatewayService:
         """
         gw_name = name
 
-        # Phase 1: read state under the lock
-        with self._lock:
-            entry = self._clients.get(gw_name)
-            if entry is None:
-                entry = _ClientEntry()
-                self._clients[gw_name] = entry
-            existing_client = entry.client
+        # Phase 1: read state (atomic — no awaits)
+        entry = self._clients.get(gw_name)
+        if entry is None:
+            entry = _ClientEntry()
+            self._clients[gw_name] = entry
+        existing_client = entry.client
 
-        # Phase 2: health-check existing client (blocking I/O, no lock)
+        # Phase 2: health-check existing client (awaits)
         if existing_client is not None:
             try:
-                existing_client.health()
+                await existing_client.health()
                 return existing_client
             except grpc.RpcError:
                 logger.warning("Gateway '%s' connection lost, attempting reconnect...", gw_name)
                 try:
-                    existing_client.close()
+                    await existing_client.close()
                 except Exception:
                     logger.debug("Error closing stale connection for '%s'", gw_name, exc_info=True)
-                with self._lock:
-                    entry.client = None
-                    entry.backoff = 0.0
+                entry.client = None
+                entry.backoff = 0.0
 
-        # Phase 3: check backoff under the lock
+        # Phase 3: check backoff (atomic)
         now = time.monotonic()
-        with self._lock:
-            if entry.backoff > 0 and (now - entry.last_attempt) < entry.backoff:
-                raise GatewayNotConnectedError(f"Gateway '{gw_name}' not connected.")
-            entry.last_attempt = now
+        if entry.backoff > 0 and (now - entry.last_attempt) < entry.backoff:
+            raise GatewayNotConnectedError(f"Gateway '{gw_name}' not connected.")
+        entry.last_attempt = now
 
-        # Phase 4: attempt connection (blocking I/O, no lock)
-        new_client = self._try_connect(gw_name)
+        # Phase 4: attempt connection (awaits)
+        new_client = await self._try_connect(gw_name)
 
-        # Phase 5: write result under the lock
-        with self._lock:
-            if new_client is None:
-                gw_cfg = get_settings().gateway
-                if entry.backoff == 0:
-                    entry.backoff = gw_cfg.backoff_min
-                else:
-                    entry.backoff = min(entry.backoff * gw_cfg.backoff_factor, gw_cfg.backoff_max)
-                raise GatewayNotConnectedError(f"Gateway '{gw_name}' not connected.")
-            entry.client = new_client
-            entry.backoff = 0.0
+        # Phase 5: write result (atomic)
+        if new_client is None:
+            gw_cfg = get_settings().gateway
+            if entry.backoff == 0:
+                entry.backoff = gw_cfg.backoff_min
+            else:
+                entry.backoff = min(entry.backoff * gw_cfg.backoff_factor, gw_cfg.backoff_max)
+            raise GatewayNotConnectedError(f"Gateway '{gw_name}' not connected.")
+        entry.client = new_client
+        entry.backoff = 0.0
         logger.info("Gateway '%s' reconnected successfully", gw_name)
         return new_client
 
@@ -177,18 +178,17 @@ class GatewayService:
             name: Gateway name.
         """
         gw_name = name
-        with self._lock:
-            if client is None:
-                self._clients.pop(gw_name, None)
-                logger.debug("Cleared client for gateway '%s'", gw_name)
-            else:
-                entry = self._clients.get(gw_name)
-                if entry is None:
-                    entry = _ClientEntry()
-                    self._clients[gw_name] = entry
-                entry.client = client
-                entry.backoff = 0.0
-                logger.debug("Set client for gateway '%s'", gw_name)
+        if client is None:
+            self._clients.pop(gw_name, None)
+            logger.debug("Cleared client for gateway '%s'", gw_name)
+        else:
+            entry = self._clients.get(gw_name)
+            if entry is None:
+                entry = _ClientEntry()
+                self._clients[gw_name] = entry
+            entry.client = client
+            entry.backoff = 0.0
+            logger.debug("Set client for gateway '%s'", gw_name)
 
     def reset_backoff(self, name: str) -> None:
         """Reset connection backoff for a gateway.
@@ -197,13 +197,12 @@ class GatewayService:
             name: Gateway name.
         """
         gw_name = name
-        with self._lock:
-            if gw_name and gw_name in self._clients:
-                self._clients[gw_name].backoff = 0.0
-                self._clients[gw_name].last_attempt = 0.0
-                logger.debug("Reset backoff for gateway '%s'", gw_name)
+        if gw_name and gw_name in self._clients:
+            self._clients[gw_name].backoff = 0.0
+            self._clients[gw_name].last_attempt = 0.0
+            logger.debug("Reset backoff for gateway '%s'", gw_name)
 
-    def _try_connect(self, name: str) -> ShoreGuardClient | None:
+    async def _try_connect(self, name: str) -> ShoreGuardClient | None:
         """Attempt to create a client for a specific gateway.
 
         Args:
@@ -212,12 +211,12 @@ class GatewayService:
         Returns:
             ShoreGuardClient | None: Connected client, or None on failure.
         """
-        creds = self._registry.get_credentials(name)
+        creds = await asyncio.to_thread(self._registry.get_credentials, name)
         if creds is not None:
-            return self._try_connect_from_registry(name, creds)
-        return self._try_connect_from_config(name)
+            return await self._try_connect_from_registry(name, creds)
+        return await self._try_connect_from_config(name)
 
-    def _try_connect_from_registry(
+    async def _try_connect_from_registry(
         self, name: str, creds: dict[str, str | bytes | None]
     ) -> ShoreGuardClient | None:
         """Connect using credentials from the database.
@@ -278,7 +277,7 @@ class GatewayService:
             logger.debug("Gateway '%s' connection failed (type=%s): %s", name, type(e).__name__, e)
             return None
         try:
-            client.health()
+            await client.health()
             logger.info("Connected to OpenShell gateway '%s'", name)
             _publish_cert_expiry_gauge(name, client)
             return client
@@ -290,12 +289,12 @@ class GatewayService:
                 e,
             )
             try:
-                client.close()
+                await client.close()
             except grpc.RpcError, OSError:
                 logger.debug("Failed to close client for '%s'", name)
             return None
 
-    def _try_connect_from_config(self, name: str) -> ShoreGuardClient | None:
+    async def _try_connect_from_config(self, name: str) -> ShoreGuardClient | None:
         """Fallback: connect using filesystem config (local mode / backward compat).
 
         Args:
@@ -321,20 +320,20 @@ class GatewayService:
             logger.debug("Gateway '%s' connection failed: %s", name, e, exc_info=True)
             return None
         try:
-            client.health()
+            await client.health()
             logger.info("Connected to OpenShell gateway '%s'", name)
             return client
         except (grpc.RpcError, OSError, ConnectionError, TimeoutError) as e:
             logger.debug("Gateway '%s' health check failed: %s", name, e, exc_info=True)
             try:
-                client.close()
+                await client.close()
             except grpc.RpcError, OSError:
                 logger.debug("Failed to close client for '%s'", name)
             return None
 
     # ── Registration ─────────────────────────────────────────────────────
 
-    def register(
+    async def register(
         self,
         name: str,
         endpoint: str,
@@ -366,23 +365,25 @@ class GatewayService:
             dict[str, Any]: Gateway record with connection status.
         """
         logger.info("Registering gateway '%s' (endpoint=%s)", name, endpoint)
-        record = self._registry.register(
-            name,
-            endpoint,
-            scheme,
-            auth_mode,
-            ca_cert=ca_cert,
-            client_cert=client_cert,
-            client_key=client_key,
-            metadata=metadata,
-            description=description,
-            labels=labels,
+        record = await asyncio.to_thread(
+            lambda: self._registry.register(
+                name,
+                endpoint,
+                scheme,
+                auth_mode,
+                ca_cert=ca_cert,
+                client_cert=client_cert,
+                client_key=client_key,
+                metadata=metadata,
+                description=description,
+                labels=labels,
+            )
         )
 
         # Attempt connection to validate
         connected = False
         try:
-            self.get_client(name=name)
+            await self.get_client(name=name)
             connected = True
         except GatewayNotConnectedError, grpc.RpcError:
             logger.debug("Could not connect to newly registered gateway '%s'", name)
@@ -392,7 +393,7 @@ class GatewayService:
 
         return record
 
-    def unregister(self, name: str) -> bool:
+    async def unregister(self, name: str) -> bool:
         """Unregister a gateway and close its connection.
 
         Args:
@@ -403,9 +404,9 @@ class GatewayService:
         """
         logger.info("Unregistering gateway '%s'", name)
         self.set_client(None, name=name)
-        return self._registry.unregister(name)
+        return await asyncio.to_thread(self._registry.unregister, name)
 
-    def test_connection(self, name: str) -> dict[str, Any]:
+    async def test_connection(self, name: str) -> dict[str, Any]:
         """Explicitly test connectivity to a registered gateway.
 
         Args:
@@ -417,14 +418,14 @@ class GatewayService:
         Raises:
             NotFoundError: If the gateway is not registered.
         """
-        record = self._registry.get(name)
+        record = await asyncio.to_thread(self._registry.get, name)
         if record is None:
             raise NotFoundError(f"Gateway '{name}' not registered")
 
         self.reset_backoff(name)
         try:
-            client = self.get_client(name=name)
-            health = client.health()
+            client = await self.get_client(name=name)
+            health = await client.health()
             return {
                 "success": True,
                 "connected": True,
@@ -436,7 +437,7 @@ class GatewayService:
 
     # ── List & Info ───────────────────────────────────────────────────────
 
-    def update_gateway_metadata(
+    async def update_gateway_metadata(
         self,
         name: str,
         *,
@@ -461,12 +462,16 @@ class GatewayService:
             kwargs["description"] = description
         if labels is not _UNSET:
             kwargs["labels"] = labels
-        result = self._registry.update_gateway_metadata(name, **kwargs)
+        result = await asyncio.to_thread(
+            lambda: self._registry.update_gateway_metadata(name, **kwargs)
+        )
         if result is None:
             raise NotFoundError(f"Gateway '{name}' not found")
         return result
 
-    def list_all(self, *, labels_filter: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    async def list_all(
+        self, *, labels_filter: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
         """List all registered gateways with cached connection status.
 
         Uses the cached client state instead of live health probes to avoid
@@ -480,19 +485,19 @@ class GatewayService:
         Returns:
             list[dict[str, Any]]: Gateway records with connection status.
         """
-        gateways = self._registry.list_all(labels_filter=labels_filter)
+        gateways = await asyncio.to_thread(
+            lambda: self._registry.list_all(labels_filter=labels_filter)
+        )
 
         for gw in gateways:
-            with self._lock:
-                cached = self._clients.get(gw["name"])
-                connected = cached is not None and cached.client is not None
-
+            cached = self._clients.get(gw["name"])
+            connected = cached is not None and cached.client is not None
             gw["connected"] = connected
             gw["status"] = _derive_status(connected, gw.get("last_status"))
 
         return gateways
 
-    def get_info(self, name: str) -> dict[str, Any]:
+    async def get_info(self, name: str) -> dict[str, Any]:
         """Get detailed info for a gateway.
 
         Args:
@@ -501,7 +506,7 @@ class GatewayService:
         Returns:
             dict[str, Any]: Detailed gateway information.
         """
-        record = self._registry.get(name)
+        record = await asyncio.to_thread(self._registry.get, name)
         if record is None:
             return {"configured": False, "error": f"Gateway '{name}' not registered"}
 
@@ -509,12 +514,11 @@ class GatewayService:
 
         connected = False
         version = None
-        with self._lock:
-            cached = self._clients.get(name)
-            cached_client = cached.client if cached else None
+        cached = self._clients.get(name)
+        cached_client = cached.client if cached else None
         if cached_client is not None:
             try:
-                health = cached_client.health()
+                health = await cached_client.health()
                 connected = True
                 version = health.get("version")
             except grpc.RpcError:
@@ -526,7 +530,7 @@ class GatewayService:
         record["status"] = _derive_status(connected, record.get("last_status"))
         return record
 
-    def get_config(self, name: str) -> dict[str, Any]:
+    async def get_config(self, name: str) -> dict[str, Any]:
         """Fetch the gateway configuration via gRPC.
 
         Args:
@@ -535,10 +539,10 @@ class GatewayService:
         Returns:
             dict[str, Any]: Gateway configuration.
         """
-        client = self.get_client(name=name)
-        return client.get_gateway_config()
+        client = await self.get_client(name=name)
+        return await client.get_gateway_config()
 
-    def update_setting(
+    async def update_setting(
         self,
         name: str,
         key: str,
@@ -557,32 +561,36 @@ class GatewayService:
         Returns:
             dict[str, Any]: ``{"settings_revision": int, "deleted": bool}``.
         """
-        client = self.get_client(name=name)
-        return client.update_gateway_setting(key=key, value=value, delete=delete)
+        client = await self.get_client(name=name)
+        return await client.update_gateway_setting(key=key, value=value, delete=delete)
 
     # ── Health monitor ────────────────────────────────────────────────────
 
-    def check_all_health(self) -> None:
-        """Probe all registered gateways and update their health in the registry."""
+    async def check_all_health(self) -> None:
+        """Probe all registered gateways concurrently and persist their health."""
         from datetime import UTC, datetime
 
-        gateways = self._registry.list_all()
+        gateways = await asyncio.to_thread(self._registry.list_all)
         if not gateways:
             return
         logger.debug("Starting health check for %d gateway(s)", len(gateways))
-        for gw in gateways:
-            name = gw["name"]
+
+        async def _probe(name: str) -> None:
             try:
-                client = self.get_client(name=name)
-                health = client.health()
+                client = await self.get_client(name=name)
+                health = await client.health()
                 status = health.get("status", "unknown")
             except (GatewayNotConnectedError, grpc.RpcError) as e:
                 logger.debug("Health probe failed for '%s': %s", name, e)
                 status = "unreachable"
             try:
-                self._registry.update_health(name, status, datetime.now(UTC))
+                await asyncio.to_thread(
+                    self._registry.update_health, name, status, datetime.now(UTC)
+                )
             except Exception:
                 logger.warning("Failed to update health for '%s'", name, exc_info=True)
+
+        await asyncio.gather(*(_probe(gw["name"]) for gw in gateways))
 
     def get_cached_client(self, name: str) -> ShoreGuardClient | None:
         """Return the cached client for a gateway, or None if not connected.
@@ -593,8 +601,7 @@ class GatewayService:
         Returns:
             ShoreGuardClient | None: Cached client, or None.
         """
-        with self._lock:
-            entry = self._clients.get(name)
-            if entry is not None and entry.client is not None:
-                return entry.client
+        entry = self._clients.get(name)
+        if entry is not None and entry.client is not None:
+            return entry.client
         return None

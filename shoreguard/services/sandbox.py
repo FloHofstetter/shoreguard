@@ -15,9 +15,9 @@ duplicated most of it in browser JS.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shlex
-import time
 from typing import TYPE_CHECKING, Any
 
 import grpc
@@ -42,9 +42,8 @@ class SandboxService:
 
     One instance is constructed per ``(gateway, operation)``
     invocation so the embedded gRPC client is already bound to
-    the right endpoint. Methods are synchronous because the gRPC
-    client is synchronous; async callers wrap them via
-    ``asyncio.to_thread``.
+    the right endpoint. Methods are async-native and await the
+    underlying grpc.aio client directly.
 
     Metadata merging, preset application, and pre/post-create
     hook dispatch happen inside this service rather than in the
@@ -77,7 +76,7 @@ class SandboxService:
         self._boot_hooks = boot_hooks
         self._gateway_name = gateway_name
 
-    def list(
+    async def list(
         self,
         *,
         limit: int = 100,
@@ -96,9 +95,9 @@ class SandboxService:
         Returns:
             list[dict[str, Any]]: Sandbox records with metadata.
         """
-        sandboxes = self._client.sandboxes.list(limit=limit, offset=offset)
+        sandboxes = await self._client.sandboxes.list(limit=limit, offset=offset)
         if self._meta and gateway_name:
-            all_meta = self._meta.list_for_gateway(gateway_name)
+            all_meta = await asyncio.to_thread(self._meta.list_for_gateway, gateway_name)
             for sb in sandboxes:
                 name = sb.get("name", "")
                 meta = all_meta.get(name)
@@ -112,7 +111,7 @@ class SandboxService:
                 ]
         return sandboxes
 
-    def get(self, name: str, *, gateway_name: str | None = None) -> dict[str, Any]:
+    async def get(self, name: str, *, gateway_name: str | None = None) -> dict[str, Any]:
         """Get a sandbox by name with merged metadata.
 
         Args:
@@ -122,14 +121,14 @@ class SandboxService:
         Returns:
             dict[str, Any]: Sandbox record with metadata.
         """
-        sb = self._client.sandboxes.get(name)
+        sb = await self._client.sandboxes.get(name)
         if self._meta and gateway_name:
-            meta = self._meta.get(gateway_name, name)
+            meta = await asyncio.to_thread(self._meta.get, gateway_name, name)
             sb["description"] = meta["description"] if meta else None
             sb["labels"] = meta["labels"] if meta else {}
         return sb
 
-    def delete(self, name: str, *, gateway_name: str | None = None) -> bool:
+    async def delete(self, name: str, *, gateway_name: str | None = None) -> bool:
         """Delete a sandbox by name and clean up metadata.
 
         Args:
@@ -139,14 +138,14 @@ class SandboxService:
         Returns:
             bool: True if the sandbox was deleted.
         """
-        deleted = self._client.sandboxes.delete(name)
+        deleted = await self._client.sandboxes.delete(name)
         if deleted and self._meta and gateway_name:
-            self._meta.delete(gateway_name, name)
+            await asyncio.to_thread(self._meta.delete, gateway_name, name)
         if deleted and self._boot_hooks and gateway_name:
-            self._boot_hooks.delete_for_sandbox(gateway_name, name)
+            await asyncio.to_thread(self._boot_hooks.delete_for_sandbox, gateway_name, name)
         return deleted
 
-    def exec(
+    async def exec(
         self,
         name: str,
         command: str | list[str],
@@ -174,13 +173,13 @@ class SandboxService:
         Raises:
             ValidationError: If the command string has invalid syntax.
         """
-        sandbox = self._client.sandboxes.get(name)
+        sandbox = await self._client.sandboxes.get(name)
         if isinstance(command, str):
             try:
                 command = shlex.split(command)
             except ValueError as e:
                 raise ValidationError(f"Invalid command syntax: {e}") from e
-        return self._client.sandboxes.exec(
+        return await self._client.sandboxes.exec(
             sandbox["id"],
             command,
             workdir=workdir,
@@ -189,7 +188,7 @@ class SandboxService:
             tty=tty,
         )
 
-    def get_logs(
+    async def get_logs(
         self,
         name: str,
         *,
@@ -210,8 +209,8 @@ class SandboxService:
         Returns:
             list[dict[str, Any]]: Log entries.
         """
-        sandbox = self._client.sandboxes.get(name)
-        return self._client.sandboxes.get_logs(
+        sandbox = await self._client.sandboxes.get(name)
+        return await self._client.sandboxes.get_logs(
             sandbox["id"],
             lines=lines,
             since_ms=since_ms,
@@ -219,7 +218,7 @@ class SandboxService:
             min_level=min_level,
         )
 
-    def create_ssh_session(self, name: str) -> dict[str, Any]:
+    async def create_ssh_session(self, name: str) -> dict[str, Any]:
         """Create an SSH session for a sandbox, resolving name to ID.
 
         Args:
@@ -228,10 +227,10 @@ class SandboxService:
         Returns:
             dict[str, Any]: SSH session details including token.
         """
-        sandbox = self._client.sandboxes.get(name)
-        return self._client.sandboxes.create_ssh_session(sandbox["id"])
+        sandbox = await self._client.sandboxes.get(name)
+        return await self._client.sandboxes.create_ssh_session(sandbox["id"])
 
-    def get_config(self, name: str) -> dict[str, Any]:
+    async def get_config(self, name: str) -> dict[str, Any]:
         """Get the stored sandbox configuration from the gateway.
 
         Resolves name to sandbox id, then calls ``GetSandboxConfig``. The
@@ -247,10 +246,10 @@ class SandboxService:
             dict[str, Any]: Sandbox configuration as returned by the
                 gateway.
         """
-        sandbox = self._client.sandboxes.get(name)
-        return self._client.sandboxes.get_config(sandbox["id"])
+        sandbox = await self._client.sandboxes.get(name)
+        return await self._client.sandboxes.get_config(sandbox["id"])
 
-    def get_provider_environment(self, name: str) -> dict[str, str]:
+    async def get_provider_environment(self, name: str) -> dict[str, str]:
         """Get the provider environment variables injected into a sandbox.
 
         Resolves name to sandbox id, then calls
@@ -265,10 +264,10 @@ class SandboxService:
         Returns:
             dict[str, str]: Environment key-value pairs.
         """
-        sandbox = self._client.sandboxes.get(name)
-        return self._client.sandboxes.get_provider_environment(sandbox["id"])
+        sandbox = await self._client.sandboxes.get(name)
+        return await self._client.sandboxes.get_provider_environment(sandbox["id"])
 
-    def list_providers(self, name: str) -> list[dict[str, Any]]:
+    async def list_providers(self, name: str) -> list[dict[str, Any]]:
         """List provider records attached to a sandbox.
 
         Args:
@@ -277,9 +276,9 @@ class SandboxService:
         Returns:
             list[dict[str, Any]]: Attached provider records.
         """
-        return self._client.sandboxes.list_providers(name)
+        return await self._client.sandboxes.list_providers(name)
 
-    def attach_provider(self, name: str, provider_name: str) -> dict[str, Any]:
+    async def attach_provider(self, name: str, provider_name: str) -> dict[str, Any]:
         """Attach a provider record to a sandbox.
 
         Args:
@@ -289,9 +288,9 @@ class SandboxService:
         Returns:
             dict[str, Any]: ``{sandbox, attached}``.
         """
-        return self._client.sandboxes.attach_provider(name, provider_name)
+        return await self._client.sandboxes.attach_provider(name, provider_name)
 
-    def detach_provider(self, name: str, provider_name: str) -> dict[str, Any]:
+    async def detach_provider(self, name: str, provider_name: str) -> dict[str, Any]:
         """Detach a provider record from a sandbox.
 
         Args:
@@ -301,9 +300,9 @@ class SandboxService:
         Returns:
             dict[str, Any]: ``{sandbox, detached}``.
         """
-        return self._client.sandboxes.detach_provider(name, provider_name)
+        return await self._client.sandboxes.detach_provider(name, provider_name)
 
-    def revoke_ssh_session(self, token: str) -> bool:
+    async def revoke_ssh_session(self, token: str) -> bool:
         """Revoke an active SSH session by token.
 
         Args:
@@ -312,9 +311,9 @@ class SandboxService:
         Returns:
             bool: True if the session was revoked.
         """
-        return self._client.sandboxes.revoke_ssh_session(token)
+        return await self._client.sandboxes.revoke_ssh_session(token)
 
-    def update_metadata(
+    async def update_metadata(
         self,
         gateway_name: str,
         name: str,
@@ -339,14 +338,16 @@ class SandboxService:
         if not self._meta:
             raise RuntimeError("Metadata store not configured")
         # Verify sandbox exists on gateway
-        sb = self._client.sandboxes.get(name)
-        self._meta.upsert(gateway_name, name, description=description, labels=labels)
-        meta = self._meta.get(gateway_name, name)
+        sb = await self._client.sandboxes.get(name)
+        await asyncio.to_thread(
+            self._meta.upsert, gateway_name, name, description=description, labels=labels
+        )
+        meta = await asyncio.to_thread(self._meta.get, gateway_name, name)
         sb["description"] = meta["description"] if meta else None
         sb["labels"] = meta["labels"] if meta else {}
         return sb
 
-    def create(
+    async def create(
         self,
         *,
         name: str = "",
@@ -405,13 +406,13 @@ class SandboxService:
                 "providers": providers or [],
                 "gpu": gpu,
             }
-            pre_results = self._boot_hooks.run_pre_create(  # type: ignore[union-attr]
+            pre_results = await self._boot_hooks.run_pre_create(  # type: ignore[union-attr]
                 effective_gateway,  # type: ignore[arg-type]
                 name,
                 pre_spec,
             )
 
-        result = self._client.sandboxes.create(
+        result = await self._client.sandboxes.create(
             name=name,
             image=image,
             gpu=gpu,
@@ -423,14 +424,17 @@ class SandboxService:
         sandbox_name = result.get("name", name)
 
         # Store metadata if provided
-        if self._meta and gateway_name and (description is not None or labels is not None):
-            self._meta.upsert(
-                gateway_name,
-                sandbox_name,
-                description=description if description is not None else _UNSET,
-                labels=labels if labels is not None else _UNSET,
+        meta_store = self._meta
+        if meta_store and gateway_name and (description is not None or labels is not None):
+            await asyncio.to_thread(
+                lambda: meta_store.upsert(
+                    gateway_name,
+                    sandbox_name,
+                    description=description if description is not None else _UNSET,
+                    labels=labels if labels is not None else _UNSET,
+                )
             )
-            meta = self._meta.get(gateway_name, sandbox_name)
+            meta = await asyncio.to_thread(meta_store.get, gateway_name, sandbox_name)
             result["description"] = meta["description"] if meta else None
             result["labels"] = meta["labels"] if meta else {}
 
@@ -438,7 +442,7 @@ class SandboxService:
             if run_hooks:
                 result["boot_hooks"] = {
                     "pre_create": pre_results,
-                    "post_create": self._boot_hooks.run_post_create(  # type: ignore[union-attr]
+                    "post_create": await self._boot_hooks.run_post_create(  # type: ignore[union-attr]
                         effective_gateway,  # type: ignore[arg-type]
                         sandbox_name,
                     ),
@@ -447,7 +451,7 @@ class SandboxService:
 
         # Wait for sandbox to become ready
         try:
-            self._client.sandboxes.wait_ready(sandbox_name, timeout_seconds=120.0)
+            await self._client.sandboxes.wait_ready(sandbox_name, timeout_seconds=120.0)
         except SandboxError:
             result["preset_error"] = "Sandbox entered error state"
             return result
@@ -459,13 +463,13 @@ class SandboxService:
         policy_ready = False
         for _ in range(15):
             try:
-                policy_data = self._client.policies.get(sandbox_name)
+                policy_data = await self._client.policies.get(sandbox_name)
                 if policy_data.get("policy"):
                     policy_ready = True
                     break
             except grpc.RpcError as e:
                 logger.debug("Policy not yet available for '%s': %s", sandbox_name, e)
-            time.sleep(1)
+            await asyncio.sleep(1)
 
         if not policy_ready:
             result["preset_warning"] = "Could not read initial policy, presets may fail"
@@ -475,7 +479,7 @@ class SandboxService:
         failed = []
         for preset in presets:
             try:
-                self._policy.apply_preset(sandbox_name, preset)
+                await self._policy.apply_preset(sandbox_name, preset)
                 applied.append(preset)
             except Exception as e:
                 logger.warning("Failed to apply preset '%s': %s", preset, e, exc_info=True)
@@ -488,7 +492,7 @@ class SandboxService:
         if run_hooks:
             result["boot_hooks"] = {
                 "pre_create": pre_results,
-                "post_create": self._boot_hooks.run_post_create(  # type: ignore[union-attr]
+                "post_create": await self._boot_hooks.run_post_create(  # type: ignore[union-attr]
                     effective_gateway,  # type: ignore[arg-type]
                     sandbox_name,
                 ),

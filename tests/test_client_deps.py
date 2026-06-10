@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -29,28 +29,28 @@ def _fake_request(gateway: str | None = None) -> MagicMock:
     return req
 
 
-def test_get_client_delegates():
+async def test_get_client_delegates():
     """get_client() reads gateway from request.state and delegates to gateway_service."""
     req = _fake_request("my-gw")
-    with patch.object(get_container(), "gateway") as mock_svc:
+    with patch.object(get_container(), "gateway", new_callable=AsyncMock) as mock_svc:
         mock_svc.get_client.return_value = MagicMock()
-        get_client(req)
+        await get_client(req)
         mock_svc.get_client.assert_called_once_with(name="my-gw")
 
 
-def test_set_client_delegates():
+async def test_set_client_delegates():
     """set_client() reads gateway from request.state and delegates to gateway_service.set_client."""
     req = _fake_request("my-gw")
     mock_client = MagicMock()
-    with patch.object(get_container(), "gateway") as mock_svc:
+    with patch.object(get_container(), "gateway", new_callable=AsyncMock) as mock_svc:
         set_client(mock_client, req)
         mock_svc.set_client.assert_called_once_with(mock_client, name="my-gw")
 
 
-def test_reset_backoff_delegates():
+async def test_reset_backoff_delegates():
     """reset_backoff() reads gateway from request.state and delegates."""
     req = _fake_request("my-gw")
-    with patch.object(get_container(), "gateway") as mock_svc:
+    with patch.object(get_container(), "gateway", new_callable=AsyncMock) as mock_svc:
         reset_backoff(req)
         mock_svc.reset_backoff.assert_called_once_with(name="my-gw")
 
@@ -58,7 +58,7 @@ def test_reset_backoff_delegates():
 # ─── resolve_gateway ────────────────────────────────────────────────────────
 
 
-def test_resolve_gateway_valid_name():
+async def test_resolve_gateway_valid_name():
     """resolve_gateway sets request.state._gateway and ContextVar."""
     req = _fake_request()
     resolve_gateway("my-gw", req)
@@ -66,7 +66,7 @@ def test_resolve_gateway_valid_name():
     assert _current_gateway.get() == "my-gw"
 
 
-def test_resolve_gateway_invalid_name_raises():
+async def test_resolve_gateway_invalid_name_raises():
     """resolve_gateway raises HTTPException 400 for invalid names."""
     req = _fake_request()
     with pytest.raises(HTTPException) as exc_info:
@@ -74,7 +74,7 @@ def test_resolve_gateway_invalid_name_raises():
     assert exc_info.value.status_code == 400
 
 
-def test_resolve_gateway_rejects_empty():
+async def test_resolve_gateway_rejects_empty():
     """resolve_gateway rejects empty string."""
     req = _fake_request()
     with pytest.raises(HTTPException) as exc_info:
@@ -82,22 +82,22 @@ def test_resolve_gateway_rejects_empty():
     assert exc_info.value.status_code == 400
 
 
-def test_get_client_with_none_gateway():
+async def test_get_client_with_none_gateway():
     """get_client raises HTTPException(500) when no gateway context is set."""
     req = _fake_request()  # no gateway
     _current_gateway.set(None)
     with pytest.raises(HTTPException) as exc_info:
-        get_client(req)
+        await get_client(req)
     assert exc_info.value.status_code == 500
 
 
-def test_get_client_falls_back_to_contextvar():
+async def test_get_client_falls_back_to_contextvar():
     """get_client falls back to ContextVar when request.state has no gateway."""
     _current_gateway.set("fallback-gw")
     req = _fake_request()  # no gateway on state
-    with patch.object(get_container(), "gateway") as mock_svc:
+    with patch.object(get_container(), "gateway", new_callable=AsyncMock) as mock_svc:
         mock_svc.get_client.return_value = MagicMock()
-        get_client(req)
+        await get_client(req)
         mock_svc.get_client.assert_called_once_with(name="fallback-gw")
     _current_gateway.set(None)
 
@@ -105,7 +105,7 @@ def test_get_client_falls_back_to_contextvar():
 # ─── _get_gateway_service None check ──────────────────────────────────────
 
 
-def test_get_gateway_service_raises_when_no_container():
+async def test_get_gateway_service_raises_when_no_container():
     """_get_gateway_service raises HTTPException(503) without a container."""
     from fastapi import HTTPException
 
@@ -125,7 +125,7 @@ def test_get_gateway_service_raises_when_no_container():
 # ─── ShoreGuardClient.from_active_cluster error handling ──────────────────
 
 
-def test_from_active_cluster_missing_metadata_file(tmp_path, monkeypatch):
+async def test_from_active_cluster_missing_metadata_file(tmp_path, monkeypatch):
     """from_active_cluster raises GatewayNotConnectedError for missing metadata."""
     from shoreguard.client import ShoreGuardClient
     from shoreguard.exceptions import GatewayNotConnectedError
@@ -139,7 +139,7 @@ def test_from_active_cluster_missing_metadata_file(tmp_path, monkeypatch):
         ShoreGuardClient.from_active_cluster(cluster="my-gw")
 
 
-def test_from_active_cluster_corrupt_json(tmp_path, monkeypatch):
+async def test_from_active_cluster_corrupt_json(tmp_path, monkeypatch):
     """from_active_cluster raises GatewayNotConnectedError for corrupt JSON."""
     from shoreguard.client import ShoreGuardClient
     from shoreguard.exceptions import GatewayNotConnectedError
@@ -153,7 +153,7 @@ def test_from_active_cluster_corrupt_json(tmp_path, monkeypatch):
         ShoreGuardClient.from_active_cluster(cluster="my-gw")
 
 
-def test_from_active_cluster_missing_endpoint_key(tmp_path, monkeypatch):
+async def test_from_active_cluster_missing_endpoint_key(tmp_path, monkeypatch):
     """from_active_cluster raises GatewayNotConnectedError when endpoint key is missing."""
     import json
 

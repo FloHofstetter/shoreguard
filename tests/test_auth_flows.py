@@ -34,15 +34,15 @@ def db():
 
 @pytest.fixture
 def mock_client():
-    from unittest.mock import MagicMock
+    from unittest.mock import AsyncMock, MagicMock
 
     from shoreguard.client import ShoreGuardClient
 
     client = MagicMock(spec=ShoreGuardClient)
-    client.sandboxes = MagicMock()
-    client.policies = MagicMock()
-    client.providers = MagicMock()
-    client.approvals = MagicMock()
+    client.sandboxes = AsyncMock()
+    client.policies = AsyncMock()
+    client.providers = AsyncMock()
+    client.approvals = AsyncMock()
     return client
 
 

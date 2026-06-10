@@ -23,7 +23,9 @@ class ServiceRoutingService:
     def __init__(self, client: ShoreGuardClient) -> None:  # noqa: D107
         self._client = client
 
-    def list(self, *, sandbox: str = "", limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    async def list(
+        self, *, sandbox: str = "", limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
         """List exposed service endpoints.
 
         Args:
@@ -34,9 +36,9 @@ class ServiceRoutingService:
         Returns:
             list[dict[str, Any]]: One dict per exposed service endpoint.
         """
-        return self._client.services.list(sandbox=sandbox, limit=limit, offset=offset)
+        return await self._client.services.list(sandbox=sandbox, limit=limit, offset=offset)
 
-    def get(self, *, sandbox: str, service: str = "") -> dict[str, Any]:
+    async def get(self, *, sandbox: str, service: str = "") -> dict[str, Any]:
         """Get a single exposed service endpoint.
 
         Args:
@@ -47,9 +49,9 @@ class ServiceRoutingService:
         Returns:
             dict[str, Any]: The service endpoint dict.
         """
-        return self._client.services.get(sandbox=sandbox, service=service)
+        return await self._client.services.get(sandbox=sandbox, service=service)
 
-    def expose(
+    async def expose(
         self, *, sandbox: str, service: str, target_port: int, domain: bool = False
     ) -> dict[str, Any]:
         """Expose a loopback port inside a sandbox as a routed service.
@@ -63,11 +65,11 @@ class ServiceRoutingService:
         Returns:
             dict[str, Any]: The created service endpoint dict (includes ``url``).
         """
-        return self._client.services.expose(
+        return await self._client.services.expose(
             sandbox=sandbox, service=service, target_port=target_port, domain=domain
         )
 
-    def delete(self, *, sandbox: str, service: str = "") -> bool:
+    async def delete(self, *, sandbox: str, service: str = "") -> bool:
         """Delete an exposed service endpoint.
 
         Args:
@@ -78,4 +80,4 @@ class ServiceRoutingService:
         Returns:
             bool: True if an endpoint existed and was deleted.
         """
-        return self._client.services.delete(sandbox=sandbox, service=service)
+        return await self._client.services.delete(sandbox=sandbox, service=service)

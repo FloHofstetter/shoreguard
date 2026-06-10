@@ -116,7 +116,7 @@ class ProviderManager:
         self._stub = stub
         self._timeout = timeout
 
-    def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    async def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """List all providers.
 
         Args:
@@ -126,13 +126,13 @@ class ProviderManager:
         Returns:
             list[dict[str, Any]]: List of provider dicts.
         """
-        resp = self._stub.ListProviders(
+        resp = await self._stub.ListProviders(
             openshell_pb2.ListProvidersRequest(limit=limit, offset=offset),
             timeout=self._timeout,
         )
         return [_provider_to_dict(p) for p in resp.providers]
 
-    def get(self, name: str) -> dict[str, Any]:
+    async def get(self, name: str) -> dict[str, Any]:
         """Get a provider by name.
 
         Args:
@@ -141,12 +141,12 @@ class ProviderManager:
         Returns:
             dict[str, Any]: Provider data dict.
         """
-        resp = self._stub.GetProvider(
+        resp = await self._stub.GetProvider(
             openshell_pb2.GetProviderRequest(name=name), timeout=self._timeout
         )
         return _provider_to_dict(resp.provider)
 
-    def create(
+    async def create(
         self,
         *,
         name: str,
@@ -173,13 +173,13 @@ class ProviderManager:
             credentials=credentials or {},
             config=config or {},
         )
-        resp = self._stub.CreateProvider(
+        resp = await self._stub.CreateProvider(
             openshell_pb2.CreateProviderRequest(provider=provider),
             timeout=self._timeout,
         )
         return _provider_to_dict(resp.provider)
 
-    def update(
+    async def update(
         self,
         *,
         name: str,
@@ -206,13 +206,13 @@ class ProviderManager:
             credentials=credentials or {},
             config=config or {},
         )
-        resp = self._stub.UpdateProvider(
+        resp = await self._stub.UpdateProvider(
             openshell_pb2.UpdateProviderRequest(provider=provider),
             timeout=self._timeout,
         )
         return _provider_to_dict(resp.provider)
 
-    def delete(self, name: str) -> bool:
+    async def delete(self, name: str) -> bool:
         """Delete a provider by name.
 
         Args:
@@ -221,14 +221,14 @@ class ProviderManager:
         Returns:
             bool: True if the provider was deleted.
         """
-        resp = self._stub.DeleteProvider(
+        resp = await self._stub.DeleteProvider(
             openshell_pb2.DeleteProviderRequest(name=name), timeout=self._timeout
         )
         return bool(resp.deleted)
 
     # ── Credential refresh / rotation (upstream PR #1349, v0.0.57) ──────────
 
-    def configure_refresh(
+    async def configure_refresh(
         self,
         *,
         provider: str,
@@ -260,10 +260,10 @@ class ProviderManager:
         )
         if expires_at_ms is not None:
             req.expires_at_ms = expires_at_ms
-        resp = self._stub.ConfigureProviderRefresh(req, timeout=self._timeout)
+        resp = await self._stub.ConfigureProviderRefresh(req, timeout=self._timeout)
         return _refresh_status_to_dict(resp.status)
 
-    def get_refresh_status(
+    async def get_refresh_status(
         self, provider: str, *, credential_key: str = ""
     ) -> list[dict[str, Any]]:
         """List credential-refresh status entries for a provider.
@@ -275,7 +275,7 @@ class ProviderManager:
         Returns:
             list[dict[str, Any]]: One status dict per configured credential.
         """
-        resp = self._stub.GetProviderRefreshStatus(
+        resp = await self._stub.GetProviderRefreshStatus(
             openshell_pb2.GetProviderRefreshStatusRequest(
                 provider=provider, credential_key=credential_key
             ),
@@ -283,7 +283,7 @@ class ProviderManager:
         )
         return [_refresh_status_to_dict(s) for s in resp.credentials]
 
-    def rotate_credential(self, *, provider: str, credential_key: str) -> dict[str, Any]:
+    async def rotate_credential(self, *, provider: str, credential_key: str) -> dict[str, Any]:
         """Rotate a provider credential immediately.
 
         Args:
@@ -293,7 +293,7 @@ class ProviderManager:
         Returns:
             dict[str, Any]: The refresh status after rotation.
         """
-        resp = self._stub.RotateProviderCredential(
+        resp = await self._stub.RotateProviderCredential(
             openshell_pb2.RotateProviderCredentialRequest(
                 provider=provider, credential_key=credential_key
             ),
@@ -301,7 +301,7 @@ class ProviderManager:
         )
         return _refresh_status_to_dict(resp.status)
 
-    def delete_refresh(self, *, provider: str, credential_key: str) -> bool:
+    async def delete_refresh(self, *, provider: str, credential_key: str) -> bool:
         """Delete a credential-refresh configuration.
 
         Args:
@@ -311,7 +311,7 @@ class ProviderManager:
         Returns:
             bool: True if a configuration existed and was deleted.
         """
-        resp = self._stub.DeleteProviderRefresh(
+        resp = await self._stub.DeleteProviderRefresh(
             openshell_pb2.DeleteProviderRefreshRequest(
                 provider=provider, credential_key=credential_key
             ),

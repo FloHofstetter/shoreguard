@@ -8,7 +8,6 @@ owns the endpoint records — these routes are a passthrough surface.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -60,7 +59,7 @@ async def list_services(
     Returns:
         dict[str, Any]: ``{"services": [...]}`` endpoint records.
     """
-    services = await asyncio.to_thread(svc.list, sandbox=sandbox)
+    services = await svc.list(sandbox=sandbox)
     return {"services": services}
 
 
@@ -86,12 +85,8 @@ async def expose_service(
         dict[str, Any]: The created service endpoint record.
     """
     check_write_rate_limit(request)
-    result = await asyncio.to_thread(
-        svc.expose,
-        sandbox=body.sandbox,
-        service=body.service,
-        target_port=body.target_port,
-        domain=body.domain,
+    result = await svc.expose(
+        sandbox=body.sandbox, service=body.service, target_port=body.target_port, domain=body.domain
     )
     logger.info(
         "Service exposed (sandbox=%s, service=%s, port=%d, actor=%s)",
@@ -127,7 +122,7 @@ async def get_service(
     Returns:
         dict[str, Any]: The service endpoint record.
     """
-    return await asyncio.to_thread(svc.get, sandbox=sandbox, service=service)
+    return await svc.get(sandbox=sandbox, service=service)
 
 
 @router.delete(
@@ -153,7 +148,7 @@ async def delete_service(
         dict[str, bool]: ``{"deleted": bool}``.
     """
     check_write_rate_limit(request)
-    deleted = await asyncio.to_thread(svc.delete, sandbox=sandbox, service=service)
+    deleted = await svc.delete(sandbox=sandbox, service=service)
     if deleted:
         logger.info(
             "Service deleted (sandbox=%s, service=%s, actor=%s)",

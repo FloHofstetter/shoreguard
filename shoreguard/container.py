@@ -134,11 +134,11 @@ def build_container(
     sandbox_meta = SandboxMetaStore(session_factory)
     audit = AuditService(session_factory, exporter=audit_exporter)
 
-    def _resolve_sandbox_service(gateway_name: str):  # type: ignore[no-untyped-def]  # noqa: D103
+    async def _resolve_sandbox_service(gateway_name: str):  # type: ignore[no-untyped-def]  # noqa: D103
         # Build a SandboxService for post-create boot-hook dispatch.
         from shoreguard.services.sandbox import SandboxService
 
-        client = gateway.get_client(gateway_name)
+        client = await gateway.get_client(gateway_name)
         if client is None:
             return None
         return SandboxService(client, meta_store=sandbox_meta, gateway_name=gateway_name)

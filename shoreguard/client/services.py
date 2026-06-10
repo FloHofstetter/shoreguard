@@ -50,7 +50,9 @@ class ServiceManager:
         self._stub = stub
         self._timeout = timeout
 
-    def list(self, *, sandbox: str = "", limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    async def list(
+        self, *, sandbox: str = "", limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
         """List exposed service endpoints.
 
         Args:
@@ -61,13 +63,13 @@ class ServiceManager:
         Returns:
             list[dict[str, Any]]: One dict per exposed service endpoint.
         """
-        resp = self._stub.ListServices(
+        resp = await self._stub.ListServices(
             openshell_pb2.ListServicesRequest(sandbox=sandbox, limit=limit, offset=offset),
             timeout=self._timeout,
         )
         return [_service_endpoint_to_dict(s) for s in resp.services]
 
-    def get(self, *, sandbox: str, service: str = "") -> dict[str, Any]:
+    async def get(self, *, sandbox: str, service: str = "") -> dict[str, Any]:
         """Get a single exposed service endpoint.
 
         Args:
@@ -78,13 +80,13 @@ class ServiceManager:
         Returns:
             dict[str, Any]: The service endpoint dict.
         """
-        resp = self._stub.GetService(
+        resp = await self._stub.GetService(
             openshell_pb2.GetServiceRequest(sandbox=sandbox, service=service),
             timeout=self._timeout,
         )
         return _service_endpoint_to_dict(resp)
 
-    def expose(
+    async def expose(
         self, *, sandbox: str, service: str, target_port: int, domain: bool = False
     ) -> dict[str, Any]:
         """Expose a loopback port inside a sandbox as a routed service.
@@ -98,7 +100,7 @@ class ServiceManager:
         Returns:
             dict[str, Any]: The created service endpoint dict (includes ``url``).
         """
-        resp = self._stub.ExposeService(
+        resp = await self._stub.ExposeService(
             openshell_pb2.ExposeServiceRequest(
                 sandbox=sandbox, service=service, target_port=target_port, domain=domain
             ),
@@ -106,7 +108,7 @@ class ServiceManager:
         )
         return _service_endpoint_to_dict(resp)
 
-    def delete(self, *, sandbox: str, service: str = "") -> bool:
+    async def delete(self, *, sandbox: str, service: str = "") -> bool:
         """Delete an exposed service endpoint.
 
         Args:
@@ -117,7 +119,7 @@ class ServiceManager:
         Returns:
             bool: True if an endpoint existed and was deleted.
         """
-        resp = self._stub.DeleteService(
+        resp = await self._stub.DeleteService(
             openshell_pb2.DeleteServiceRequest(sandbox=sandbox, service=service),
             timeout=self._timeout,
         )

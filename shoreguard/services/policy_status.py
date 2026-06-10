@@ -52,7 +52,7 @@ class PolicyStatusBroker:
         wake = asyncio.Event()
         stream_holder: dict[str, Any] = {}
 
-        def _consume_stream() -> None:
+        async def _consume_stream() -> None:
             try:
                 stream = client._stub.WatchSandbox(
                     openshell_pb2.WatchSandboxRequest(
@@ -65,22 +65,25 @@ class PolicyStatusBroker:
                 )
             except Exception:
                 logger.debug("WatchSandbox open failed", exc_info=True)
-                loop.call_soon_threadsafe(wake.set)
+                wake.set()
                 return
             stream_holder["stream"] = stream
             try:
-                for event in stream:
+                async for event in stream:
                     payload = event.WhichOneof("payload")
                     if payload in ("draft_policy_update", "sandbox"):
-                        loop.call_soon_threadsafe(wake.set)
+                        wake.set()
             except Exception:
                 # Stream cancelled or gateway closed it — fine, just stop.
                 pass
 
-        consumer_future = loop.run_in_executor(None, _consume_stream)
+        consumer_task = asyncio.create_task(_consume_stream())
+        # Let the consumer open the stream before the fast-path check, so
+        # teardown can always cancel a stream that was actually opened.
+        await asyncio.sleep(0)
 
         async def _is_loaded() -> bool:
-            status = await asyncio.to_thread(client.policies.get, sandbox_name)
+            status = await client.policies.get(sandbox_name)
             return (
                 status.get("active_version") == target_version
                 and status.get("revision", {}).get("status") == "loaded"
@@ -112,9 +115,10 @@ class PolicyStatusBroker:
                     stream.cancel()
                 except Exception:
                     pass
+            consumer_task.cancel()
             try:
-                await asyncio.wait_for(consumer_future, timeout=1.0)
-            except Exception:
+                await asyncio.wait_for(consumer_task, timeout=1.0)
+            except TimeoutError, asyncio.CancelledError, Exception:
                 pass
 
 

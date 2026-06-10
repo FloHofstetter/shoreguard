@@ -33,24 +33,24 @@ def policy_svc(mock_client):
 # ── Unit tests: PolicyService ────────────────────────────────────────────────
 
 
-def test_get_version_delegates_to_client(policy_svc, mock_client):
+async def test_get_version_delegates_to_client(policy_svc, mock_client):
     """get_version passes sandbox name and version to the client."""
     mock_client.policies.get_version.return_value = VERSION_1_RESPONSE
 
-    result = policy_svc.get_version("sb1", 1)
+    result = await policy_svc.get_version("sb1", 1)
 
     mock_client.policies.get_version.assert_called_once_with("sb1", 1)
     assert result == VERSION_1_RESPONSE
 
 
-def test_diff_revisions_returns_structured_diff(policy_svc, mock_client):
+async def test_diff_revisions_returns_structured_diff(policy_svc, mock_client):
     """diff_revisions fetches two versions and returns a structured dict."""
     mock_client.policies.get_version.side_effect = [
         VERSION_1_RESPONSE,
         VERSION_2_RESPONSE,
     ]
 
-    result = policy_svc.diff_revisions("sb1", 1, 2)
+    result = await policy_svc.diff_revisions("sb1", 1, 2)
 
     assert result["version_a"] == 1
     assert result["version_b"] == 2
@@ -61,11 +61,11 @@ def test_diff_revisions_returns_structured_diff(policy_svc, mock_client):
     assert mock_client.policies.get_version.call_count == 2
 
 
-def test_list_revisions_delegates_with_limit_offset(policy_svc, mock_client):
+async def test_list_revisions_delegates_with_limit_offset(policy_svc, mock_client):
     """list_revisions passes limit and offset to the client."""
     mock_client.policies.list_revisions.return_value = REVISIONS_LIST
 
-    result = policy_svc.list_revisions("sb1", limit=10, offset=5)
+    result = await policy_svc.list_revisions("sb1", limit=10, offset=5)
 
     mock_client.policies.list_revisions.assert_called_once_with("sb1", limit=10, offset=5)
     assert result == REVISIONS_LIST

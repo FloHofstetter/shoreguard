@@ -132,7 +132,7 @@ async def verify_policy(
     prover_svc = _get_prover_service()
 
     # Fetch current policy from gateway
-    policy_data = await asyncio.to_thread(policy_svc.get, name)
+    policy_data = await policy_svc.get(name)
     policy = policy_data.get("policy", {})
 
     queries = [{"query_id": q.query_id, "params": q.params} for q in body.queries]

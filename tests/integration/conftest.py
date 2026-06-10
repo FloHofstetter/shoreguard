@@ -11,6 +11,7 @@ Gateway resolution order:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import shutil
@@ -46,7 +47,7 @@ def _wait_healthy(client: ShoreGuardClient, timeout: float = 120.0) -> None:
     last_err = None
     while time.time() < deadline:
         try:
-            resp = client.health()
+            resp = asyncio.run(client.health())
             if resp.get("status") in ("healthy", "ok"):
                 return
         except Exception as e:
@@ -173,8 +174,12 @@ def gateway_endpoint():
     if gw_name:
         try:
             client = ShoreGuardClient.from_active_cluster(cluster=gw_name)
-            client.health()
-            client.close()
+
+            async def _probe(c: ShoreGuardClient) -> None:
+                await c.health()
+                await c.close()
+
+            asyncio.run(_probe(client))
             yield f"__cluster__:{gw_name}"
             return
         except Exception:
@@ -201,7 +206,7 @@ def sg_client(gateway_endpoint: str):
 
     _wait_healthy(client)
     yield client
-    client.close()
+    asyncio.run(client.close())
 
 
 # ── Function/module-scoped fixtures ───────────────────────────────────────
@@ -212,31 +217,34 @@ def sandbox_factory(sg_client: ShoreGuardClient):
     """Factory that creates sandboxes and auto-cleans them after the test."""
     created: list[str] = []
 
-    def _make(*, name: str = "", image: str = "", **kwargs):
-        sb = sg_client.sandboxes.create(name=name, image=image, **kwargs)
+    async def _make(*, name: str = "", image: str = "", **kwargs):
+        sb = await sg_client.sandboxes.create(name=name, image=image, **kwargs)
         created.append(sb["name"])
         return sb
 
     yield _make
 
-    for sb_name in reversed(created):
-        try:
-            sg_client.sandboxes.delete(sb_name)
-        except Exception:
-            pass
+    async def _cleanup() -> None:
+        for sb_name in reversed(created):
+            try:
+                await sg_client.sandboxes.delete(sb_name)
+            except Exception:
+                pass
+
+    asyncio.run(_cleanup())
 
 
 @pytest.fixture(scope="module")
 def ready_sandbox(sg_client: ShoreGuardClient):
     """A sandbox that has reached 'ready' phase. Module-scoped for reuse."""
-    sb = sg_client.sandboxes.create(name="")
+    sb = asyncio.run(sg_client.sandboxes.create(name=""))
     sb_name = sb["name"]
     try:
-        sb = sg_client.sandboxes.wait_ready(sb_name, timeout_seconds=120.0)
+        sb = asyncio.run(sg_client.sandboxes.wait_ready(sb_name, timeout_seconds=120.0))
         yield sb
     finally:
         try:
-            sg_client.sandboxes.delete(sb_name)
+            asyncio.run(sg_client.sandboxes.delete(sb_name))
         except Exception:
             pass
 
@@ -246,18 +254,21 @@ def provider_factory(sg_client: ShoreGuardClient):
     """Factory that creates providers and auto-cleans them after the test."""
     created: list[str] = []
 
-    def _make(*, name: str, provider_type: str = "anthropic", **kwargs):
-        prov = sg_client.providers.create(name=name, provider_type=provider_type, **kwargs)
+    async def _make(*, name: str, provider_type: str = "anthropic", **kwargs):
+        prov = await sg_client.providers.create(name=name, provider_type=provider_type, **kwargs)
         created.append(prov["name"])
         return prov
 
     yield _make
 
-    for prov_name in reversed(created):
-        try:
-            sg_client.providers.delete(prov_name)
-        except Exception:
-            pass
+    async def _cleanup() -> None:
+        for prov_name in reversed(created):
+            try:
+                await sg_client.providers.delete(prov_name)
+            except Exception:
+                pass
+
+    asyncio.run(_cleanup())
 
 
 @pytest.fixture

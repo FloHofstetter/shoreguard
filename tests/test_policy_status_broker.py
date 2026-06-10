@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -13,6 +13,7 @@ from shoreguard.services.policy_status import PolicyStatusBroker
 def _make_client(policy_statuses, watch_events=None):
     """Build a stand-in client whose policies.get() walks ``policy_statuses``."""
     client = MagicMock()
+    client.policies = AsyncMock()
     statuses = iter(policy_statuses)
     last = {"v": policy_statuses[-1]}
 
@@ -24,7 +25,12 @@ def _make_client(policy_statuses, watch_events=None):
         return last["v"]
 
     client.policies.get.side_effect = _get
-    client._stub.WatchSandbox.return_value = iter(watch_events or [])
+
+    async def _watch_stream():
+        for ev in watch_events or []:
+            yield ev
+
+    client._stub.WatchSandbox = MagicMock(return_value=_watch_stream())
     return client
 
 
@@ -93,15 +99,21 @@ async def test_wait_for_loaded_wrong_version_blocks():
 async def test_wait_for_loaded_cancels_watch_stream():
     """The watch stream is cancelled on the way out, even on success."""
     cancelled = {"v": False}
-    fake_stream = MagicMock()
-    fake_stream.__iter__ = lambda self: iter([])
 
-    def _cancel():
-        cancelled["v"] = True
+    class _FakeStream:
+        def __aiter__(self):
+            return self
 
-    fake_stream.cancel.side_effect = _cancel
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+        def cancel(self):
+            cancelled["v"] = True
+
+    fake_stream = _FakeStream()
 
     client = MagicMock()
+    client.policies = AsyncMock()
     client.policies.get.return_value = {
         "active_version": 5,
         "revision": {"status": "loaded"},
@@ -118,6 +130,7 @@ async def test_wait_for_loaded_cancels_watch_stream():
 async def test_wait_for_loaded_handles_watch_open_failure():
     """Falls back to polling when WatchSandbox raises on open."""
     client = MagicMock()
+    client.policies = AsyncMock()
     statuses = [
         {"active_version": 4, "revision": {"status": "pending"}},
         {"active_version": 5, "revision": {"status": "loaded"}},
@@ -147,6 +160,7 @@ async def test_wait_event_dispatch(monkeypatch):
     fake_stream.__iter__ = lambda self: iter([_Event("draft_policy_update"), _Event("log")])
 
     client = MagicMock()
+    client.policies = AsyncMock()
     client._stub.WatchSandbox.return_value = fake_stream
     statuses = [
         {"active_version": 4, "revision": {"status": "pending"}},

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import grpc
 import pytest
@@ -15,7 +15,7 @@ from shoreguard.container import get_container
 @pytest.fixture
 def mock_gw_svc():
     """Mock the gateway_service used by routes."""
-    with patch.object(get_container(), "gateway") as mock:
+    with patch.object(get_container(), "gateway", new_callable=AsyncMock) as mock:
         yield mock
 
 
@@ -438,6 +438,8 @@ def mock_local_mgr():
     from unittest.mock import MagicMock
 
     mgr = MagicMock()
+    for name in ("start", "stop", "restart", "create", "destroy"):
+        setattr(mgr, name, AsyncMock())
     with patch("shoreguard.api.routes.gateway._get_local_manager", return_value=mgr):
         yield mgr
 

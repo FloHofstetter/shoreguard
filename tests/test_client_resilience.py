@@ -48,7 +48,7 @@ class _Clock:
     def monotonic(self) -> float:
         return self.now
 
-    def sleep(self, seconds: float) -> None:
+    async def sleep(self, seconds: float) -> None:
         self.slept.append(seconds)
         self.now += seconds
 
@@ -60,7 +60,7 @@ def _make_fn(outcomes: list):
     """
     it = iter(outcomes)
 
-    def fn():
+    async def fn():
         nxt = next(it)
         if isinstance(nxt, BaseException):
             raise nxt
@@ -72,32 +72,32 @@ def _make_fn(outcomes: list):
 # ── Policy validation ────────────────────────────────────────────────────────
 
 
-def test_retry_policy_rejects_invalid_jitter():
+async def test_retry_policy_rejects_invalid_jitter():
     with pytest.raises(ValueError):
         RetryPolicy(jitter=1.5)
 
 
-def test_retry_policy_rejects_bad_backoff_bounds():
+async def test_retry_policy_rejects_bad_backoff_bounds():
     with pytest.raises(ValueError):
         RetryPolicy(initial_backoff=5.0, max_backoff=1.0)
 
 
-def test_retry_policy_rejects_zero_attempts():
+async def test_retry_policy_rejects_zero_attempts():
     with pytest.raises(ValueError):
         RetryPolicy(max_attempts=0)
 
 
-def test_retryable_sets_are_disjoint():
+async def test_retryable_sets_are_disjoint():
     assert RETRYABLE_CODES.isdisjoint(NON_RETRYABLE_CODES)
 
 
 # ── call_with_retry happy + retry paths ──────────────────────────────────────
 
 
-def test_call_returns_immediately_on_success():
+async def test_call_returns_immediately_on_success():
     clock = _Clock()
     fn = _make_fn(["payload"])
-    result = call_with_retry(
+    result = await call_with_retry(
         fn,
         op_name="test.ok",
         _sleep=clock.sleep,
@@ -107,7 +107,7 @@ def test_call_returns_immediately_on_success():
     assert clock.slept == []
 
 
-def test_call_retries_on_unavailable_then_succeeds():
+async def test_call_retries_on_unavailable_then_succeeds():
     clock = _Clock()
     fn = _make_fn(
         [
@@ -116,7 +116,7 @@ def test_call_retries_on_unavailable_then_succeeds():
             "done",
         ]
     )
-    result = call_with_retry(
+    result = await call_with_retry(
         fn,
         op_name="test.retry",
         policy=RetryPolicy(max_attempts=4, initial_backoff=0.1, max_backoff=1.0, jitter=0.0),
@@ -128,11 +128,11 @@ def test_call_retries_on_unavailable_then_succeeds():
     assert len(clock.slept) == 2
 
 
-def test_call_does_not_retry_non_retryable_code():
+async def test_call_does_not_retry_non_retryable_code():
     clock = _Clock()
     fn = _make_fn([_FakeRpcError(grpc.StatusCode.INVALID_ARGUMENT), "never"])
     with pytest.raises(grpc.RpcError):
-        call_with_retry(
+        await call_with_retry(
             fn,
             op_name="test.non_retryable",
             _sleep=clock.sleep,
@@ -141,7 +141,7 @@ def test_call_does_not_retry_non_retryable_code():
     assert clock.slept == []
 
 
-def test_call_gives_up_after_max_attempts():
+async def test_call_gives_up_after_max_attempts():
     clock = _Clock()
     attempts: list[tuple[int, str]] = []
 
@@ -150,7 +150,7 @@ def test_call_gives_up_after_max_attempts():
 
     fn = _make_fn([_FakeRpcError(grpc.StatusCode.UNAVAILABLE)] * 5)
     with pytest.raises(grpc.RpcError):
-        call_with_retry(
+        await call_with_retry(
             fn,
             op_name="test.exhaust",
             policy=RetryPolicy(max_attempts=3, initial_backoff=0.05, max_backoff=0.2, jitter=0.0),
@@ -164,11 +164,11 @@ def test_call_gives_up_after_max_attempts():
     assert outcomes == ["retry", "retry", "giveup"]
 
 
-def test_call_respects_absolute_deadline():
+async def test_call_respects_absolute_deadline():
     clock = _Clock()
     fn = _make_fn([_FakeRpcError(grpc.StatusCode.UNAVAILABLE)] * 10)
     with pytest.raises(grpc.RpcError):
-        call_with_retry(
+        await call_with_retry(
             fn,
             op_name="test.deadline",
             policy=RetryPolicy(max_attempts=10, initial_backoff=1.0, max_backoff=4.0, jitter=0.0),
@@ -181,10 +181,10 @@ def test_call_respects_absolute_deadline():
     assert sum(clock.slept) <= 1.5 + 1e-9
 
 
-def test_call_backoff_is_exponential():
+async def test_call_backoff_is_exponential():
     clock = _Clock()
     fn = _make_fn([_FakeRpcError(grpc.StatusCode.UNAVAILABLE)] * 4 + ["ok"])
-    call_with_retry(
+    await call_with_retry(
         fn,
         op_name="test.backoff",
         policy=RetryPolicy(max_attempts=5, initial_backoff=0.1, max_backoff=10.0, jitter=0.0),
@@ -195,14 +195,14 @@ def test_call_backoff_is_exponential():
     assert clock.slept == [0.1, 0.2, 0.4, 0.8]
 
 
-def test_on_attempt_fires_on_success():
+async def test_on_attempt_fires_on_success():
     clock = _Clock()
     seen: list[str] = []
 
     def cb(*, op_name, attempt, code, outcome):
         seen.append(outcome)
 
-    call_with_retry(
+    await call_with_retry(
         _make_fn(["ok"]),
         op_name="test.cb",
         on_attempt=cb,
@@ -215,17 +215,17 @@ def test_on_attempt_fires_on_success():
 # ── stream_with_retry ────────────────────────────────────────────────────────
 
 
-def test_stream_with_retry_retries_open_only():
+async def test_stream_with_retry_retries_open_only():
     clock = _Clock()
     calls = {"n": 0}
 
-    def opener():
+    async def opener():
         calls["n"] += 1
         if calls["n"] < 2:
             raise _FakeRpcError(grpc.StatusCode.UNAVAILABLE)
         return iter(["a", "b", "c"])
 
-    stream = call_with_retry(  # exercise the shared path
+    stream = await call_with_retry(  # exercise the shared path
         opener,
         op_name="test.stream",
         _sleep=clock.sleep,
@@ -236,10 +236,14 @@ def test_stream_with_retry_retries_open_only():
     assert calls["n"] == 2
 
 
-def test_stream_with_retry_wrapper_delegates():
+async def test_stream_with_retry_wrapper_delegates():
     # Smoke test that the public stream_with_retry alias returns the iterator.
-    stream = stream_with_retry(lambda: iter([1, 2]), op_name="test.s")
-    assert list(stream) == [1, 2]
+    async def _gen():
+        yield 1
+        yield 2
+
+    stream = await stream_with_retry(lambda: _gen(), op_name="test.s")
+    assert [x async for x in stream] == [1, 2]
 
 
 # ── classify_grpc_error mapping ──────────────────────────────────────────────
@@ -258,23 +262,23 @@ def test_stream_with_retry_wrapper_delegates():
         (grpc.StatusCode.INTERNAL, SandboxError),
     ],
 )
-def test_classify_grpc_error(code, expected):
+async def test_classify_grpc_error(code, expected):
     exc = _FakeRpcError(code, details="boom")
     assert isinstance(classify_grpc_error(exc), expected)
 
 
-def test_classify_non_grpc_falls_back_to_sandbox_error():
+async def test_classify_non_grpc_falls_back_to_sandbox_error():
     assert isinstance(classify_grpc_error(RuntimeError("nope")), SandboxError)
 
 
-def test_default_policy_uses_documented_retryable_set():
+async def test_default_policy_uses_documented_retryable_set():
     assert DEFAULT_POLICY.retryable_codes == RETRYABLE_CODES
 
 
 # ── SandboxManager integration: transparent retry through _invoke ────────────
 
 
-def test_sandbox_manager_retries_list_on_unavailable(monkeypatch):
+async def test_sandbox_manager_retries_list_on_unavailable(monkeypatch):
     from types import SimpleNamespace
 
     from shoreguard.client._proto import datamodel_pb2, openshell_pb2
@@ -282,12 +286,15 @@ def test_sandbox_manager_retries_list_on_unavailable(monkeypatch):
     from shoreguard.client.sandboxes import SandboxManager
 
     # Keep sleeps fast.
-    monkeypatch.setattr("shoreguard.client._resilience.time.sleep", lambda _s: None, raising=False)
+    async def _no_sleep(_s):
+        return None
+
+    monkeypatch.setattr("shoreguard.client._resilience.asyncio.sleep", _no_sleep, raising=False)
 
     calls = {"n": 0}
 
     class _FlakyStub:
-        def ListSandboxes(self, req, timeout=None):
+        async def ListSandboxes(self, req, timeout=None):
             calls["n"] += 1
             if calls["n"] < 3:
                 raise _FakeRpcError(grpc.StatusCode.UNAVAILABLE)
@@ -306,16 +313,16 @@ def test_sandbox_manager_retries_list_on_unavailable(monkeypatch):
     m._retry_policy = RetryPolicy(max_attempts=5, initial_backoff=0.0, max_backoff=0.0, jitter=0.0)
     m._retry_deadline = None
 
-    result = m.list(limit=1, offset=0)
+    result = await m.list(limit=1, offset=0)
     assert calls["n"] == 3
     assert result[0]["name"] == "sb1"
 
 
-def test_sandbox_manager_raises_on_non_retryable():
+async def test_sandbox_manager_raises_on_non_retryable():
     from shoreguard.client.sandboxes import SandboxManager
 
     class _BadStub:
-        def GetSandbox(self, req, timeout=None):
+        async def GetSandbox(self, req, timeout=None):
             raise _FakeRpcError(grpc.StatusCode.INVALID_ARGUMENT, details="nope")
 
     m = object.__new__(SandboxManager)
@@ -325,4 +332,4 @@ def test_sandbox_manager_raises_on_non_retryable():
     m._retry_deadline = None
 
     with pytest.raises(grpc.RpcError):
-        m.get("sb1")
+        await m.get("sb1")

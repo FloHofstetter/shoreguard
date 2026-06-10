@@ -16,7 +16,6 @@ pattern for long-running creates.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 import shlex
@@ -259,9 +258,7 @@ async def list_sandboxes(
     """
     labels_filter = _parse_label_filters(label)
     gw = get_gateway_name(request)
-    items = await asyncio.to_thread(
-        svc.list, limit=limit, offset=offset, gateway_name=gw, labels_filter=labels_filter
-    )
+    items = await svc.list(limit=limit, offset=offset, gateway_name=gw, labels_filter=labels_filter)
     return {"items": items, "total": None}
 
 
@@ -299,8 +296,7 @@ async def create_sandbox(
 
     async def work(op):
         logger.info("Starting sandbox creation: '%s' (op=%s, actor=%s)", sandbox_name, op.id, actor)
-        result = await asyncio.to_thread(
-            svc.create,
+        result = await svc.create(
             name=body.name,
             image=body.image,
             gpu=body.gpu,
@@ -320,10 +316,8 @@ async def create_sandbox(
 
             ready_timeout = get_settings().sandbox.ready_timeout
             try:
-                await asyncio.to_thread(
-                    client.sandboxes.wait_ready, sb_name, timeout_seconds=ready_timeout
-                )
-                result = await asyncio.to_thread(svc.get, sb_name, gateway_name=gw)
+                await client.sandboxes.wait_ready(sb_name, timeout_seconds=ready_timeout)
+                result = await svc.get(sb_name, gateway_name=gw)
             except TimeoutError:
                 result["warning"] = _ready_timeout_warning(ready_timeout)
         logger.info("Sandbox creation completed: '%s' (op=%s)", sandbox_name, op.id)
@@ -382,7 +376,7 @@ async def get_sandbox(
         dict[str, Any]: Sandbox record.
     """
     gw = get_gateway_name(request)
-    return await asyncio.to_thread(svc.get, name, gateway_name=gw)
+    return await svc.get(name, gateway_name=gw)
 
 
 @router.patch(
@@ -412,8 +406,7 @@ async def update_sandbox_metadata(
     gw = get_gateway_name(request)
     from shoreguard.services.sandbox_meta import _UNSET
 
-    result = await asyncio.to_thread(
-        svc.update_metadata,
+    result = await svc.update_metadata(
         gw,
         name,
         description=body.description if body.description is not None else _UNSET,
@@ -447,7 +440,7 @@ async def get_sandbox_config(
         dict[str, Any]: Sandbox configuration as returned by the gateway.
     """
     del request  # only accepted to match the route-dependency shape
-    return await asyncio.to_thread(svc.get_config, name)
+    return await svc.get_config(name)
 
 
 @router.get("/{name}/provider-env", response_model=SandboxProviderEnvResponse)
@@ -472,7 +465,7 @@ async def get_sandbox_provider_env(
         dict[str, dict[str, str]]: ``{"env": {key: "[REDACTED]"}}``.
     """
     del request
-    raw = await asyncio.to_thread(svc.get_provider_environment, name)
+    raw = await svc.get_provider_environment(name)
     return {"env": dict.fromkeys(raw, "[REDACTED]")}
 
 
@@ -494,7 +487,7 @@ async def list_sandbox_providers(
     Returns:
         list[dict[str, Any]]: Attached provider records.
     """
-    return await asyncio.to_thread(svc.list_providers, name)
+    return await svc.list_providers(name)
 
 
 @router.post(
@@ -523,7 +516,7 @@ async def attach_sandbox_provider(
             :class:`AttachSandboxProviderResponse`.
     """
     check_write_rate_limit(request)
-    result = await asyncio.to_thread(svc.attach_provider, name, body.provider_name)
+    result = await svc.attach_provider(name, body.provider_name)
     actor = get_actor(request)
     gw = get_gateway_name(request)
     logger.info(
@@ -569,7 +562,7 @@ async def detach_sandbox_provider(
             :class:`DetachSandboxProviderResponse`.
     """
     check_write_rate_limit(request)
-    result = await asyncio.to_thread(svc.detach_provider, name, provider_name)
+    result = await svc.detach_provider(name, provider_name)
     actor = get_actor(request)
     gw = get_gateway_name(request)
     logger.info(
@@ -610,7 +603,7 @@ async def delete_sandbox(
         dict[str, bool]: Deletion status.
     """
     gw = get_gateway_name(request)
-    deleted = await asyncio.to_thread(svc.delete, name, gateway_name=gw)
+    deleted = await svc.delete(name, gateway_name=gw)
     if deleted:
         actor = get_actor(request)
         logger.info("Sandbox deleted (sandbox=%s, actor=%s)", name, actor)
@@ -657,8 +650,7 @@ async def exec_in_sandbox(
     gw = get_gateway_name(request)
 
     async def work(op):
-        result = await asyncio.to_thread(
-            svc.exec,
+        result = await svc.exec(
             name,
             body.command,
             workdir=body.workdir,
@@ -715,7 +707,7 @@ async def create_ssh_session(
     Returns:
         dict[str, Any]: SSH session details including token and connection info.
     """
-    result = await asyncio.to_thread(svc.create_ssh_session, name)
+    result = await svc.create_ssh_session(name)
     logger.info("SSH session created (sandbox=%s, actor=%s)", name, get_actor(request))
     await audit_log(
         request, "sandbox.ssh.create", "sandbox", name, gateway=get_gateway_name(request)
@@ -745,7 +737,7 @@ async def revoke_ssh_session(
     Returns:
         dict[str, bool]: Revocation status.
     """
-    revoked = await asyncio.to_thread(svc.revoke_ssh_session, body.token)
+    revoked = await svc.revoke_ssh_session(body.token)
     logger.info("SSH session revoked (sandbox=%s, actor=%s)", name, get_actor(request))
     await audit_log(
         request, "sandbox.ssh.revoke", "sandbox", name, gateway=get_gateway_name(request)
@@ -850,13 +842,8 @@ async def get_sandbox_logs(
     """
     source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else None
     # Always pull with min_level="" so OCSF events survive the gateway filter.
-    logs = await asyncio.to_thread(
-        svc.get_logs,
-        name,
-        lines=lines,
-        since_ms=since_ms,
-        sources=source_list,
-        min_level="",
+    logs = await svc.get_logs(
+        name, lines=lines, since_ms=since_ms, sources=source_list, min_level=""
     )
     for entry in logs:
         ocsf = parse_ocsf_log(entry)

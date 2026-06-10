@@ -9,12 +9,10 @@ construction time, and exposes four submanagers —
 which maps a logical surface onto a subset of the underlying
 RPCs.
 
-The client is intentionally synchronous: gRPC itself is sync,
-and all the service layers wrap calls in
-``asyncio.to_thread`` when they need to run inside a FastAPI
-async route. Keeping the client sync avoids the double-wrapping
-that an async gRPC client would require without any benefit at
-this scale.
+The client is async-native: channels are ``grpc.aio`` channels
+and every RPC method is a coroutine, so FastAPI routes await
+them directly with no thread hops. Synchronous callers (the
+Typer CLI) wrap calls in ``asyncio.run``.
 """
 
 from __future__ import annotations
@@ -200,9 +198,9 @@ class ShoreGuardClient:
                 private_key=key_bytes,
                 certificate_chain=cert_bytes,
             )
-            self._channel = grpc.secure_channel(endpoint, credentials)
+            self._channel = grpc.aio.secure_channel(endpoint, credentials)
         else:
-            self._channel = grpc.insecure_channel(endpoint)
+            self._channel = grpc.aio.insecure_channel(endpoint)
 
         self._stub = openshell_pb2_grpc.OpenShellStub(self._channel)
         self._inference_stub = inference_pb2_grpc.InferenceStub(self._channel)
@@ -288,10 +286,10 @@ class ShoreGuardClient:
                 private_key=key_bytes,
                 certificate_chain=cert_bytes,
             )
-            instance._channel = grpc.secure_channel(endpoint, credentials)
+            instance._channel = grpc.aio.secure_channel(endpoint, credentials)
             logger.debug("Creating secure gRPC channel to %s", endpoint)
         else:
-            instance._channel = grpc.insecure_channel(endpoint)
+            instance._channel = grpc.aio.insecure_channel(endpoint)
             logger.debug("Creating insecure gRPC channel to %s", endpoint)
 
         instance._stub = openshell_pb2_grpc.OpenShellStub(instance._channel)
@@ -359,17 +357,17 @@ class ShoreGuardClient:
             )
         return cls(endpoint, timeout=timeout)
 
-    def health(self) -> dict:
+    async def health(self) -> dict:
         """Check gateway health.
 
         Returns:
             dict: Status and version of the gateway.
         """
-        resp = self._stub.Health(openshell_pb2.HealthRequest(), timeout=self._timeout)
+        resp = await self._stub.Health(openshell_pb2.HealthRequest(), timeout=self._timeout)
         status_names = {0: "unspecified", 1: "healthy", 2: "degraded", 3: "unhealthy"}
         return {"status": status_names.get(resp.status, "unknown"), "version": resp.version}
 
-    def get_inference_bundle(self) -> dict:
+    async def get_inference_bundle(self) -> dict:
         """Get the resolved inference bundle (routes after policy overlay).
 
         API keys are redacted: each route exposes only ``has_api_key`` (bool),
@@ -380,7 +378,7 @@ class ShoreGuardClient:
                 route contains name, base_url, protocols, model_id,
                 provider_type, timeout_secs, has_api_key.
         """
-        resp = self._inference_stub.GetInferenceBundle(
+        resp = await self._inference_stub.GetInferenceBundle(
             inference_pb2.GetInferenceBundleRequest(),
             timeout=self._timeout,
         )
@@ -401,7 +399,7 @@ class ShoreGuardClient:
             ],
         }
 
-    def get_cluster_inference(self, *, route_name: str = "") -> dict:
+    async def get_cluster_inference(self, *, route_name: str = "") -> dict:
         """Get current cluster inference configuration.
 
         Args:
@@ -410,7 +408,7 @@ class ShoreGuardClient:
         Returns:
             dict: Inference configuration with provider, model, and route.
         """
-        resp = self._inference_stub.GetClusterInference(
+        resp = await self._inference_stub.GetClusterInference(
             inference_pb2.GetClusterInferenceRequest(route_name=route_name),
             timeout=self._timeout,
         )
@@ -422,13 +420,13 @@ class ShoreGuardClient:
             "timeout_secs": resp.timeout_secs,
         }
 
-    def get_gateway_config(self) -> dict:
+    async def get_gateway_config(self) -> dict:
         """Get the global gateway configuration (settings and revision).
 
         Returns:
             dict: Settings map and settings revision number.
         """
-        resp = self._stub.GetGatewayConfig(
+        resp = await self._stub.GetGatewayConfig(
             sandbox_pb2.GetGatewayConfigRequest(), timeout=self._timeout
         )
         settings: dict[str, str | bool | int | bytes] = {}
@@ -444,7 +442,7 @@ class ShoreGuardClient:
                 settings[key] = val.bytes_value
         return {"settings": settings, "settings_revision": resp.settings_revision}
 
-    def update_gateway_setting(
+    async def update_gateway_setting(
         self,
         *,
         key: str,
@@ -482,7 +480,7 @@ class ShoreGuardClient:
                 raise TypeError(f"Unsupported setting value type: {type(value).__name__}")
             setting_value = sv
 
-        resp = self._stub.UpdateConfig(
+        resp = await self._stub.UpdateConfig(
             openshell_pb2.UpdateConfigRequest(
                 setting_key=key,
                 setting_value=setting_value,
@@ -496,7 +494,7 @@ class ShoreGuardClient:
             "deleted": resp.deleted,
         }
 
-    def set_cluster_inference(
+    async def set_cluster_inference(
         self,
         *,
         provider_name: str,
@@ -517,7 +515,7 @@ class ShoreGuardClient:
         Returns:
             dict: Updated inference configuration with validation results.
         """
-        resp = self._inference_stub.SetClusterInference(
+        resp = await self._inference_stub.SetClusterInference(
             inference_pb2.SetClusterInferenceRequest(
                 provider_name=provider_name,
                 model_id=model_id,
@@ -554,7 +552,7 @@ class ShoreGuardClient:
         """
         return self._cert_info
 
-    def reload_credentials(
+    async def reload_credentials(
         self,
         *,
         ca_cert: bytes,
@@ -588,7 +586,7 @@ class ShoreGuardClient:
             certificate_chain=client_cert,
         )
         old_channel = self._channel
-        self._channel = grpc.secure_channel(self._endpoint, credentials)
+        self._channel = grpc.aio.secure_channel(self._endpoint, credentials)
         self._stub = openshell_pb2_grpc.OpenShellStub(self._channel)
         self._inference_stub = inference_pb2_grpc.InferenceStub(self._channel)
         self.sandboxes = SandboxManager(
@@ -603,29 +601,29 @@ class ShoreGuardClient:
         self.provider_profiles = ProviderProfileManager(self._stub, timeout=self._timeout)
         self.services = ServiceManager(self._stub, timeout=self._timeout)
         try:
-            old_channel.close()
+            await old_channel.close()
         except Exception:  # noqa: BLE001
             logger.debug("old channel close raised during reload_credentials", exc_info=True)
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Close the underlying gRPC channel."""
-        self._channel.close()
+        await self._channel.close()
 
-    def __enter__(self) -> ShoreGuardClient:
-        """Support usage as a context manager.
+    async def __aenter__(self) -> ShoreGuardClient:
+        """Support usage as an async context manager.
 
         Returns:
             ShoreGuardClient: This client instance.
         """
         return self
 
-    def __exit__(self, *args: object) -> None:
+    async def __aexit__(self, *args: object) -> None:
         """Close the channel on context exit.
 
         Args:
             *args: Exception info (exc_type, exc_val, exc_tb).
         """
-        self.close()
+        await self.close()
 
 
 def _resolve_active_cluster() -> str:

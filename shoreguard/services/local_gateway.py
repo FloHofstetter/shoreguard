@@ -5,13 +5,13 @@ Only used when SHOREGUARD_LOCAL_MODE=1 or for backward-compatible v0.2 workflows
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import shutil
 import subprocess
-import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import grpc
@@ -114,7 +114,7 @@ class LocalGatewayManager:
 
     # ── Lifecycle actions ─────────────────────────────────────────────────
 
-    def start(self, name: str) -> dict[str, Any]:
+    async def start(self, name: str) -> dict[str, Any]:
         """Start a gateway by name.
 
         Args:
@@ -126,7 +126,7 @@ class LocalGatewayManager:
         gw_name = name
         logger.info("Starting gateway '%s'", gw_name)
 
-        if not self._check_docker_daemon():
+        if not await asyncio.to_thread(self._check_docker_daemon):
             logger.error("Cannot start gateway '%s': Docker daemon is not running", gw_name)
             return {
                 "success": False,
@@ -134,19 +134,19 @@ class LocalGatewayManager:
                 "Start it first: sudo systemctl start docker",
             }
 
-        status = self._get_container_status(gw_name)
+        status = await asyncio.to_thread(self._get_container_status, gw_name)
 
         if status == "running":
             try:
-                self._gw.get_client(name=gw_name)
+                await self._gw.get_client(name=gw_name)
             except GatewayNotConnectedError:
                 logger.debug("Gateway '%s' running but not yet connectable", gw_name)
             return {"success": True, "output": "Gateway is already running"}
 
         if status in ("exited", "created", "dead"):
-            port = self._get_port_for_gateway(gw_name)
+            port = await asyncio.to_thread(self._get_port_for_gateway, gw_name)
             if port:
-                blocker = self._find_port_blocker(gw_name, port)
+                blocker = await asyncio.to_thread(self._find_port_blocker, gw_name, port)
                 if blocker:
                     logger.warning(
                         "Port conflict when starting '%s': port %d in use by '%s'",
@@ -163,14 +163,14 @@ class LocalGatewayManager:
                         ),
                     }
 
-            result = self._docker_start_container(gw_name)
+            result = await asyncio.to_thread(self._docker_start_container, gw_name)
             if result["success"]:
                 self._gw.reset_backoff(name=gw_name)
                 lgw = get_settings().local_gw
                 for attempt in range(lgw.startup_retries):
-                    time.sleep(lgw.startup_sleep)
+                    await asyncio.sleep(lgw.startup_sleep)
                     try:
-                        self._gw.get_client(name=gw_name)
+                        await self._gw.get_client(name=gw_name)
                         break
                     except GatewayNotConnectedError:
                         logger.debug(
@@ -190,17 +190,19 @@ class LocalGatewayManager:
             return {"success": False, "error": "openshell CLI not found"}
 
         args = ["gateway", "start", "--name", gw_name]
-        result = self._run_openshell(args, timeout=int(get_settings().local_gw.openshell_timeout))
+        result = await asyncio.to_thread(
+            self._run_openshell, args, timeout=int(get_settings().local_gw.openshell_timeout)
+        )
 
         if result["success"]:
             try:
-                self._gw.get_client(name=gw_name)
+                await self._gw.get_client(name=gw_name)
             except GatewayNotConnectedError:
                 logger.debug("Gateway '%s' started but not yet connectable", gw_name)
 
         return result
 
-    def stop(self, name: str) -> dict[str, Any]:
+    async def stop(self, name: str) -> dict[str, Any]:
         """Stop a gateway by name.
 
         Args:
@@ -212,18 +214,18 @@ class LocalGatewayManager:
         gw_name = name
         logger.info("Stopping gateway '%s'", gw_name)
 
-        status = self._get_container_status(gw_name)
+        status = await asyncio.to_thread(self._get_container_status, gw_name)
         if status != "running":
             return {"success": True, "output": "Gateway is already stopped"}
 
-        result = self._docker_stop_container(gw_name)
+        result = await asyncio.to_thread(self._docker_stop_container, gw_name)
 
         if result["success"]:
             self._gw.set_client(None, name=gw_name)
 
         return result
 
-    def restart(self, name: str) -> dict[str, Any]:
+    async def restart(self, name: str) -> dict[str, Any]:
         """Restart a gateway (stop + start).
 
         Args:
@@ -233,10 +235,10 @@ class LocalGatewayManager:
             dict[str, Any]: Result from the start step.
         """
         logger.info("Restarting gateway '%s'", name)
-        self.stop(name=name)
-        return self.start(name=name)
+        await self.stop(name=name)
+        return await self.start(name=name)
 
-    def create(
+    async def create(
         self,
         name: str,
         port: int | None = None,
@@ -259,7 +261,7 @@ class LocalGatewayManager:
             logger.error("Cannot create gateway '%s': openshell CLI not found", name)
             return {"success": False, "error": "openshell CLI not found"}
 
-        if not self._check_docker_daemon():
+        if not await asyncio.to_thread(self._check_docker_daemon):
             logger.error("Cannot create gateway '%s': Docker daemon is not running", name)
             return {
                 "success": False,
@@ -268,7 +270,7 @@ class LocalGatewayManager:
             }
 
         if port and port > 0:
-            blocker = self._find_port_blocker(name, port)
+            blocker = await asyncio.to_thread(self._find_port_blocker, name, port)
             if blocker:
                 return {
                     "success": False,
@@ -279,7 +281,7 @@ class LocalGatewayManager:
                     ),
                 }
         else:
-            port = self._next_free_port()
+            port = await asyncio.to_thread(self._next_free_port)
 
         args = ["gateway", "start", "--name", name, "--port", str(port)]
         if remote_host:
@@ -287,20 +289,22 @@ class LocalGatewayManager:
         if gpu:
             args.append("--gpu")
 
-        result = self._run_openshell(args, timeout=int(get_settings().local_gw.openshell_timeout))
+        result = await asyncio.to_thread(
+            self._run_openshell, args, timeout=int(get_settings().local_gw.openshell_timeout)
+        )
 
         if result["success"]:
             try:
-                self._gw.get_client(name=name)
+                await self._gw.get_client(name=name)
             except GatewayNotConnectedError:
                 logger.debug("Gateway '%s' created but not yet connectable", name)
-            info = self._gw.get_info(name)
+            info = await self._gw.get_info(name)
             info["gpu"] = gpu
             return info
 
         return result
 
-    def destroy(self, name: str, *, force: bool = False) -> dict[str, Any]:
+    async def destroy(self, name: str, *, force: bool = False) -> dict[str, Any]:
         """Destroy a gateway and remove its configuration.
 
         Args:
@@ -316,10 +320,10 @@ class LocalGatewayManager:
 
         logger.info("Destroying gateway '%s'", name)
 
-        client = self._get_client_if_connected(name)
+        client = await self._get_client_if_connected(name)
         if client is not None:
-            sandboxes = self._list_resources_safe(client.sandboxes.list)
-            providers = self._list_resources_safe(client.providers.list)
+            sandboxes = await self._list_resources_safe(client.sandboxes.list)
+            providers = await self._list_resources_safe(client.providers.list)
 
             if sandboxes is None or providers is None:
                 if not force:
@@ -351,7 +355,7 @@ class LocalGatewayManager:
                     sb_name = sb.get("name", "")
                     if sb_name:
                         try:
-                            client.sandboxes.delete(sb_name)
+                            await client.sandboxes.delete(sb_name)
                         except (grpc.RpcError, OSError, ConnectionError) as e:
                             logger.warning(
                                 "Failed to delete sandbox '%s' during gateway cleanup: %s",
@@ -363,7 +367,7 @@ class LocalGatewayManager:
                     prov_name = prov.get("name", "")
                     if prov_name:
                         try:
-                            client.providers.delete(prov_name)
+                            await client.providers.delete(prov_name)
                         except (grpc.RpcError, OSError, ConnectionError) as e:
                             logger.warning(
                                 "Failed to delete provider '%s' during gateway cleanup: %s",
@@ -373,7 +377,8 @@ class LocalGatewayManager:
 
         self._gw.set_client(None, name=name)
 
-        return self._run_openshell(
+        return await asyncio.to_thread(
+            self._run_openshell,
             ["gateway", "destroy", "--name", name],
             timeout=int(get_settings().local_gw.docker_timeout),
         )
@@ -617,7 +622,7 @@ class LocalGatewayManager:
 
     # ── Internal helpers ──────────────────────────────────────────────────
 
-    def _get_client_if_connected(self, name: str) -> ShoreGuardClient | None:
+    async def _get_client_if_connected(self, name: str) -> ShoreGuardClient | None:
         """Return a connected client for the gateway, or None.
 
         Args:
@@ -630,7 +635,7 @@ class LocalGatewayManager:
         if cached is not None:
             return cached
         try:
-            return self._gw.get_client(name=name)
+            return await self._gw.get_client(name=name)
         except GatewayNotConnectedError, grpc.RpcError, OSError:
             logger.debug(
                 "Could not connect to gateway '%s' for resource listing",
@@ -639,17 +644,19 @@ class LocalGatewayManager:
             )
         return None
 
-    def _list_resources_safe(self, list_fn: Callable[[], list[dict]]) -> list[dict] | None:
+    async def _list_resources_safe(
+        self, list_fn: Callable[[], Awaitable[list[dict]]]
+    ) -> list[dict] | None:
         """Return resource list, or None if the listing call failed.
 
         Args:
-            list_fn: Callable that returns a list of resource dicts.
+            list_fn: Async callable that returns a list of resource dicts.
 
         Returns:
             list[dict] | None: Resource list, or None on failure.
         """
         try:
-            return list_fn()
+            return await list_fn()
         except grpc.RpcError, OSError, ConnectionError:
             logger.debug("Failed to list resources via %s", list_fn, exc_info=True)
             return None

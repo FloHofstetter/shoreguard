@@ -28,7 +28,7 @@ def _mock_meta(provider_types: dict):
 
 
 @patch("shoreguard.services.providers.get_openshell_meta")
-def test_create_maps_cred_key(mock_get_meta, provider_svc, mock_client):
+async def test_create_maps_cred_key(mock_get_meta, provider_svc, mock_client):
     """Create maps api_key to the correct credential key from openshell.yaml."""
     mock_get_meta.return_value = _mock_meta(
         {
@@ -37,7 +37,7 @@ def test_create_maps_cred_key(mock_get_meta, provider_svc, mock_client):
     )
     mock_client.providers.create.return_value = {"name": "my-claude"}
 
-    result = provider_svc.create(
+    result = await provider_svc.create(
         name="my-claude",
         provider_type="anthropic",
         api_key="sk-ant-xxx",
@@ -49,12 +49,12 @@ def test_create_maps_cred_key(mock_get_meta, provider_svc, mock_client):
 
 
 @patch("shoreguard.services.providers.get_openshell_meta")
-def test_create_unknown_type_fallback(mock_get_meta, provider_svc, mock_client):
+async def test_create_unknown_type_fallback(mock_get_meta, provider_svc, mock_client):
     """Unknown provider type falls back to API_KEY as credential key."""
     mock_get_meta.return_value = _mock_meta({})
     mock_client.providers.create.return_value = {"name": "custom"}
 
-    provider_svc.create(
+    await provider_svc.create(
         name="custom",
         provider_type="unknown_provider",
         api_key="key123",
@@ -65,7 +65,7 @@ def test_create_unknown_type_fallback(mock_get_meta, provider_svc, mock_client):
 
 
 @patch("shoreguard.services.providers.get_openshell_meta")
-def test_list_known_types(mock_get_meta):
+async def test_list_known_types(mock_get_meta):
     """list_known_types returns formatted list from openshell meta."""
     mock_get_meta.return_value = _mock_meta(
         {
@@ -81,31 +81,31 @@ def test_list_known_types(mock_get_meta):
     assert types == {"openai", "anthropic"}
 
 
-def test_list(provider_svc, mock_client):
+async def test_list(provider_svc, mock_client):
     """list() delegates limit/offset to client."""
     mock_client.providers.list.return_value = [{"name": "p1"}, {"name": "p2"}]
 
-    result = provider_svc.list(limit=50, offset=5)
+    result = await provider_svc.list(limit=50, offset=5)
 
     mock_client.providers.list.assert_called_once_with(limit=50, offset=5)
     assert len(result) == 2
 
 
-def test_get(provider_svc, mock_client):
+async def test_get(provider_svc, mock_client):
     """get() delegates name to client."""
     mock_client.providers.get.return_value = {"name": "my-prov"}
 
-    result = provider_svc.get("my-prov")
+    result = await provider_svc.get("my-prov")
 
     mock_client.providers.get.assert_called_once_with("my-prov")
     assert result["name"] == "my-prov"
 
 
-def test_update(provider_svc, mock_client):
+async def test_update(provider_svc, mock_client):
     """update() forwards all kwargs to client."""
     mock_client.providers.update.return_value = {"name": "my-prov"}
 
-    result = provider_svc.update(
+    result = await provider_svc.update(
         name="my-prov",
         provider_type="openai",
         credentials={"OPENAI_API_KEY": "sk-xxx"},
@@ -120,24 +120,24 @@ def test_update(provider_svc, mock_client):
     assert result["name"] == "my-prov"
 
 
-def test_delete(provider_svc, mock_client):
+async def test_delete(provider_svc, mock_client):
     """delete() delegates name to client and returns bool."""
     mock_client.providers.delete.return_value = True
 
-    result = provider_svc.delete("my-prov")
+    result = await provider_svc.delete("my-prov")
 
     mock_client.providers.delete.assert_called_once_with("my-prov")
     assert result is True
 
 
-def test_list_inference_providers():
+async def test_list_inference_providers():
     """list_inference_providers returns a list from openshell meta."""
     result = ProviderService.list_inference_providers()
 
     assert isinstance(result, list)
 
 
-def test_list_community_sandboxes():
+async def test_list_community_sandboxes():
     """list_community_sandboxes returns a list (may be empty if openshell.yaml absent)."""
     result = ProviderService.list_community_sandboxes()
 
@@ -147,11 +147,11 @@ def test_list_community_sandboxes():
 # ─── Credential refresh / rotation delegation ────────────────────────────────
 
 
-def test_configure_refresh_delegates(provider_svc, mock_client):
+async def test_configure_refresh_delegates(provider_svc, mock_client):
     """configure_refresh forwards every argument to the client manager."""
     mock_client.providers.configure_refresh.return_value = {"status": "active"}
 
-    provider_svc.configure_refresh(
+    await provider_svc.configure_refresh(
         provider="p1",
         credential_key="K",
         strategy="oauth2_refresh_token",
@@ -170,31 +170,31 @@ def test_configure_refresh_delegates(provider_svc, mock_client):
     )
 
 
-def test_get_refresh_status_delegates(provider_svc, mock_client):
+async def test_get_refresh_status_delegates(provider_svc, mock_client):
     """get_refresh_status forwards provider and credential_key."""
     mock_client.providers.get_refresh_status.return_value = []
 
-    provider_svc.get_refresh_status("p1", credential_key="K")
+    await provider_svc.get_refresh_status("p1", credential_key="K")
 
     mock_client.providers.get_refresh_status.assert_called_once_with("p1", credential_key="K")
 
 
-def test_rotate_credential_delegates(provider_svc, mock_client):
+async def test_rotate_credential_delegates(provider_svc, mock_client):
     """rotate_credential forwards provider and credential_key."""
     mock_client.providers.rotate_credential.return_value = {"status": "active"}
 
-    provider_svc.rotate_credential(provider="p1", credential_key="K")
+    await provider_svc.rotate_credential(provider="p1", credential_key="K")
 
     mock_client.providers.rotate_credential.assert_called_once_with(
         provider="p1", credential_key="K"
     )
 
 
-def test_delete_refresh_delegates(provider_svc, mock_client):
+async def test_delete_refresh_delegates(provider_svc, mock_client):
     """delete_refresh forwards provider and credential_key and returns the bool."""
     mock_client.providers.delete_refresh.return_value = True
 
-    result = provider_svc.delete_refresh(provider="p1", credential_key="K")
+    result = await provider_svc.delete_refresh(provider="p1", credential_key="K")
 
     assert result is True
     mock_client.providers.delete_refresh.assert_called_once_with(provider="p1", credential_key="K")

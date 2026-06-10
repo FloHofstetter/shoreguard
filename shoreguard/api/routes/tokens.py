@@ -10,7 +10,6 @@ returned to the operator but never written to the audit log.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -47,7 +46,7 @@ async def issue_token(
         dict[str, Any]: ``{"token": str, "expires_at_ms": int}``.
     """
     check_write_rate_limit(request)
-    result = await asyncio.to_thread(client.sandboxes.issue_token)
+    result = await client.sandboxes.issue_token()
     logger.info("Gateway token issued (actor=%s)", get_actor(request))
     # Token value deliberately excluded from the audit detail.
     await audit_log(
@@ -79,7 +78,7 @@ async def refresh_token(
         dict[str, Any]: ``{"token": str, "expires_at_ms": int}``.
     """
     check_write_rate_limit(request)
-    result = await asyncio.to_thread(client.sandboxes.refresh_token)
+    result = await client.sandboxes.refresh_token()
     logger.info("Gateway token refreshed (actor=%s)", get_actor(request))
     await audit_log(
         request,

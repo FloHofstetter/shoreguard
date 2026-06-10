@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -37,11 +37,11 @@ class _FakeOpenShellStub:
     def __init__(self):
         self.request = None
 
-    def Health(self, req, timeout=None):
+    async def Health(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(status=1, version="1.2.3")
 
-    def GetGatewayConfig(self, req, timeout=None):
+    async def GetGatewayConfig(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(
             settings={
@@ -62,7 +62,7 @@ class _FakeInferenceStub:
     def __init__(self):
         self.request = None
 
-    def GetClusterInference(self, req, timeout=None):
+    async def GetClusterInference(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(
             provider_name="anthropic",
@@ -72,7 +72,7 @@ class _FakeInferenceStub:
             timeout_secs=30,
         )
 
-    def GetInferenceBundle(self, req, timeout=None):
+    async def GetInferenceBundle(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(
             revision="rev-42",
@@ -99,7 +99,7 @@ class _FakeInferenceStub:
             ],
         )
 
-    def SetClusterInference(self, req, timeout=None):
+    async def SetClusterInference(self, req, timeout=None):
         self.request = req
         resp = SimpleNamespace(
             provider_name=req.provider_name,
@@ -121,23 +121,23 @@ def client():
     c = object.__new__(ShoreGuardClient)
     c._endpoint = "localhost:8080"
     c._timeout = 30.0
-    c._channel = MagicMock()
+    c._channel = AsyncMock()
     c._stub = _FakeOpenShellStub()  # type: ignore[assignment]
     c._inference_stub = _FakeInferenceStub()  # type: ignore[assignment]
-    c.sandboxes = MagicMock()
-    c.policies = MagicMock()
-    c.approvals = MagicMock()
-    c.providers = MagicMock()
+    c.sandboxes = AsyncMock()
+    c.policies = AsyncMock()
+    c.approvals = AsyncMock()
+    c.providers = AsyncMock()
     return c
 
 
 # ─── Constructor ──────────────────────────────────────────────────────────────
 
 
-def test_init_insecure(monkeypatch):
+async def test_init_insecure(monkeypatch):
     """Constructor without certs creates insecure channel."""
     mock_channel = MagicMock()
-    monkeypatch.setattr("grpc.insecure_channel", lambda ep: mock_channel)
+    monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: mock_channel)
 
     c = ShoreGuardClient("localhost:8080")
 
@@ -145,7 +145,7 @@ def test_init_insecure(monkeypatch):
     assert c._channel is mock_channel
 
 
-def test_init_mtls(tmp_path, monkeypatch):
+async def test_init_mtls(tmp_path, monkeypatch):
     """Constructor with certs validates the bundle and creates a secure channel."""
     ca = tmp_path / "ca.crt"
     cert = tmp_path / "tls.crt"
@@ -156,7 +156,7 @@ def test_init_mtls(tmp_path, monkeypatch):
 
     mock_channel = MagicMock()
     monkeypatch.setattr("grpc.ssl_channel_credentials", lambda **kw: MagicMock())
-    monkeypatch.setattr("grpc.secure_channel", lambda ep, creds: mock_channel)
+    monkeypatch.setattr("grpc.aio.secure_channel", lambda ep, creds: mock_channel)
     monkeypatch.setattr(
         "shoreguard.client.validate_bundle",
         lambda **kw: MagicMock(seconds_until_expiry=365 * 86400),
@@ -170,7 +170,7 @@ def test_init_mtls(tmp_path, monkeypatch):
 # ─── from_active_cluster ─────────────────────────────────────────────────────
 
 
-def test_from_active_cluster_http(tmp_path, monkeypatch):
+async def test_from_active_cluster_http(tmp_path, monkeypatch):
     """from_active_cluster parses http endpoint and creates insecure client."""
     config_dir = tmp_path / "openshell"
     gw_dir = config_dir / "gateways" / "my-gw"
@@ -183,13 +183,13 @@ def test_from_active_cluster_http(tmp_path, monkeypatch):
         )
     )
     monkeypatch.setattr("shoreguard.client.openshell_config_dir", lambda: config_dir)
-    monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+    monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
 
     c = ShoreGuardClient.from_active_cluster(cluster="my-gw")
     assert c._endpoint == "127.0.0.1:8080"
 
 
-def test_from_active_cluster_https(tmp_path, monkeypatch):
+async def test_from_active_cluster_https(tmp_path, monkeypatch):
     """from_active_cluster with https loads mTLS certs."""
     config_dir = tmp_path / "openshell"
     gw_dir = config_dir / "gateways" / "my-gw"
@@ -208,19 +208,19 @@ def test_from_active_cluster_https(tmp_path, monkeypatch):
 
     monkeypatch.setattr("shoreguard.client.openshell_config_dir", lambda: config_dir)
     monkeypatch.setattr("grpc.ssl_channel_credentials", lambda **kw: MagicMock())
-    monkeypatch.setattr("grpc.secure_channel", lambda ep, creds: MagicMock())
+    monkeypatch.setattr("grpc.aio.secure_channel", lambda ep, creds: MagicMock())
 
     c = ShoreGuardClient.from_active_cluster(cluster="my-gw")
     assert c._endpoint == "myhost:443"
 
 
-def test_resolve_active_cluster_env_var(monkeypatch):
+async def test_resolve_active_cluster_env_var(monkeypatch):
     """OPENSHELL_GATEWAY env var overrides config file."""
     monkeypatch.setenv("OPENSHELL_GATEWAY", "env-gw")
     assert _resolve_active_cluster() == "env-gw"
 
 
-def test_resolve_active_cluster_file(tmp_path, monkeypatch):
+async def test_resolve_active_cluster_file(tmp_path, monkeypatch):
     """Reads gateway name from active_gateway file."""
     config_dir = tmp_path / "openshell"
     config_dir.mkdir()
@@ -231,7 +231,7 @@ def test_resolve_active_cluster_file(tmp_path, monkeypatch):
     assert _resolve_active_cluster() == "file-gw"
 
 
-def test_resolve_active_cluster_empty(tmp_path, monkeypatch):
+async def test_resolve_active_cluster_empty(tmp_path, monkeypatch):
     """Empty active_gateway file raises GatewayNotConnectedError."""
     config_dir = tmp_path / "openshell"
     config_dir.mkdir()
@@ -246,16 +246,16 @@ def test_resolve_active_cluster_empty(tmp_path, monkeypatch):
 # ─── gRPC methods ─────────────────────────────────────────────────────────────
 
 
-def test_health(client):
+async def test_health(client):
     """health() maps status enum to string and returns version."""
-    result = client.health()
+    result = await client.health()
     assert result["status"] == "healthy"
     assert result["version"] == "1.2.3"
 
 
-def test_get_inference_bundle(client):
+async def test_get_inference_bundle(client):
     """get_inference_bundle() returns redacted routes + revision."""
-    result = client.get_inference_bundle()
+    result = await client.get_inference_bundle()
     assert result["revision"] == "rev-42"
     assert result["generated_at_ms"] == 1700000000000
     assert len(result["routes"]) == 2
@@ -276,9 +276,9 @@ def test_get_inference_bundle(client):
     assert "api_key" not in empty_route
 
 
-def test_get_cluster_inference(client):
+async def test_get_cluster_inference(client):
     """get_cluster_inference() returns provider/model dict."""
-    result = client.get_cluster_inference()
+    result = await client.get_cluster_inference()
     assert result["provider_name"] == "anthropic"
     assert result["model_id"] == "claude-sonnet-4-20250514"
     assert result["version"] == 2
@@ -286,9 +286,9 @@ def test_get_cluster_inference(client):
     assert result["timeout_secs"] == 30
 
 
-def test_get_gateway_config(client):
+async def test_get_gateway_config(client):
     """get_gateway_config() unpacks SettingValue oneofs."""
-    result = client.get_gateway_config()
+    result = await client.get_gateway_config()
     assert result["settings"]["log_level"] == "info"
     assert result["settings"]["debug"] is True
     assert result["settings"]["max_retries"] == 5
@@ -296,9 +296,9 @@ def test_get_gateway_config(client):
     assert result["settings_revision"] == 7
 
 
-def test_set_cluster_inference(client):
+async def test_set_cluster_inference(client):
     """set_cluster_inference() returns result with validation fields."""
-    result = client.set_cluster_inference(
+    result = await client.set_cluster_inference(
         provider_name="anthropic", model_id="claude-sonnet-4-20250514", verify=True, timeout_secs=45
     )
     assert result["provider_name"] == "anthropic"
@@ -310,12 +310,12 @@ def test_set_cluster_inference(client):
     assert result["validated_endpoints"][0]["reachable"] is True
 
 
-def test_set_cluster_inference_without_validation(client):
+async def test_set_cluster_inference_without_validation(client):
     """set_cluster_inference works when validation fields are absent."""
 
     # Override with a stub that doesn't have validation fields
     class _NoValidationStub:
-        def SetClusterInference(self, req, timeout=None):
+        async def SetClusterInference(self, req, timeout=None):
             return SimpleNamespace(
                 provider_name="openai",
                 model_id="gpt-4o",
@@ -325,7 +325,7 @@ def test_set_cluster_inference_without_validation(client):
             )
 
     client._inference_stub = _NoValidationStub()
-    result = client.set_cluster_inference(provider_name="openai", model_id="gpt-4o")
+    result = await client.set_cluster_inference(provider_name="openai", model_id="gpt-4o")
     assert result["provider_name"] == "openai"
     assert "validation_performed" not in result
     assert "validated_endpoints" not in result
@@ -334,15 +334,15 @@ def test_set_cluster_inference_without_validation(client):
 # ─── Lifecycle ────────────────────────────────────────────────────────────────
 
 
-def test_close(client):
+async def test_close(client):
     """close() closes the channel."""
-    client.close()
+    await client.close()
     client._channel.close.assert_called_once()
 
 
-def test_context_manager(client):
+async def test_context_manager(client):
     """Context manager calls close on exit."""
-    with client as c:
+    async with client as c:
         assert c is client
     client._channel.close.assert_called_once()
 
@@ -350,10 +350,10 @@ def test_context_manager(client):
 # ─── from_credentials ─────────────────────────────────────────────────────────
 
 
-def test_from_credentials_insecure(monkeypatch):
+async def test_from_credentials_insecure(monkeypatch):
     """from_credentials without certs creates insecure channel."""
     mock_channel = MagicMock()
-    monkeypatch.setattr("grpc.insecure_channel", lambda ep: mock_channel)
+    monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: mock_channel)
 
     c = ShoreGuardClient.from_credentials("host:8443")
 
@@ -361,12 +361,12 @@ def test_from_credentials_insecure(monkeypatch):
     assert c._channel is mock_channel
 
 
-def test_from_credentials_secure(monkeypatch):
+async def test_from_credentials_secure(monkeypatch):
     """from_credentials with all certs creates secure channel."""
     mock_creds = MagicMock()
     mock_channel = MagicMock()
     monkeypatch.setattr("grpc.ssl_channel_credentials", lambda **kw: mock_creds)
-    monkeypatch.setattr("grpc.secure_channel", lambda ep, creds: mock_channel)
+    monkeypatch.setattr("grpc.aio.secure_channel", lambda ep, creds: mock_channel)
 
     c = ShoreGuardClient.from_credentials(
         "host:8443",
@@ -378,10 +378,10 @@ def test_from_credentials_secure(monkeypatch):
     assert c._channel is mock_channel
 
 
-def test_from_credentials_partial_certs_uses_insecure(monkeypatch):
+async def test_from_credentials_partial_certs_uses_insecure(monkeypatch):
     """from_credentials with only some certs falls back to insecure channel."""
     mock_channel = MagicMock()
-    monkeypatch.setattr("grpc.insecure_channel", lambda ep: mock_channel)
+    monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: mock_channel)
 
     c = ShoreGuardClient.from_credentials("host:8443", ca_cert=b"ca-data")
 
@@ -404,25 +404,25 @@ class TestHealthStatusMapping:
             (99, "unknown"),
         ],
     )
-    def test_health_status_codes(self, code, expected, monkeypatch):
+    async def test_health_status_codes(self, code, expected, monkeypatch):
         c = object.__new__(ShoreGuardClient)
         c._endpoint = "localhost:8080"
         c._timeout = 30.0
-        c._channel = MagicMock()
-        c._stub = MagicMock()
+        c._channel = AsyncMock()
+        c._stub = AsyncMock()
         c._stub.Health.return_value = SimpleNamespace(status=code, version="v")
-        result = c.health()
+        result = await c.health()
         assert result["status"] == expected
         assert result["version"] == "v"
 
-    def test_health_uses_timeout(self, monkeypatch):
+    async def test_health_uses_timeout(self, monkeypatch):
         c = object.__new__(ShoreGuardClient)
         c._endpoint = "localhost:8080"
         c._timeout = 42.0
-        c._channel = MagicMock()
-        c._stub = MagicMock()
+        c._channel = AsyncMock()
+        c._stub = AsyncMock()
         c._stub.Health.return_value = SimpleNamespace(status=1, version="v")
-        c.health()
+        await c.health()
         c._stub.Health.assert_called_once()
         _, kwargs = c._stub.Health.call_args
         assert kwargs["timeout"] == 42.0
@@ -431,14 +431,14 @@ class TestHealthStatusMapping:
 class TestGetClusterInferenceMutations:
     """Kill mutations in get_cluster_inference return dict keys/values."""
 
-    def test_route_name_forwarded(self, monkeypatch):
+    async def test_route_name_forwarded(self, monkeypatch):
         c = object.__new__(ShoreGuardClient)
         c._timeout = 5.0
-        c._inference_stub = MagicMock()
+        c._inference_stub = AsyncMock()
         c._inference_stub.GetClusterInference.return_value = SimpleNamespace(
             provider_name="p", model_id="m", version=1, route_name="r", timeout_secs=10
         )
-        result = c.get_cluster_inference(route_name="custom")
+        result = await c.get_cluster_inference(route_name="custom")
         req = c._inference_stub.GetClusterInference.call_args[0][0]
         assert req.route_name == "custom"
         assert result == {
@@ -449,14 +449,14 @@ class TestGetClusterInferenceMutations:
             "timeout_secs": 10,
         }
 
-    def test_default_route_name_empty(self):
+    async def test_default_route_name_empty(self):
         c = object.__new__(ShoreGuardClient)
         c._timeout = 5.0
-        c._inference_stub = MagicMock()
+        c._inference_stub = AsyncMock()
         c._inference_stub.GetClusterInference.return_value = SimpleNamespace(
             provider_name="p", model_id="m", version=1, route_name="", timeout_secs=0
         )
-        c.get_cluster_inference()
+        await c.get_cluster_inference()
         req = c._inference_stub.GetClusterInference.call_args[0][0]
         assert req.route_name == ""
 
@@ -464,42 +464,42 @@ class TestGetClusterInferenceMutations:
 class TestSetClusterInferenceMutations:
     """Kill mutations in set_cluster_inference request building and response dict."""
 
-    def test_verify_true_sets_no_verify_false(self):
+    async def test_verify_true_sets_no_verify_false(self):
         c = object.__new__(ShoreGuardClient)
         c._timeout = 5.0
-        c._inference_stub = MagicMock()
+        c._inference_stub = AsyncMock()
         resp = SimpleNamespace(
             provider_name="p", model_id="m", version=1, route_name="", timeout_secs=0
         )
         # no validation fields
         c._inference_stub.SetClusterInference.return_value = resp
-        c.set_cluster_inference(provider_name="p", model_id="m", verify=True)
+        await c.set_cluster_inference(provider_name="p", model_id="m", verify=True)
         req = c._inference_stub.SetClusterInference.call_args[0][0]
         assert req.verify is True
         assert req.no_verify is False
 
-    def test_verify_false_sets_no_verify_true(self):
+    async def test_verify_false_sets_no_verify_true(self):
         c = object.__new__(ShoreGuardClient)
         c._timeout = 5.0
-        c._inference_stub = MagicMock()
+        c._inference_stub = AsyncMock()
         resp = SimpleNamespace(
             provider_name="p", model_id="m", version=1, route_name="", timeout_secs=0
         )
         c._inference_stub.SetClusterInference.return_value = resp
-        c.set_cluster_inference(provider_name="p", model_id="m", verify=False)
+        await c.set_cluster_inference(provider_name="p", model_id="m", verify=False)
         req = c._inference_stub.SetClusterInference.call_args[0][0]
         assert req.verify is False
         assert req.no_verify is True
 
-    def test_route_name_and_timeout_forwarded(self):
+    async def test_route_name_and_timeout_forwarded(self):
         c = object.__new__(ShoreGuardClient)
         c._timeout = 5.0
-        c._inference_stub = MagicMock()
+        c._inference_stub = AsyncMock()
         resp = SimpleNamespace(
             provider_name="p", model_id="m", version=1, route_name="r", timeout_secs=120
         )
         c._inference_stub.SetClusterInference.return_value = resp
-        result = c.set_cluster_inference(
+        result = await c.set_cluster_inference(
             provider_name="p", model_id="m", route_name="r", timeout_secs=120
         )
         req = c._inference_stub.SetClusterInference.call_args[0][0]
@@ -508,10 +508,10 @@ class TestSetClusterInferenceMutations:
         assert result["route_name"] == "r"
         assert result["timeout_secs"] == 120
 
-    def test_validated_endpoints_fields(self):
+    async def test_validated_endpoints_fields(self):
         c = object.__new__(ShoreGuardClient)
         c._timeout = 5.0
-        c._inference_stub = MagicMock()
+        c._inference_stub = AsyncMock()
         resp = SimpleNamespace(
             provider_name="p",
             model_id="m",
@@ -525,7 +525,7 @@ class TestSetClusterInferenceMutations:
             ],
         )
         c._inference_stub.SetClusterInference.return_value = resp
-        result = c.set_cluster_inference(provider_name="p", model_id="m")
+        result = await c.set_cluster_inference(provider_name="p", model_id="m")
         assert result["validation_performed"] is True
         assert len(result["validated_endpoints"]) == 2
         assert result["validated_endpoints"][0] == {
@@ -545,25 +545,25 @@ class TestSetClusterInferenceMutations:
 class TestGetGatewayConfigMutations:
     """Kill mutations in get_gateway_config oneof handling."""
 
-    def test_unknown_oneof_field_ignored(self):
+    async def test_unknown_oneof_field_ignored(self):
         """A SettingValue with an unknown oneof type is not included."""
         c = object.__new__(ShoreGuardClient)
         c._timeout = 5.0
-        c._stub = MagicMock()
+        c._stub = AsyncMock()
         c._stub.GetGatewayConfig.return_value = SimpleNamespace(
             settings={
                 "unknown": SimpleNamespace(WhichOneof=lambda _: "future_value"),
             },
             settings_revision=1,
         )
-        result = c.get_gateway_config()
+        result = await c.get_gateway_config()
         assert result["settings"] == {}
         assert result["settings_revision"] == 1
 
-    def test_each_value_type_maps_correctly(self):
+    async def test_each_value_type_maps_correctly(self):
         c = object.__new__(ShoreGuardClient)
         c._timeout = 5.0
-        c._stub = MagicMock()
+        c._stub = AsyncMock()
         c._stub.GetGatewayConfig.return_value = SimpleNamespace(
             settings={
                 "s": SimpleNamespace(WhichOneof=lambda _: "string_value", string_value="hello"),
@@ -573,7 +573,7 @@ class TestGetGatewayConfigMutations:
             },
             settings_revision=99,
         )
-        result = c.get_gateway_config()
+        result = await c.get_gateway_config()
         assert result["settings"]["s"] == "hello"
         assert result["settings"]["b"] is False
         assert result["settings"]["i"] == 0
@@ -584,7 +584,7 @@ class TestGetGatewayConfigMutations:
 class TestFromActiveClusterMutations:
     """Kill mutations in URL parsing, port defaults, error handling."""
 
-    def test_missing_metadata_raises(self, tmp_path, monkeypatch):
+    async def test_missing_metadata_raises(self, tmp_path, monkeypatch):
         config_dir = tmp_path / "openshell"
         gw_dir = config_dir / "gateways" / "my-gw"
         gw_dir.mkdir(parents=True)
@@ -593,7 +593,7 @@ class TestFromActiveClusterMutations:
         with pytest.raises(GatewayNotConnectedError, match="Failed to load metadata"):
             ShoreGuardClient.from_active_cluster(cluster="my-gw")
 
-    def test_invalid_json_raises(self, tmp_path, monkeypatch):
+    async def test_invalid_json_raises(self, tmp_path, monkeypatch):
         config_dir = tmp_path / "openshell"
         gw_dir = config_dir / "gateways" / "my-gw"
         gw_dir.mkdir(parents=True)
@@ -602,7 +602,7 @@ class TestFromActiveClusterMutations:
         with pytest.raises(GatewayNotConnectedError, match="Failed to load metadata"):
             ShoreGuardClient.from_active_cluster(cluster="my-gw")
 
-    def test_empty_gateway_endpoint_raises(self, tmp_path, monkeypatch):
+    async def test_empty_gateway_endpoint_raises(self, tmp_path, monkeypatch):
         config_dir = tmp_path / "openshell"
         gw_dir = config_dir / "gateways" / "my-gw"
         gw_dir.mkdir(parents=True)
@@ -611,7 +611,7 @@ class TestFromActiveClusterMutations:
         with pytest.raises(GatewayNotConnectedError, match="Missing 'gateway_endpoint'"):
             ShoreGuardClient.from_active_cluster(cluster="my-gw")
 
-    def test_missing_gateway_endpoint_key_raises(self, tmp_path, monkeypatch):
+    async def test_missing_gateway_endpoint_key_raises(self, tmp_path, monkeypatch):
         config_dir = tmp_path / "openshell"
         gw_dir = config_dir / "gateways" / "my-gw"
         gw_dir.mkdir(parents=True)
@@ -620,17 +620,17 @@ class TestFromActiveClusterMutations:
         with pytest.raises(GatewayNotConnectedError, match="Missing 'gateway_endpoint'"):
             ShoreGuardClient.from_active_cluster(cluster="my-gw")
 
-    def test_http_default_port_80(self, tmp_path, monkeypatch):
+    async def test_http_default_port_80(self, tmp_path, monkeypatch):
         config_dir = tmp_path / "openshell"
         gw_dir = config_dir / "gateways" / "my-gw"
         gw_dir.mkdir(parents=True)
         (gw_dir / "metadata.json").write_text(json.dumps({"gateway_endpoint": "http://myhost"}))
         monkeypatch.setattr("shoreguard.client.openshell_config_dir", lambda: config_dir)
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient.from_active_cluster(cluster="my-gw")
         assert c._endpoint == "myhost:80"
 
-    def test_https_default_port_443(self, tmp_path, monkeypatch):
+    async def test_https_default_port_443(self, tmp_path, monkeypatch):
         config_dir = tmp_path / "openshell"
         gw_dir = config_dir / "gateways" / "my-gw"
         mtls_dir = gw_dir / "mtls"
@@ -641,11 +641,11 @@ class TestFromActiveClusterMutations:
         (mtls_dir / "tls.key").write_bytes(b"key")
         monkeypatch.setattr("shoreguard.client.openshell_config_dir", lambda: config_dir)
         monkeypatch.setattr("grpc.ssl_channel_credentials", lambda **kw: MagicMock())
-        monkeypatch.setattr("grpc.secure_channel", lambda ep, creds: MagicMock())
+        monkeypatch.setattr("grpc.aio.secure_channel", lambda ep, creds: MagicMock())
         c = ShoreGuardClient.from_active_cluster(cluster="my-gw")
         assert c._endpoint == "myhost:443"
 
-    def test_no_hostname_defaults_to_localhost(self, tmp_path, monkeypatch):
+    async def test_no_hostname_defaults_to_localhost(self, tmp_path, monkeypatch):
         """When urlparse yields no hostname, default to 127.0.0.1."""
         config_dir = tmp_path / "openshell"
         gw_dir = config_dir / "gateways" / "my-gw"
@@ -653,11 +653,11 @@ class TestFromActiveClusterMutations:
         # A URL that parses with no hostname
         (gw_dir / "metadata.json").write_text(json.dumps({"gateway_endpoint": "http://:9090"}))
         monkeypatch.setattr("shoreguard.client.openshell_config_dir", lambda: config_dir)
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient.from_active_cluster(cluster="my-gw")
         assert c._endpoint == "127.0.0.1:9090"
 
-    def test_uses_active_cluster_when_no_cluster_arg(self, tmp_path, monkeypatch):
+    async def test_uses_active_cluster_when_no_cluster_arg(self, tmp_path, monkeypatch):
         monkeypatch.setenv("OPENSHELL_GATEWAY", "env-cluster")
         config_dir = tmp_path / "openshell"
         gw_dir = config_dir / "gateways" / "env-cluster"
@@ -666,11 +666,11 @@ class TestFromActiveClusterMutations:
             json.dumps({"gateway_endpoint": "http://localhost:8080"})
         )
         monkeypatch.setattr("shoreguard.client.openshell_config_dir", lambda: config_dir)
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient.from_active_cluster()
         assert c._endpoint == "localhost:8080"
 
-    def test_custom_timeout_forwarded(self, tmp_path, monkeypatch):
+    async def test_custom_timeout_forwarded(self, tmp_path, monkeypatch):
         config_dir = tmp_path / "openshell"
         gw_dir = config_dir / "gateways" / "my-gw"
         gw_dir.mkdir(parents=True)
@@ -678,7 +678,7 @@ class TestFromActiveClusterMutations:
             json.dumps({"gateway_endpoint": "http://localhost:8080"})
         )
         monkeypatch.setattr("shoreguard.client.openshell_config_dir", lambda: config_dir)
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient.from_active_cluster(cluster="my-gw", timeout=99.0)
         assert c._timeout == 99.0
 
@@ -686,25 +686,25 @@ class TestFromActiveClusterMutations:
 class TestFromCredentialsMutations:
     """Kill mutations in from_credentials."""
 
-    def test_timeout_stored(self, monkeypatch):
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+    async def test_timeout_stored(self, monkeypatch):
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient.from_credentials("h:80", timeout=77.0)
         assert c._timeout == 77.0
 
-    def test_endpoint_stored(self, monkeypatch):
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+    async def test_endpoint_stored(self, monkeypatch):
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient.from_credentials("myhost:9090")
         assert c._endpoint == "myhost:9090"
 
-    def test_managers_initialized(self, monkeypatch):
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+    async def test_managers_initialized(self, monkeypatch):
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient.from_credentials("h:80")
         assert hasattr(c, "sandboxes")
         assert hasattr(c, "policies")
         assert hasattr(c, "approvals")
         assert hasattr(c, "providers")
 
-    def test_secure_passes_correct_bytes(self, monkeypatch):
+    async def test_secure_passes_correct_bytes(self, monkeypatch):
         captured = {}
 
         def mock_ssl(**kw):
@@ -712,7 +712,7 @@ class TestFromCredentialsMutations:
             return MagicMock()
 
         monkeypatch.setattr("grpc.ssl_channel_credentials", mock_ssl)
-        monkeypatch.setattr("grpc.secure_channel", lambda ep, creds: MagicMock())
+        monkeypatch.setattr("grpc.aio.secure_channel", lambda ep, creds: MagicMock())
         ShoreGuardClient.from_credentials(
             "h:443", ca_cert=b"CA", client_cert=b"CERT", client_key=b"KEY"
         )
@@ -720,15 +720,15 @@ class TestFromCredentialsMutations:
         assert captured["private_key"] == b"KEY"
         assert captured["certificate_chain"] == b"CERT"
 
-    def test_partial_certs_only_ca_and_key(self, monkeypatch):
+    async def test_partial_certs_only_ca_and_key(self, monkeypatch):
         """Missing client_cert falls back to insecure."""
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient.from_credentials("h:80", ca_cert=b"ca", client_key=b"key")
         assert c._channel is not None
 
-    def test_partial_certs_only_ca_and_cert(self, monkeypatch):
+    async def test_partial_certs_only_ca_and_cert(self, monkeypatch):
         """Missing client_key falls back to insecure."""
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient.from_credentials("h:80", ca_cert=b"ca", client_cert=b"cert")
         assert c._channel is not None
 
@@ -736,18 +736,18 @@ class TestFromCredentialsMutations:
 class TestInitMutations:
     """Kill mutations in __init__ constructor."""
 
-    def test_timeout_default(self, monkeypatch):
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+    async def test_timeout_default(self, monkeypatch):
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient("h:80")
         assert c._timeout == 30.0
 
-    def test_timeout_custom(self, monkeypatch):
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+    async def test_timeout_custom(self, monkeypatch):
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient("h:80", timeout=99.0)
         assert c._timeout == 99.0
 
-    def test_managers_created(self, monkeypatch):
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: MagicMock())
+    async def test_managers_created(self, monkeypatch):
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: MagicMock())
         c = ShoreGuardClient("h:80")
         from shoreguard.client.approvals import ApprovalManager
         from shoreguard.client.policies import PolicyManager
@@ -759,7 +759,7 @@ class TestInitMutations:
         assert isinstance(c.approvals, ApprovalManager)
         assert isinstance(c.providers, ProviderManager)
 
-    def test_mtls_passes_correct_bytes(self, tmp_path, monkeypatch):
+    async def test_mtls_passes_correct_bytes(self, tmp_path, monkeypatch):
         ca = tmp_path / "ca.crt"
         cert = tmp_path / "tls.crt"
         key = tmp_path / "tls.key"
@@ -773,18 +773,18 @@ class TestInitMutations:
             return MagicMock()
 
         monkeypatch.setattr("grpc.ssl_channel_credentials", mock_ssl)
-        monkeypatch.setattr("grpc.secure_channel", lambda ep, creds: MagicMock())
+        monkeypatch.setattr("grpc.aio.secure_channel", lambda ep, creds: MagicMock())
         ShoreGuardClient("h:443", ca_path=ca, cert_path=cert, key_path=key)
         assert captured["root_certificates"] == b"CA-DATA"
         assert captured["private_key"] == b"KEY-DATA"
         assert captured["certificate_chain"] == b"CERT-DATA"
 
-    def test_partial_paths_uses_insecure(self, monkeypatch):
+    async def test_partial_paths_uses_insecure(self, monkeypatch):
         """Only ca_path without cert/key uses insecure."""
         import pathlib
 
         mock_ch = MagicMock()
-        monkeypatch.setattr("grpc.insecure_channel", lambda ep: mock_ch)
+        monkeypatch.setattr("grpc.aio.insecure_channel", lambda ep: mock_ch)
         c = ShoreGuardClient("h:80", ca_path=pathlib.Path("/some/ca"))
         assert c._channel is mock_ch
 
@@ -792,7 +792,7 @@ class TestInitMutations:
 class TestResolveActiveClusterMutations:
     """Kill mutations in _resolve_active_cluster."""
 
-    def test_env_var_takes_precedence_over_file(self, tmp_path, monkeypatch):
+    async def test_env_var_takes_precedence_over_file(self, tmp_path, monkeypatch):
         config_dir = tmp_path / "openshell"
         config_dir.mkdir()
         (config_dir / "active_gateway").write_text("file-gw")
@@ -800,7 +800,7 @@ class TestResolveActiveClusterMutations:
         monkeypatch.setenv("OPENSHELL_GATEWAY", "env-gw")
         assert _resolve_active_cluster() == "env-gw"
 
-    def test_file_with_whitespace_stripped(self, tmp_path, monkeypatch):
+    async def test_file_with_whitespace_stripped(self, tmp_path, monkeypatch):
         config_dir = tmp_path / "openshell"
         config_dir.mkdir()
         (config_dir / "active_gateway").write_text("  my-gw  \n")
@@ -808,7 +808,7 @@ class TestResolveActiveClusterMutations:
         monkeypatch.delenv("OPENSHELL_GATEWAY", raising=False)
         assert _resolve_active_cluster() == "my-gw"
 
-    def test_file_not_found_raises(self, tmp_path, monkeypatch):
+    async def test_file_not_found_raises(self, tmp_path, monkeypatch):
         config_dir = tmp_path / "openshell"
         config_dir.mkdir()
         # No active_gateway file
@@ -817,7 +817,7 @@ class TestResolveActiveClusterMutations:
         with pytest.raises(FileNotFoundError):
             _resolve_active_cluster()
 
-    def test_whitespace_only_raises(self, tmp_path, monkeypatch):
+    async def test_whitespace_only_raises(self, tmp_path, monkeypatch):
         config_dir = tmp_path / "openshell"
         config_dir.mkdir()
         (config_dir / "active_gateway").write_text("   \n  ")
@@ -830,13 +830,13 @@ class TestResolveActiveClusterMutations:
 class TestContextManagerMutations:
     """Kill mutations in __enter__ / __exit__."""
 
-    def test_enter_returns_self(self):
+    async def test_enter_returns_self(self):
         c = object.__new__(ShoreGuardClient)
-        c._channel = MagicMock()
-        assert c.__enter__() is c
+        c._channel = AsyncMock()
+        assert await c.__aenter__() is c
 
-    def test_exit_calls_close(self):
+    async def test_exit_calls_close(self):
         c = object.__new__(ShoreGuardClient)
-        c._channel = MagicMock()
-        c.__exit__(None, None, None)
+        c._channel = AsyncMock()
+        await c.__aexit__(None, None, None)
         c._channel.close.assert_called_once()

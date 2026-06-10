@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -32,8 +31,8 @@ async def gw_health(gw: str) -> dict[str, Any] | JSONResponse:
         dict[str, Any] | JSONResponse: Health info or 503 if disconnected.
     """
     try:
-        client = _get_gateway_service().get_client(name=gw)
-        return await asyncio.to_thread(client.health)
+        client = await _get_gateway_service().get_client(name=gw)
+        return await client.health()
     except GatewayNotConnectedError:
         return JSONResponse(
             status_code=503,
@@ -78,7 +77,7 @@ async def get_inference(
     Returns:
         dict[str, Any]: Current inference provider and model settings.
     """
-    return await asyncio.to_thread(client.get_cluster_inference, route_name=route_name)
+    return await client.get_cluster_inference(route_name=route_name)
 
 
 @router.get("/inference/bundle", response_model=InferenceBundleResponse)
@@ -104,7 +103,7 @@ async def get_inference_bundle(
     Returns:
         dict[str, Any]: Bundle with revision, timestamp, and routes.
     """
-    result = await asyncio.to_thread(client.get_inference_bundle)
+    result = await client.get_inference_bundle()
     from shoreguard.services.audit import audit_log
 
     await audit_log(
@@ -147,8 +146,7 @@ async def set_inference(
         body.model_id,
         actor,
     )
-    result = await asyncio.to_thread(
-        client.set_cluster_inference,
+    result = await client.set_cluster_inference(
         provider_name=body.provider_name,
         model_id=body.model_id,
         verify=body.verify,

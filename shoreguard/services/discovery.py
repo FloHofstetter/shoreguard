@@ -22,6 +22,7 @@ re-scan is idempotent.
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import logging
 import re
@@ -180,7 +181,7 @@ class DiscoveryService:
 
     # --------------------------------------------------------------- registration
 
-    def auto_register(
+    async def auto_register(
         self,
         endpoints: list[DiscoveredEndpoint],
     ) -> dict[str, Any]:
@@ -197,7 +198,7 @@ class DiscoveryService:
         Returns:
             dict[str, Any]: ``{registered, skipped, errors}`` summary.
         """
-        existing = {gw.get("endpoint") for gw in self._registry.list_all()}
+        existing = {gw.get("endpoint") for gw in await asyncio.to_thread(self._registry.list_all)}
         registered: list[dict[str, Any]] = []
         skipped: list[dict[str, Any]] = []
         errors: list[dict[str, Any]] = []
@@ -219,7 +220,7 @@ class DiscoveryService:
 
             name = self._derive_name(ep)
             try:
-                self._gateway_service.register(
+                await self._gateway_service.register(
                     name=name,
                     endpoint=endpoint_str,
                     scheme=self._settings.default_scheme,
@@ -250,7 +251,7 @@ class DiscoveryService:
             "errors": errors,
         }
 
-    def run_once(self, *, domains: list[str] | None = None) -> dict[str, Any]:
+    async def run_once(self, *, domains: list[str] | None = None) -> dict[str, Any]:
         """Run a single discovery + register cycle.
 
         Args:
@@ -259,12 +260,12 @@ class DiscoveryService:
         Returns:
             dict[str, Any]: ``{discovered, registered, skipped, errors}``.
         """
-        scan = self.discover_all(domains=domains)
+        scan = await asyncio.to_thread(self.discover_all, domains=domains)
         flat: list[DiscoveredEndpoint] = []
         for items in scan.values():
             flat.extend(items)
         if self._settings.auto_register:
-            outcome = self.auto_register(flat)
+            outcome = await self.auto_register(flat)
         else:
             outcome = {
                 "registered": [],

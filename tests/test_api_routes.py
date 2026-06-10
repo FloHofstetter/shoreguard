@@ -577,7 +577,10 @@ async def test_sandbox_create_lro_cancelled(api_client, mock_client):
             if task is not asyncio.current_task() and "_run" in repr(task):
                 task.cancel()
 
-    mock_client.sandboxes.create.side_effect = lambda **kw: time.sleep(10)
+    async def _slow_create(**kw):
+        await asyncio.sleep(10)
+
+    mock_client.sandboxes.create.side_effect = _slow_create
 
     resp = await api_client.post(
         f"/api/gateways/{GW}/sandboxes",

@@ -14,7 +14,6 @@ ShoreGuard UI without falling back to ``grpcurl``.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -61,7 +60,7 @@ async def list_provider_profiles(
         dict[str, Any]: ``{items, total}``. ``total`` is None because the
             upstream RPC returns paginated slices without a total count.
     """
-    items = await asyncio.to_thread(client.provider_profiles.list, limit=limit, offset=offset)
+    items = await client.provider_profiles.list(limit=limit, offset=offset)
     return {"items": items, "total": None}
 
 
@@ -79,7 +78,7 @@ async def get_provider_profile(
     Returns:
         dict[str, Any]: Profile dict.
     """
-    return await asyncio.to_thread(client.provider_profiles.get, profile_id)
+    return await client.provider_profiles.get(profile_id)
 
 
 @router.post(
@@ -104,7 +103,7 @@ async def lint_provider_profiles(
     """
     check_write_rate_limit(request)
     items = [item.model_dump() for item in body.profiles]
-    return await asyncio.to_thread(client.provider_profiles.lint, items)
+    return await client.provider_profiles.lint(items)
 
 
 @router.post(
@@ -133,7 +132,7 @@ async def import_provider_profiles(
     """
     check_write_rate_limit(request)
     items = [item.model_dump() for item in body.profiles]
-    result = await asyncio.to_thread(client.provider_profiles.import_, items)
+    result = await client.provider_profiles.import_(items)
     actor = get_actor(request)
     gw = get_gateway_name(request)
     logger.info(
@@ -174,7 +173,7 @@ async def delete_provider_profile(
         dict[str, bool]: ``{deleted}``.
     """
     check_write_rate_limit(request)
-    deleted = await asyncio.to_thread(client.provider_profiles.delete, profile_id)
+    deleted = await client.provider_profiles.delete(profile_id)
     if deleted:
         actor = get_actor(request)
         gw = get_gateway_name(request)

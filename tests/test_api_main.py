@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
 import pytest
@@ -16,15 +17,25 @@ from shoreguard.exceptions import (
 )
 
 
+def _astream(items):
+    """Wrap *items* in an async generator (mimics a grpc.aio stream)."""
+
+    async def _gen():
+        for item in items:
+            yield item
+
+    return _gen()
+
+
 @pytest.fixture
 def mock_client():
     from shoreguard.client import ShoreGuardClient
 
     client = MagicMock(spec=ShoreGuardClient)
-    client.sandboxes = MagicMock()
-    client.policies = MagicMock()
-    client.providers = MagicMock()
-    client.approvals = MagicMock()
+    client.sandboxes = AsyncMock()
+    client.policies = AsyncMock()
+    client.providers = AsyncMock()
+    client.approvals = AsyncMock()
     return client
 
 
@@ -288,17 +299,20 @@ def test_ws_streams_sandbox_events():
     from shoreguard.api.main import app
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
     # watch() returns an iterable of events
-    mock_client.sandboxes.watch.return_value = iter(
-        [
-            {"type": "status", "sandbox": "test-sb", "phase": "ready"},
-            {"type": "log", "sandbox": "test-sb", "message": "hello"},
-        ]
+    mock_client.sandboxes.watch = MagicMock(
+        return_value=_astream(
+            [
+                {"type": "status", "sandbox": "test-sb", "phase": "ready"},
+                {"type": "log", "sandbox": "test-sb", "message": "hello"},
+            ]
+        )
     )
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb") as ws:
             msg1 = ws.receive_json()
@@ -314,28 +328,31 @@ def test_ws_enriches_ocsf_log_events():
     from shoreguard.api.main import app
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
-    mock_client.sandboxes.watch.return_value = iter(
-        [
-            {
-                "type": "log",
-                "data": {
-                    "timestamp_ms": 1000,
-                    "level": "OCSF",
-                    "target": "ocsf",
-                    "message": (
-                        "NET:OPEN [MED] DENIED /usr/bin/curl(64) -> httpbin.org:443 "
-                        "[policy:- engine:opa]"
-                    ),
-                    "source": "sandbox",
-                    "fields": {"dst_host": "httpbin.org"},
+    mock_client.sandboxes.watch = MagicMock(
+        return_value=_astream(
+            [
+                {
+                    "type": "log",
+                    "data": {
+                        "timestamp_ms": 1000,
+                        "level": "OCSF",
+                        "target": "ocsf",
+                        "message": (
+                            "NET:OPEN [MED] DENIED /usr/bin/curl(64) -> httpbin.org:443 "
+                            "[policy:- engine:opa]"
+                        ),
+                        "source": "sandbox",
+                        "fields": {"dst_host": "httpbin.org"},
+                    },
                 },
-            },
-        ]
+            ]
+        )
     )
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb") as ws:
             msg = ws.receive_json()
@@ -354,6 +371,7 @@ def test_ws_handles_grpc_stream_error():
     from shoreguard.api.main import app
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
 
     # Create a fake gRPC error
@@ -364,10 +382,14 @@ def test_ws_handles_grpc_stream_error():
         def details(self):
             return "stream died"
 
-    mock_client.sandboxes.watch.side_effect = _FakeRpcError()
+    async def _failing_watch(*_a, **_kw):
+        raise _FakeRpcError()
+        yield  # pragma: no cover — async generator marker
+
+    mock_client.sandboxes.watch = MagicMock(side_effect=_failing_watch)
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb") as ws:
             msg = ws.receive_json()
@@ -377,25 +399,25 @@ def test_ws_handles_grpc_stream_error():
 
 def test_ws_client_disconnect():
     """WebSocket cleanup handles client disconnect gracefully."""
-    import time
 
     from starlette.testclient import TestClient
 
     from shoreguard.api.main import app
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
 
-    # watch() returns a slow generator that yields forever
-    def slow_watch(**kwargs):
+    # watch() returns a slow async generator that yields forever
+    async def slow_watch(*_a, **kwargs):
         while True:
-            time.sleep(0.5)
+            await asyncio.sleep(0.5)
             yield {"type": "heartbeat"}
 
-    mock_client.sandboxes.watch.return_value = slow_watch()
+    mock_client.sandboxes.watch = MagicMock(side_effect=slow_watch)
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb") as ws:
             # Receive at least one event then disconnect
@@ -406,7 +428,6 @@ def test_ws_client_disconnect():
 
 def test_ws_sends_heartbeat_on_idle():
     """WebSocket sends heartbeat when no events arrive within the interval."""
-    import time
 
     from starlette.testclient import TestClient
 
@@ -418,18 +439,19 @@ def test_ws_sends_heartbeat_on_idle():
     override_settings(settings)
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
 
-    def slow_watch(**kwargs):
-        time.sleep(2)
+    async def slow_watch(*_a, **kwargs):
+        await asyncio.sleep(2)
         return
-        yield  # make it a generator
+        yield  # make it an async generator
 
-    mock_client.sandboxes.watch.return_value = slow_watch()
+    mock_client.sandboxes.watch = MagicMock(side_effect=slow_watch)
 
     try:
         with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-            mock_gw_svc.return_value.get_client.return_value = mock_client
+            mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
             client = TestClient(app)
             with client.websocket_connect("/ws/test-gw/test-sb") as ws:
                 msg = ws.receive_json()
@@ -442,7 +464,6 @@ def test_ws_sends_heartbeat_on_idle():
 
 def test_ws_heartbeat_reports_dropped_events():
     """Heartbeat includes count of events dropped due to backpressure."""
-    import time
 
     from starlette.testclient import TestClient
 
@@ -459,20 +480,21 @@ def test_ws_heartbeat_reports_dropped_events():
     override_settings(settings)
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-123", "name": "test-sb"}
 
-    def burst_then_idle(**kwargs):
+    async def burst_then_idle(*_a, **kwargs):
         # Burst: many events exceed queue capacity → drops.
         # Then idle: heartbeat fires with drop count.
         for i in range(20):
             yield {"type": "log", "data": {"message": f"msg-{i}"}}
-        time.sleep(1.5)
+        await asyncio.sleep(1.5)
 
-    mock_client.sandboxes.watch.return_value = burst_then_idle()
+    mock_client.sandboxes.watch = MagicMock(side_effect=burst_then_idle)
 
     try:
         with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-            mock_gw_svc.return_value.get_client.return_value = mock_client
+            mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
             client = TestClient(app)
             with client.websocket_connect("/ws/test-gw/test-sb") as ws:
                 # Drain until heartbeat
@@ -602,11 +624,14 @@ def test_ws_auth_accepts_valid_sp_token(monkeypatch):
     )
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-1", "name": "sb1"}
-    mock_client.sandboxes.watch.return_value = iter([{"type": "status", "phase": "ready"}])
+    mock_client.sandboxes.watch = MagicMock(
+        return_value=_astream([{"type": "status", "phase": "ready"}])
+    )
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/mygw/sb1?token=goodkey") as ws:
             msg = ws.receive_json()
@@ -649,7 +674,7 @@ def test_ws_sandbox_not_found_sends_error_event():
     mock_client.sandboxes.get.side_effect = _NotFoundRpcError()
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/mygw/ghost") as ws:
             data = ws.receive_json()
@@ -669,7 +694,7 @@ def test_ws_unexpected_exception_sends_internal_error():
     mock_client.sandboxes.get.side_effect = RuntimeError("boom")
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/mygw/sb1") as ws:
             data = ws.receive_json()
@@ -691,10 +716,11 @@ def test_ws_sandbox_get_unavailable_uses_friendly_message():
             return "upstream down"
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.side_effect = _UnavailableRpcError()
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/mygw/sb1") as ws:
             data = ws.receive_json()
@@ -710,16 +736,17 @@ def test_ws_outer_websocket_disconnect_swallowed():
     from shoreguard.api.main import app
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-1", "name": "sb1"}
 
-    def many(**kwargs):
+    async def many(*_a, **kwargs):
         for i in range(10000):
             yield {"type": "log", "data": {"i": i}}
 
-    mock_client.sandboxes.watch.return_value = many()
+    mock_client.sandboxes.watch = MagicMock(side_effect=many)
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/mygw/sb1") as ws:
             # Grab one event, then close immediately.
@@ -769,7 +796,7 @@ async def test_ws_handler_gateway_not_connected_send_runtime_error(monkeypatch):
     ws.send_json = AsyncMock(side_effect=RuntimeError("disconnected"))
 
     class _FakeSvc:
-        def get_client(self, name):  # noqa: ARG002
+        async def get_client(self, name):  # noqa: ARG002
             raise GatewayNotConnectedError("nope")
 
     monkeypatch.setattr(ws_mod, "_get_gateway_service", lambda: _FakeSvc())
@@ -791,11 +818,11 @@ async def test_ws_handler_outer_exception_send_runtime_error(monkeypatch):
     class _FakeClient:
         class sandboxes:  # noqa: N801
             @staticmethod
-            def get(_name):
+            async def get(_name):
                 raise RuntimeError("unexpected internal failure")
 
     class _FakeSvc:
-        def get_client(self, name):  # noqa: ARG002
+        async def get_client(self, name):  # noqa: ARG002
             return _FakeClient
 
     monkeypatch.setattr(ws_mod, "_get_gateway_service", lambda: _FakeSvc())
@@ -820,11 +847,11 @@ async def test_ws_handler_outer_grpc_error_send_runtime_error(monkeypatch):
     class _FakeClient:
         class sandboxes:  # noqa: N801
             @staticmethod
-            def get(_name):
+            async def get(_name):
                 raise _RpcErr()
 
     class _FakeSvc:
-        def get_client(self, name):  # noqa: ARG002
+        async def get_client(self, name):  # noqa: ARG002
             return _FakeClient
 
     monkeypatch.setattr(ws_mod, "_get_gateway_service", lambda: _FakeSvc())
@@ -838,14 +865,17 @@ def test_ws_draft_policy_update_fires_webhook():
     from shoreguard.api.main import app
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-1", "name": "sb1"}
-    mock_client.sandboxes.watch.return_value = iter(
-        [
-            {
-                "type": "draft_policy_update",
-                "data": {"diff": "+allow pypi.org"},
-            }
-        ]
+    mock_client.sandboxes.watch = MagicMock(
+        return_value=_astream(
+            [
+                {
+                    "type": "draft_policy_update",
+                    "data": {"diff": "+allow pypi.org"},
+                }
+            ]
+        )
     )
 
     async def _fake_fire(event_type, payload):
@@ -857,7 +887,7 @@ def test_ws_draft_policy_update_fires_webhook():
         patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc,
         patch("shoreguard.api.websocket.fire_webhook", side_effect=_fake_fire),
     ):
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/mygw/sb1") as ws:
             msg = ws.receive_json()
@@ -1044,20 +1074,21 @@ def test_ws_exec_interactive_streams_output():
     from shoreguard.api.main import app
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-1", "name": "test-sb"}
 
     def _fake_exec(*args, **kwargs):
-        return iter(
+        return _astream(
             [
                 {"type": "stdout", "data": b"hello"},
                 {"type": "exit", "exit_code": 0},
             ]
         )
 
-    mock_client.sandboxes.exec_interactive.side_effect = _fake_exec
+    mock_client.sandboxes.exec_interactive = MagicMock(side_effect=_fake_exec)
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb/exec") as ws:
             ws.send_json({"type": "start", "command": ["bash"], "cols": 80, "rows": 24})
@@ -1076,10 +1107,11 @@ def test_ws_exec_interactive_requires_start_command():
     from shoreguard.api.main import app
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-1", "name": "test-sb"}
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb/exec") as ws:
             ws.send_json({"type": "start"})
@@ -1094,15 +1126,16 @@ def test_ws_forward_relays_bytes():
     from shoreguard.api.main import app
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-1", "name": "test-sb"}
 
     def _fake_forward(*args, **kwargs):
-        return iter([{"type": "data", "data": b"banner"}])
+        return _astream([{"type": "data", "data": b"banner"}])
 
-    mock_client.sandboxes.forward_tcp.side_effect = _fake_forward
+    mock_client.sandboxes.forward_tcp = MagicMock(side_effect=_fake_forward)
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb/forward") as ws:
             ws.send_json({"target": "tcp", "host": "127.0.0.1", "port": 9000})
@@ -1117,10 +1150,11 @@ def test_ws_forward_rejects_bad_target():
     from shoreguard.api.main import app
 
     mock_client = MagicMock()
+    mock_client.sandboxes = AsyncMock()
     mock_client.sandboxes.get.return_value = {"id": "sb-1", "name": "test-sb"}
 
     with patch("shoreguard.api.websocket._get_gateway_service") as mock_gw_svc:
-        mock_gw_svc.return_value.get_client.return_value = mock_client
+        mock_gw_svc.return_value.get_client = AsyncMock(return_value=mock_client)
         client = TestClient(app)
         with client.websocket_connect("/ws/test-gw/test-sb/forward") as ws:
             ws.send_json({"target": "nope"})

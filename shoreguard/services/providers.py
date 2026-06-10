@@ -32,7 +32,7 @@ class ProviderService:
     def __init__(self, client: ShoreGuardClient) -> None:  # noqa: D107
         self._client = client
 
-    def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    async def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """List all providers.
 
         Args:
@@ -42,9 +42,9 @@ class ProviderService:
         Returns:
             list[dict[str, Any]]: Provider records.
         """
-        return self._client.providers.list(limit=limit, offset=offset)
+        return await self._client.providers.list(limit=limit, offset=offset)
 
-    def get(self, name: str) -> dict[str, Any]:
+    async def get(self, name: str) -> dict[str, Any]:
         """Get a provider by name.
 
         Args:
@@ -53,9 +53,9 @@ class ProviderService:
         Returns:
             dict[str, Any]: Provider record.
         """
-        return self._client.providers.get(name)
+        return await self._client.providers.get(name)
 
-    def create(
+    async def create(
         self,
         *,
         name: str,
@@ -87,14 +87,14 @@ class ProviderService:
         if extra_credentials:
             credentials.update(extra_credentials)
 
-        return self._client.providers.create(
+        return await self._client.providers.create(
             name=name,
             provider_type=provider_type,
             credentials=credentials,
             config=config,
         )
 
-    def update(
+    async def update(
         self,
         *,
         name: str,
@@ -113,14 +113,14 @@ class ProviderService:
         Returns:
             dict[str, Any]: The updated provider record.
         """
-        return self._client.providers.update(
+        return await self._client.providers.update(
             name=name,
             provider_type=provider_type,
             credentials=credentials,
             config=config,
         )
 
-    def delete(self, name: str) -> bool:
+    async def delete(self, name: str) -> bool:
         """Delete a provider.
 
         Args:
@@ -129,9 +129,9 @@ class ProviderService:
         Returns:
             bool: True if the provider was deleted.
         """
-        return self._client.providers.delete(name)
+        return await self._client.providers.delete(name)
 
-    def configure_refresh(
+    async def configure_refresh(
         self,
         *,
         provider: str,
@@ -154,7 +154,7 @@ class ProviderService:
         Returns:
             dict[str, Any]: The resulting refresh status.
         """
-        return self._client.providers.configure_refresh(
+        return await self._client.providers.configure_refresh(
             provider=provider,
             credential_key=credential_key,
             strategy=strategy,
@@ -163,7 +163,7 @@ class ProviderService:
             expires_at_ms=expires_at_ms,
         )
 
-    def get_refresh_status(
+    async def get_refresh_status(
         self, provider: str, *, credential_key: str = ""
     ) -> list[dict[str, Any]]:
         """List credential-refresh status entries for a provider.
@@ -175,9 +175,11 @@ class ProviderService:
         Returns:
             list[dict[str, Any]]: One status dict per configured credential.
         """
-        return self._client.providers.get_refresh_status(provider, credential_key=credential_key)
+        return await self._client.providers.get_refresh_status(
+            provider, credential_key=credential_key
+        )
 
-    def rotate_credential(self, *, provider: str, credential_key: str) -> dict[str, Any]:
+    async def rotate_credential(self, *, provider: str, credential_key: str) -> dict[str, Any]:
         """Rotate a provider credential immediately.
 
         Args:
@@ -187,11 +189,11 @@ class ProviderService:
         Returns:
             dict[str, Any]: The refresh status after rotation.
         """
-        return self._client.providers.rotate_credential(
+        return await self._client.providers.rotate_credential(
             provider=provider, credential_key=credential_key
         )
 
-    def delete_refresh(self, *, provider: str, credential_key: str) -> bool:
+    async def delete_refresh(self, *, provider: str, credential_key: str) -> bool:
         """Delete a credential-refresh configuration.
 
         Args:
@@ -201,11 +203,11 @@ class ProviderService:
         Returns:
             bool: True if a configuration existed and was deleted.
         """
-        return self._client.providers.delete_refresh(
+        return await self._client.providers.delete_refresh(
             provider=provider, credential_key=credential_key
         )
 
-    def get_env(self, name: str) -> dict[str, Any]:
+    async def get_env(self, name: str) -> dict[str, Any]:
         """Get the redacted environment projection for a provider.
 
         Returns the environment variables this provider injects into
@@ -227,7 +229,7 @@ class ProviderService:
         Returns:
             dict[str, Any]: Record with ``provider``, ``type`` and ``env``.
         """
-        provider = self._client.providers.get(name)
+        provider = await self._client.providers.get(name)
         provider_type = provider.get("type") if isinstance(provider, dict) else None
 
         env: list[dict[str, str]] = []

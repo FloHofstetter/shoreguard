@@ -91,7 +91,7 @@ def test_record_gateway_cert_expiry_sets_gauge():
 # ── SandboxManager integration: retry metric flows through ──────────────────
 
 
-def test_sandbox_manager_invoke_emits_metrics(monkeypatch):
+async def test_sandbox_manager_invoke_emits_metrics(monkeypatch):
     from types import SimpleNamespace
 
     from shoreguard.client._proto import datamodel_pb2, openshell_pb2
@@ -103,12 +103,15 @@ def test_sandbox_manager_invoke_emits_metrics(monkeypatch):
         def code(self):
             return grpc.StatusCode.UNAVAILABLE
 
-    monkeypatch.setattr("shoreguard.client._resilience.time.sleep", lambda _s: None)
+    async def _no_sleep(_s):
+        return None
+
+    monkeypatch.setattr("shoreguard.client._resilience.asyncio.sleep", _no_sleep)
 
     calls = {"n": 0}
 
     class _Stub:
-        def ListSandboxes(self, req, timeout=None):
+        async def ListSandboxes(self, req, timeout=None):
             calls["n"] += 1
             if calls["n"] == 1:
                 raise _FakeRpcError()
@@ -130,7 +133,7 @@ def test_sandbox_manager_invoke_emits_metrics(monkeypatch):
     before_retry = _counter_value(sg_grpc_retry_total, op="sandboxes.list", code="UNAVAILABLE")
     before_ok = _counter_value(sg_grpc_call_total, op="sandboxes.list", code="OK")
 
-    result = m.list(limit=1, offset=0)
+    result = await m.list(limit=1, offset=0)
 
     assert result[0]["name"] == "sb"
     assert (

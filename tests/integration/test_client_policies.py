@@ -9,7 +9,7 @@ from shoreguard.client._converters import _dict_to_policy
 pytestmark = pytest.mark.integration
 
 
-def test_get_policy(ready_sandbox, sg_client):
+async def test_get_policy(ready_sandbox, sg_client):
     """get() returns policy data for a ready sandbox."""
     result = sg_client.policies.get(ready_sandbox["name"])
 
@@ -19,7 +19,7 @@ def test_get_policy(ready_sandbox, sg_client):
     assert result["revision"]["status"] in ("loaded", "pending")
 
 
-def test_list_revisions(ready_sandbox, sg_client):
+async def test_list_revisions(ready_sandbox, sg_client):
     """list_revisions() returns at least the initial policy revision."""
     revisions = sg_client.policies.list_revisions(ready_sandbox["name"])
 
@@ -29,10 +29,10 @@ def test_list_revisions(ready_sandbox, sg_client):
     assert "status" in revisions[0]
 
 
-def test_update_policy(ready_sandbox, sg_client):
+async def test_update_policy(ready_sandbox, sg_client):
     """Updating a policy increments the version."""
     current = sg_client.policies.get(ready_sandbox["name"])
-    policy = current.get("policy", {})
+    policy = await current.get("policy", {})
     old_version = current["active_version"]
 
     # Add a filesystem path
@@ -47,10 +47,10 @@ def test_update_policy(ready_sandbox, sg_client):
     assert result["version"] > old_version
 
 
-def test_policy_roundtrip(ready_sandbox, sg_client):
+async def test_policy_roundtrip(ready_sandbox, sg_client):
     """Update policy with known values, re-read, verify roundtrip."""
     current = sg_client.policies.get(ready_sandbox["name"])
-    policy = current.get("policy", {})
+    policy = await current.get("policy", {})
 
     policy["process"] = {"run_as_user": "integ-test", "run_as_group": "integ-test"}
     proto = _dict_to_policy(policy)

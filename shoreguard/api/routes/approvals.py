@@ -190,7 +190,7 @@ async def get_approvals(
     Returns:
         dict[str, Any]: Draft policy with approval metadata.
     """
-    return await asyncio.to_thread(svc.get_draft, name, status_filter=status_filter)
+    return await svc.get_draft(name, status_filter=status_filter)
 
 
 @router.get("/{name}/approvals/pending", response_model=list[ApprovalChunkResponse])
@@ -207,7 +207,7 @@ async def get_pending_approvals(
     Returns:
         list[dict[str, Any]]: Pending draft chunks.
     """
-    return await asyncio.to_thread(svc.get_pending, name)
+    return await svc.get_pending(name)
 
 
 @router.post(
@@ -300,7 +300,7 @@ async def approve_chunk(
         logger.info("Quorum met, firing upstream approve (sandbox=%s, chunk=%s)", name, chunk_id)
 
     logger.info("Chunk approved (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
-    result = await asyncio.to_thread(svc.approve, name, chunk_id)
+    result = await svc.approve(name, chunk_id)
     await audit_log(
         request,
         "approval.approve",
@@ -388,7 +388,7 @@ async def reject_chunk(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     logger.info("Chunk rejected (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
-    await asyncio.to_thread(svc.reject, name, chunk_id, reason=reason)
+    await svc.reject(name, chunk_id, reason=reason)
     await audit_log(
         request,
         "approval.reject",
@@ -459,9 +459,7 @@ async def approve_all(
 
     logger.info("All chunks approved (sandbox=%s, actor=%s)", name, actor)
     include_flagged = body.include_security_flagged if body else False
-    result = await asyncio.to_thread(
-        svc.approve_all, name, include_security_flagged=include_flagged
-    )
+    result = await svc.approve_all(name, include_security_flagged=include_flagged)
     await audit_log(
         request,
         "approval.approve_all",
@@ -507,7 +505,7 @@ async def edit_chunk(
     """
     actor = get_actor(request)
     logger.info("Chunk edited (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
-    await asyncio.to_thread(svc.edit, name, chunk_id, body.proposed_rule)
+    await svc.edit(name, chunk_id, body.proposed_rule)
     await audit_log(
         request,
         "approval.edit",
@@ -543,7 +541,7 @@ async def undo_chunk(
     """
     actor = get_actor(request)
     logger.info("Chunk undone (sandbox=%s, chunk_id=%s, actor=%s)", name, chunk_id, actor)
-    result = await asyncio.to_thread(svc.undo, name, chunk_id)
+    result = await svc.undo(name, chunk_id)
     await audit_log(
         request,
         "approval.undo",
@@ -577,7 +575,7 @@ async def clear_approvals(
     """
     actor = get_actor(request)
     logger.info("Chunks cleared (sandbox=%s, actor=%s)", name, actor)
-    result = await asyncio.to_thread(svc.clear, name)
+    result = await svc.clear(name)
     await audit_log(request, "approval.clear", "approval", name, gateway=get_gateway_name(request))
     return result
 
@@ -596,7 +594,7 @@ async def get_approval_history(
     Returns:
         list[dict[str, Any]]: Approval decision history records.
     """
-    return await asyncio.to_thread(svc.get_history, name)
+    return await svc.get_history(name)
 
 
 # ─── Multi-stage approval workflows ──────────────────────────────────

@@ -42,7 +42,7 @@ class PolicyService:
     def __init__(self, client: ShoreGuardClient) -> None:  # noqa: D107
         self._client = client
 
-    def get(self, sandbox_name: str) -> dict[str, Any]:
+    async def get(self, sandbox_name: str) -> dict[str, Any]:
         """Get the current active policy for a sandbox.
 
         Args:
@@ -51,9 +51,9 @@ class PolicyService:
         Returns:
             dict[str, Any]: Policy data.
         """
-        return self._client.policies.get(sandbox_name)
+        return await self._client.policies.get(sandbox_name)
 
-    def get_effective(self, sandbox_name: str) -> dict[str, Any]:
+    async def get_effective(self, sandbox_name: str) -> dict[str, Any]:
         """Get the effective policy — what the gateway currently enforces.
 
         In the current architecture, presets are merged eagerly into the
@@ -75,12 +75,12 @@ class PolicyService:
         Returns:
             dict[str, Any]: Effective policy envelope.
         """
-        result = self._client.policies.get(sandbox_name)
+        result = await self._client.policies.get(sandbox_name)
         if isinstance(result, dict):
             return {**result, "source": "gateway_runtime"}
         return {"policy": result, "source": "gateway_runtime"}
 
-    def submit_analysis(
+    async def submit_analysis(
         self,
         sandbox_name: str,
         *,
@@ -126,14 +126,14 @@ class PolicyService:
         if container is not None:
             container.denial_context.ingest_summaries(sandbox_name, summaries)
 
-        return self._client.policies.submit_analysis(
+        return await self._client.policies.submit_analysis(
             sandbox_name,
             summaries=summaries,
             proposed_chunks=proposed_chunks,
             analysis_mode=analysis_mode,
         )
 
-    def update(self, sandbox_name: str, policy_dict: dict) -> dict[str, Any]:
+    async def update(self, sandbox_name: str, policy_dict: dict) -> dict[str, Any]:
         """Push a new policy version and return the full PolicyResponse.
 
         Args:
@@ -145,10 +145,10 @@ class PolicyService:
         """
         logger.info("Updating policy for sandbox '%s'", sandbox_name)
         proto_policy = _dict_to_policy(policy_dict)
-        self._client.policies.update(sandbox_name, proto_policy)
-        return self._client.policies.get(sandbox_name)
+        await self._client.policies.update(sandbox_name, proto_policy)
+        return await self._client.policies.get(sandbox_name)
 
-    def update_merge(
+    async def update_merge(
         self,
         sandbox_name: str,
         operations: list[dict[str, Any]],
@@ -174,10 +174,10 @@ class PolicyService:
             len(operations),
             sandbox_name,
         )
-        self._client.policies.apply_merge_operations(sandbox_name, operations)
-        return self._client.policies.get(sandbox_name)
+        await self._client.policies.apply_merge_operations(sandbox_name, operations)
+        return await self._client.policies.get(sandbox_name)
 
-    def get_version(self, sandbox_name: str, version: int) -> dict[str, Any]:
+    async def get_version(self, sandbox_name: str, version: int) -> dict[str, Any]:
         """Get a specific policy revision by version number.
 
         Args:
@@ -187,9 +187,11 @@ class PolicyService:
         Returns:
             dict[str, Any]: Policy revision data.
         """
-        return self._client.policies.get_version(sandbox_name, version)
+        return await self._client.policies.get_version(sandbox_name, version)
 
-    def diff_revisions(self, sandbox_name: str, version_a: int, version_b: int) -> dict[str, Any]:
+    async def diff_revisions(
+        self, sandbox_name: str, version_a: int, version_b: int
+    ) -> dict[str, Any]:
         """Fetch two revisions and return both for client-side diffing.
 
         Args:
@@ -200,8 +202,8 @@ class PolicyService:
         Returns:
             dict[str, Any]: Both policy revisions for comparison.
         """
-        rev_a = self.get_version(sandbox_name, version_a)
-        rev_b = self.get_version(sandbox_name, version_b)
+        rev_a = await self.get_version(sandbox_name, version_a)
+        rev_b = await self.get_version(sandbox_name, version_b)
         return {
             "version_a": version_a,
             "version_b": version_b,
@@ -211,7 +213,7 @@ class PolicyService:
             "revision_b": rev_b.get("revision"),
         }
 
-    def list_revisions(
+    async def list_revisions(
         self, sandbox_name: str, *, limit: int = 20, offset: int = 0
     ) -> list[dict[str, Any]]:
         """List policy revision history.
@@ -224,9 +226,9 @@ class PolicyService:
         Returns:
             list[dict[str, Any]]: Revision history entries.
         """
-        return self._client.policies.list_revisions(sandbox_name, limit=limit, offset=offset)
+        return await self._client.policies.list_revisions(sandbox_name, limit=limit, offset=offset)
 
-    def apply_preset(self, sandbox_name: str, preset_name: str) -> dict[str, Any]:
+    async def apply_preset(self, sandbox_name: str, preset_name: str) -> dict[str, Any]:
         """Apply a policy preset to a sandbox (merges network_policies).
 
         Args:
@@ -255,11 +257,13 @@ class PolicyService:
             """
             policy.setdefault("network_policies", {}).update(preset_rules)
 
-        return self._read_modify_write(sandbox_name, _merge)
+        return await self._read_modify_write(sandbox_name, _merge)
 
     # ── Read-modify-write helper ──────────────────────────────────────────
 
-    def _read_modify_write(self, sandbox_name: str, fn: Callable[[dict], None]) -> dict[str, Any]:
+    async def _read_modify_write(
+        self, sandbox_name: str, fn: Callable[[dict], None]
+    ) -> dict[str, Any]:
         """Read the current policy, apply fn to it, then write it back.
 
         Args:
@@ -272,16 +276,18 @@ class PolicyService:
         Raises:
             PolicyError: If the current policy cannot be read.
         """
-        current = self.get(sandbox_name)
+        current = await self.get(sandbox_name)
         policy = current.get("policy")
         if not policy:
             raise PolicyError(f"Could not read current policy for sandbox {sandbox_name}")
         fn(policy)
-        return self.update(sandbox_name, policy)
+        return await self.update(sandbox_name, policy)
 
     # ── Atomic network rule CRUD ──────────────────────────────────────────
 
-    def add_network_rule(self, sandbox_name: str, key: str, rule: dict[str, Any]) -> dict[str, Any]:
+    async def add_network_rule(
+        self, sandbox_name: str, key: str, rule: dict[str, Any]
+    ) -> dict[str, Any]:
         """Add or update a single network rule (read-modify-write).
 
         Args:
@@ -302,9 +308,9 @@ class PolicyService:
             """
             policy.setdefault("network_policies", {})[key] = rule
 
-        return self._read_modify_write(sandbox_name, _add)
+        return await self._read_modify_write(sandbox_name, _add)
 
-    def delete_network_rule(self, sandbox_name: str, key: str) -> dict[str, Any]:
+    async def delete_network_rule(self, sandbox_name: str, key: str) -> dict[str, Any]:
         """Delete a single network rule (read-modify-write).
 
         Args:
@@ -324,11 +330,13 @@ class PolicyService:
             """
             policy.get("network_policies", {}).pop(key, None)
 
-        return self._read_modify_write(sandbox_name, _delete)
+        return await self._read_modify_write(sandbox_name, _delete)
 
     # ── Atomic filesystem path CRUD ──────────────────────────────────────
 
-    def add_filesystem_path(self, sandbox_name: str, path: str, access: str) -> dict[str, Any]:
+    async def add_filesystem_path(
+        self, sandbox_name: str, path: str, access: str
+    ) -> dict[str, Any]:
         """Add a filesystem path (read-modify-write).
 
         Args:
@@ -363,9 +371,9 @@ class PolicyService:
             else:
                 fs["read_only"].append(path)
 
-        return self._read_modify_write(sandbox_name, _add)
+        return await self._read_modify_write(sandbox_name, _add)
 
-    def delete_filesystem_path(self, sandbox_name: str, path: str) -> dict[str, Any]:
+    async def delete_filesystem_path(self, sandbox_name: str, path: str) -> dict[str, Any]:
         """Delete a filesystem path (read-modify-write).
 
         Args:
@@ -388,11 +396,11 @@ class PolicyService:
                 fs["read_only"] = [p for p in fs.get("read_only", []) if p != path]
                 fs["read_write"] = [p for p in fs.get("read_write", []) if p != path]
 
-        return self._read_modify_write(sandbox_name, _delete)
+        return await self._read_modify_write(sandbox_name, _delete)
 
     # ── Atomic process/landlock update ───────────────────────────────────
 
-    def update_process_policy(
+    async def update_process_policy(
         self,
         sandbox_name: str,
         *,
@@ -430,4 +438,4 @@ class PolicyService:
                     policy["landlock"] = {}
                 policy["landlock"]["compatibility"] = landlock_compatibility
 
-        return self._read_modify_write(sandbox_name, _update)
+        return await self._read_modify_write(sandbox_name, _update)

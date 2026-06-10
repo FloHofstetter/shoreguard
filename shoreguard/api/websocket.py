@@ -1,13 +1,19 @@
-"""WebSocket handler for live sandbox event streaming."""
+"""WebSocket handlers for live sandbox event streaming, exec, and forwarding.
+
+All three endpoints consume ``grpc.aio`` streams directly on the event
+loop — no worker threads or thread-safe queues. Bidirectional sessions
+(exec terminal, TCP forward) pump inbound WebSocket frames into an
+``asyncio.Queue`` that feeds the gRPC request stream, while the
+response stream is async-iterated and re-encoded for the browser.
+"""
 
 import asyncio
 import base64
 import contextlib
 import json
 import logging
-import threading
 import time
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
 from typing import Any
 
 import grpc
@@ -19,11 +25,13 @@ from shoreguard.services.webhooks import fire_webhook
 
 from .auth import require_auth_ws, require_role_ws
 from .deps import _VALID_GW_RE, _current_gateway, _get_gateway_service
-from .ws_bridge import run_bidi_session
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Frame returned by an encoder: ("text", str) or ("bytes", bytes).
+Frame = tuple[str, Any]
 
 
 @router.websocket("/ws/{gw}/{sandbox_name}")
@@ -61,7 +69,7 @@ async def sandbox_events(
 
     _current_gateway.set(gw)
     try:
-        client = await asyncio.to_thread(_get_gateway_service().get_client, name=gw)
+        client = await _get_gateway_service().get_client(name=gw)
     except GatewayNotConnectedError:
         try:
             await websocket.send_json(
@@ -72,90 +80,73 @@ async def sandbox_events(
         return
 
     try:
-        sandbox = await asyncio.to_thread(client.sandboxes.get, sandbox_name)
+        sandbox = await client.sandboxes.get(sandbox_name)
         sandbox_id = sandbox["id"]
 
         from shoreguard.settings import get_settings
 
         ws_cfg = get_settings().websocket
         queue: asyncio.Queue[dict | None] = asyncio.Queue(maxsize=ws_cfg.queue_maxsize)
-        cancel_event = threading.Event()
         drop_count = 0
 
-        async def _producer():
-            """Run the blocking gRPC watch in a thread and enqueue events."""
+        async def _producer() -> None:
+            """Consume the gRPC watch stream and enqueue events with backpressure."""
+            nonlocal drop_count
+            consecutive_drops = 0
+            try:
+                async for event in client.sandboxes.watch(
+                    sandbox_id,
+                    follow_status=True,
+                    follow_logs=True,
+                    follow_events=True,
+                ):
+                    if event.get("type") == "log":
+                        data = event.get("data")
+                        if isinstance(data, dict):
+                            ocsf = parse_ocsf_log(data)
+                            if ocsf is not None:
+                                data["ocsf"] = ocsf
+                                # Feed bypass detection service.
+                                from shoreguard.container import try_get_container
 
-            def _iter_watch() -> None:
-                """Iterate the gRPC watch stream, forwarding events to the queue."""
-                nonlocal drop_count
-                consecutive_drops = 0
-                try:
-                    for event in client.sandboxes.watch(
-                        sandbox_id,
-                        follow_status=True,
-                        follow_logs=True,
-                        follow_events=True,
-                    ):
-                        if cancel_event.is_set():
-                            break
-                        if event.get("type") == "log":
-                            data = event.get("data")
-                            if isinstance(data, dict):
-                                ocsf = parse_ocsf_log(data)
-                                if ocsf is not None:
-                                    data["ocsf"] = ocsf
-                                    # Feed bypass detection service.
-                                    from shoreguard.container import try_get_container
-
-                                    container = try_get_container()
-                                    if container is not None:
-                                        container.bypass.ingest_log(
-                                            data,
-                                            sandbox_name=sandbox_name,
-                                            gateway_name=gw,
-                                        )
-                        try:
-                            queue.put_nowait(event)
-                            consecutive_drops = 0
-                        except asyncio.QueueFull:
-                            drop_count += 1
-                            consecutive_drops += 1
+                                container = try_get_container()
+                                if container is not None:
+                                    container.bypass.ingest_log(
+                                        data,
+                                        sandbox_name=sandbox_name,
+                                        gateway_name=gw,
+                                    )
+                    try:
+                        queue.put_nowait(event)
+                        consecutive_drops = 0
+                    except asyncio.QueueFull:
+                        drop_count += 1
+                        consecutive_drops += 1
+                        logger.warning(
+                            "WebSocket queue full for %s, dropped %d total (%d consecutive)",
+                            sandbox_name,
+                            drop_count,
+                            consecutive_drops,
+                        )
+                        if consecutive_drops >= ws_cfg.backpressure_drop_limit:
                             logger.warning(
-                                "WebSocket queue full for %s, dropped %d total (%d consecutive)",
+                                "Disconnecting slow consumer for %s after %d consecutive drops",
                                 sandbox_name,
-                                drop_count,
                                 consecutive_drops,
                             )
-                            if consecutive_drops >= ws_cfg.backpressure_drop_limit:
-                                logger.warning(
-                                    "Disconnecting slow consumer for %s after %d consecutive drops",
-                                    sandbox_name,
-                                    consecutive_drops,
-                                )
-                                cancel_event.set()
-                                break
-                except grpc.RpcError as exc:
-                    if cancel_event.is_set():
-                        return
-                    detail = friendly_grpc_error(exc)
-                    logger.warning("WatchSandbox stream error for %s: %s", sandbox_name, detail)
-                    try:
-                        queue.put_nowait(
-                            {"type": "error", "data": {"message": f"Stream error: {detail}"}}
-                        )
-                    except asyncio.QueueFull:
-                        pass
-                finally:
-                    try:
-                        queue.put_nowait(None)
-                    except asyncio.QueueFull:
-                        logger.warning(
-                            "Could not send sentinel for %s, setting cancel event",
-                            sandbox_name,
-                        )
-                        cancel_event.set()
-
-            await asyncio.to_thread(_iter_watch)
+                            break
+            except grpc.RpcError as exc:
+                detail = friendly_grpc_error(exc)
+                logger.warning("WatchSandbox stream error for %s: %s", sandbox_name, detail)
+                with contextlib.suppress(asyncio.QueueFull):
+                    queue.put_nowait(
+                        {"type": "error", "data": {"message": f"Stream error: {detail}"}}
+                    )
+            finally:
+                try:
+                    queue.put_nowait(None)
+                except asyncio.QueueFull:
+                    logger.warning("Could not send sentinel for %s", sandbox_name)
 
         producer_task = asyncio.create_task(_producer())
         last_send_time = time.monotonic()
@@ -165,7 +156,7 @@ async def sandbox_events(
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=ws_cfg.queue_get_timeout)
                 except TimeoutError:
-                    if cancel_event.is_set():
+                    if producer_task.done() and queue.empty():
                         break
                     if time.monotonic() - last_send_time >= ws_cfg.heartbeat_interval:
                         await websocket.send_json(
@@ -189,12 +180,14 @@ async def sandbox_events(
                         )
                     )
         finally:
-            cancel_event.set()
             producer_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await producer_task
-            except asyncio.CancelledError:
-                pass
+
+        # The stream ended (sentinel or backpressure cutoff) — close the
+        # socket explicitly so clients see a clean close frame.
+        with contextlib.suppress(RuntimeError, WebSocketDisconnect):
+            await websocket.close()
 
     except WebSocketDisconnect:
         logger.debug("WebSocket disconnected: %s/%s", gw, sandbox_name)
@@ -248,8 +241,8 @@ async def _accept_and_resolve_sandbox(
         return None
     _current_gateway.set(gw)
     try:
-        client = await asyncio.to_thread(_get_gateway_service().get_client, name=gw)
-        sandbox = await asyncio.to_thread(client.sandboxes.get, sandbox_name)
+        client = await _get_gateway_service().get_client(name=gw)
+        sandbox = await client.sandboxes.get(sandbox_name)
     except GatewayNotConnectedError:
         with contextlib.suppress(RuntimeError, WebSocketDisconnect):
             await websocket.send_json(
@@ -263,6 +256,71 @@ async def _accept_and_resolve_sandbox(
             )
         return None
     return client, sandbox["id"]
+
+
+async def _run_bidi_session(
+    websocket: WebSocket,
+    *,
+    stream: AsyncIterator[dict[str, Any]],
+    inbound: asyncio.Queue[Any],
+    decode_client: Callable[[Mapping[str, Any]], Any],
+    encode_event: Callable[[dict[str, Any]], Frame | None],
+) -> None:
+    """Pump a bidirectional gRPC stream over an accepted WebSocket.
+
+    A reader task forwards inbound WebSocket frames into the request
+    queue (``None`` half-closes the request stream); the response
+    stream is iterated inline and re-encoded for the browser.
+
+    Args:
+        websocket: An already-accepted WebSocket connection.
+        stream: Async iterator of event dicts from the gRPC bidi call.
+        inbound: Queue feeding the gRPC request stream.
+        decode_client: Maps a Starlette ``receive()`` message to an inbound
+            queue item, or ``None`` to ignore the frame.
+        encode_event: Maps a stream event dict to a WebSocket frame, or
+            ``None`` to drop it.
+    """
+
+    async def _reader() -> None:
+        try:
+            while True:
+                message = await websocket.receive()
+                if message.get("type") == "websocket.disconnect":
+                    break
+                item = decode_client(message)
+                if item is not None:
+                    await inbound.put(item)
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await inbound.put(None)
+
+    reader = asyncio.create_task(_reader())
+    try:
+        async for event in stream:
+            frame = encode_event(event)
+            if frame is None:
+                continue
+            kind, payload = frame
+            if kind == "bytes":
+                await websocket.send_bytes(payload)
+            else:
+                await websocket.send_text(payload)
+    except grpc.RpcError as exc:
+        detail = friendly_grpc_error(exc)
+        with contextlib.suppress(RuntimeError, WebSocketDisconnect):
+            await websocket.send_text(json.dumps({"type": "error", "data": {"message": detail}}))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        reader.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await reader
+        aclose = getattr(stream, "aclose", None)
+        if aclose is not None:
+            with contextlib.suppress(Exception):
+                await aclose()
 
 
 @router.websocket("/ws/{gw}/{sandbox_name}/exec")
@@ -309,17 +367,16 @@ async def sandbox_exec(
     env = {str(k): str(v) for k, v in (start.get("env") or {}).items()}
     workdir = str(start.get("workdir") or "")
 
-    def _stream_factory(inbound, on_call):
-        return client.sandboxes.exec_interactive(
-            sandbox_id,
-            command,
-            inbound=inbound,
-            on_call=on_call,
-            workdir=workdir,
-            env=env or None,
-            cols=cols,
-            rows=rows,
-        )
+    inbound: asyncio.Queue[Any] = asyncio.Queue()
+    stream = client.sandboxes.exec_interactive(
+        sandbox_id,
+        command,
+        inbound=inbound,
+        workdir=workdir,
+        env=env or None,
+        cols=cols,
+        rows=rows,
+    )
 
     def _decode(message: Mapping[str, Any]) -> dict[str, Any] | None:
         text = message.get("text")
@@ -340,7 +397,7 @@ async def sandbox_exec(
             }
         return None
 
-    def _encode(event: dict[str, Any]):
+    def _encode(event: dict[str, Any]) -> Frame | None:
         etype = event["type"]
         if etype in ("stdout", "stderr"):
             return (
@@ -356,9 +413,10 @@ async def sandbox_exec(
     logger.info(
         "Interactive exec started (gw=%s, sandbox=%s, cmd=%s)", gw, sandbox_name, command[:3]
     )
-    await run_bidi_session(
+    await _run_bidi_session(
         websocket,
-        stream_factory=_stream_factory,
+        stream=stream,
+        inbound=inbound,
         decode_client=_decode,
         encode_event=_encode,
     )
@@ -417,14 +475,14 @@ async def sandbox_forward(
         forward_init["host"] = str(init["host"])
         forward_init["port"] = int(init["port"])
 
-    def _stream_factory(inbound, on_call):
-        return client.sandboxes.forward_tcp(init=forward_init, inbound=inbound, on_call=on_call)
+    inbound_bytes: asyncio.Queue[Any] = asyncio.Queue()
+    stream = client.sandboxes.forward_tcp(init=forward_init, inbound=inbound_bytes)
 
     def _decode(message: Mapping[str, Any]) -> bytes | None:
         data = message.get("bytes")
         return data if data is not None else None
 
-    def _encode(event: dict[str, Any]):
+    def _encode(event: dict[str, Any]) -> Frame | None:
         if event["type"] == "data":
             return ("bytes", event["data"])
         if event["type"] == "error":
@@ -432,9 +490,10 @@ async def sandbox_forward(
         return None
 
     logger.info("TCP forward started (gw=%s, sandbox=%s, target=%s)", gw, sandbox_name, target)
-    await run_bidi_session(
+    await _run_bidi_session(
         websocket,
-        stream_factory=_stream_factory,
+        stream=stream,
+        inbound=inbound_bytes,
         decode_client=_decode,
         encode_event=_encode,
     )

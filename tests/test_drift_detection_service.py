@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -11,15 +11,17 @@ from shoreguard.settings import DriftDetectionSettings
 
 
 def _gateway_service(*, gateways, sandboxes_per_gw, hash_per_sandbox):
-    """Build a fake gateway service whose state is mutable per test."""
-    gw_svc = MagicMock()
+    """Build a fake async gateway service whose state is mutable per test."""
+    gw_svc = AsyncMock()
     gw_svc.list_all.return_value = [{"name": gw} for gw in gateways]
 
-    def _get_client(name):
+    async def _get_client(name):
         client = MagicMock()
+        client.sandboxes = AsyncMock()
+        client.policies = AsyncMock()
         client.sandboxes.list.return_value = [{"name": sb} for sb in sandboxes_per_gw.get(name, [])]
 
-        def _policies_get(sb_name):
+        async def _policies_get(sb_name):
             return {
                 "active_version": 1,
                 "revision": {
@@ -105,13 +107,15 @@ async def test_one_broken_sandbox_does_not_kill_loop():
     async def emit(event, payload):
         fired.append((event, payload))
 
-    gw_svc = MagicMock()
+    gw_svc = AsyncMock()
     gw_svc.list_all.return_value = [{"name": "gw1"}]
 
     client = MagicMock()
+    client.sandboxes = AsyncMock()
+    client.policies = AsyncMock()
     client.sandboxes.list.return_value = [{"name": "broken"}, {"name": "ok"}]
 
-    def _policies_get(sb_name):
+    async def _policies_get(sb_name):
         if sb_name == "broken":
             raise RuntimeError("policy fetch boom")
         return {

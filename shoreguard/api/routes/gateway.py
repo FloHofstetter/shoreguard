@@ -255,7 +255,7 @@ async def discover_gateways(
         dict[str, Any]: ``{discovered, registered, skipped, errors}``.
     """
     svc = get_services().discovery
-    result = await asyncio.to_thread(svc.run_once, domains=body.domains)
+    result = await svc.run_once(domains=body.domains)
     await audit_log(
         request,
         "gateway.discovered",
@@ -318,7 +318,7 @@ async def gateway_list(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
     svc = _get_gateway_service()
-    items = await asyncio.to_thread(svc.list_all, labels_filter=labels_filter)
+    items = await svc.list_all(labels_filter=labels_filter)
     if runtime_normalized is not None:
         items = [gw for gw in items if get_runtime(gw.get("metadata")) == runtime_normalized]
     return {"items": items, "total": len(items)}
@@ -335,7 +335,7 @@ async def gateway_info(name: str) -> dict[str, Any]:
         dict[str, Any]: Gateway info.
     """
     _validate_name_param(name)
-    return await asyncio.to_thread(_get_gateway_service().get_info, name)
+    return await _get_gateway_service().get_info(name)
 
 
 @router.get("/{name}/config")
@@ -349,7 +349,7 @@ async def gateway_config(name: str) -> dict[str, Any]:
         dict[str, Any]: Gateway configuration.
     """
     _validate_name_param(name)
-    return await asyncio.to_thread(_get_gateway_service().get_config, name)
+    return await _get_gateway_service().get_config(name)
 
 
 # ─── Gateway settings (S1.2 — OpenShell v0.0.26 alignment) ──────────────
@@ -381,7 +381,7 @@ async def gateway_settings_get(name: str) -> dict[str, Any]:
         dict[str, Any]: ``{"settings": {...}, "settings_revision": int}``.
     """
     _validate_name_param(name)
-    return await asyncio.to_thread(_get_gateway_service().get_config, name)
+    return await _get_gateway_service().get_config(name)
 
 
 @router.put(
@@ -408,12 +408,7 @@ async def gateway_settings_put(
     _validate_name_param(name)
     if not key:
         raise HTTPException(400, "Setting key must not be empty")
-    result = await asyncio.to_thread(
-        _get_gateway_service().update_setting,
-        name,
-        key,
-        body.value,
-    )
+    result = await _get_gateway_service().update_setting(name, key, body.value)
     await audit_log(
         request,
         "gateway.setting_update",
@@ -446,13 +441,7 @@ async def gateway_settings_delete(name: str, key: str, request: Request) -> dict
     _validate_name_param(name)
     if not key:
         raise HTTPException(400, "Setting key must not be empty")
-    result = await asyncio.to_thread(
-        _get_gateway_service().update_setting,
-        name,
-        key,
-        None,
-        delete=True,
-    )
+    result = await _get_gateway_service().update_setting(name, key, None, delete=True)
     await audit_log(
         request,
         "gateway.setting_delete",
@@ -529,8 +518,7 @@ async def gateway_register(body: RegisterGatewayRequest, request: Request) -> di
                 f"metadata exceeds maximum size of {limits.max_metadata_json_bytes} bytes",
             )
 
-    result = await asyncio.to_thread(
-        _get_gateway_service().register,
+    result = await _get_gateway_service().register(
         name=body.name,
         endpoint=body.endpoint,
         scheme=body.scheme,
@@ -602,7 +590,7 @@ async def gateway_unregister(name: str, request: Request) -> dict[str, Any]:
         HTTPException: If the gateway is not found.
     """
     _validate_name_param(name)
-    removed = await asyncio.to_thread(_get_gateway_service().unregister, name)
+    removed = await _get_gateway_service().unregister(name)
     if not removed:
         logger.warning("Unregister failed: gateway '%s' not found", name)
         raise HTTPException(404, f"Gateway '{name}' not found")
@@ -653,11 +641,7 @@ async def gateway_update_metadata(
     if "labels" in provided:
         kwargs["labels"] = body.labels
 
-    result = await asyncio.to_thread(
-        _get_gateway_service().update_gateway_metadata,
-        name,
-        **kwargs,
-    )
+    result = await _get_gateway_service().update_gateway_metadata(name, **kwargs)
 
     await audit_log(
         request,
@@ -686,7 +670,7 @@ async def gateway_test_connection(name: str, request: Request) -> dict[str, Any]
         dict[str, Any]: Connection test result.
     """
     _validate_name_param(name)
-    result = await asyncio.to_thread(_get_gateway_service().test_connection, name)
+    result = await _get_gateway_service().test_connection(name)
     if result.get("success"):
         logger.info("Connection test passed for gateway '%s'", name)
     else:
@@ -755,7 +739,7 @@ async def gateway_start_named(name: str, request: Request) -> dict[str, Any]:
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
     logger.info("Gateway start requested (gateway=%s, actor=%s)", name, get_actor(request))
-    result = await asyncio.to_thread(mgr.start, name)
+    result = await mgr.start(name)
     await audit_log(request, "gateway.start", "gateway", name, gateway=name)
     return result
 
@@ -779,7 +763,7 @@ async def gateway_stop_named(name: str, request: Request) -> dict[str, Any]:
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
     logger.info("Gateway stop requested (gateway=%s, actor=%s)", name, get_actor(request))
-    result = await asyncio.to_thread(mgr.stop, name)
+    result = await mgr.stop(name)
     await audit_log(request, "gateway.stop", "gateway", name, gateway=name)
     return result
 
@@ -803,7 +787,7 @@ async def gateway_restart_named(name: str, request: Request) -> dict[str, Any]:
     if mgr is None:
         raise HTTPException(404, "Local lifecycle only available in local mode")
     logger.info("Gateway restart requested (gateway=%s, actor=%s)", name, get_actor(request))
-    result = await asyncio.to_thread(mgr.restart, name)
+    result = await mgr.restart(name)
     await audit_log(request, "gateway.restart", "gateway", name, gateway=name)
     return result
 
@@ -833,7 +817,7 @@ async def gateway_destroy(name: str, request: Request, force: bool = False) -> d
         force,
         get_actor(request),
     )
-    result = await asyncio.to_thread(mgr.destroy, name, force=force)
+    result = await mgr.destroy(name, force=force)
     await audit_log(
         request, "gateway.destroy", "gateway", name, gateway=name, detail={"force": force}
     )
@@ -867,8 +851,7 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> JSONRe
     async def work(op):
         logger.info("Starting gateway creation: '%s' (op=%s, actor=%s)", body.name, op.id, actor)
         await get_services().operations.update_progress(op.id, 10, "Starting gateway container")
-        result = await asyncio.to_thread(
-            mgr.create,
+        result = await mgr.create(
             name=body.name,
             port=body.port,
             remote_host=body.remote_host,

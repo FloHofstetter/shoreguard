@@ -13,11 +13,11 @@ warm-up commands inside a sandbox once it has been created.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import queue
 import re
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from shoreguard.exceptions import SandboxError
@@ -149,16 +149,16 @@ def _sandbox_to_dict(sb: openshell_pb2.Sandbox) -> dict[str, Any]:
     }
 
 
-def _exec_input_iter(
+async def _exec_input_iter(
     sandbox_id: str,
     command: list[str],
-    inbound: queue.Queue[dict[str, Any] | None],
+    inbound: asyncio.Queue[dict[str, Any] | None],
     *,
     workdir: str,
     env: dict[str, str] | None,
     cols: int,
     rows: int,
-) -> Iterator[openshell_pb2.ExecSandboxInput]:
+) -> AsyncIterator[openshell_pb2.ExecSandboxInput]:
     """Yield the request stream for ``ExecSandboxInteractive``.
 
     The first message is the exec request (TTY always on); subsequent messages
@@ -167,7 +167,7 @@ def _exec_input_iter(
     Args:
         sandbox_id: Sandbox identifier.
         command: Command and arguments to execute.
-        inbound: Thread-safe queue of stdin/resize frames; ``None`` ends input.
+        inbound: Queue of stdin/resize frames; ``None`` ends input.
         workdir: Working directory inside the sandbox.
         env: Optional environment variables for the command.
         cols: Initial terminal columns.
@@ -188,7 +188,7 @@ def _exec_input_iter(
         )
     )
     while True:
-        item = inbound.get()
+        item = await inbound.get()
         if item is None:
             return
         kind = item.get("type")
@@ -225,9 +225,9 @@ def _build_tcp_forward_init(init: dict[str, Any]) -> openshell_pb2.TcpForwardIni
     )
 
 
-def _tcp_forward_iter(
-    init: dict[str, Any], inbound: queue.Queue[bytes | None]
-) -> Iterator[openshell_pb2.TcpForwardFrame]:
+async def _tcp_forward_iter(
+    init: dict[str, Any], inbound: asyncio.Queue[bytes | None]
+) -> AsyncIterator[openshell_pb2.TcpForwardFrame]:
     """Yield the request stream for ``ForwardTcp``.
 
     The first frame carries the relay target; subsequent frames carry raw byte
@@ -235,14 +235,14 @@ def _tcp_forward_iter(
 
     Args:
         init: Relay-init mapping (see :func:`_build_tcp_forward_init`).
-        inbound: Thread-safe queue of outbound byte chunks; ``None`` ends the stream.
+        inbound: Queue of outbound byte chunks; ``None`` ends the stream.
 
     Yields:
         openshell_pb2.TcpForwardFrame: The init frame, then data frames.
     """
     yield openshell_pb2.TcpForwardFrame(init=_build_tcp_forward_init(init))
     while True:
-        chunk = inbound.get()
+        chunk = await inbound.get()
         if chunk is None:
             return
         yield openshell_pb2.TcpForwardFrame(data=bytes(chunk))
@@ -278,20 +278,20 @@ class SandboxManager:
         self._retry_policy = retry_policy or DEFAULT_POLICY
         self._retry_deadline = retry_deadline
 
-    def _invoke(self, op_name: str, fn: Any) -> Any:
+    async def _invoke(self, op_name: str, fn: Any) -> Any:
         """Execute a unary gRPC call through the resilience wrapper.
 
         Args:
             op_name: Logical-op label used for logs and metrics.
-            fn: Zero-arg callable that issues the gRPC call.
+            fn: Zero-arg callable returning the awaitable gRPC call.
 
         Returns:
-            Any: The result returned by ``fn``.
+            Any: The awaited result of ``fn``.
         """
         record_attempt, record_duration = _lazy_metrics()
         start = time.monotonic()
         try:
-            return call_with_retry(
+            return await call_with_retry(
                 fn,
                 op_name=op_name,
                 policy=self._retry_policy,
@@ -302,7 +302,7 @@ class SandboxManager:
             if record_duration is not None:
                 record_duration(op_name, time.monotonic() - start)
 
-    def _open_stream(self, op_name: str, fn: Any) -> Any:
+    async def _open_stream(self, op_name: str, fn: Any) -> Any:
         """Open a gRPC server-stream; retry only the open, not in-flight reads.
 
         Args:
@@ -310,12 +310,12 @@ class SandboxManager:
             fn: Zero-arg callable that opens the stream.
 
         Returns:
-            Any: The opened stream iterator.
+            Any: The opened async stream iterator.
         """
         record_attempt, record_duration = _lazy_metrics()
         start = time.monotonic()
         try:
-            return stream_with_retry(
+            return await stream_with_retry(
                 fn,
                 op_name=op_name,
                 policy=self._retry_policy,
@@ -326,7 +326,7 @@ class SandboxManager:
             if record_duration is not None:
                 record_duration(op_name, time.monotonic() - start)
 
-    def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    async def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """List all sandboxes.
 
         Args:
@@ -336,7 +336,7 @@ class SandboxManager:
         Returns:
             list[dict[str, Any]]: List of sandbox dicts.
         """
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.list",
             lambda: self._stub.ListSandboxes(
                 openshell_pb2.ListSandboxesRequest(limit=limit, offset=offset),
@@ -345,7 +345,7 @@ class SandboxManager:
         )
         return [_sandbox_to_dict(sb) for sb in resp.sandboxes]
 
-    def get(self, name: str) -> dict[str, Any]:
+    async def get(self, name: str) -> dict[str, Any]:
         """Get a sandbox by name.
 
         Args:
@@ -354,7 +354,7 @@ class SandboxManager:
         Returns:
             dict[str, Any]: Sandbox data dict.
         """
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.get",
             lambda: self._stub.GetSandbox(
                 openshell_pb2.GetSandboxRequest(name=name), timeout=self._timeout
@@ -362,7 +362,7 @@ class SandboxManager:
         )
         return _sandbox_to_dict(resp.sandbox)
 
-    def create(
+    async def create(
         self,
         *,
         name: str = "",
@@ -401,7 +401,7 @@ class SandboxManager:
         if policy:
             spec.policy.CopyFrom(_dict_to_policy(policy))
 
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.create",
             lambda: self._stub.CreateSandbox(
                 openshell_pb2.CreateSandboxRequest(spec=spec, name=name),
@@ -410,7 +410,7 @@ class SandboxManager:
         )
         return _sandbox_to_dict(resp.sandbox)
 
-    def delete(self, name: str) -> bool:
+    async def delete(self, name: str) -> bool:
         """Delete a sandbox by name.
 
         Args:
@@ -419,7 +419,7 @@ class SandboxManager:
         Returns:
             bool: True if the sandbox was deleted.
         """
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.delete",
             lambda: self._stub.DeleteSandbox(
                 openshell_pb2.DeleteSandboxRequest(name=name), timeout=self._timeout
@@ -427,7 +427,7 @@ class SandboxManager:
         )
         return bool(resp.deleted)
 
-    def list_providers(self, sandbox_name: str) -> list[dict[str, Any]]:
+    async def list_providers(self, sandbox_name: str) -> list[dict[str, Any]]:
         """List provider records attached to a sandbox.
 
         Args:
@@ -437,7 +437,7 @@ class SandboxManager:
             list[dict[str, Any]]: Attached provider records, each as the
                 flat dict returned by :func:`_provider_to_dict`.
         """
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.list_providers",
             lambda: self._stub.ListSandboxProviders(
                 openshell_pb2.ListSandboxProvidersRequest(sandbox_name=sandbox_name),
@@ -446,7 +446,7 @@ class SandboxManager:
         )
         return [_provider_to_dict(p) for p in resp.providers]
 
-    def attach_provider(self, sandbox_name: str, provider_name: str) -> dict[str, Any]:
+    async def attach_provider(self, sandbox_name: str, provider_name: str) -> dict[str, Any]:
         """Attach a provider record to a sandbox.
 
         Args:
@@ -458,7 +458,7 @@ class SandboxManager:
                 where ``attached`` is False if the provider was already
                 attached.
         """
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.attach_provider",
             lambda: self._stub.AttachSandboxProvider(
                 openshell_pb2.AttachSandboxProviderRequest(
@@ -473,7 +473,7 @@ class SandboxManager:
             "attached": bool(resp.attached),
         }
 
-    def detach_provider(self, sandbox_name: str, provider_name: str) -> dict[str, Any]:
+    async def detach_provider(self, sandbox_name: str, provider_name: str) -> dict[str, Any]:
         """Detach a provider record from a sandbox.
 
         Args:
@@ -484,7 +484,7 @@ class SandboxManager:
             dict[str, Any]: ``{sandbox: <sandbox dict>, detached: bool}``
                 where ``detached`` is False if the provider was not attached.
         """
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.detach_provider",
             lambda: self._stub.DetachSandboxProvider(
                 openshell_pb2.DetachSandboxProviderRequest(
@@ -499,7 +499,7 @@ class SandboxManager:
             "detached": bool(resp.detached),
         }
 
-    def wait_ready(self, name: str, *, timeout_seconds: float = 300.0) -> dict[str, Any]:
+    async def wait_ready(self, name: str, *, timeout_seconds: float = 300.0) -> dict[str, Any]:
         """Block until a sandbox reaches READY phase.
 
         Args:
@@ -515,15 +515,15 @@ class SandboxManager:
         """
         deadline = time.time() + timeout_seconds
         while time.time() < deadline:
-            sb = self.get(name)
+            sb = await self.get(name)
             if sb["phase"] == "ready":
                 return sb
             if sb["phase"] == "error":
                 raise SandboxError(f"Sandbox {name} entered error phase")
-            time.sleep(1)
+            await asyncio.sleep(1)
         raise TimeoutError(f"Sandbox {name} was not ready within {timeout_seconds}s")
 
-    def get_config(self, sandbox_id: str) -> dict[str, Any]:
+    async def get_config(self, sandbox_id: str) -> dict[str, Any]:
         """Fetch the effective sandbox config (policy + settings + revision).
 
         Args:
@@ -534,7 +534,7 @@ class SandboxManager:
                 config_revision, policy_source, global_policy_version}``.
                 ``settings`` is a flat ``{key: {value, scope}}`` map.
         """
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.get_config",
             lambda: self._stub.GetSandboxConfig(
                 sandbox_pb2.GetSandboxConfigRequest(sandbox_id=sandbox_id),
@@ -566,7 +566,7 @@ class SandboxManager:
             "global_policy_version": resp.global_policy_version,
         }
 
-    def get_provider_environment(self, sandbox_id: str) -> dict[str, str]:
+    async def get_provider_environment(self, sandbox_id: str) -> dict[str, str]:
         """Fetch the resolved provider environment variables for a sandbox.
 
         Args:
@@ -575,7 +575,7 @@ class SandboxManager:
         Returns:
             dict[str, str]: Environment variables map.
         """
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.get_provider_environment",
             lambda: self._stub.GetSandboxProviderEnvironment(
                 openshell_pb2.GetSandboxProviderEnvironmentRequest(sandbox_id=sandbox_id),
@@ -584,7 +584,7 @@ class SandboxManager:
         )
         return dict(resp.environment)
 
-    def exec(
+    async def exec(
         self,
         sandbox_id: str,
         command: list[str],
@@ -618,7 +618,7 @@ class SandboxManager:
             tty=tty,
         )
         grpc_timeout = max(self._timeout, (timeout_seconds or 600) + 10)
-        stream = self._open_stream(
+        stream = await self._open_stream(
             "sandboxes.exec",
             lambda: self._stub.ExecSandbox(request, timeout=grpc_timeout),
         )
@@ -627,7 +627,7 @@ class SandboxManager:
         stderr_parts: list[bytes] = []
         exit_code: int | None = None
 
-        for event in stream:
+        async for event in stream:
             payload = event.WhichOneof("payload")
             if payload == "stdout":
                 stdout_parts.append(bytes(event.stdout.data))
@@ -642,19 +642,19 @@ class SandboxManager:
             "stderr": b"".join(stderr_parts).decode("utf-8", errors="replace"),
         }
 
-    def exec_interactive(
+    async def exec_interactive(
         self,
         sandbox_id: str,
         command: list[str],
         *,
-        inbound: queue.Queue[dict[str, Any] | None],
+        inbound: asyncio.Queue[dict[str, Any] | None],
         on_call: Callable[[Any], None] | None = None,
         workdir: str = "",
         env: dict[str, str] | None = None,
         cols: int = 80,
         rows: int = 24,
         timeout: float | None = None,
-    ) -> Iterator[dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Run a command with bidirectional streaming (interactive TTY session).
 
         The first wire message carries the exec request; subsequent messages are
@@ -666,7 +666,7 @@ class SandboxManager:
         Args:
             sandbox_id: Sandbox identifier.
             command: Command and arguments to execute.
-            inbound: Thread-safe queue of stdin/resize frames; ``None`` ends input.
+            inbound: Queue of stdin/resize frames; ``None`` ends input.
             on_call: Optional callback handed the live gRPC call so the caller can
                 cancel it on teardown.
             workdir: Working directory inside the sandbox.
@@ -686,7 +686,7 @@ class SandboxManager:
         if on_call is not None:
             on_call(call)
         try:
-            for event in call:
+            async for event in call:
                 payload = event.WhichOneof("payload")
                 if payload == "stdout":
                     yield {"type": "stdout", "data": bytes(event.stdout.data)}
@@ -697,14 +697,14 @@ class SandboxManager:
         finally:
             call.cancel()
 
-    def forward_tcp(
+    async def forward_tcp(
         self,
         *,
         init: dict[str, Any],
-        inbound: queue.Queue[bytes | None],
+        inbound: asyncio.Queue[bytes | None],
         on_call: Callable[[Any], None] | None = None,
         timeout: float | None = None,
-    ) -> Iterator[dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Relay a raw TCP/SSH tunnel to a sandbox via bidirectional streaming.
 
         The first wire frame carries the relay target (``ssh`` or ``tcp``);
@@ -713,7 +713,7 @@ class SandboxManager:
 
         Args:
             init: Relay-init mapping (see :func:`_build_tcp_forward_init`).
-            inbound: Thread-safe queue of outbound byte chunks; ``None`` ends it.
+            inbound: Queue of outbound byte chunks; ``None`` ends it.
             on_call: Optional callback handed the live gRPC call for cancellation.
             timeout: Optional gRPC deadline in seconds; ``None`` for no deadline.
 
@@ -725,13 +725,13 @@ class SandboxManager:
         if on_call is not None:
             on_call(call)
         try:
-            for frame in call:
+            async for frame in call:
                 if frame.WhichOneof("payload") == "data":
                     yield {"type": "data", "data": bytes(frame.data)}
         finally:
             call.cancel()
 
-    def issue_token(self) -> dict[str, Any]:
+    async def issue_token(self) -> dict[str, Any]:
         """Mint a gateway JWT bound to the calling mTLS identity.
 
         Note:
@@ -742,23 +742,23 @@ class SandboxManager:
         Returns:
             dict[str, Any]: ``{"token": str, "expires_at_ms": int}`` (0 = non-expiring).
         """
-        resp = self._stub.IssueSandboxToken(
+        resp = await self._stub.IssueSandboxToken(
             openshell_pb2.IssueSandboxTokenRequest(), timeout=self._timeout
         )
         return {"token": resp.token, "expires_at_ms": resp.expires_at_ms}
 
-    def refresh_token(self) -> dict[str, Any]:
+    async def refresh_token(self) -> dict[str, Any]:
         """Mint a fresh gateway JWT for the calling identity.
 
         Returns:
             dict[str, Any]: ``{"token": str, "expires_at_ms": int}`` (0 = non-expiring).
         """
-        resp = self._stub.RefreshSandboxToken(
+        resp = await self._stub.RefreshSandboxToken(
             openshell_pb2.RefreshSandboxTokenRequest(), timeout=self._timeout
         )
         return {"token": resp.token, "expires_at_ms": resp.expires_at_ms}
 
-    def create_ssh_session(self, sandbox_id: str) -> dict[str, Any]:
+    async def create_ssh_session(self, sandbox_id: str) -> dict[str, Any]:
         """Create a temporary SSH session for shell access to a sandbox.
 
         The upstream gateway holds a documented charset contract on every
@@ -783,7 +783,7 @@ class SandboxManager:
             dict[str, Any]: SSH session details including token and
                 gateway connection info.
         """
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.create_ssh_session",
             lambda: self._stub.CreateSshSession(
                 openshell_pb2.CreateSshSessionRequest(sandbox_id=sandbox_id),
@@ -802,7 +802,7 @@ class SandboxManager:
             "expires_at_ms": resp.expires_at_ms,
         }
 
-    def revoke_ssh_session(self, token: str) -> bool:
+    async def revoke_ssh_session(self, token: str) -> bool:
         """Revoke an active SSH session.
 
         Args:
@@ -811,7 +811,7 @@ class SandboxManager:
         Returns:
             bool: True if the session was revoked.
         """
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.revoke_ssh_session",
             lambda: self._stub.RevokeSshSession(
                 openshell_pb2.RevokeSshSessionRequest(token=token),
@@ -820,7 +820,7 @@ class SandboxManager:
         )
         return bool(resp.revoked)
 
-    def get_logs(
+    async def get_logs(
         self,
         sandbox_id: str,
         *,
@@ -841,7 +841,7 @@ class SandboxManager:
         Returns:
             list[dict[str, Any]]: List of log entry dicts.
         """
-        resp = self._invoke(
+        resp = await self._invoke(
             "sandboxes.get_logs",
             lambda: self._stub.GetSandboxLogs(
                 openshell_pb2.GetSandboxLogsRequest(
@@ -866,7 +866,7 @@ class SandboxManager:
             for log in resp.logs
         ]
 
-    def watch(
+    async def watch(
         self,
         sandbox_id: str,
         *,
@@ -874,7 +874,7 @@ class SandboxManager:
         follow_logs: bool = True,
         follow_events: bool = True,
         log_tail_lines: int = 50,
-    ) -> Iterator[dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Stream live sandbox events (status, logs, platform events, draft updates).
 
         Args:
@@ -887,7 +887,7 @@ class SandboxManager:
         Yields:
             dict[str, Any]: Event dict with ``type`` and ``data`` keys.
         """
-        stream = self._open_stream(
+        stream = await self._open_stream(
             "sandboxes.watch",
             lambda: self._stub.WatchSandbox(
                 openshell_pb2.WatchSandboxRequest(
@@ -899,7 +899,7 @@ class SandboxManager:
                 ),
             ),
         )
-        for event in stream:
+        async for event in stream:
             payload_type = event.WhichOneof("payload")
             if payload_type == "sandbox":
                 yield {"type": "status", "data": _sandbox_to_dict(event.sandbox)}

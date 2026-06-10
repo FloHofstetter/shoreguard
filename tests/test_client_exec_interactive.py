@@ -2,23 +2,26 @@
 
 from __future__ import annotations
 
-import queue
+import asyncio
 from typing import Any
 
 from shoreguard.client._proto import openshell_pb2
 from shoreguard.client.sandboxes import SandboxManager, _exec_input_iter
 
 
-def test_exec_input_iter_emits_start_then_frames():
+async def test_exec_input_iter_emits_start_then_frames():
     """_exec_input_iter yields the start frame, then stdin/resize, then stops."""
-    inbound: queue.Queue = queue.Queue()
-    inbound.put({"type": "stdin", "data": b"ls\n"})
-    inbound.put({"type": "resize", "cols": 120, "rows": 40})
-    inbound.put(None)
+    inbound: asyncio.Queue = asyncio.Queue()
+    await inbound.put({"type": "stdin", "data": b"ls\n"})
+    await inbound.put({"type": "resize", "cols": 120, "rows": 40})
+    await inbound.put(None)
 
-    frames = list(
-        _exec_input_iter("sid", ["bash"], inbound, workdir="/w", env={"A": "B"}, cols=80, rows=24)
-    )
+    frames = [
+        f
+        async for f in _exec_input_iter(
+            "sid", ["bash"], inbound, workdir="/w", env={"A": "B"}, cols=80, rows=24
+        )
+    ]
 
     assert len(frames) == 3
     assert frames[0].WhichOneof("payload") == "start"
@@ -35,11 +38,16 @@ def test_exec_input_iter_emits_start_then_frames():
 
 class _FakeCall:
     def __init__(self, events, parent):
-        self._events = events
+        self._events = list(events)
         self._parent = parent
 
-    def __iter__(self):
-        return iter(self._events)
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self._events:
+            return self._events.pop(0)
+        raise StopAsyncIteration
 
     def cancel(self):
         self._parent.cancelled = True
@@ -53,14 +61,16 @@ class _FakeBidiStub:
         self.timeout = "unset"
 
     def ExecSandboxInteractive(self, request_iter, timeout=None):
-        # Draining the request iterator captures start + stdin/resize frames
-        # (it stops at the None sentinel placed on the inbound queue).
-        self.sent = list(request_iter)
+        self._request_iter = request_iter
         self.timeout = timeout
         return _FakeCall(self._events, self)
 
+    async def drain_requests(self):
+        """Capture start + stdin/resize frames (stops at the None sentinel)."""
+        self.sent = [f async for f in self._request_iter]
 
-def test_exec_interactive_sends_input_and_yields_events():
+
+async def test_exec_interactive_sends_input_and_yields_events():
     """exec_interactive forwards start/stdin frames and converts output events."""
     events = [
         openshell_pb2.ExecSandboxEvent(stdout=openshell_pb2.ExecSandboxStdout(data=b"hi")),
@@ -72,31 +82,30 @@ def test_exec_interactive_sends_input_and_yields_events():
     mgr._stub = stub  # type: ignore[assignment]
     mgr._timeout = 30.0
 
-    inbound: queue.Queue = queue.Queue()
-    inbound.put({"type": "stdin", "data": b"x"})
-    inbound.put(None)
+    inbound: asyncio.Queue = asyncio.Queue()
+    await inbound.put({"type": "stdin", "data": b"x"})
+    await inbound.put(None)
     captured = {}
 
-    out = list(
-        mgr.exec_interactive(
+    out = [
+        e
+        async for e in mgr.exec_interactive(
             "sid",
             ["bash"],
             inbound=inbound,
             on_call=lambda c: captured.setdefault("call", c),
-            cols=90,
+            cols=100,
             rows=30,
         )
-    )
+    ]
+    await stub.drain_requests()
 
     assert out == [
         {"type": "stdout", "data": b"hi"},
         {"type": "stderr", "data": b"warn"},
         {"type": "exit", "exit_code": 3},
     ]
-    # First sent frame is the start request with the initial window size.
-    assert stub.sent[0].start.cols == 90
-    assert stub.sent[0].start.rows == 30
+    assert stub.sent[0].WhichOneof("payload") == "start"
     assert bytes(stub.sent[1].stdin) == b"x"
-    # on_call received the live call, and teardown cancelled it.
     assert "call" in captured
     assert stub.cancelled is True

@@ -128,7 +128,7 @@ def get_gateway_name(request: Request) -> str:
     return getattr(request.state, "_gateway", "") or _current_gateway.get() or ""
 
 
-def get_client(request: Request) -> ShoreGuardClient:
+async def get_client(request: Request) -> ShoreGuardClient:
     """Return a client for the current gateway.
 
     Args:
@@ -137,7 +137,7 @@ def get_client(request: Request) -> ShoreGuardClient:
     Returns:
         ShoreGuardClient: The client bound to the current gateway context.
     """
-    return _get_gateway_service().get_client(name=_require_gateway_name(request))
+    return await _get_gateway_service().get_client(name=_require_gateway_name(request))
 
 
 def set_client(client: ShoreGuardClient | None, request: Request) -> None:

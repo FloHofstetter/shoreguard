@@ -389,7 +389,7 @@ async def run_hook(
     existing = _service().get(hook_id)
     if existing is None or existing["gateway_name"] != gw or existing["sandbox_name"] != name:
         raise HTTPException(404, "Boot hook not found")
-    result = _service().run_one(hook_id)
+    result = await _service().run_one(hook_id)
     await audit_log(
         request,
         "boot_hook.manual_run",

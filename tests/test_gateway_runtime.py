@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -86,7 +86,7 @@ class TestValidateRuntime:
 
 @pytest.fixture
 def mock_gw_svc():
-    with patch.object(get_container(), "gateway") as mock:
+    with patch.object(get_container(), "gateway", new_callable=AsyncMock) as mock:
         yield mock
 
 

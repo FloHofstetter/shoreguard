@@ -35,15 +35,15 @@ class _FakeStub:
     def __init__(self) -> None:
         self.request = None
 
-    def ListProviderProfiles(self, req, timeout=None):
+    async def ListProviderProfiles(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(profiles=[_make_profile("claude"), _make_profile("openai")])
 
-    def GetProviderProfile(self, req, timeout=None):
+    async def GetProviderProfile(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(profile=_make_profile(req.id))
 
-    def LintProviderProfiles(self, req, timeout=None):
+    async def LintProviderProfiles(self, req, timeout=None):
         self.request = req
         diag = openshell_pb2.ProviderProfileDiagnostic(
             source="inline",
@@ -54,7 +54,7 @@ class _FakeStub:
         )
         return SimpleNamespace(valid=False, diagnostics=[diag])
 
-    def ImportProviderProfiles(self, req, timeout=None):
+    async def ImportProviderProfiles(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(
             imported=True,
@@ -62,7 +62,7 @@ class _FakeStub:
             diagnostics=[],
         )
 
-    def DeleteProviderProfile(self, req, timeout=None):
+    async def DeleteProviderProfile(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(deleted=True)
 
@@ -80,16 +80,16 @@ def mgr(stub: _FakeStub) -> ProviderProfileManager:
     return m
 
 
-def test_list_passes_pagination(mgr: ProviderProfileManager, stub: _FakeStub) -> None:
-    out = mgr.list(limit=42, offset=7)
+async def test_list_passes_pagination(mgr: ProviderProfileManager, stub: _FakeStub) -> None:
+    out = await mgr.list(limit=42, offset=7)
     assert stub.request is not None
     assert stub.request.limit == 42
     assert stub.request.offset == 7
     assert [p["id"] for p in out] == ["claude", "openai"]
 
 
-def test_get_returns_dict(mgr: ProviderProfileManager, stub: _FakeStub) -> None:
-    out = mgr.get("claude")
+async def test_get_returns_dict(mgr: ProviderProfileManager, stub: _FakeStub) -> None:
+    out = await mgr.get("claude")
     assert stub.request is not None
     assert stub.request.id == "claude"
     assert out["id"] == "claude"
@@ -98,27 +98,29 @@ def test_get_returns_dict(mgr: ProviderProfileManager, stub: _FakeStub) -> None:
     assert out["credentials"][0]["env_vars"] == ["ANTHROPIC_API_KEY"]
 
 
-def test_lint_round_trip(mgr: ProviderProfileManager, stub: _FakeStub) -> None:
-    result = mgr.lint([{"profile": {"id": "oops", "display_name": ""}, "source": "inline"}])
+async def test_lint_round_trip(mgr: ProviderProfileManager, stub: _FakeStub) -> None:
+    result = await mgr.lint([{"profile": {"id": "oops", "display_name": ""}, "source": "inline"}])
     assert result["valid"] is False
     assert result["diagnostics"][0]["message"] == "empty"
 
 
-def test_import_returns_imported_profiles(mgr: ProviderProfileManager, stub: _FakeStub) -> None:
-    result = mgr.import_(
+async def test_import_returns_imported_profiles(
+    mgr: ProviderProfileManager, stub: _FakeStub
+) -> None:
+    result = await mgr.import_(
         [{"profile": {"id": "claude", "display_name": "Claude"}, "source": "inline"}]
     )
     assert result["imported"] is True
     assert result["profiles"][0]["id"] == "claude"
 
 
-def test_delete_returns_bool(mgr: ProviderProfileManager, stub: _FakeStub) -> None:
-    assert mgr.delete("claude") is True
+async def test_delete_returns_bool(mgr: ProviderProfileManager, stub: _FakeStub) -> None:
+    assert await mgr.delete("claude") is True
     assert stub.request is not None
     assert stub.request.id == "claude"
 
 
-def test_profile_to_dict_unknown_category() -> None:
+async def test_profile_to_dict_unknown_category() -> None:
     """An unseen category integer is passed through as a raw int."""
     profile = openshell_pb2.ProviderProfile(id="x", category=99)  # type: ignore[arg-type]
     d = _profile_to_dict(profile)

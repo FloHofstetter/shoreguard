@@ -23,6 +23,7 @@ without the REST surface changing.
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
 import logging
@@ -94,7 +95,7 @@ class BootHookService:
 
     Args:
         session_factory: SQLAlchemy session factory for database access.
-        sandbox_service_provider: Optional callable returning a
+        sandbox_service_provider: Optional async callable returning a
             ``SandboxService`` for a given gateway. Used during post-create
             execution to dispatch ``ExecSandbox``. Kept lazy to avoid an
             import cycle with ``shoreguard.services.sandbox``.
@@ -353,7 +354,7 @@ class BootHookService:
 
     # -------------------------------------------------------------- Execution
 
-    def run_pre_create(
+    async def run_pre_create(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -377,8 +378,9 @@ class BootHookService:
             BootHookError: If any hook fails.
         """
         results: list[dict[str, Any]] = []
-        for hook in self._enabled_for(gateway_name, sandbox_name, PHASE_PRE):
-            result = self._run_local(hook, spec)
+        hooks = await asyncio.to_thread(self._enabled_for, gateway_name, sandbox_name, PHASE_PRE)
+        for hook in hooks:
+            result = await asyncio.to_thread(self._run_local, hook, spec)
             results.append(result)
             if result["status"] == "failure":
                 raise BootHookError(
@@ -389,7 +391,7 @@ class BootHookService:
                 )
         return results
 
-    def run_post_create(
+    async def run_post_create(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -412,7 +414,7 @@ class BootHookService:
         sandbox_service: SandboxService | None = None
         if self._sandbox_provider is not None:
             try:
-                sandbox_service = self._sandbox_provider(gateway_name)
+                sandbox_service = await self._sandbox_provider(gateway_name)
             except Exception:
                 logger.exception(
                     "boot_hooks: failed to obtain SandboxService for gateway %s",
@@ -422,8 +424,9 @@ class BootHookService:
         if sandbox_service is None:
             return results
 
-        for hook in self._enabled_for(gateway_name, sandbox_name, PHASE_POST):
-            result = self._run_in_sandbox(hook, sandbox_service)
+        hooks = await asyncio.to_thread(self._enabled_for, gateway_name, sandbox_name, PHASE_POST)
+        for hook in hooks:
+            result = await self._run_in_sandbox(hook, sandbox_service)
             results.append(result)
             if result["status"] == "failure" and not hook["continue_on_failure"]:
                 logger.warning(
@@ -435,7 +438,7 @@ class BootHookService:
                 break
         return results
 
-    def run_one(
+    async def run_one(
         self,
         hook_id: int,
         *,
@@ -454,15 +457,15 @@ class BootHookService:
         Returns:
             dict[str, Any] | None: Hook execution result or None if missing.
         """
-        hook = self.get(hook_id)
+        hook = await asyncio.to_thread(self.get, hook_id)
         if hook is None:
             return None
         if hook["phase"] == PHASE_PRE:
-            return self._run_local(hook, spec or {})
+            return await asyncio.to_thread(self._run_local, hook, spec or {})
         sandbox_service: SandboxService | None = None
         if self._sandbox_provider is not None:
             try:
-                sandbox_service = self._sandbox_provider(hook["gateway_name"])
+                sandbox_service = await self._sandbox_provider(hook["gateway_name"])
             except Exception:
                 logger.exception(
                     "boot_hooks: manual run failed to resolve SandboxService",
@@ -474,9 +477,9 @@ class BootHookService:
                 "no SandboxService available",
                 "",
             )
-            self._persist_run(hook["id"], failure)
+            await asyncio.to_thread(self._persist_run, hook["id"], failure)
             return failure
-        return self._run_in_sandbox(hook, sandbox_service)
+        return await self._run_in_sandbox(hook, sandbox_service)
 
     # ----------------------------------------------------------------- Internals
 
@@ -608,7 +611,7 @@ class BootHookService:
         self._persist_run(hook["id"], failure)
         return failure
 
-    def _run_in_sandbox(
+    async def _run_in_sandbox(
         self,
         hook: dict[str, Any],
         sandbox_service: SandboxService,
@@ -623,7 +626,7 @@ class BootHookService:
             dict[str, Any]: ``HookResult`` capturing status + output.
         """
         start = time.monotonic()
-        result = self._run_in_sandbox_impl(hook, sandbox_service)
+        result = await self._run_in_sandbox_impl(hook, sandbox_service)
         _record_hook_metric(
             hook,
             status=("success" if result.get("status") == "success" else "failure"),
@@ -631,7 +634,7 @@ class BootHookService:
         )
         return result
 
-    def _run_in_sandbox_impl(
+    async def _run_in_sandbox_impl(
         self,
         hook: dict[str, Any],
         sandbox_service: SandboxService,
@@ -646,7 +649,7 @@ class BootHookService:
             dict[str, Any]: ``HookResult``.
         """
         try:
-            exec_result = sandbox_service.exec(
+            exec_result = await sandbox_service.exec(
                 hook["sandbox_name"],
                 hook["command"],
                 workdir=hook.get("workdir") or "",

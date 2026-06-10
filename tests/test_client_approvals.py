@@ -14,7 +14,7 @@ class _FakeStub:
     def __init__(self) -> None:
         self.request = None
 
-    def GetDraftPolicy(self, req, timeout=None):
+    async def GetDraftPolicy(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(
             chunks=[openshell_pb2.PolicyChunk(id="chunk-1", rule_name="pypi", status="pending")],
@@ -23,33 +23,33 @@ class _FakeStub:
             last_analyzed_at_ms=1000,
         )
 
-    def ApproveDraftChunk(self, req, timeout=None):
+    async def ApproveDraftChunk(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(policy_version=5, policy_hash="abc")
 
-    def RejectDraftChunk(self, req, timeout=None):
+    async def RejectDraftChunk(self, req, timeout=None):
         self.request = req
         return SimpleNamespace()
 
-    def ApproveAllDraftChunks(self, req, timeout=None):
+    async def ApproveAllDraftChunks(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(
             policy_version=5, policy_hash="abc", chunks_approved=3, chunks_skipped=1
         )
 
-    def EditDraftChunk(self, req, timeout=None):
+    async def EditDraftChunk(self, req, timeout=None):
         self.request = req
         return SimpleNamespace()
 
-    def UndoDraftChunk(self, req, timeout=None):
+    async def UndoDraftChunk(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(policy_version=4, policy_hash="old")
 
-    def ClearDraftChunks(self, req, timeout=None):
+    async def ClearDraftChunks(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(chunks_cleared=5)
 
-    def GetDraftHistory(self, req, timeout=None):
+    async def GetDraftHistory(self, req, timeout=None):
         self.request = req
         return SimpleNamespace(
             entries=[
@@ -76,9 +76,9 @@ def mgr(stub):
     return m
 
 
-def test_get_draft_sends_sandbox_name(mgr, stub):
+async def test_get_draft_sends_sandbox_name(mgr, stub):
     """get_draft() sends sandbox name and returns chunks list."""
-    result = mgr.get_draft("sb1")
+    result = await mgr.get_draft("sb1")
 
     assert stub.request.name == "sb1"
     assert result["draft_version"] == 2
@@ -86,36 +86,36 @@ def test_get_draft_sends_sandbox_name(mgr, stub):
     assert result["chunks"][0]["rule_name"] == "pypi"
 
 
-def test_approve_sends_chunk_id(mgr, stub):
+async def test_approve_sends_chunk_id(mgr, stub):
     """approve() sends sandbox name + chunk_id and returns policy version."""
-    result = mgr.approve("sb1", "chunk-1")
+    result = await mgr.approve("sb1", "chunk-1")
 
     assert stub.request.name == "sb1"
     assert stub.request.chunk_id == "chunk-1"
     assert result["policy_version"] == 5
 
 
-def test_reject_sends_reason(mgr, stub):
+async def test_reject_sends_reason(mgr, stub):
     """reject() sends reason in request."""
-    mgr.reject("sb1", "chunk-1", reason="too permissive")
+    await mgr.reject("sb1", "chunk-1", reason="too permissive")
 
     assert stub.request.name == "sb1"
     assert stub.request.chunk_id == "chunk-1"
     assert stub.request.reason == "too permissive"
 
 
-def test_approve_all_sends_flag(mgr, stub):
+async def test_approve_all_sends_flag(mgr, stub):
     """approve_all() sends include_security_flagged and returns counts."""
-    result = mgr.approve_all("sb1", include_security_flagged=True)
+    result = await mgr.approve_all("sb1", include_security_flagged=True)
 
     assert stub.request.include_security_flagged is True
     assert result["chunks_approved"] == 3
     assert result["chunks_skipped"] == 1
 
 
-def test_edit_converts_proposed_rule(mgr, stub):
+async def test_edit_converts_proposed_rule(mgr, stub):
     """edit() converts dict to NetworkPolicyRule proto via _dict_to_network_rule."""
-    mgr.edit("sb1", "chunk-1", {"name": "pypi", "endpoints": [], "binaries": []})
+    await mgr.edit("sb1", "chunk-1", {"name": "pypi", "endpoints": [], "binaries": []})
 
     assert stub.request.name == "sb1"
     assert stub.request.chunk_id == "chunk-1"
@@ -123,25 +123,25 @@ def test_edit_converts_proposed_rule(mgr, stub):
     assert stub.request.proposed_rule.name == "pypi"
 
 
-def test_undo_sends_chunk_id(mgr, stub):
+async def test_undo_sends_chunk_id(mgr, stub):
     """undo() sends chunk_id and returns policy version."""
-    result = mgr.undo("sb1", "chunk-1")
+    result = await mgr.undo("sb1", "chunk-1")
 
     assert stub.request.chunk_id == "chunk-1"
     assert result["policy_version"] == 4
 
 
-def test_clear_returns_count(mgr, stub):
+async def test_clear_returns_count(mgr, stub):
     """clear() returns chunks_cleared count."""
-    result = mgr.clear("sb1")
+    result = await mgr.clear("sb1")
 
     assert stub.request.name == "sb1"
     assert result["chunks_cleared"] == 5
 
 
-def test_get_history_returns_list(mgr, stub):
+async def test_get_history_returns_list(mgr, stub):
     """get_history() returns list of decision entries."""
-    result = mgr.get_history("sb1")
+    result = await mgr.get_history("sb1")
 
     assert stub.request.name == "sb1"
     assert len(result) == 1
@@ -152,7 +152,7 @@ def test_get_history_returns_list(mgr, stub):
 # ─── _chunk_to_dict conversion tests ────────────────────────────────────────
 
 
-def test_chunk_to_dict_basic_fields():
+async def test_chunk_to_dict_basic_fields():
     """Chunk without proposed_rule — basic fields only."""
     chunk = openshell_pb2.PolicyChunk(
         id="c1",
@@ -184,14 +184,14 @@ def test_chunk_to_dict_basic_fields():
     assert "proposed_rule" not in result
 
 
-def test_chunk_to_dict_denial_summary_ids_default_empty():
+async def test_chunk_to_dict_denial_summary_ids_default_empty():
     """An absent/empty denial_summary_ids surfaces as an empty list, not None."""
     chunk = openshell_pb2.PolicyChunk(id="c1")
     result = _chunk_to_dict(chunk)
     assert result["denial_summary_ids"] == []
 
 
-def test_chunk_to_dict_with_proposed_rule():
+async def test_chunk_to_dict_with_proposed_rule():
     """Chunk with proposed_rule including endpoints and binaries."""
     rule = sandbox_pb2.NetworkPolicyRule(
         name="pypi",
@@ -241,9 +241,9 @@ def test_chunk_to_dict_with_proposed_rule():
     assert pr["binaries"][0]["path"] == "/usr/bin/pip"
 
 
-def test_get_pending_delegates(mgr):
+async def test_get_pending_delegates(mgr):
     """get_pending() calls get_draft with status_filter='pending'."""
-    result = mgr.get_pending("sb1")
+    result = await mgr.get_pending("sb1")
     assert len(result) == 1
     assert result[0]["rule_name"] == "pypi"
 
@@ -251,7 +251,7 @@ def test_get_pending_delegates(mgr):
 # ─── Mutation-killing tests ──────────────────────────────────────────────────
 
 
-def test_chunk_to_dict_timestamp_fields():
+async def test_chunk_to_dict_timestamp_fields():
     """Assert all timestamp fields: created_at_ms, decided_at_ms, first_seen_ms, last_seen_ms."""
     chunk = openshell_pb2.PolicyChunk(
         id="c1",
@@ -271,7 +271,7 @@ def test_chunk_to_dict_timestamp_fields():
     assert result["stage"] == "review"
 
 
-def test_chunk_to_dict_proposed_rule_minimal_endpoint():
+async def test_chunk_to_dict_proposed_rule_minimal_endpoint():
     """Proposed rule with minimal endpoint (no optional fields)."""
     rule = sandbox_pb2.NetworkPolicyRule(
         name="minimal",
@@ -291,36 +291,36 @@ def test_chunk_to_dict_proposed_rule_minimal_endpoint():
         assert key not in ep
 
 
-def test_get_draft_rolling_summary_and_last_analyzed(mgr):
+async def test_get_draft_rolling_summary_and_last_analyzed(mgr):
     """get_draft() returns rolling_summary and last_analyzed_at_ms."""
-    result = mgr.get_draft("sb1")
+    result = await mgr.get_draft("sb1")
     assert result["rolling_summary"] == "summary"
     assert result["last_analyzed_at_ms"] == 1000
 
 
-def test_approve_returns_policy_hash(mgr):
+async def test_approve_returns_policy_hash(mgr):
     """approve() returns policy_hash field."""
-    result = mgr.approve("sb1", "chunk-1")
+    result = await mgr.approve("sb1", "chunk-1")
     assert result["policy_hash"] == "abc"
 
 
-def test_approve_all_returns_policy_hash(mgr):
+async def test_approve_all_returns_policy_hash(mgr):
     """approve_all() returns policy_hash field."""
-    result = mgr.approve_all("sb1")
+    result = await mgr.approve_all("sb1")
     assert result["policy_hash"] == "abc"
     assert result["policy_version"] == 5
 
 
-def test_undo_returns_policy_hash(mgr):
+async def test_undo_returns_policy_hash(mgr):
     """undo() returns policy_hash field."""
-    result = mgr.undo("sb1", "chunk-1")
+    result = await mgr.undo("sb1", "chunk-1")
     assert result["policy_hash"] == "old"
     assert result["policy_version"] == 4
 
 
-def test_get_history_timestamp_and_description(mgr):
+async def test_get_history_timestamp_and_description(mgr):
     """get_history() returns timestamp_ms and description fields."""
-    result = mgr.get_history("sb1")
+    result = await mgr.get_history("sb1")
     assert result[0]["timestamp_ms"] == 1000
     assert result[0]["description"] == "ok"
 
@@ -331,7 +331,7 @@ def test_get_history_timestamp_and_description(mgr):
 class TestChunkToDictMutations:
     """Kill mutations in _chunk_to_dict field mappings."""
 
-    def test_chunk_all_fields_exact(self):
+    async def test_chunk_all_fields_exact(self):
         chunk = openshell_pb2.PolicyChunk(
             id="ID",
             status="STATUS",
@@ -362,18 +362,18 @@ class TestChunkToDictMutations:
         assert d["last_seen_ms"] == 5
         assert d["binary"] == "BIN"
 
-    def test_chunk_no_proposed_rule_key_absent(self):
+    async def test_chunk_no_proposed_rule_key_absent(self):
         chunk = openshell_pb2.PolicyChunk(id="c")
         d = _chunk_to_dict(chunk)
         assert "proposed_rule" not in d
 
-    def test_chunk_proposed_rule_name(self):
+    async def test_chunk_proposed_rule_name(self):
         rule = sandbox_pb2.NetworkPolicyRule(name="r1")
         chunk = openshell_pb2.PolicyChunk(id="c", proposed_rule=rule)
         d = _chunk_to_dict(chunk)
         assert d["proposed_rule"]["name"] == "r1"
 
-    def test_chunk_proposed_rule_binaries(self):
+    async def test_chunk_proposed_rule_binaries(self):
         rule = sandbox_pb2.NetworkPolicyRule(
             name="r",
             binaries=[sandbox_pb2.NetworkBinary(path="/a"), sandbox_pb2.NetworkBinary(path="/b")],
@@ -382,13 +382,13 @@ class TestChunkToDictMutations:
         d = _chunk_to_dict(chunk)
         assert d["proposed_rule"]["binaries"] == [{"path": "/a"}, {"path": "/b"}]
 
-    def test_chunk_proposed_rule_empty_binaries(self):
+    async def test_chunk_proposed_rule_empty_binaries(self):
         rule = sandbox_pb2.NetworkPolicyRule(name="r")
         chunk = openshell_pb2.PolicyChunk(id="c", proposed_rule=rule)
         d = _chunk_to_dict(chunk)
         assert d["proposed_rule"]["binaries"] == []
 
-    def test_chunk_proposed_rule_endpoint_optional_fields_omitted(self):
+    async def test_chunk_proposed_rule_endpoint_optional_fields_omitted(self):
         """Endpoint without protocol/tls/enforcement/access/rules/allowed_ips/ports omits them."""
         rule = sandbox_pb2.NetworkPolicyRule(
             name="r",
@@ -402,7 +402,7 @@ class TestChunkToDictMutations:
         for key in ("protocol", "tls", "enforcement", "access", "rules", "allowed_ips", "ports"):
             assert key not in ep
 
-    def test_chunk_proposed_rule_endpoint_all_optional(self):
+    async def test_chunk_proposed_rule_endpoint_all_optional(self):
         """Endpoint with all optional fields present includes them."""
         rule = sandbox_pb2.NetworkPolicyRule(
             name="r",
@@ -441,9 +441,9 @@ class TestChunkToDictMutations:
 class TestApprovalManagerMutations:
     """Kill mutations in ApprovalManager method argument passing."""
 
-    def test_get_draft_status_filter(self):
+    async def test_get_draft_status_filter(self):
         class _Stub(_FakeStub):
-            def GetDraftPolicy(self, req, timeout=None):
+            async def GetDraftPolicy(self, req, timeout=None):
                 self.request = req
                 return SimpleNamespace(
                     chunks=[], rolling_summary="", draft_version=0, last_analyzed_at_ms=0
@@ -453,12 +453,12 @@ class TestApprovalManagerMutations:
         m = object.__new__(ApprovalManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        m.get_draft("sb", status_filter="approved")
+        await m.get_draft("sb", status_filter="approved")
         assert s.request.status_filter == "approved"
 
-    def test_get_draft_default_status_filter_empty(self):
+    async def test_get_draft_default_status_filter_empty(self):
         class _Stub(_FakeStub):
-            def GetDraftPolicy(self, req, timeout=None):
+            async def GetDraftPolicy(self, req, timeout=None):
                 self.request = req
                 return SimpleNamespace(
                     chunks=[], rolling_summary="", draft_version=0, last_analyzed_at_ms=0
@@ -468,12 +468,12 @@ class TestApprovalManagerMutations:
         m = object.__new__(ApprovalManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        m.get_draft("sb")
+        await m.get_draft("sb")
         assert s.request.status_filter == ""
 
-    def test_get_pending_uses_pending_filter(self):
+    async def test_get_pending_uses_pending_filter(self):
         class _Stub(_FakeStub):
-            def GetDraftPolicy(self, req, timeout=None):
+            async def GetDraftPolicy(self, req, timeout=None):
                 self.request = req
                 return SimpleNamespace(
                     chunks=[openshell_pb2.PolicyChunk(id="c", status="pending")],
@@ -486,25 +486,25 @@ class TestApprovalManagerMutations:
         m = object.__new__(ApprovalManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.get_pending("sb")
+        result = await m.get_pending("sb")
         assert s.request.status_filter == "pending"
         assert len(result) == 1
 
-    def test_reject_default_reason_empty(self, mgr, stub):
-        mgr.reject("sb1", "chunk-1")
+    async def test_reject_default_reason_empty(self, mgr, stub):
+        await mgr.reject("sb1", "chunk-1")
         assert stub.request.reason == ""
 
-    def test_approve_all_default_no_security_flagged(self, mgr, stub):
-        mgr.approve_all("sb1")
+    async def test_approve_all_default_no_security_flagged(self, mgr, stub):
+        await mgr.approve_all("sb1")
         assert stub.request.include_security_flagged is False
 
-    def test_approve_all_with_security_flagged(self, mgr, stub):
-        mgr.approve_all("sb1", include_security_flagged=True)
+    async def test_approve_all_with_security_flagged(self, mgr, stub):
+        await mgr.approve_all("sb1", include_security_flagged=True)
         assert stub.request.include_security_flagged is True
 
-    def test_edit_passes_rule_with_endpoints(self):
+    async def test_edit_passes_rule_with_endpoints(self):
         class _Stub(_FakeStub):
-            def EditDraftChunk(self, req, timeout=None):
+            async def EditDraftChunk(self, req, timeout=None):
                 self.request = req
                 return SimpleNamespace()
 
@@ -512,7 +512,7 @@ class TestApprovalManagerMutations:
         m = object.__new__(ApprovalManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        m.edit(
+        await m.edit(
             "sb",
             "c",
             {
@@ -526,17 +526,17 @@ class TestApprovalManagerMutations:
         assert s.request.proposed_rule.endpoints[0].port == 80
         assert s.request.proposed_rule.binaries[0].path == "/bin/x"
 
-    def test_undo_sends_sandbox_name(self, mgr, stub):
-        mgr.undo("sb1", "chunk-1")
+    async def test_undo_sends_sandbox_name(self, mgr, stub):
+        await mgr.undo("sb1", "chunk-1")
         assert stub.request.name == "sb1"
 
-    def test_clear_sends_sandbox_name(self, mgr, stub):
-        mgr.clear("sb1")
+    async def test_clear_sends_sandbox_name(self, mgr, stub):
+        await mgr.clear("sb1")
         assert stub.request.name == "sb1"
 
-    def test_get_history_entries_all_fields(self):
+    async def test_get_history_entries_all_fields(self):
         class _Stub(_FakeStub):
-            def GetDraftHistory(self, req, timeout=None):
+            async def GetDraftHistory(self, req, timeout=None):
                 return SimpleNamespace(
                     entries=[
                         SimpleNamespace(
@@ -555,7 +555,7 @@ class TestApprovalManagerMutations:
         m = object.__new__(ApprovalManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.get_history("sb")
+        result = await m.get_history("sb")
         assert len(result) == 2
         assert result[0] == {
             "timestamp_ms": 100,
@@ -570,9 +570,9 @@ class TestApprovalManagerMutations:
             "chunk_id": "c3",
         }
 
-    def test_get_draft_all_return_fields(self):
+    async def test_get_draft_all_return_fields(self):
         class _Stub(_FakeStub):
-            def GetDraftPolicy(self, req, timeout=None):
+            async def GetDraftPolicy(self, req, timeout=None):
                 return SimpleNamespace(
                     chunks=[], rolling_summary="RS", draft_version=9, last_analyzed_at_ms=555
                 )
@@ -581,7 +581,7 @@ class TestApprovalManagerMutations:
         m = object.__new__(ApprovalManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.get_draft("sb")
+        result = await m.get_draft("sb")
         assert result == {
             "chunks": [],
             "rolling_summary": "RS",
@@ -589,33 +589,33 @@ class TestApprovalManagerMutations:
             "last_analyzed_at_ms": 555,
         }
 
-    def test_approve_returns_exact_dict(self):
+    async def test_approve_returns_exact_dict(self):
         class _Stub(_FakeStub):
-            def ApproveDraftChunk(self, req, timeout=None):
+            async def ApproveDraftChunk(self, req, timeout=None):
                 return SimpleNamespace(policy_version=10, policy_hash="HASH")
 
         s = _Stub()
         m = object.__new__(ApprovalManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.approve("sb", "c")
+        result = await m.approve("sb", "c")
         assert result == {"policy_version": 10, "policy_hash": "HASH"}
 
-    def test_clear_returns_exact_dict(self):
+    async def test_clear_returns_exact_dict(self):
         class _Stub(_FakeStub):
-            def ClearDraftChunks(self, req, timeout=None):
+            async def ClearDraftChunks(self, req, timeout=None):
                 return SimpleNamespace(chunks_cleared=0)
 
         s = _Stub()
         m = object.__new__(ApprovalManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.clear("sb")
+        result = await m.clear("sb")
         assert result == {"chunks_cleared": 0}
 
-    def test_approve_all_returns_exact_dict(self):
+    async def test_approve_all_returns_exact_dict(self):
         class _Stub(_FakeStub):
-            def ApproveAllDraftChunks(self, req, timeout=None):
+            async def ApproveAllDraftChunks(self, req, timeout=None):
                 return SimpleNamespace(
                     policy_version=7, policy_hash="H", chunks_approved=0, chunks_skipped=0
                 )
@@ -624,7 +624,7 @@ class TestApprovalManagerMutations:
         m = object.__new__(ApprovalManager)
         m._stub = s  # type: ignore[assignment]
         m._timeout = 30.0
-        result = m.approve_all("sb")
+        result = await m.approve_all("sb")
         assert result == {
             "policy_version": 7,
             "policy_hash": "H",

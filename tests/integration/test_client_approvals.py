@@ -7,7 +7,7 @@ import pytest
 pytestmark = pytest.mark.integration
 
 
-def test_get_draft_empty(ready_sandbox, sg_client):
+async def test_get_draft_empty(ready_sandbox, sg_client):
     """get_draft() returns a valid structure on a fresh sandbox."""
     result = sg_client.approvals.get_draft(ready_sandbox["name"])
 
@@ -18,14 +18,14 @@ def test_get_draft_empty(ready_sandbox, sg_client):
     assert "last_analyzed_at_ms" in result
 
 
-def test_get_pending_empty(ready_sandbox, sg_client):
+async def test_get_pending_empty(ready_sandbox, sg_client):
     """get_pending() returns a list (likely empty on fresh sandbox)."""
     result = sg_client.approvals.get_pending(ready_sandbox["name"])
 
     assert isinstance(result, list)
 
 
-def test_get_history(ready_sandbox, sg_client):
+async def test_get_history(ready_sandbox, sg_client):
     """get_history() returns a list of decision entries."""
     result = sg_client.approvals.get_history(ready_sandbox["name"])
 

@@ -146,7 +146,7 @@ async def get_policy(
     Returns:
         dict[str, Any]: Active policy document.
     """
-    return await asyncio.to_thread(svc.get, name)
+    return await svc.get(name)
 
 
 @router.get("/sandboxes/{name}/policy/effective", response_model=PolicyResponse)
@@ -171,7 +171,7 @@ async def get_effective_policy(
     Returns:
         dict[str, Any]: Effective policy envelope.
     """
-    return await asyncio.to_thread(svc.get_effective, name)
+    return await svc.get_effective(name)
 
 
 @router.post(
@@ -206,8 +206,7 @@ async def submit_policy_analysis(
         int, "rejection_reasons": list[str]}``.
     """
     check_write_rate_limit(request)
-    result = await asyncio.to_thread(
-        svc.submit_analysis,
+    result = await svc.submit_analysis(
         name,
         summaries=body.summaries,
         proposed_chunks=body.proposed_chunks,
@@ -292,7 +291,7 @@ async def export_policy(
     Returns:
         dict[str, Any]: ``PolicyExportResponse`` payload.
     """
-    snapshot = await asyncio.to_thread(svc.get, name)
+    snapshot = await svc.get(name)
     policy = snapshot.get("policy") or {}
     gw = get_gateway_name(request)
     yaml_text = render_yaml(
@@ -360,7 +359,7 @@ async def apply_policy(
 
     expected_version = body.expected_version or metadata.get("policy_hash")
 
-    snapshot = await asyncio.to_thread(svc.get, name)
+    snapshot = await svc.get(name)
     current_policy = snapshot.get("policy") or {}
     current_hash = _extract_hash(snapshot)
 
@@ -497,9 +496,9 @@ async def apply_policy(
                     "hint": "retry with mode='replace' for changes outside network_policies",
                 },
             ) from exc
-        result = await asyncio.to_thread(svc.update_merge, name, merge_ops)
+        result = await svc.update_merge(name, merge_ops)
     else:
-        result = await asyncio.to_thread(svc.update, name, new_policy)
+        result = await svc.update(name, new_policy)
     new_hash = ""
     if isinstance(result, dict):
         rev = result.get("revision") or {}
@@ -561,7 +560,7 @@ async def update_policy(
         dict[str, Any]: Updated policy record.
     """
     _check_policy_pin(request, name)
-    result = await asyncio.to_thread(svc.update, name, body)
+    result = await svc.update(name, body)
     logger.info(
         "Policy updated (sandbox=%s, actor=%s)",
         name,
@@ -594,12 +593,7 @@ async def list_policy_revisions(
     Returns:
         list[dict[str, Any]]: Policy revision records.
     """
-    return await asyncio.to_thread(
-        svc.list_revisions,
-        name,
-        limit=limit,
-        offset=offset,
-    )
+    return await svc.list_revisions(name, limit=limit, offset=offset)
 
 
 @router.get("/sandboxes/{name}/policy/diff", response_model=PolicyDiffResponse)
@@ -620,7 +614,7 @@ async def diff_policy_revisions(
     Returns:
         dict[str, Any]: Diff result with added, removed, and changed entries.
     """
-    return await asyncio.to_thread(svc.diff_revisions, name, version_a, version_b)
+    return await svc.diff_revisions(name, version_a, version_b)
 
 
 # ─── Network Rule CRUD ───────────────────────────────────────────────────────
@@ -650,12 +644,7 @@ async def add_network_rule(
     """
     check_write_rate_limit(request)
     _check_policy_pin(request, name)
-    result = await asyncio.to_thread(
-        svc.add_network_rule,
-        name,
-        body.key,
-        body.rule,
-    )
+    result = await svc.add_network_rule(name, body.key, body.rule)
     logger.info(
         "Network rule added (sandbox=%s, actor=%s)",
         name,
@@ -695,7 +684,7 @@ async def delete_network_rule(
         dict[str, Any]: Updated policy after rule deletion.
     """
     _check_policy_pin(request, name)
-    result = await asyncio.to_thread(svc.delete_network_rule, name, key)
+    result = await svc.delete_network_rule(name, key)
     logger.info(
         "Network rule deleted (sandbox=%s, key=%s, actor=%s)",
         name,
@@ -740,12 +729,7 @@ async def add_filesystem_path(
     """
     check_write_rate_limit(request)
     _check_policy_pin(request, name)
-    result = await asyncio.to_thread(
-        svc.add_filesystem_path,
-        name,
-        body.path,
-        body.access,
-    )
+    result = await svc.add_filesystem_path(name, body.path, body.access)
     logger.info(
         "Filesystem path added (sandbox=%s, actor=%s)",
         name,
@@ -785,7 +769,7 @@ async def delete_filesystem_path(
         dict[str, Any]: Updated policy after path deletion.
     """
     _check_policy_pin(request, name)
-    result = await asyncio.to_thread(svc.delete_filesystem_path, name, path)
+    result = await svc.delete_filesystem_path(name, path)
     logger.info(
         "Filesystem path deleted (sandbox=%s, actor=%s)",
         name,
@@ -829,8 +813,7 @@ async def update_process_policy(
     """
     check_write_rate_limit(request)
     _check_policy_pin(request, name)
-    result = await asyncio.to_thread(
-        svc.update_process_policy,
+    result = await svc.update_process_policy(
         name,
         run_as_user=body.run_as_user,
         run_as_group=body.run_as_group,
@@ -908,7 +891,7 @@ async def pin_policy(
     import datetime
 
     # Read current version from gateway
-    current = await asyncio.to_thread(svc.get, name)
+    current = await svc.get(name)
     version = current.get("active_version")
     if version is None:
         raise HTTPException(status_code=400, detail="Could not read active policy version")
@@ -1042,7 +1025,7 @@ async def apply_preset(
         dict[str, Any]: Updated policy after preset application.
     """
     _check_policy_pin(request, name)
-    result = await asyncio.to_thread(svc.apply_preset, name, preset_name)
+    result = await svc.apply_preset(name, preset_name)
     logger.info(
         "Preset applied (sandbox=%s, preset=%s, actor=%s)",
         name,

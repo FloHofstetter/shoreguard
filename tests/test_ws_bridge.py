@@ -1,10 +1,12 @@
-"""Unit tests for the bidirectional WebSocket↔gRPC bridge."""
+"""Unit tests for the bidirectional WebSocket↔gRPC session pump."""
 
 from __future__ import annotations
 
 import asyncio
 
-from shoreguard.api.ws_bridge import run_bidi_session
+import grpc
+
+from shoreguard.api.websocket import _run_bidi_session
 
 
 class _FakeWS:
@@ -30,11 +32,11 @@ class _FakeWS:
 async def test_bridge_relays_events_and_forwards_input():
     """Events from the stream reach the socket; client frames reach the stream."""
     received_inbound: list = []
+    inbound: asyncio.Queue = asyncio.Queue()
 
-    def stream_factory(inbound, on_call):
-        on_call(object())
+    async def stream():
         # First drain whatever the reader forwarded, then emit two events.
-        item = inbound.get()
+        item = await inbound.get()
         if item is not None:
             received_inbound.append(item)
         yield {"type": "stdout", "data": b"a"}
@@ -56,9 +58,10 @@ async def test_bridge_relays_events_and_forwards_input():
     )
 
     await asyncio.wait_for(
-        run_bidi_session(
+        _run_bidi_session(
             ws,  # type: ignore[arg-type]
-            stream_factory=stream_factory,
+            stream=stream(),
+            inbound=inbound,
             decode_client=decode_client,
             encode_event=encode_event,
         ),
@@ -70,31 +73,41 @@ async def test_bridge_relays_events_and_forwards_input():
     assert received_inbound == [{"type": "stdin", "data": b"ping"}]
 
 
-async def test_bridge_surfaces_stream_error():
-    """A stream exception is encoded as an error frame to the socket."""
+class _FakeRpcError(grpc.RpcError):
+    """RpcError carrying a details() string like a live call."""
 
-    def stream_factory(inbound, on_call):
-        raise RuntimeError("boom")
-        yield  # pragma: no cover — makes this a generator
+    def details(self):  # noqa: D102
+        return "boom"
+
+    def code(self):  # noqa: D102
+        return grpc.StatusCode.UNAVAILABLE
+
+
+async def test_bridge_surfaces_stream_error():
+    """A gRPC stream exception is encoded as an error frame to the socket."""
+    inbound: asyncio.Queue = asyncio.Queue()
+
+    async def stream():
+        raise _FakeRpcError()
+        yield  # pragma: no cover — makes this an async generator
 
     def decode_client(message):
         return None
 
     def encode_event(event):
-        if event["type"] == "error":
-            return ("text", f"ERR:{event['data']['message']}")
         return None
 
     ws = _FakeWS([{"type": "websocket.disconnect"}])
 
     await asyncio.wait_for(
-        run_bidi_session(
+        _run_bidi_session(
             ws,  # type: ignore[arg-type]
-            stream_factory=stream_factory,
+            stream=stream(),
+            inbound=inbound,
             decode_client=decode_client,
             encode_event=encode_event,
         ),
         timeout=5,
     )
 
-    assert ("text", "ERR:boom") in ws.sent
+    assert any(kind == "text" and "error" in str(payload) for kind, payload in ws.sent)

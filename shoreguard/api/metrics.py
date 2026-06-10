@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import contextvars
 import logging
 import time
@@ -291,7 +290,7 @@ async def _collect_gauges() -> None:
         return
 
     # Gateway status counts
-    all_gw = await asyncio.to_thread(container.gateway.list_all)
+    all_gw = await container.gateway.list_all()
     counts: dict[str, int] = {}
     for g in all_gw:
         status = g.get("status", "unknown")

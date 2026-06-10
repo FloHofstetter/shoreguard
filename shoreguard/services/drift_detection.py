@@ -17,7 +17,6 @@ not an incident, whereas flaky persistence would be.
 
 from __future__ import annotations
 
-import asyncio
 import datetime
 import logging
 from typing import TYPE_CHECKING, Any
@@ -76,7 +75,7 @@ class DriftDetectionService:
         """
         events: list[dict[str, Any]] = []
         try:
-            gateways = self._gateway_service.list_all()
+            gateways = await self._gateway_service.list_all()
         except Exception:
             logger.exception("drift_detection: failed to list gateways")
             return events
@@ -85,12 +84,12 @@ class DriftDetectionService:
             if not gw_name:
                 continue
             try:
-                client = self._gateway_service.get_client(gw_name)
+                client = await self._gateway_service.get_client(gw_name)
             except Exception:
                 logger.warning("drift_detection: cannot connect to gateway %s", gw_name)
                 continue
             try:
-                sandboxes = await asyncio.to_thread(client.sandboxes.list)
+                sandboxes = await client.sandboxes.list()
             except Exception:
                 logger.warning("drift_detection: list sandboxes failed for %s", gw_name)
                 continue
@@ -107,7 +106,7 @@ class DriftDetectionService:
         self, client: Any, gateway_name: str, sandbox_name: str
     ) -> dict[str, Any] | None:
         try:
-            snapshot = await asyncio.to_thread(client.policies.get, sandbox_name)
+            snapshot = await client.policies.get(sandbox_name)
         except Exception:
             logger.warning(
                 "drift_detection: policy fetch failed (gw=%s, sb=%s)",

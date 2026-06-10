@@ -91,7 +91,7 @@ class CertRotationService:
             "skipped_not_due": 0,
             "skipped_no_cert": 0,
         }
-        gateways = await asyncio.to_thread(self._gateway_service.list_all)
+        gateways = await self._gateway_service.list_all()
         for gw in gateways:
             name = gw.get("name")
             if not name:
@@ -122,7 +122,7 @@ class CertRotationService:
         last_error: Exception | None = None
         for attempt in range(1, self._max_retries + 1):
             try:
-                await asyncio.to_thread(self._rotate, name, client)
+                await self._rotate(name, client)
                 seconds_left_after = (
                     client.cert_info.seconds_until_expiry if client.cert_info is not None else None
                 )
@@ -178,7 +178,7 @@ class CertRotationService:
         """
         return self._gateway_service.get_cached_client(name)
 
-    def _rotate(self, name: str, client: ShoreGuardClient) -> None:
+    async def _rotate(self, name: str, client: ShoreGuardClient) -> None:
         """Re-read credentials from the registry and rebuild the channel.
 
         Args:
@@ -189,7 +189,10 @@ class CertRotationService:
             RuntimeError: When the registry has no usable bytes credentials
                 for this gateway.
         """
-        creds = self._gateway_service._registry.get_credentials(name)  # noqa: SLF001
+        creds = await asyncio.to_thread(
+            self._gateway_service._registry.get_credentials,  # noqa: SLF001
+            name,
+        )
         if creds is None:
             raise RuntimeError(f"gateway '{name}' has no credentials in the registry to rotate")
         ca_cert = creds.get("ca_cert")
@@ -201,7 +204,7 @@ class CertRotationService:
             and isinstance(client_key, bytes)
         ):
             raise RuntimeError(f"gateway '{name}' has incomplete bytes credentials in the registry")
-        client.reload_credentials(
+        await client.reload_credentials(
             ca_cert=ca_cert,
             client_cert=client_cert,
             client_key=client_key,

@@ -11,10 +11,11 @@ späteren Chunk an ``shoreguard.api.metrics`` verdrahtet.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -130,22 +131,22 @@ def _sleep_for(
     return max(0.0, min(candidate, remaining))
 
 
-def call_with_retry[T](
-    fn: Callable[[], T],
+async def call_with_retry[T](
+    fn: Callable[[], Awaitable[T]],
     *,
     op_name: str,
     policy: RetryPolicy = DEFAULT_POLICY,
     deadline_s: float | None = None,
     on_attempt: AttemptCallback | None = None,
-    _sleep: Callable[[float], None] = time.sleep,
+    _sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     _monotonic: Callable[[], float] = time.monotonic,
     _rng: random.Random | None = None,
 ) -> T:
     """Execute ``fn`` with retry, jitter and an optional wall-clock deadline.
 
     Args:
-        fn: Zero-arg callable that issues the gRPC call. The caller binds the
-            request and per-call timeout up front.
+        fn: Zero-arg async callable that issues the gRPC call. The caller
+            binds the request and per-call timeout up front.
         op_name: Logical-op label (for example ``"sandboxes.create"``) used
             for logs and future metric labels.
         policy: Retry policy. Defaults to :data:`DEFAULT_POLICY`.
@@ -156,8 +157,8 @@ def call_with_retry[T](
             ``op_name``, ``attempt``, ``code`` and ``outcome`` (one of
             ``"ok"``, ``"retry"``, ``"giveup"``). Wired to Prometheus in a
             later chunk.
-        _sleep: Sleep function used between retries. Injection point for
-            tests; defaults to :func:`time.sleep`.
+        _sleep: Async sleep function used between retries. Injection point
+            for tests; defaults to :func:`asyncio.sleep`.
         _monotonic: Monotonic-clock function used to track the deadline.
             Injection point for tests; defaults to :func:`time.monotonic`.
         _rng: Random source used for jitter. Injection point for tests;
@@ -177,7 +178,7 @@ def call_with_retry[T](
     start = _monotonic()
     for attempt in range(1, policy.max_attempts + 1):
         try:
-            result = fn()
+            result = await fn()
         except grpc.RpcError as exc:
             code = _grpc_code(exc)
             is_retryable = code is not None and code in policy.retryable_codes
@@ -207,7 +208,7 @@ def call_with_retry[T](
                 getattr(code, "name", code),
             )
             if sleep_for > 0:
-                _sleep(sleep_for)
+                await _sleep(sleep_for)
             continue
         else:
             if on_attempt is not None:
@@ -216,32 +217,39 @@ def call_with_retry[T](
     raise RuntimeError("call_with_retry loop exited without result")  # pragma: no cover
 
 
-def stream_with_retry[T](
-    open_fn: Callable[[], Iterator[T]],
+async def stream_with_retry[T](
+    open_fn: Callable[[], AsyncIterator[T]],
     *,
     op_name: str,
     policy: RetryPolicy = DEFAULT_POLICY,
     deadline_s: float | None = None,
     on_attempt: AttemptCallback | None = None,
-) -> Iterator[T]:
+) -> AsyncIterator[T]:
     """Retry only the opening of a gRPC server-stream.
 
     In-flight errors propagate unchanged: streams such as ``ExecSandbox`` or
     ``WatchSandbox`` are not idempotent, so a mid-stream retry would double
-    side effects or lose events.
+    side effects or lose events. With ``grpc.aio``, constructing the call
+    is cheap and non-blocking; connection errors surface on the first read,
+    so the retry budget effectively guards call construction only.
 
     Args:
-        open_fn: Callable that opens the gRPC stream and returns an iterator.
+        open_fn: Callable that opens the gRPC stream and returns an async
+            iterator (the live call object).
         op_name: Logical-op label for logs and future metrics.
         policy: Retry policy applied to the open call only.
         deadline_s: Optional total budget in seconds for opening the stream.
         on_attempt: Callback forwarded to :func:`call_with_retry`.
 
     Returns:
-        Iterator[T]: The opened stream iterator.
+        AsyncIterator[T]: The opened stream iterator.
     """
-    return call_with_retry(
-        open_fn,
+
+    async def _open() -> AsyncIterator[T]:
+        return open_fn()
+
+    return await call_with_retry(
+        _open,
         op_name=op_name,
         policy=policy,
         deadline_s=deadline_s,

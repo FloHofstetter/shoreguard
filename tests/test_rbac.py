@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -47,10 +47,10 @@ def mock_client():
     from shoreguard.client import ShoreGuardClient
 
     client = MagicMock(spec=ShoreGuardClient)
-    client.sandboxes = MagicMock()
-    client.policies = MagicMock()
-    client.providers = MagicMock()
-    client.approvals = MagicMock()
+    client.sandboxes = AsyncMock()
+    client.policies = AsyncMock()
+    client.providers = AsyncMock()
+    client.approvals = AsyncMock()
     # Ensure mock methods return serialisable values so FastAPI doesn't fail
     _d = {"status": "mock"}
     client.approvals.approve.return_value = _d

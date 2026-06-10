@@ -41,10 +41,10 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
         await asyncio.to_thread(container.webhooks.cleanup_old_deliveries)
 
     async def _health_monitor() -> None:
-        await asyncio.to_thread(container.gateway.check_all_health)
+        await container.gateway.check_all_health()
 
     async def _discovery() -> None:
-        await asyncio.to_thread(container.discovery.run_once)
+        await container.discovery.run_once()
 
     async def _drift_detection() -> None:
         await container.drift_detection.run_once()

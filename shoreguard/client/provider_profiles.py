@@ -91,7 +91,7 @@ class ProviderProfileManager:
         self._stub = stub
         self._timeout = timeout
 
-    def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    async def list(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """List provider profiles registered on the gateway.
 
         Args:
@@ -101,13 +101,13 @@ class ProviderProfileManager:
         Returns:
             list[dict[str, Any]]: Profile dicts.
         """
-        resp = self._stub.ListProviderProfiles(
+        resp = await self._stub.ListProviderProfiles(
             openshell_pb2.ListProviderProfilesRequest(limit=limit, offset=offset),
             timeout=self._timeout,
         )
         return [_profile_to_dict(p) for p in resp.profiles]
 
-    def get(self, profile_id: str) -> dict[str, Any]:
+    async def get(self, profile_id: str) -> dict[str, Any]:
         """Fetch a single profile by ID.
 
         Args:
@@ -116,13 +116,13 @@ class ProviderProfileManager:
         Returns:
             dict[str, Any]: Profile dict.
         """
-        resp = self._stub.GetProviderProfile(
+        resp = await self._stub.GetProviderProfile(
             openshell_pb2.GetProviderProfileRequest(id=profile_id),
             timeout=self._timeout,
         )
         return _profile_to_dict(resp.profile)
 
-    def lint(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+    async def lint(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         """Validate a batch of profiles without mutating state.
 
         Args:
@@ -139,13 +139,13 @@ class ProviderProfileManager:
         request = openshell_pb2.LintProviderProfilesRequest(
             profiles=[_dict_to_import_item(it) for it in items]
         )
-        resp = self._stub.LintProviderProfiles(request, timeout=self._timeout)
+        resp = await self._stub.LintProviderProfiles(request, timeout=self._timeout)
         return {
             "valid": bool(resp.valid),
             "diagnostics": [_diagnostic_to_dict(d) for d in resp.diagnostics],
         }
 
-    def import_(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+    async def import_(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         """Import a batch of profiles after validation.
 
         Args:
@@ -160,14 +160,14 @@ class ProviderProfileManager:
         request = openshell_pb2.ImportProviderProfilesRequest(
             profiles=[_dict_to_import_item(it) for it in items]
         )
-        resp = self._stub.ImportProviderProfiles(request, timeout=self._timeout)
+        resp = await self._stub.ImportProviderProfiles(request, timeout=self._timeout)
         return {
             "imported": bool(resp.imported),
             "profiles": [_profile_to_dict(p) for p in resp.profiles],
             "diagnostics": [_diagnostic_to_dict(d) for d in resp.diagnostics],
         }
 
-    def delete(self, profile_id: str) -> bool:
+    async def delete(self, profile_id: str) -> bool:
         """Delete a custom profile by ID.
 
         Args:
@@ -176,7 +176,7 @@ class ProviderProfileManager:
         Returns:
             bool: True if the profile was deleted.
         """
-        resp = self._stub.DeleteProviderProfile(
+        resp = await self._stub.DeleteProviderProfile(
             openshell_pb2.DeleteProviderProfileRequest(id=profile_id),
             timeout=self._timeout,
         )
