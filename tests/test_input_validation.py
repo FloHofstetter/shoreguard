@@ -208,7 +208,7 @@ class TestSetInferenceRequest:
 
 class TestLoginRequest:
     def _cls(self):
-        from shoreguard.api.pages import LoginRequest
+        from shoreguard.api.routes.auth import LoginRequest
 
         return LoginRequest
 

@@ -125,3 +125,30 @@ def check_write_rate_limit(request: Request) -> None:
             headers={"Retry-After": str(retry_after)},
         )
     limiter.record(str(key))
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+$")
+
+
+def valid_email(email: str) -> bool:
+    """Basic email format check.
+
+    Args:
+        email: Email address to validate.
+
+    Returns:
+        bool: True if the email matches a basic pattern.
+    """
+    return bool(_EMAIL_RE.match(email.strip()))
+
+
+def client_ip(request: Request) -> str:
+    """Extract the client IP from a request.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        str: Client IP address or ``"unknown"``.
+    """
+    return request.client.host if request.client else "unknown"

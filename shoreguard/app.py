@@ -254,6 +254,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tokens,
         webhooks,
     )
+    from shoreguard.api.routes import (
+        auth as auth_routes,
+    )
+    from shoreguard.api.routes import (
+        users as user_routes,
+    )
     from shoreguard.api.security_headers import security_headers_middleware
     from shoreguard.api.websocket import router as ws_router
     from shoreguard.settings import get_settings
@@ -355,6 +361,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tags=["templates"],
         dependencies=[Depends(require_auth)],
     )
+
+    # ── Auth + user management APIs (self-guarded routes) ────────────────
+    app.include_router(auth_routes.router)
+    app.include_router(user_routes.router)
 
     # ── WebSocket, pages, and static files ───────────────────────────────
     app.include_router(ws_router)
