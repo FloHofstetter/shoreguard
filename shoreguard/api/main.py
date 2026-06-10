@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -64,16 +64,6 @@ from .security_headers import security_headers_middleware
 from .websocket import router as ws_router
 
 logger = logging.getLogger(__name__)
-
-# Supervision state for long-running background tasks. Keys match the
-# ``_cleanup_operations`` / ``_health_monitor`` task names.  Read by
-# ``/readyz`` to surface dead or stalled workers.
-_task_health: dict[str, dict[str, Any]] = {
-    "cleanup": {"last_success": None, "consecutive_failures": 0, "alive": False},
-    "health_monitor": {"last_success": None, "consecutive_failures": 0, "alive": False},
-    "discovery": {"last_success": None, "consecutive_failures": 0, "alive": False},
-    "drift_detection": {"last_success": None, "consecutive_failures": 0, "alive": False},
-}
 
 
 def _warn_if_docker_unusable(manager: LocalGatewayManager) -> None:
@@ -196,200 +186,36 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.redoc_url = None
 
     # ── Background tasks ─────────────────────────────────────────────────
-    async def _cleanup_operations() -> None:
-        """Periodically purge expired operations and audit entries."""
-        base_interval = settings.background.cleanup_interval
-        max_interval = settings.background.cleanup_max_interval
-        backoff_threshold = settings.background.cleanup_backoff_threshold
-        consecutive_failures = 0
-        interval = base_interval
-        _task_health["cleanup"]["alive"] = True
-        _task_health["cleanup"]["last_success"] = time.time()
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                await container.operations.cleanup()
-                await asyncio.to_thread(container.audit.cleanup)
-                await asyncio.to_thread(container.webhooks.cleanup_old_deliveries)
-                consecutive_failures = 0
-                interval = base_interval
-                _task_health["cleanup"]["last_success"] = time.time()
-                _task_health["cleanup"]["consecutive_failures"] = 0
-            except Exception:
-                consecutive_failures += 1
-                _task_health["cleanup"]["consecutive_failures"] = consecutive_failures
-                logger.exception(
-                    "Operation cleanup failed (consecutive failures: %d)",
-                    consecutive_failures,
-                )
-                if consecutive_failures >= backoff_threshold:
-                    interval = min(interval * 2, max_interval)
-                    logger.error(
-                        "Operation cleanup has failed %d consecutive times, "
-                        "backing off to %ds interval",
-                        consecutive_failures,
-                        interval,
-                    )
+    from shoreguard.tasks import TaskSupervisor
+    from shoreguard.tasks.definitions import build_tasks
 
-    async def _health_monitor() -> None:
-        """Periodically check health of all registered gateways."""
-        base_interval = settings.background.health_interval
-        max_interval = settings.background.health_max_interval
-        backoff_threshold = settings.background.health_backoff_threshold
-        consecutive_failures = 0
-        interval = base_interval
-        _task_health["health_monitor"]["alive"] = True
-        _task_health["health_monitor"]["last_success"] = time.time()
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                await asyncio.to_thread(container.gateway.check_all_health)
-                consecutive_failures = 0
-                interval = base_interval
-                _task_health["health_monitor"]["last_success"] = time.time()
-                _task_health["health_monitor"]["consecutive_failures"] = 0
-            except Exception:
-                consecutive_failures += 1
-                _task_health["health_monitor"]["consecutive_failures"] = consecutive_failures
-                logger.exception(
-                    "Health monitor error (consecutive failures: %d)",
-                    consecutive_failures,
-                )
-                if consecutive_failures >= backoff_threshold:
-                    interval = min(interval * 2, max_interval)
-                    logger.error(
-                        "Health monitor has failed %d consecutive times, "
-                        "backing off to %ds interval",
-                        consecutive_failures,
-                        interval,
-                    )
+    supervisor = TaskSupervisor()
+    supervisor.start(build_tasks(container, settings))
+    app.state.supervisor = supervisor
 
-    def _make_done_cb(name: str) -> Callable[[asyncio.Task[Any]], None]:
-        def _cb(t: asyncio.Task[Any]) -> None:
-            _task_health[name]["alive"] = False
-            if t.cancelled():
-                logger.info("Background task %s cancelled", name)
-                return
-            exc = t.exception()
-            if exc is not None:
-                logger.error(
-                    "Background task %s exited with exception: %s",
-                    name,
-                    exc,
-                    exc_info=exc,
-                )
-            else:
-                logger.warning("Background task %s exited unexpectedly", name)
-
-        return _cb
-
-    async def _discovery_loop() -> None:
-        """Periodically run DNS-SRV gateway discovery if enabled."""
-        if not settings.discovery.enabled:
-            _task_health["discovery"]["alive"] = False
-            return
-        base_interval = settings.discovery.interval_seconds
-        max_interval = max(base_interval * 8, base_interval)
-        consecutive_failures = 0
-        interval = base_interval
-        _task_health["discovery"]["alive"] = True
-        _task_health["discovery"]["last_success"] = time.time()
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                await asyncio.to_thread(container.discovery.run_once)
-                consecutive_failures = 0
-                interval = base_interval
-                _task_health["discovery"]["last_success"] = time.time()
-                _task_health["discovery"]["consecutive_failures"] = 0
-            except Exception:
-                consecutive_failures += 1
-                _task_health["discovery"]["consecutive_failures"] = consecutive_failures
-                logger.exception(
-                    "Discovery loop error (consecutive failures: %d)",
-                    consecutive_failures,
-                )
-                if consecutive_failures >= 3:
-                    interval = min(interval * 2, max_interval)
-
-    cleanup_task = asyncio.create_task(_cleanup_operations())
-    cleanup_task.add_done_callback(_make_done_cb("cleanup"))
-    health_task = asyncio.create_task(_health_monitor())
-    health_task.add_done_callback(_make_done_cb("health_monitor"))
-    discovery_task = asyncio.create_task(_discovery_loop())
-    discovery_task.add_done_callback(_make_done_cb("discovery"))
-
-    async def _drift_detection_loop() -> None:
-        """Periodically run policy drift detection if enabled."""
-        if not settings.drift_detection.enabled:
-            return
-        interval = settings.drift_detection.interval_seconds
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                await container.drift_detection.run_once()
-            except Exception:
-                logger.exception("Drift detection loop error")
-
-    drift_task = asyncio.create_task(_drift_detection_loop())
-    drift_task.add_done_callback(_make_done_cb("drift_detection"))
-
-    async def _cert_rotation_loop() -> None:
-        """Periodically rotate gateway client certs before expiry."""
-        if not settings.cert_rotation.enabled:
-            return
-        interval = settings.cert_rotation.poll_interval_s
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                outcomes = await container.cert_rotation.run_once()
-                if any(outcomes.get(k) for k in ("success", "failure")):
-                    logger.info(
-                        "Cert rotation cycle: %s",
-                        ", ".join(f"{k}={v}" for k, v in outcomes.items() if v),
-                    )
-            except Exception:
-                logger.exception("Cert rotation loop error")
-
-    cert_rotation_task = asyncio.create_task(_cert_rotation_loop())
-    cert_rotation_task.add_done_callback(_make_done_cb("cert_rotation"))
     yield
 
     # ── Graceful shutdown ──────────────────────────────────────────
     logger.info("Shutdown started")
 
-    # 1. Stop background polling (fast)
-    cleanup_task.cancel()
-    health_task.cancel()
-    discovery_task.cancel()
-    drift_task.cancel()
-    cert_rotation_task.cancel()
-
-    # 2. Cancel LRO tasks (CancelledError handler marks ops as failed)
+    # 1. Cancel LRO tasks (CancelledError handler marks ops as failed)
     from shoreguard.api.lro import shutdown_lros
 
     lro_count = await shutdown_lros(timeout=10.0)
     if lro_count:
         logger.info("Cancelled %d LRO task(s)", lro_count)
 
-    # 3. Cancel in-flight webhook deliveries
+    # 2. Cancel in-flight webhook deliveries
     wh_count = await container.webhooks.shutdown(timeout=3.0)
     if wh_count:
         logger.info("Cancelled %d webhook delivery task(s)", wh_count)
 
-    # 4. Await background task cancellation with a hard deadline so a
-    #    task that swallows CancelledError cannot block shutdown forever.
-    bg_tasks = (cleanup_task, health_task, discovery_task)
-    shutdown_timeout = float(settings.server.graceful_shutdown_timeout)
-    _, pending = await asyncio.wait(bg_tasks, timeout=shutdown_timeout)
-    if pending:
-        logger.warning(
-            "Background tasks did not exit within %.1fs: %d still pending",
-            shutdown_timeout,
-            len(pending),
-        )
+    # 3. Stop background polling with a hard deadline so a task that
+    #    swallows CancelledError cannot block shutdown forever.
+    await supervisor.shutdown(timeout=float(settings.server.graceful_shutdown_timeout))
+    app.state.supervisor = None
 
-    # 5. Dispose DB engines and drop the container
+    # 4. Dispose DB engines and drop the container
     uninstall()
     engine.dispose()
     from shoreguard.db import dispose_async_engine
@@ -462,10 +288,11 @@ async def version_info() -> dict[str, str]:
 
 
 @health_router.get("/readyz")
-async def readyz(verbose: bool = False) -> JSONResponse:
+async def readyz(request: Request, verbose: bool = False) -> JSONResponse:
     """Readiness probe — checks database connectivity and gateway health.
 
     Args:
+        request: Incoming HTTP request (for app state access).
         verbose: If True, include per-gateway breakdown.
 
     Returns:
@@ -529,23 +356,17 @@ async def readyz(verbose: bool = False) -> JSONResponse:
         healthy = False
 
     # ── Background task supervision ───────────────────────────────
-    now = time.time()
-    for name, state in _task_health.items():
-        if not state["alive"]:
-            checks[f"background_{name}"] = "dead"
-            healthy = False
-            continue
-        last = state["last_success"]
-        checks[f"background_{name}"] = "ok"
-        if last is not None:
-            age = now - last
-            checks[f"background_{name}_age_s"] = round(age, 1)
-            stall_threshold: float
-            if name == "cleanup":
-                stall_threshold = 2.0 * float(get_settings().background.cleanup_max_interval)
-            else:
-                stall_threshold = 2.0 * float(get_settings().background.health_max_interval)
-            if age > stall_threshold:
+    supervisor = getattr(request.app.state, "supervisor", None)
+    if supervisor is not None:
+        for name, state in supervisor.health_snapshot().items():
+            if not state["alive"]:
+                checks[f"background_{name}"] = "dead"
+                healthy = False
+                continue
+            checks[f"background_{name}"] = "ok"
+            if state["age_s"] is not None:
+                checks[f"background_{name}_age_s"] = state["age_s"]
+            if state["stalled"]:
                 checks[f"background_{name}"] = "stalled"
                 checks[f"background_{name}_stalled"] = True
 
