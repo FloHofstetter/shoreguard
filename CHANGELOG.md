@@ -20,6 +20,12 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Grafana dashboard expansion + metrics docs** — the shipped
+  dashboard (`deploy/grafana/shoreguard.json`) gains panels for gRPC
+  latency/errors/retries against the gateways, sandbox phase
+  transitions, client-cert expiry, and webhook delivery results; the
+  monitoring guide now documents the `/metrics` scrape setup
+  (public-or-bearer) and the alert-worthy metric set.
 - **Fleet view — the second-box step** — new `/fleet` page and
   `/api/fleet/*` endpoints for the moment the second Spark arrives:
   per-gateway status/OpenShell-version/sandbox table with a skew

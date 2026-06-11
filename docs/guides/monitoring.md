@@ -54,3 +54,41 @@ GET /api/gateways/{gw}/sandboxes/{name}/logs?lines=100&since_ms=1700000000000&mi
 | `since_ms` | Only return entries after this Unix timestamp (milliseconds) |
 | `min_level` | Minimum log level (`info`, `warn`, `error`) |
 | `sources` | Comma-separated list of sources to include |
+
+## Metrics (Prometheus + Grafana)
+
+ShoreGuard exposes Prometheus metrics at `GET /metrics` — admin-only by
+default; set `SHOREGUARD_METRICS_PUBLIC=true` to let a scraper on the
+same private network read it without credentials, or scrape with a
+service-principal bearer token:
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: shoreguard
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["shoreguard:8888"]
+    # When metrics are not public:
+    authorization:
+      type: Bearer
+      credentials: <service-principal key>
+```
+
+A ready-made dashboard ships in the repository at
+[`deploy/grafana/shoreguard.json`](https://github.com/FloHofstetter/shoreguard/blob/main/deploy/grafana/shoreguard.json)
+— import it in Grafana (*Dashboards → Import*) and select your
+Prometheus datasource. It covers HTTP rate/latency, gateway health,
+webhook delivery results, gRPC latency/errors/retries against the
+OpenShell gateways, sandbox phase transitions, and client-certificate
+expiry.
+
+Key metrics worth alerting on:
+
+| Metric | Meaning |
+|--------|---------|
+| `shoreguard_gateways_total{status="unreachable"}` | A gateway is down (also fires the `gateway.unreachable` webhook) |
+| `shoreguard_webhook_deliveries_total{status="failed"}` | Notifications are not reaching you — alert on `rate() > 0` |
+| `sg_grpc_call_total{code!="OK"}` | RPC errors against a gateway |
+| `sg_gateway_cert_expiry_seconds` | Client cert expiry; the rotation service should keep this high |
+| `shoreguard_http_request_duration_seconds` | UI/API latency histogram |
