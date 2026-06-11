@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-    from sqlalchemy.orm import Session, sessionmaker
 
     from shoreguard.services.approval_workflow import ApprovalWorkflowService
     from shoreguard.services.audit import AuditService
@@ -48,7 +47,6 @@ class ServiceContainer:
 
     Attributes:
         settings: The settings snapshot the container was built from.
-        session_factory: Sync SQLAlchemy session factory (auth subsystem only).
         async_session_factory: Async SQLAlchemy session factory (all data services).
         registry: Persistent gateway CRUD (what gateways exist).
         gateway: Live gateway connections (clients, health, backoff).
@@ -70,7 +68,6 @@ class ServiceContainer:
     """
 
     settings: Settings
-    session_factory: sessionmaker[Session]
     async_session_factory: async_sessionmaker[AsyncSession]
     registry: GatewayRegistry
     gateway: GatewayService
@@ -93,7 +90,6 @@ class ServiceContainer:
 
 def build_container(
     settings: Settings,
-    session_factory: sessionmaker[Session],
     async_session_factory: async_sessionmaker[AsyncSession],
     *,
     audit_exporter: AuditExporter | None = None,
@@ -102,7 +98,6 @@ def build_container(
 
     Args:
         settings: Settings snapshot to build from.
-        session_factory: Sync SQLAlchemy session factory.
         async_session_factory: Async SQLAlchemy session factory.
         audit_exporter: Optional audit export fan-out (needs a running
             event loop, so the caller constructs it).
@@ -145,7 +140,6 @@ def build_container(
 
     return ServiceContainer(
         settings=settings,
-        session_factory=session_factory,
         async_session_factory=async_session_factory,
         registry=registry,
         gateway=gateway,

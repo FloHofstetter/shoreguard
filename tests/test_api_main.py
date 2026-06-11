@@ -513,6 +513,21 @@ def test_ws_heartbeat_reports_dropped_events():
 # ─── 3C.1: WebSocket auth & error-path coverage ──────────────────────────────
 
 
+async def _async_true(*_args, **_kwargs):
+    """Async stand-in for patched is_setup_complete."""
+    return True
+
+
+async def _async_none(*_args, **_kwargs):
+    """Async stand-in for patched lookups returning None."""
+    return None
+
+
+async def _async_sp(*_args, **_kwargs):
+    """Async stand-in returning a valid SP identity."""
+    return {"role": "operator", "name": "ci-bot"}
+
+
 def test_ws_auth_rejects_without_token(monkeypatch):
     """WebSocket auth rejects connection when no token/session is provided.
 
@@ -528,8 +543,8 @@ def test_ws_auth_rejects_without_token(monkeypatch):
 
     # Disable no-auth and force setup-complete so the dep actually rejects.
     monkeypatch.setattr(auth_mod.state, "no_auth", False)
-    monkeypatch.setattr(rbac_mod, "is_setup_complete", lambda: True)
-    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", lambda _k: None)
+    monkeypatch.setattr(rbac_mod, "is_setup_complete", _async_true)
+    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", _async_none)
     monkeypatch.setattr(rbac_mod, "verify_session_token", lambda _t: None)
 
     client = TestClient(app)
@@ -548,8 +563,8 @@ def test_ws_auth_rejects_invalid_token(monkeypatch):
     from shoreguard.api.main import app
 
     monkeypatch.setattr(auth_mod.state, "no_auth", False)
-    monkeypatch.setattr(rbac_mod, "is_setup_complete", lambda: True)
-    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", lambda _k: None)
+    monkeypatch.setattr(rbac_mod, "is_setup_complete", _async_true)
+    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", _async_none)
     monkeypatch.setattr(rbac_mod, "verify_session_token", lambda _t: None)
 
     client = TestClient(app)
@@ -568,8 +583,8 @@ def test_ws_auth_rejects_expired_session(monkeypatch):
     from shoreguard.api.main import app
 
     monkeypatch.setattr(auth_mod.state, "no_auth", False)
-    monkeypatch.setattr(rbac_mod, "is_setup_complete", lambda: True)
-    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", lambda _k: None)
+    monkeypatch.setattr(rbac_mod, "is_setup_complete", _async_true)
+    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", _async_none)
     # Expired / invalid session → verify returns None.
     monkeypatch.setattr(rbac_mod, "verify_session_token", lambda _t: None)
 
@@ -592,11 +607,11 @@ def test_ws_auth_rejects_deleted_user(monkeypatch):
     from shoreguard.api.main import app
 
     monkeypatch.setattr(auth_mod.state, "no_auth", False)
-    monkeypatch.setattr(rbac_mod, "is_setup_complete", lambda: True)
-    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", lambda _k: None)
+    monkeypatch.setattr(rbac_mod, "is_setup_complete", _async_true)
+    monkeypatch.setattr(rbac_mod, "_lookup_sp_identity", _async_none)
     # Session verifies, but user row no longer exists.
     monkeypatch.setattr(rbac_mod, "verify_session_token", lambda _t: (42, "operator"))
-    monkeypatch.setattr(rbac_mod, "_lookup_user", lambda _uid: None)
+    monkeypatch.setattr(rbac_mod, "_lookup_user", _async_none)
 
     client = TestClient(app)
     with pytest.raises(WebSocketDisconnect):
@@ -616,11 +631,11 @@ def test_ws_auth_accepts_valid_sp_token(monkeypatch):
     from shoreguard.api.main import app
 
     monkeypatch.setattr(auth_mod.state, "no_auth", False)
-    monkeypatch.setattr(rbac_mod, "is_setup_complete", lambda: True)
+    monkeypatch.setattr(rbac_mod, "is_setup_complete", _async_true)
     monkeypatch.setattr(
         rbac_mod,
         "_lookup_sp_identity",
-        lambda _k: {"role": "operator", "name": "ci-bot"},
+        _async_sp,
     )
 
     mock_client = MagicMock()

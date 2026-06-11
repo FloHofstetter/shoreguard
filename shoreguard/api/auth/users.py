@@ -7,7 +7,7 @@ import logging
 import secrets
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from shoreguard.exceptions import ValidationError as DomainValidationError
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # ─── User CRUD ─────────────────────────────────────────────────────────────
 
 
-def create_user(email: str, password: str | None, role: str) -> dict:
+async def create_user(email: str, password: str | None, role: str) -> dict:
     """Create a new user account.
 
     If *password* is None, an invite token is generated instead.
@@ -67,7 +67,7 @@ def create_user(email: str, password: str | None, role: str) -> dict:
         invite_token = secrets.token_urlsafe(32)
         invite_token_hash = _hash_key(invite_token)
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             user = User(
                 email=email,
@@ -77,7 +77,7 @@ def create_user(email: str, password: str | None, role: str) -> dict:
                 created_at=now,
             )
             session.add(user)
-            session.commit()
+            await session.commit()
             result: dict = {
                 "id": user.id,
                 "email": user.email,
@@ -95,10 +95,10 @@ def create_user(email: str, password: str | None, role: str) -> dict:
             )
             return result
         except IntegrityError:
-            session.rollback()
+            await session.rollback()
             raise
         except Exception:
-            session.rollback()
+            await session.rollback()
             logger.exception("Failed to create user (email=%s)", email)
             raise
 
@@ -106,7 +106,7 @@ def create_user(email: str, password: str | None, role: str) -> dict:
 INVITE_MAX_AGE = 86400 * 7  # 7 days — module-level alias for backwards compat
 
 
-def accept_invite(token: str, password: str) -> dict | None:
+async def accept_invite(token: str, password: str) -> dict | None:
     """Accept an invite by setting the user's password.
 
     Rejects tokens older than the configured invite max age.
@@ -127,12 +127,15 @@ def accept_invite(token: str, password: str) -> dict | None:
     from shoreguard.models import User
 
     token_hash = _hash_key(token)
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             user = (
-                session.query(User)
-                .filter(User.invite_token_hash == token_hash)
-                .with_for_update()
+                (
+                    await session.execute(
+                        select(User).where(User.invite_token_hash == token_hash).with_for_update()
+                    )
+                )
+                .scalars()
                 .first()
             )
             if user is None:
@@ -150,7 +153,7 @@ def accept_invite(token: str, password: str) -> dict | None:
                     return None
             user.hashed_password = hash_password(password)
             user.invite_token_hash = None
-            session.commit()
+            await session.commit()
             logger.info(
                 "Invite accepted (user_id=%d, email=%s, role=%s)",
                 user.id,
@@ -159,15 +162,15 @@ def accept_invite(token: str, password: str) -> dict | None:
             )
             return {"id": user.id, "email": user.email, "role": user.role}
         except IntegrityError:
-            session.rollback()
+            await session.rollback()
             raise
         except Exception:
-            session.rollback()
+            await session.rollback()
             logger.exception("Failed to accept invite")
             raise
 
 
-def list_users() -> list[dict]:
+async def list_users() -> list[dict]:
     """Return all users (without password hashes).
 
     Returns:
@@ -177,9 +180,9 @@ def list_users() -> list[dict]:
         return []
     from shoreguard.models import User
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            rows = session.query(User).order_by(User.created_at).all()
+            rows = (await session.execute(select(User).order_by(User.created_at))).scalars().all()
             return [
                 {
                     "id": r.id,
@@ -197,7 +200,9 @@ def list_users() -> list[dict]:
             return []
 
 
-def find_or_create_oidc_user(email: str, oidc_provider: str, oidc_sub: str, role: str) -> dict:
+async def find_or_create_oidc_user(
+    email: str, oidc_provider: str, oidc_sub: str, role: str
+) -> dict:
     """Find an existing user or create one for an OIDC login.
 
     Lookup order:
@@ -224,11 +229,17 @@ def find_or_create_oidc_user(email: str, oidc_provider: str, oidc_sub: str, role
 
     email = email.strip().lower()
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         # 1. Lookup by OIDC identity
         user = (
-            session.query(User)
-            .filter(User.oidc_provider == oidc_provider, User.oidc_sub == oidc_sub)
+            (
+                await session.execute(
+                    select(User).where(
+                        User.oidc_provider == oidc_provider, User.oidc_sub == oidc_sub
+                    )
+                )
+            )
+            .scalars()
             .first()
         )
         if user:
@@ -236,11 +247,11 @@ def find_or_create_oidc_user(email: str, oidc_provider: str, oidc_sub: str, role
             return {"user": info, "action": "login"}
 
         # 2. Lookup by email — link OIDC identity
-        user = session.query(User).filter(User.email == email).first()
+        user = (await session.execute(select(User).where(User.email == email))).scalars().first()
         if user:
             user.oidc_provider = oidc_provider
             user.oidc_sub = oidc_sub
-            session.commit()
+            await session.commit()
             logger.info("Linked OIDC identity (user=%s, provider=%s)", email, oidc_provider)
             info = {"id": user.id, "email": user.email, "role": user.role}
             return {"user": info, "action": "link"}
@@ -258,7 +269,7 @@ def find_or_create_oidc_user(email: str, oidc_provider: str, oidc_sub: str, role
             oidc_sub=oidc_sub,
         )
         session.add(user)
-        session.commit()
+        await session.commit()
         logger.info(
             "Created OIDC user (id=%d, email=%s, provider=%s, role=%s)",
             user.id,
@@ -270,7 +281,7 @@ def find_or_create_oidc_user(email: str, oidc_provider: str, oidc_sub: str, role
         return {"user": info, "action": "create"}
 
 
-def delete_user(user_id: int) -> bool:
+async def delete_user(user_id: int) -> bool:
     """Delete a user by ID.
 
     Uses a single transaction with locked read to prevent TOCTOU races.
@@ -292,26 +303,30 @@ def delete_user(user_id: int) -> bool:
         raise RuntimeError("Database not available")
     from shoreguard.models import User
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            row = session.query(User).filter(User.id == user_id).with_for_update().first()
+            row = (
+                (await session.execute(select(User).where(User.id == user_id).with_for_update()))
+                .scalars()
+                .first()
+            )
             if row is None:
                 return False
             if row.role == "admin" and row.is_active:
                 admin_count = (
-                    session.query(func.count(User.id))
-                    .filter(
-                        User.role == "admin",
-                        User.is_active == True,  # noqa: E712
-                        User.id != user_id,
+                    await session.execute(
+                        select(func.count(User.id)).where(
+                            User.role == "admin",
+                            User.is_active == True,  # noqa: E712
+                            User.id != user_id,
+                        )
                     )
-                    .scalar()
-                )
+                ).scalar()
                 if admin_count == 0:
                     raise DomainValidationError("Cannot delete the last active admin user")
             email, role = row.email, row.role
-            session.delete(row)
-            session.commit()
+            await session.delete(row)
+            await session.commit()
             logger.info(
                 "User deleted from DB (user_id=%d, email=%s, role=%s)",
                 user_id,
@@ -320,18 +335,18 @@ def delete_user(user_id: int) -> bool:
             )
             return True
         except IntegrityError:
-            session.rollback()
+            await session.rollback()
             raise
         except ValueError:
-            session.rollback()
+            await session.rollback()
             raise
         except Exception:
-            session.rollback()
+            await session.rollback()
             logger.exception("Failed to delete user (user_id=%d)", user_id)
             raise
 
 
-def bootstrap_admin_user() -> None:
+async def bootstrap_admin_user() -> None:
     """Seed the first admin user from env var if the users table is empty.
 
     Raises:
@@ -340,10 +355,10 @@ def bootstrap_admin_user() -> None:
     password = _get_auth_settings().admin_password
     if not password or state.session_factory is None:
         return
-    if is_setup_complete():
+    if await is_setup_complete():
         return
     try:
-        create_user("admin@localhost", password, "admin")
+        await create_user("admin@localhost", password, "admin")
         logger.info("Bootstrap admin user created (admin@localhost)")
     except Exception:
         logger.exception("Failed to bootstrap admin user")

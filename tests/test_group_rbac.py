@@ -6,12 +6,8 @@ from datetime import UTC, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine, event
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from shoreguard.api import auth
 from shoreguard.api.auth import (
     add_group_member,
     create_group,
@@ -30,7 +26,7 @@ from shoreguard.api.auth import (
 from shoreguard.api.auth.rbac import _lookup_gateway_role, _lookup_group_global_role
 from shoreguard.exceptions import NotFoundError
 from shoreguard.exceptions import ValidationError as DomainValidationError
-from shoreguard.models import Base, Gateway
+from shoreguard.models import Gateway
 
 ADMIN_EMAIL = "admin@test.com"
 ADMIN_PASS = "adminpass123"
@@ -42,24 +38,11 @@ GW_NAME_2 = "test-gw-2"
 
 @pytest.fixture
 def db():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    from tests.conftest import make_auth_test_db
 
-    @event.listens_for(engine, "connect")
-    def _enable_fk(dbapi_conn, _connection_record):
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    auth.init_auth_for_test(factory)
+    factory, dispose = make_auth_test_db(foreign_keys=True)
     yield factory
-    auth.reset()
-    engine.dispose()
+    dispose()
 
 
 @pytest.fixture
@@ -92,13 +75,13 @@ def _with_two_gateways(db):
 
 
 @pytest.fixture
-def _with_admin(db):
-    create_user(ADMIN_EMAIL, ADMIN_PASS, "admin")
+async def _with_admin(db):
+    await create_user(ADMIN_EMAIL, ADMIN_PASS, "admin")
 
 
 @pytest.fixture
-def _with_viewer(db):
-    create_user(VIEWER_EMAIL, VIEWER_PASS, "viewer")
+async def _with_viewer(db):
+    await create_user(VIEWER_EMAIL, VIEWER_PASS, "viewer")
 
 
 @pytest.fixture
@@ -137,314 +120,314 @@ async def viewer_client(db, _with_viewer):
 
 
 class TestCreateGroup:
-    def test_create_basic(self, db):
-        result = create_group("devs", "operator", "Development team")
+    async def test_create_basic(self, db):
+        result = await create_group("devs", "operator", "Development team")
         assert result["name"] == "devs"
         assert result["role"] == "operator"
         assert result["description"] == "Development team"
         assert result["member_count"] == 0
         assert "id" in result
 
-    def test_create_default_role(self, db):
-        result = create_group("viewers")
+    async def test_create_default_role(self, db):
+        result = await create_group("viewers")
         assert result["role"] == "viewer"
 
-    def test_duplicate_name_raises(self, db):
-        create_group("devs")
+    async def test_duplicate_name_raises(self, db):
+        await create_group("devs")
         with pytest.raises(IntegrityError):
-            create_group("devs")
+            await create_group("devs")
 
-    def test_invalid_role_raises(self, db):
+    async def test_invalid_role_raises(self, db):
         with pytest.raises(DomainValidationError, match="Invalid role"):
-            create_group("devs", "superadmin")
+            await create_group("devs", "superadmin")
 
 
 class TestUpdateGroup:
-    def test_update_name(self, db):
-        g = create_group("devs", "operator")
-        result = update_group(g["id"], name="developers")
+    async def test_update_name(self, db):
+        g = await create_group("devs", "operator")
+        result = await update_group(g["id"], name="developers")
         assert result["name"] == "developers"
         assert result["role"] == "operator"
 
-    def test_update_role(self, db):
-        g = create_group("devs", "viewer")
-        result = update_group(g["id"], role="admin")
+    async def test_update_role(self, db):
+        g = await create_group("devs", "viewer")
+        result = await update_group(g["id"], role="admin")
         assert result["role"] == "admin"
 
-    def test_update_description(self, db):
-        g = create_group("devs")
-        result = update_group(g["id"], description="New desc")
+    async def test_update_description(self, db):
+        g = await create_group("devs")
+        result = await update_group(g["id"], description="New desc")
         assert result["description"] == "New desc"
 
-    def test_update_nonexistent_raises(self, db):
+    async def test_update_nonexistent_raises(self, db):
         with pytest.raises(NotFoundError, match="not found"):
-            update_group(999, name="nope")
+            await update_group(999, name="nope")
 
-    def test_invalid_role_raises(self, db):
-        g = create_group("devs")
+    async def test_invalid_role_raises(self, db):
+        g = await create_group("devs")
         with pytest.raises(DomainValidationError, match="Invalid role"):
-            update_group(g["id"], role="superadmin")
+            await update_group(g["id"], role="superadmin")
 
 
 class TestDeleteGroup:
-    def test_delete_existing(self, db):
-        g = create_group("devs")
-        assert delete_group(g["id"]) is True
-        assert get_group(g["id"]) is None
+    async def test_delete_existing(self, db):
+        g = await create_group("devs")
+        assert await delete_group(g["id"]) is True
+        assert await get_group(g["id"]) is None
 
-    def test_delete_nonexistent(self, db):
-        assert delete_group(999) is False
+    async def test_delete_nonexistent(self, db):
+        assert await delete_group(999) is False
 
-    def test_cascade_removes_members(self, db):
-        g = create_group("devs")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g["id"], u["id"])
-        delete_group(g["id"])
-        assert list_user_groups(u["id"]) == []
+    async def test_cascade_removes_members(self, db):
+        g = await create_group("devs")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g["id"], u["id"])
+        await delete_group(g["id"])
+        assert await list_user_groups(u["id"]) == []
 
-    def test_cascade_removes_gateway_roles(self, db, _with_gateway):
-        g = create_group("devs")
-        set_group_gateway_role(g["id"], GW_NAME, "admin")
-        delete_group(g["id"])
-        assert list_group_gateway_roles(g["id"]) == []
+    async def test_cascade_removes_gateway_roles(self, db, _with_gateway):
+        g = await create_group("devs")
+        await set_group_gateway_role(g["id"], GW_NAME, "admin")
+        await delete_group(g["id"])
+        assert await list_group_gateway_roles(g["id"]) == []
 
 
 class TestListGroups:
-    def test_empty(self, db):
-        assert list_groups() == []
+    async def test_empty(self, db):
+        assert await list_groups() == []
 
-    def test_with_members(self, db):
-        g = create_group("devs", "operator")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g["id"], u["id"])
-        groups = list_groups()
+    async def test_with_members(self, db):
+        g = await create_group("devs", "operator")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g["id"], u["id"])
+        groups = await list_groups()
         assert len(groups) == 1
         assert groups[0]["member_count"] == 1
 
-    def test_ordered_by_name(self, db):
-        create_group("zebra")
-        create_group("alpha")
-        groups = list_groups()
+    async def test_ordered_by_name(self, db):
+        await create_group("zebra")
+        await create_group("alpha")
+        groups = await list_groups()
         assert groups[0]["name"] == "alpha"
         assert groups[1]["name"] == "zebra"
 
 
 class TestGetGroup:
-    def test_with_members(self, db):
-        g = create_group("devs")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g["id"], u["id"])
-        result = get_group(g["id"])
+    async def test_with_members(self, db):
+        g = await create_group("devs")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g["id"], u["id"])
+        result = await get_group(g["id"])
         assert result is not None
         assert len(result["members"]) == 1
         assert result["members"][0]["email"] == "u@test.com"
 
-    def test_nonexistent(self, db):
-        assert get_group(999) is None
+    async def test_nonexistent(self, db):
+        assert await get_group(999) is None
 
 
 # ─── Unit tests: Group Membership ────────────────────────────────────────
 
 
 class TestGroupMembership:
-    def test_add_member(self, db):
-        g = create_group("devs")
-        u = create_user("u@test.com", "password1", "viewer")
-        result = add_group_member(g["id"], u["id"])
+    async def test_add_member(self, db):
+        g = await create_group("devs")
+        u = await create_user("u@test.com", "password1", "viewer")
+        result = await add_group_member(g["id"], u["id"])
         assert result["group_name"] == "devs"
         assert result["user_email"] == "u@test.com"
 
-    def test_duplicate_membership_raises(self, db):
-        g = create_group("devs")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g["id"], u["id"])
+    async def test_duplicate_membership_raises(self, db):
+        g = await create_group("devs")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g["id"], u["id"])
         with pytest.raises(IntegrityError):
-            add_group_member(g["id"], u["id"])
+            await add_group_member(g["id"], u["id"])
 
-    def test_add_to_nonexistent_group_raises(self, db):
-        u = create_user("u@test.com", "password1", "viewer")
+    async def test_add_to_nonexistent_group_raises(self, db):
+        u = await create_user("u@test.com", "password1", "viewer")
         with pytest.raises(NotFoundError, match="Group 999 not found"):
-            add_group_member(999, u["id"])
+            await add_group_member(999, u["id"])
 
-    def test_add_nonexistent_user_raises(self, db):
-        g = create_group("devs")
+    async def test_add_nonexistent_user_raises(self, db):
+        g = await create_group("devs")
         with pytest.raises(NotFoundError, match="User 999 not found"):
-            add_group_member(g["id"], 999)
+            await add_group_member(g["id"], 999)
 
-    def test_remove_member(self, db):
-        g = create_group("devs")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g["id"], u["id"])
-        assert remove_group_member(g["id"], u["id"]) is True
-        assert list_group_members(g["id"]) == []
+    async def test_remove_member(self, db):
+        g = await create_group("devs")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g["id"], u["id"])
+        assert await remove_group_member(g["id"], u["id"]) is True
+        assert await list_group_members(g["id"]) == []
 
-    def test_remove_nonexistent_member(self, db):
-        g = create_group("devs")
-        assert remove_group_member(g["id"], 999) is False
+    async def test_remove_nonexistent_member(self, db):
+        g = await create_group("devs")
+        assert await remove_group_member(g["id"], 999) is False
 
-    def test_list_members(self, db):
-        g = create_group("devs")
-        u1 = create_user("a@test.com", "password1", "viewer")
-        u2 = create_user("b@test.com", "password1", "operator")
-        add_group_member(g["id"], u1["id"])
-        add_group_member(g["id"], u2["id"])
-        members = list_group_members(g["id"])
+    async def test_list_members(self, db):
+        g = await create_group("devs")
+        u1 = await create_user("a@test.com", "password1", "viewer")
+        u2 = await create_user("b@test.com", "password1", "operator")
+        await add_group_member(g["id"], u1["id"])
+        await add_group_member(g["id"], u2["id"])
+        members = await list_group_members(g["id"])
         assert len(members) == 2
         assert members[0]["email"] == "a@test.com"
 
-    def test_list_user_groups(self, db):
-        g1 = create_group("alpha")
-        g2 = create_group("beta")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g1["id"], u["id"])
-        add_group_member(g2["id"], u["id"])
-        groups = list_user_groups(u["id"])
+    async def test_list_user_groups(self, db):
+        g1 = await create_group("alpha")
+        g2 = await create_group("beta")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g1["id"], u["id"])
+        await add_group_member(g2["id"], u["id"])
+        groups = await list_user_groups(u["id"])
         assert len(groups) == 2
         assert groups[0]["name"] == "alpha"
 
-    def test_user_delete_cascades_membership(self, db):
+    async def test_user_delete_cascades_membership(self, db):
         from shoreguard.api.auth import delete_user
 
-        g = create_group("devs")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g["id"], u["id"])
-        delete_user(u["id"])
-        assert list_group_members(g["id"]) == []
+        g = await create_group("devs")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g["id"], u["id"])
+        await delete_user(u["id"])
+        assert await list_group_members(g["id"]) == []
 
 
 # ─── Unit tests: Group Gateway Roles ────────────────────────────────────
 
 
 class TestGroupGatewayRoles:
-    def test_set_role(self, db, _with_gateway):
-        g = create_group("devs")
-        result = set_group_gateway_role(g["id"], GW_NAME, "operator")
+    async def test_set_role(self, db, _with_gateway):
+        g = await create_group("devs")
+        result = await set_group_gateway_role(g["id"], GW_NAME, "operator")
         assert result == {"group_id": g["id"], "gateway_name": GW_NAME, "role": "operator"}
 
-    def test_update_role(self, db, _with_gateway):
-        g = create_group("devs")
-        set_group_gateway_role(g["id"], GW_NAME, "operator")
-        result = set_group_gateway_role(g["id"], GW_NAME, "admin")
+    async def test_update_role(self, db, _with_gateway):
+        g = await create_group("devs")
+        await set_group_gateway_role(g["id"], GW_NAME, "operator")
+        result = await set_group_gateway_role(g["id"], GW_NAME, "admin")
         assert result["role"] == "admin"
 
-    def test_invalid_role_raises(self, db, _with_gateway):
-        g = create_group("devs")
+    async def test_invalid_role_raises(self, db, _with_gateway):
+        g = await create_group("devs")
         with pytest.raises(DomainValidationError, match="Invalid role"):
-            set_group_gateway_role(g["id"], GW_NAME, "superadmin")
+            await set_group_gateway_role(g["id"], GW_NAME, "superadmin")
 
-    def test_nonexistent_group_raises(self, db, _with_gateway):
+    async def test_nonexistent_group_raises(self, db, _with_gateway):
         with pytest.raises(NotFoundError, match="Group 999 not found"):
-            set_group_gateway_role(999, GW_NAME, "admin")
+            await set_group_gateway_role(999, GW_NAME, "admin")
 
-    def test_nonexistent_gateway_raises(self, db):
-        g = create_group("devs")
+    async def test_nonexistent_gateway_raises(self, db):
+        g = await create_group("devs")
         with pytest.raises(NotFoundError, match="Gateway.*not found"):
-            set_group_gateway_role(g["id"], "no-such-gw", "admin")
+            await set_group_gateway_role(g["id"], "no-such-gw", "admin")
 
-    def test_remove_role(self, db, _with_gateway):
-        g = create_group("devs")
-        set_group_gateway_role(g["id"], GW_NAME, "admin")
-        assert remove_group_gateway_role(g["id"], GW_NAME) is True
-        assert list_group_gateway_roles(g["id"]) == []
+    async def test_remove_role(self, db, _with_gateway):
+        g = await create_group("devs")
+        await set_group_gateway_role(g["id"], GW_NAME, "admin")
+        assert await remove_group_gateway_role(g["id"], GW_NAME) is True
+        assert await list_group_gateway_roles(g["id"]) == []
 
-    def test_remove_nonexistent(self, db, _with_gateway):
-        g = create_group("devs")
-        assert remove_group_gateway_role(g["id"], GW_NAME) is False
+    async def test_remove_nonexistent(self, db, _with_gateway):
+        g = await create_group("devs")
+        assert await remove_group_gateway_role(g["id"], GW_NAME) is False
 
-    def test_list_roles(self, db, _with_two_gateways):
-        g = create_group("devs")
-        set_group_gateway_role(g["id"], GW_NAME, "operator")
-        set_group_gateway_role(g["id"], GW_NAME_2, "admin")
-        roles = list_group_gateway_roles(g["id"])
+    async def test_list_roles(self, db, _with_two_gateways):
+        g = await create_group("devs")
+        await set_group_gateway_role(g["id"], GW_NAME, "operator")
+        await set_group_gateway_role(g["id"], GW_NAME_2, "admin")
+        roles = await list_group_gateway_roles(g["id"])
         assert len(roles) == 2
 
-    def test_gateway_delete_cascades(self, db, _with_gateway):
-        g = create_group("devs")
-        set_group_gateway_role(g["id"], GW_NAME, "admin")
+    async def test_gateway_delete_cascades(self, db, _with_gateway):
+        g = await create_group("devs")
+        await set_group_gateway_role(g["id"], GW_NAME, "admin")
         session = db()
         gw = session.query(Gateway).filter(Gateway.name == GW_NAME).first()
         session.delete(gw)
         session.commit()
         session.close()
-        assert list_group_gateway_roles(g["id"]) == []
+        assert await list_group_gateway_roles(g["id"]) == []
 
 
 # ─── Unit tests: Role Resolution ────────────────────────────────────────
 
 
 class TestRoleResolution:
-    def test_group_gateway_role_when_no_individual(self, db, _with_gateway):
+    async def test_group_gateway_role_when_no_individual(self, db, _with_gateway):
         """Group gateway role applies when user has no individual gateway role."""
-        g = create_group("devs")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g["id"], u["id"])
-        set_group_gateway_role(g["id"], GW_NAME, "operator")
-        result = _lookup_gateway_role(user_id=u["id"], gateway=GW_NAME)
+        g = await create_group("devs")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g["id"], u["id"])
+        await set_group_gateway_role(g["id"], GW_NAME, "operator")
+        result = await _lookup_gateway_role(user_id=u["id"], gateway=GW_NAME)
         assert result == "operator"
 
-    def test_individual_gateway_wins_over_group_gateway(self, db, _with_gateway):
+    async def test_individual_gateway_wins_over_group_gateway(self, db, _with_gateway):
         """Individual gateway role takes precedence over group gateway role."""
         from shoreguard.api.auth import set_gateway_role
 
-        g = create_group("devs")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g["id"], u["id"])
-        set_group_gateway_role(g["id"], GW_NAME, "admin")
-        set_gateway_role(user_id=u["id"], gateway_name=GW_NAME, role="viewer")
-        result = _lookup_gateway_role(user_id=u["id"], gateway=GW_NAME)
+        g = await create_group("devs")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g["id"], u["id"])
+        await set_group_gateway_role(g["id"], GW_NAME, "admin")
+        await set_gateway_role(user_id=u["id"], gateway_name=GW_NAME, role="viewer")
+        result = await _lookup_gateway_role(user_id=u["id"], gateway=GW_NAME)
         assert result == "viewer"
 
-    def test_multiple_groups_highest_rank_wins(self, db, _with_gateway):
+    async def test_multiple_groups_highest_rank_wins(self, db, _with_gateway):
         """When user is in multiple groups, highest gateway role wins."""
-        g1 = create_group("viewers")
-        g2 = create_group("admins", "admin")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g1["id"], u["id"])
-        add_group_member(g2["id"], u["id"])
-        set_group_gateway_role(g1["id"], GW_NAME, "viewer")
-        set_group_gateway_role(g2["id"], GW_NAME, "admin")
-        result = _lookup_gateway_role(user_id=u["id"], gateway=GW_NAME)
+        g1 = await create_group("viewers")
+        g2 = await create_group("admins", "admin")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g1["id"], u["id"])
+        await add_group_member(g2["id"], u["id"])
+        await set_group_gateway_role(g1["id"], GW_NAME, "viewer")
+        await set_group_gateway_role(g2["id"], GW_NAME, "admin")
+        result = await _lookup_gateway_role(user_id=u["id"], gateway=GW_NAME)
         assert result == "admin"
 
-    def test_group_global_role_elevates(self, db):
+    async def test_group_global_role_elevates(self, db):
         """User (viewer) in group (operator) effectively gets operator."""
-        g = create_group("devs", "operator")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g["id"], u["id"])
-        result = _lookup_group_global_role(u["id"])
+        g = await create_group("devs", "operator")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g["id"], u["id"])
+        result = await _lookup_group_global_role(u["id"])
         assert result == "operator"
 
-    def test_group_global_role_does_not_downgrade(self, db):
+    async def test_group_global_role_does_not_downgrade(self, db):
         """User (admin) in group (viewer) keeps admin."""
-        g = create_group("viewers", "viewer")
-        u = create_user("u@test.com", "password1", "admin")
-        add_group_member(g["id"], u["id"])
+        g = await create_group("viewers", "viewer")
+        u = await create_user("u@test.com", "password1", "admin")
+        await add_group_member(g["id"], u["id"])
         # _lookup_group_global_role returns "viewer" but require_role only
         # elevates (it checks if group_global rank > current rank)
-        result = _lookup_group_global_role(u["id"])
+        result = await _lookup_group_global_role(u["id"])
         assert result == "viewer"  # lookup returns it, but require_role won't apply
 
-    def test_multiple_groups_global_highest_wins(self, db):
+    async def test_multiple_groups_global_highest_wins(self, db):
         """Multiple group memberships: highest global role wins."""
-        g1 = create_group("viewers", "viewer")
-        g2 = create_group("admins", "admin")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g1["id"], u["id"])
-        add_group_member(g2["id"], u["id"])
-        result = _lookup_group_global_role(u["id"])
+        g1 = await create_group("viewers", "viewer")
+        g2 = await create_group("admins", "admin")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g1["id"], u["id"])
+        await add_group_member(g2["id"], u["id"])
+        result = await _lookup_group_global_role(u["id"])
         assert result == "admin"
 
-    def test_no_groups_returns_none(self, db):
+    async def test_no_groups_returns_none(self, db):
         """User in no groups: _lookup_group_global_role returns None."""
-        u = create_user("u@test.com", "password1", "viewer")
-        assert _lookup_group_global_role(u["id"]) is None
+        u = await create_user("u@test.com", "password1", "viewer")
+        assert await _lookup_group_global_role(u["id"]) is None
 
-    def test_no_group_gateway_role_returns_none(self, db, _with_gateway):
+    async def test_no_group_gateway_role_returns_none(self, db, _with_gateway):
         """User in group without gateway role: _lookup_gateway_role returns None."""
-        g = create_group("devs")
-        u = create_user("u@test.com", "password1", "viewer")
-        add_group_member(g["id"], u["id"])
-        result = _lookup_gateway_role(user_id=u["id"], gateway=GW_NAME)
+        g = await create_group("devs")
+        u = await create_user("u@test.com", "password1", "viewer")
+        await add_group_member(g["id"], u["id"])
+        result = await _lookup_gateway_role(user_id=u["id"], gateway=GW_NAME)
         assert result is None
 
 

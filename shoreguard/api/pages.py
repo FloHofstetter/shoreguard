@@ -152,7 +152,7 @@ def _render_error(
     return HTMLResponse(content=resp.body, status_code=status_code, headers=dict(resp.headers))
 
 
-def _require_page_auth(request: Request) -> RedirectResponse | None:
+async def _require_page_auth(request: Request) -> RedirectResponse | None:
     """Redirect to /login or /setup based on auth state.
 
     Args:
@@ -164,12 +164,12 @@ def _require_page_auth(request: Request) -> RedirectResponse | None:
     from shoreguard.api.auth import state
 
     # If a DB is configured but no users exist yet → setup wizard
-    if state.session_factory is not None and not is_setup_complete():
+    if state.session_factory is not None and not await is_setup_complete():
         from urllib.parse import quote
 
         return RedirectResponse(url=f"/setup?next={quote(request.url.path)}", status_code=302)
 
-    role = check_request_auth(request)
+    role = await check_request_auth(request)
     if role is None:
         from urllib.parse import quote
 
@@ -239,7 +239,7 @@ async def setup_page(request: Request) -> TemplateResponse | RedirectResponse:
     Returns:
         TemplateResponse | RedirectResponse: Rendered setup page, or redirect if already set up.
     """
-    if is_setup_complete():
+    if await is_setup_complete():
         return RedirectResponse(url="/", status_code=302)
     return templates.TemplateResponse(request, "pages/setup.html", {})
 
@@ -254,7 +254,7 @@ async def dashboard_page(request: Request) -> TemplateResponse | RedirectRespons
     Returns:
         TemplateResponse | RedirectResponse: Rendered dashboard page.
     """
-    redirect = _require_page_auth(request)
+    redirect = await _require_page_auth(request)
     if redirect:
         return redirect
     return templates.TemplateResponse(
@@ -274,7 +274,7 @@ async def gateways_page(request: Request) -> TemplateResponse | RedirectResponse
     Returns:
         TemplateResponse | RedirectResponse: Rendered gateways list page.
     """
-    redirect = _require_page_auth(request)
+    redirect = await _require_page_auth(request)
     if redirect:
         return redirect
     return templates.TemplateResponse(
@@ -297,7 +297,7 @@ async def gateway_detail_or_sub(
     Returns:
         TemplateResponse | RedirectResponse | HTMLResponse: Rendered gateway page or 404 error page.
     """
-    redirect = _require_page_auth(request)
+    redirect = await _require_page_auth(request)
     if redirect:
         return redirect
     parts = name.split("/", 1)
@@ -474,7 +474,7 @@ async def policies_page(request: Request) -> TemplateResponse | RedirectResponse
     Returns:
         TemplateResponse | RedirectResponse: Rendered policies list page.
     """
-    redirect = _require_page_auth(request)
+    redirect = await _require_page_auth(request)
     if redirect:
         return redirect
     return templates.TemplateResponse(
@@ -495,7 +495,7 @@ async def preset_detail_page(request: Request, name: str) -> TemplateResponse | 
     Returns:
         TemplateResponse | RedirectResponse: Rendered preset detail page.
     """
-    redirect = _require_page_auth(request)
+    redirect = await _require_page_auth(request)
     if redirect:
         return redirect
     return templates.TemplateResponse(
@@ -516,7 +516,7 @@ async def audit_page(request: Request) -> TemplateResponse | RedirectResponse | 
         TemplateResponse | RedirectResponse | HTMLResponse: Rendered audit log
             page or access denied error.
     """
-    redirect = _require_page_auth(request)
+    redirect = await _require_page_auth(request)
     if redirect:
         return redirect
     if getattr(request.state, "role", None) != "admin":
@@ -545,7 +545,7 @@ async def groups_page(request: Request) -> TemplateResponse | RedirectResponse |
         TemplateResponse | RedirectResponse | HTMLResponse: Rendered groups page
             or access denied error.
     """
-    redirect = _require_page_auth(request)
+    redirect = await _require_page_auth(request)
     if redirect:
         return redirect
     if getattr(request.state, "role", None) != "admin":
@@ -574,7 +574,7 @@ async def users_page(request: Request) -> TemplateResponse | RedirectResponse | 
         TemplateResponse | RedirectResponse | HTMLResponse: Rendered users
             management page or access denied error.
     """
-    redirect = _require_page_auth(request)
+    redirect = await _require_page_auth(request)
     if redirect:
         return redirect
     if getattr(request.state, "role", None) != "admin":
@@ -603,7 +603,7 @@ async def webhooks_page(request: Request) -> TemplateResponse | RedirectResponse
         TemplateResponse | RedirectResponse | HTMLResponse: Rendered webhooks
             management page or access denied error.
     """
-    redirect = _require_page_auth(request)
+    redirect = await _require_page_auth(request)
     if redirect:
         return redirect
     if getattr(request.state, "role", None) != "admin":
@@ -632,7 +632,7 @@ async def user_new_page(request: Request) -> TemplateResponse | RedirectResponse
         TemplateResponse | RedirectResponse | HTMLResponse: Rendered invite
             user form or access denied error.
     """
-    redirect = _require_page_auth(request)
+    redirect = await _require_page_auth(request)
     if redirect:
         return redirect
     if getattr(request.state, "role", None) != "admin":
@@ -657,7 +657,7 @@ async def sp_new_page(request: Request) -> TemplateResponse | RedirectResponse |
         TemplateResponse | RedirectResponse | HTMLResponse: Rendered service
             principal form or access denied error.
     """
-    redirect = _require_page_auth(request)
+    redirect = await _require_page_auth(request)
     if redirect:
         return redirect
     if getattr(request.state, "role", None) != "admin":

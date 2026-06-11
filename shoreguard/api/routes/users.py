@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import datetime
 import logging
 import re
@@ -108,7 +107,7 @@ async def get_users(request: Request) -> list[dict[str, Any]]:
     Returns:
         list[dict[str, Any]]: All registered users.
     """
-    return list_users()
+    return await list_users()
 
 
 @router.post(
@@ -140,7 +139,7 @@ async def create_user_endpoint(
     if not valid_email(body.email):
         raise HTTPException(400, "Invalid email format")
     try:
-        info = create_user(body.email.strip(), None, body.role)
+        info = await create_user(body.email.strip(), None, body.role)
     except IntegrityError:
         logger.warning(
             "Duplicate user creation attempt (email=%s, actor=%s)",
@@ -184,12 +183,12 @@ async def delete_user_endpoint(request: Request, user_id: int) -> dict[str, Any]
         if result and result[0] == user_id:
             raise HTTPException(400, "Cannot delete your own account")
     # Prevent deleting the last admin
-    users = list_users()
+    users = await list_users()
     active_admins = [u for u in users if u.get("role") == "admin" and u.get("is_active")]
     target_is_admin = any(u["id"] == user_id and u.get("role") == "admin" for u in users)
     if target_is_admin and len(active_admins) <= 1:
         raise HTTPException(400, "Cannot delete the last admin user")
-    if delete_user(user_id):
+    if await delete_user(user_id):
         logger.info("User deleted (user_id=%s, actor=%s)", user_id, _get_actor(request))
         await audit_log(request, "user.delete", "user", str(user_id))
         return {"ok": True}
@@ -223,7 +222,7 @@ async def get_user_gateway_roles(user_id: int) -> list[dict[str, Any]]:
     Returns:
         list[dict[str, Any]]: Gateway role overrides for the user.
     """
-    return await asyncio.to_thread(list_gateway_roles_for_user, user_id)
+    return await list_gateway_roles_for_user(user_id)
 
 
 @router.put(
@@ -258,9 +257,7 @@ async def set_user_gateway_role(
         logger.warning("Invalid role rejected (role=%s, actor=%s)", body.role, _get_actor(request))
         raise HTTPException(400, f"Invalid role: {body.role!r} (must be one of {ROLES})")
     try:
-        result = await asyncio.to_thread(
-            set_gateway_role, user_id=user_id, gateway_name=gw, role=body.role
-        )
+        result = await set_gateway_role(user_id=user_id, gateway_name=gw, role=body.role)
     except IntegrityError:
         logger.warning(
             "Gateway role conflict (user_id=%s, gateway=%s, role=%s, actor=%s)",
@@ -314,7 +311,7 @@ async def delete_user_gateway_role(
             "Invalid gateway name rejected (gateway=%s, actor=%s)", gw, _get_actor(request)
         )
         raise HTTPException(400, "Invalid gateway name")
-    if await asyncio.to_thread(remove_gateway_role, user_id=user_id, gateway_name=gw):
+    if await remove_gateway_role(user_id=user_id, gateway_name=gw):
         logger.info(
             "User gateway role removed (user_id=%s, gateway=%s, actor=%s)",
             user_id,
@@ -352,7 +349,7 @@ async def get_sp_gateway_roles(sp_id: int) -> list[dict[str, Any]]:
     Returns:
         list[dict[str, Any]]: Gateway role overrides for the service principal.
     """
-    return await asyncio.to_thread(list_gateway_roles_for_sp, sp_id)
+    return await list_gateway_roles_for_sp(sp_id)
 
 
 @router.put(
@@ -387,9 +384,7 @@ async def set_sp_gateway_role_endpoint(
         logger.warning("Invalid role rejected (role=%s, actor=%s)", body.role, _get_actor(request))
         raise HTTPException(400, f"Invalid role: {body.role!r} (must be one of {ROLES})")
     try:
-        result = await asyncio.to_thread(
-            set_gateway_role, sp_id=sp_id, gateway_name=gw, role=body.role
-        )
+        result = await set_gateway_role(sp_id=sp_id, gateway_name=gw, role=body.role)
     except IntegrityError:
         logger.warning(
             "Gateway role conflict (sp_id=%s, gateway=%s, role=%s, actor=%s)",
@@ -443,7 +438,7 @@ async def delete_sp_gateway_role(
             "Invalid gateway name rejected (gateway=%s, actor=%s)", gw, _get_actor(request)
         )
         raise HTTPException(400, "Invalid gateway name")
-    if await asyncio.to_thread(remove_gateway_role, sp_id=sp_id, gateway_name=gw):
+    if await remove_gateway_role(sp_id=sp_id, gateway_name=gw):
         logger.info(
             "SP gateway role removed (sp_id=%s, gateway=%s, actor=%s)",
             sp_id,
@@ -498,7 +493,7 @@ async def get_sps(request: Request) -> list[dict[str, Any]]:
     Returns:
         list[dict[str, Any]]: All registered service principals.
     """
-    return list_service_principals()
+    return await list_service_principals()
 
 
 @router.post(
@@ -528,7 +523,7 @@ async def create_sp_endpoint(
     if not body.name.strip():
         raise HTTPException(400, "Name is required")
     try:
-        plaintext, info = create_service_principal(
+        plaintext, info = await create_service_principal(
             body.name.strip(), body.role, expires_at=body.expires_at
         )
     except IntegrityError:
@@ -575,7 +570,7 @@ async def delete_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | J
     Raises:
         HTTPException: If the service principal does not exist.
     """
-    if delete_service_principal(sp_id):
+    if await delete_service_principal(sp_id):
         logger.info("Service principal deleted (sp_id=%s, actor=%s)", sp_id, _get_actor(request))
         await audit_log(request, "sp.delete", "service_principal", str(sp_id))
         return {"ok": True}
@@ -602,7 +597,7 @@ async def rotate_sp_endpoint(request: Request, sp_id: int) -> dict[str, Any] | J
     Raises:
         HTTPException: If the service principal does not exist.
     """
-    result = rotate_service_principal(sp_id)
+    result = await rotate_service_principal(sp_id)
     if result is None:
         raise HTTPException(404, "Service principal not found")
     plaintext, info = result
@@ -666,7 +661,7 @@ async def get_groups(request: Request) -> list[dict[str, Any]]:
     Returns:
         list[dict[str, Any]]: Group info dicts.
     """
-    return await asyncio.to_thread(list_groups)
+    return await list_groups()
 
 
 @router.post(
@@ -693,7 +688,7 @@ async def create_group_endpoint(
     if body.role not in ROLES:
         raise HTTPException(400, f"Invalid role: {body.role!r}")
     try:
-        result = await asyncio.to_thread(create_group, body.name, body.role, body.description)
+        result = await create_group(body.name, body.role, body.description)
     except IntegrityError:
         raise HTTPException(409, "Group name already exists")
     await audit_log(request, "group.create", "group", body.name, detail={"role": body.role})
@@ -718,7 +713,7 @@ async def get_group_endpoint(request: Request, group_id: int) -> dict[str, Any] 
     Raises:
         HTTPException: If the group does not exist.
     """
-    result = await asyncio.to_thread(get_group, group_id)
+    result = await get_group(group_id)
     if result is None:
         raise HTTPException(404, "Group not found")
     return result
@@ -748,8 +743,8 @@ async def update_group_endpoint(
     if body.role is not None and body.role not in ROLES:
         raise HTTPException(400, f"Invalid role: {body.role!r}")
     try:
-        result = await asyncio.to_thread(
-            update_group, group_id, name=body.name, role=body.role, description=body.description
+        result = await update_group(
+            group_id, name=body.name, role=body.role, description=body.description
         )
     except IntegrityError:
         raise HTTPException(409, "Group name already exists")
@@ -777,10 +772,10 @@ async def delete_group_endpoint(request: Request, group_id: int) -> dict[str, An
         HTTPException: If the group does not exist.
     """
     # Fetch group name for audit before deleting
-    info = await asyncio.to_thread(get_group, group_id)
+    info = await get_group(group_id)
     if info is None:
         raise HTTPException(404, "Group not found")
-    await asyncio.to_thread(delete_group, group_id)
+    await delete_group(group_id)
     await audit_log(request, "group.delete", "group", info["name"])
     return {"ok": True}
 
@@ -811,7 +806,7 @@ async def add_group_member_endpoint(
         HTTPException: If the user is already a member of the group.
     """
     try:
-        result = await asyncio.to_thread(add_group_member, group_id, body.user_id)
+        result = await add_group_member(group_id, body.user_id)
     except IntegrityError:
         raise HTTPException(409, "User is already a member")
     await audit_log(
@@ -846,10 +841,10 @@ async def remove_group_member_endpoint(
         HTTPException: If the group or membership does not exist.
     """
     # Fetch group name for audit
-    info = await asyncio.to_thread(get_group, group_id)
+    info = await get_group(group_id)
     if info is None:
         raise HTTPException(404, "Group not found")
-    removed = await asyncio.to_thread(remove_group_member, group_id, user_id)
+    removed = await remove_group_member(group_id, user_id)
     if not removed:
         raise HTTPException(404, "Membership not found")
     await audit_log(
@@ -880,7 +875,7 @@ async def get_group_gateway_roles_endpoint(request: Request, group_id: int) -> l
     Returns:
         list[dict[str, Any]]: Gateway role dicts.
     """
-    return await asyncio.to_thread(list_group_gateway_roles, group_id)
+    return await list_group_gateway_roles(group_id)
 
 
 @router.put(
@@ -907,7 +902,7 @@ async def set_group_gateway_role_endpoint(
     """
     if body.role not in ROLES:
         raise HTTPException(400, f"Invalid role: {body.role!r}")
-    result = await asyncio.to_thread(set_group_gateway_role, group_id, gw, body.role)
+    result = await set_group_gateway_role(group_id, gw, body.role)
     await audit_log(
         request,
         "group.gateway_role.set",
@@ -939,7 +934,7 @@ async def delete_group_gateway_role_endpoint(
     Raises:
         HTTPException: If the gateway role does not exist.
     """
-    removed = await asyncio.to_thread(remove_group_gateway_role, group_id, gw)
+    removed = await remove_group_gateway_role(group_id, gw)
     if not removed:
         raise HTTPException(404, "Gateway role not found")
     await audit_log(

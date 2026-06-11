@@ -7,6 +7,7 @@ from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Cookie, HTTPException, Query, Request, WebSocket, status
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 if TYPE_CHECKING:
@@ -32,7 +33,7 @@ class _GatewayRoleLookupError(Exception):
     """Raised when the gateway role DB lookup fails — triggers a 503."""
 
 
-def _lookup_gateway_role(
+async def _lookup_gateway_role(
     *, user_id: int | None = None, sp_id: int | None = None, gateway: str
 ) -> str | None:
     """Return the gateway-scoped role override, or None if no override exists.
@@ -61,37 +62,48 @@ def _lookup_gateway_role(
         UserGatewayRole,
     )
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             if user_id is not None:
                 # Priority 1: individual gateway role
                 row = (
-                    session.query(UserGatewayRole)
-                    .join(Gateway, UserGatewayRole.gateway_id == Gateway.id)
-                    .filter(
-                        UserGatewayRole.user_id == user_id,
-                        Gateway.name == gateway,
+                    (
+                        await session.execute(
+                            select(UserGatewayRole)
+                            .join(Gateway, UserGatewayRole.gateway_id == Gateway.id)
+                            .where(
+                                UserGatewayRole.user_id == user_id,
+                                Gateway.name == gateway,
+                            )
+                        )
                     )
+                    .scalars()
                     .first()
                 )
                 if row:
                     return row.role
                 # Priority 2: group gateway role (highest rank wins)
                 group_rows = (
-                    session.query(GroupGatewayRole.role)
-                    .join(GroupMember, GroupMember.group_id == GroupGatewayRole.group_id)
-                    .join(Gateway, Gateway.id == GroupGatewayRole.gateway_id)
-                    .filter(GroupMember.user_id == user_id, Gateway.name == gateway)
-                    .all()
-                )
+                    await session.execute(
+                        select(GroupGatewayRole.role)
+                        .join(GroupMember, GroupMember.group_id == GroupGatewayRole.group_id)
+                        .join(Gateway, Gateway.id == GroupGatewayRole.gateway_id)
+                        .where(GroupMember.user_id == user_id, Gateway.name == gateway)
+                    )
+                ).all()
                 if group_rows:
                     return max((r[0] for r in group_rows), key=lambda r: _ROLE_RANK.get(r, -1))
                 return None
             elif sp_id is not None:
                 row = (
-                    session.query(SPGatewayRole)
-                    .join(Gateway, SPGatewayRole.gateway_id == Gateway.id)
-                    .filter(SPGatewayRole.sp_id == sp_id, Gateway.name == gateway)
+                    (
+                        await session.execute(
+                            select(SPGatewayRole)
+                            .join(Gateway, SPGatewayRole.gateway_id == Gateway.id)
+                            .where(SPGatewayRole.sp_id == sp_id, Gateway.name == gateway)
+                        )
+                    )
+                    .scalars()
                     .first()
                 )
                 return row.role if row else None
@@ -102,7 +114,7 @@ def _lookup_gateway_role(
             raise _GatewayRoleLookupError(f"Gateway role lookup failed for gateway={gateway}")
 
 
-def _lookup_group_global_role(user_id: int) -> str | None:
+async def _lookup_group_global_role(user_id: int) -> str | None:
     """Return the highest global role from all groups a user belongs to.
 
     Args:
@@ -118,14 +130,15 @@ def _lookup_group_global_role(user_id: int) -> str | None:
         return None
     from shoreguard.models import Group, GroupMember
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             rows = (
-                session.query(Group.role)
-                .join(GroupMember, GroupMember.group_id == Group.id)
-                .filter(GroupMember.user_id == user_id)
-                .all()
-            )
+                await session.execute(
+                    select(Group.role)
+                    .join(GroupMember, GroupMember.group_id == Group.id)
+                    .where(GroupMember.user_id == user_id)
+                )
+            ).all()
             if not rows:
                 return None
             return max((r[0] for r in rows), key=lambda r: _ROLE_RANK.get(r, -1))
@@ -137,7 +150,7 @@ def _lookup_group_global_role(user_id: int) -> str | None:
 # ─── FastAPI dependencies ──────────────────────────────────────────────────
 
 
-def require_auth(request: Request) -> None:
+async def require_auth(request: Request) -> None:
     """Reject unauthenticated requests (401).
 
     Args:
@@ -146,7 +159,7 @@ def require_auth(request: Request) -> None:
     Raises:
         HTTPException: 401 if credentials are missing or invalid.
     """
-    role = check_request_auth(request)
+    role = await check_request_auth(request)
     if role is not None:
         request.state.role = role
         return
@@ -190,7 +203,7 @@ def require_role(minimum: str) -> Callable[..., Coroutine[Any, Any, None]]:
         """
         role = getattr(request.state, "role", None)
         if role is None:
-            role = check_request_auth(request)
+            role = await check_request_auth(request)
             if role is None:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -205,7 +218,9 @@ def require_role(minimum: str) -> Callable[..., Coroutine[Any, Any, None]]:
             user_db_id = getattr(request.state, "user_db_id", None)
             sp_db_id = getattr(request.state, "sp_db_id", None)
             try:
-                gw_role = _lookup_gateway_role(user_id=user_db_id, sp_id=sp_db_id, gateway=gateway)
+                gw_role = await _lookup_gateway_role(
+                    user_id=user_db_id, sp_id=sp_db_id, gateway=gateway
+                )
             except _GatewayRoleLookupError:
                 raise HTTPException(
                     status_code=503,
@@ -219,7 +234,7 @@ def require_role(minimum: str) -> Callable[..., Coroutine[Any, Any, None]]:
         user_db_id = getattr(request.state, "user_db_id", None)
         if user_db_id is not None:
             try:
-                group_global = _lookup_group_global_role(user_db_id)
+                group_global = await _lookup_group_global_role(user_db_id)
             except _GatewayRoleLookupError:
                 raise HTTPException(
                     status_code=503,
@@ -256,7 +271,7 @@ def require_role(minimum: str) -> Callable[..., Coroutine[Any, Any, None]]:
     return _dependency
 
 
-def require_auth_ws(
+async def require_auth_ws(
     websocket: WebSocket,
     token: str | None = Query(default=None),
     sg_session: str | None = Cookie(default=None),
@@ -275,12 +290,12 @@ def require_auth_ws(
     """
     if state.no_auth:
         return
-    if not is_setup_complete():
+    if not await is_setup_complete():
         return
 
     # 1. Query-param token → service principal
     if token:
-        sp = _lookup_sp_identity(token)
+        sp = await _lookup_sp_identity(token)
         if sp:
             logger.debug(
                 "WebSocket auth via SP token (path=%s, role=%s)", websocket.url.path, sp["role"]
@@ -292,7 +307,7 @@ def require_auth_ws(
         result = verify_session_token(sg_session)
         if result:
             user_id, _ = result
-            if _lookup_user(user_id) is not None:
+            if await _lookup_user(user_id) is not None:
                 logger.debug("WebSocket auth via session cookie (path=%s)", websocket.url.path)
                 return
             logger.warning("WebSocket session for inactive/deleted user_id=%d", user_id)
@@ -305,7 +320,7 @@ def require_auth_ws(
     )
 
 
-def require_role_ws(minimum: str) -> Callable[..., None]:
+def require_role_ws(minimum: str) -> Callable[..., Coroutine[Any, Any, None]]:
     """Return a WebSocket dependency enforcing a minimum global role.
 
     Mirrors :func:`require_auth_ws` identity resolution (SP token or session
@@ -319,10 +334,11 @@ def require_role_ws(minimum: str) -> Callable[..., None]:
         minimum: Minimum required role (``admin``, ``operator``, ``viewer``).
 
     Returns:
-        Callable[..., None]: A FastAPI WebSocket dependency callable.
+        Callable[..., Coroutine[Any, Any, None]]: An async FastAPI WebSocket
+            dependency callable.
     """
 
-    def _dep(
+    async def _dep(
         websocket: WebSocket,
         token: str | None = Query(default=None),
         sg_session: str | None = Cookie(default=None),
@@ -337,18 +353,18 @@ def require_role_ws(minimum: str) -> Callable[..., None]:
         Raises:
             HTTPException: 403 if unauthenticated or the role is insufficient.
         """
-        if state.no_auth or not is_setup_complete():
+        if state.no_auth or not await is_setup_complete():
             return
         role: str | None = None
         if token:
-            sp = _lookup_sp_identity(token)
+            sp = await _lookup_sp_identity(token)
             if sp:
                 role = sp["role"]
         if role is None and sg_session:
             result = verify_session_token(sg_session)
             if result:
                 user_id, sess_role = result
-                if _lookup_user(user_id) is not None:
+                if await _lookup_user(user_id) is not None:
                     role = sess_role
         if role is None:
             raise HTTPException(

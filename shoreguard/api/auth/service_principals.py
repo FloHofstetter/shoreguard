@@ -7,6 +7,7 @@ import logging
 import secrets
 from typing import TYPE_CHECKING
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from shoreguard.exceptions import ValidationError as DomainValidationError
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 # ─── Service Principal CRUD ────────────────────────────────────────────────
 
 
-def create_service_principal(
+async def create_service_principal(
     name: str,
     role: str,
     created_by: int | None = None,
@@ -56,7 +57,7 @@ def create_service_principal(
     key_prefix = plaintext[:12]
     now = datetime.datetime.now(datetime.UTC)
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             sp = ServicePrincipal(
                 name=name,
@@ -68,7 +69,7 @@ def create_service_principal(
                 expires_at=expires_at,
             )
             session.add(sp)
-            session.commit()
+            await session.commit()
             logger.info(
                 "Service principal created (id=%d, name=%s, role=%s, created_by=%s)",
                 sp.id,
@@ -85,15 +86,15 @@ def create_service_principal(
                 "expires_at": expires_at.isoformat() if expires_at else None,
             }
         except IntegrityError:
-            session.rollback()
+            await session.rollback()
             raise
         except Exception:
-            session.rollback()
+            await session.rollback()
             logger.exception("Failed to create service principal (name=%s)", name)
             raise
 
 
-def list_service_principals() -> list[dict]:
+async def list_service_principals() -> list[dict]:
     """Return all service principals (without key hashes).
 
     Returns:
@@ -103,9 +104,17 @@ def list_service_principals() -> list[dict]:
         return []
     from shoreguard.models import ServicePrincipal
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            rows = session.query(ServicePrincipal).order_by(ServicePrincipal.created_at).all()
+            rows = (
+                (
+                    await session.execute(
+                        select(ServicePrincipal).order_by(ServicePrincipal.created_at)
+                    )
+                )
+                .scalars()
+                .all()
+            )
             return [
                 {
                     "id": r.id,
@@ -124,7 +133,7 @@ def list_service_principals() -> list[dict]:
             return []
 
 
-def delete_service_principal(sp_id: int) -> bool:
+async def delete_service_principal(sp_id: int) -> bool:
     """Delete a service principal by ID.
 
     Args:
@@ -141,23 +150,31 @@ def delete_service_principal(sp_id: int) -> bool:
         raise RuntimeError("Database not available")
     from shoreguard.models import ServicePrincipal
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            row = session.query(ServicePrincipal).filter(ServicePrincipal.id == sp_id).first()
+            row = (
+                (
+                    await session.execute(
+                        select(ServicePrincipal).where(ServicePrincipal.id == sp_id)
+                    )
+                )
+                .scalars()
+                .first()
+            )
             if row is None:
                 return False
             name, role = row.name, row.role
-            session.delete(row)
-            session.commit()
+            await session.delete(row)
+            await session.commit()
             logger.info("Service principal deleted (sp_id=%d, name=%s, role=%s)", sp_id, name, role)
             return True
         except Exception:
-            session.rollback()
+            await session.rollback()
             logger.exception("Failed to delete service principal (sp_id=%d)", sp_id)
             raise
 
 
-def rotate_service_principal(sp_id: int) -> tuple[str, dict] | None:
+async def rotate_service_principal(sp_id: int) -> tuple[str, dict] | None:
     """Rotate the API key for a service principal.
 
     Generates a new key and immediately invalidates the old one.
@@ -181,14 +198,22 @@ def rotate_service_principal(sp_id: int) -> tuple[str, dict] | None:
     new_hash = _hash_key(new_plaintext)
     new_prefix = new_plaintext[:12]
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            row = session.query(ServicePrincipal).filter(ServicePrincipal.id == sp_id).first()
+            row = (
+                (
+                    await session.execute(
+                        select(ServicePrincipal).where(ServicePrincipal.id == sp_id)
+                    )
+                )
+                .scalars()
+                .first()
+            )
             if row is None:
                 return None
             row.key_hash = new_hash
             row.key_prefix = new_prefix
-            session.commit()
+            await session.commit()
             logger.info("Service principal key rotated (sp_id=%d, name=%s)", sp_id, row.name)
             return new_plaintext, {
                 "id": row.id,
@@ -198,6 +223,6 @@ def rotate_service_principal(sp_id: int) -> tuple[str, dict] | None:
                 "expires_at": row.expires_at.isoformat() if row.expires_at else None,
             }
         except Exception:
-            session.rollback()
+            await session.rollback()
             logger.exception("Failed to rotate service principal key (sp_id=%d)", sp_id)
             raise

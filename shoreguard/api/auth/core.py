@@ -19,7 +19,7 @@ from pwdlib.hashers.bcrypt import BcryptHasher
 from sqlalchemy.exc import SQLAlchemyError
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import sessionmaker as SessionMaker
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from shoreguard.settings import AuthSettings
 
@@ -83,7 +83,7 @@ class _AuthState:
             (``--no-auth`` development mode).
     """
 
-    session_factory: SessionMaker | None = None
+    session_factory: async_sessionmaker[AsyncSession] | None = None
     hmac_secret: bytes = b""
     no_auth: bool = False
 
@@ -145,13 +145,13 @@ def _load_or_create_secret_key() -> bytes:
     return secret
 
 
-def init_auth(session_factory: SessionMaker) -> None:
+def init_auth(session_factory: async_sessionmaker[AsyncSession]) -> None:
     """Initialise the auth module with a DB session factory.
 
     Called once from the application lifespan.
 
     Args:
-        session_factory: SQLAlchemy session factory bound to the engine.
+        session_factory: Async SQLAlchemy session factory bound to the engine.
     """
     state.session_factory = session_factory
     state.hmac_secret = _load_or_create_secret_key()
@@ -166,11 +166,11 @@ def reset() -> None:
     _account_failures.clear()
 
 
-def init_auth_for_test(session_factory: SessionMaker) -> None:
+def init_auth_for_test(session_factory: async_sessionmaker[AsyncSession]) -> None:
     """Initialise auth with a test DB and a fixed HMAC secret.
 
     Args:
-        session_factory: SQLAlchemy session factory for the test database.
+        session_factory: Async SQLAlchemy session factory for the test database.
     """
     state.session_factory = session_factory
     state.hmac_secret = b"test-secret-key-for-unit-tests!!"
@@ -186,7 +186,7 @@ def is_registration_enabled() -> bool:
     return _get_auth_settings().allow_registration
 
 
-def is_setup_complete() -> bool:
+async def is_setup_complete() -> bool:
     """Return True when at least one user exists in the database.
 
     Returns:
@@ -194,11 +194,14 @@ def is_setup_complete() -> bool:
     """
     if state.session_factory is None:
         return False
+    from sqlalchemy import func, select
+
     from shoreguard.models import User
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            return session.query(User).count() > 0
+            count = (await session.execute(select(func.count()).select_from(User))).scalar()
+            return (count or 0) > 0
         except SQLAlchemyError:
             logger.exception("Failed to check setup status")
             return False
@@ -272,7 +275,7 @@ def verify_session_token(token: str) -> tuple[int, str] | None:
 # ─── DB lookups ─────────────────────────────────────────────────────────────
 
 
-def _lookup_sp(key: str) -> str | None:
+async def _lookup_sp(key: str) -> str | None:
     """Look up a service principal by Bearer token. Returns role or None.
 
     .. deprecated:: Use :func:`_lookup_sp_identity` for new code.
@@ -283,11 +286,11 @@ def _lookup_sp(key: str) -> str | None:
     Returns:
         str | None: Role string or ``None`` if not found.
     """
-    result = _lookup_sp_identity(key)
+    result = await _lookup_sp_identity(key)
     return result["role"] if result else None
 
 
-def authenticate_user(email: str, password: str) -> dict | None:
+async def authenticate_user(email: str, password: str) -> dict | None:
     """Verify user credentials. Returns user info dict or None.
 
     Uses constant-time comparison to prevent timing-based email enumeration:
@@ -303,11 +306,13 @@ def authenticate_user(email: str, password: str) -> dict | None:
     """
     if state.session_factory is None:
         return None
+    from sqlalchemy import select
+
     from shoreguard.models import User
 
     email = email.strip().lower()
-    with state.session_factory() as session:
-        user = session.query(User).filter(User.email == email).first()
+    async with state.session_factory() as session:
+        user = (await session.execute(select(User).where(User.email == email))).scalars().first()
 
         # Always run bcrypt to prevent timing-based user enumeration.
         # The dummy hash is a valid bcrypt hash that will never match.
@@ -318,9 +323,10 @@ def authenticate_user(email: str, password: str) -> dict | None:
             and user.invite_token_hash is None
             and user.hashed_password is not None
         )
-        password_ok = verify_password(password, user.hashed_password if valid_user else _DUMMY_HASH)
+        hashed = user.hashed_password if user is not None and valid_user else None
+        password_ok = verify_password(password, hashed or _DUMMY_HASH)
 
-        if not valid_user or not password_ok:
+        if user is None or not valid_user or not password_ok:
             logger.warning("Auth failed: invalid credentials (email=%s)", email)
             return None
         return {"id": user.id, "email": user.email, "role": user.role}
@@ -395,7 +401,7 @@ def reset_lockouts() -> None:
     _account_failures.clear()
 
 
-def _lookup_user(user_id: int) -> dict | None:
+async def _lookup_user(user_id: int) -> dict | None:
     """Return ``{id, email, role}`` if the user exists and is active, else None.
 
     Args:
@@ -406,16 +412,18 @@ def _lookup_user(user_id: int) -> dict | None:
     """
     if state.session_factory is None:
         return None
+    from sqlalchemy import select
+
     from shoreguard.models import User
 
-    with state.session_factory() as session:
-        user = session.query(User).filter(User.id == user_id).first()
+    async with state.session_factory() as session:
+        user = (await session.execute(select(User).where(User.id == user_id))).scalars().first()
         if user is None or not user.is_active:
             return None
         return {"id": user.id, "email": user.email, "role": user.role}
 
 
-def _lookup_sp_identity(key: str) -> dict | None:
+async def _lookup_sp_identity(key: str) -> dict | None:
     """Look up a service principal by Bearer token. Returns ``{name, role}`` or None.
 
     Args:
@@ -426,14 +434,20 @@ def _lookup_sp_identity(key: str) -> dict | None:
     """
     if state.session_factory is None:
         return None
+    from sqlalchemy import select
+
     from shoreguard.models import ServicePrincipal
 
     key_hash = _hash_key(key)
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             row = (
-                session.query(ServicePrincipal)
-                .filter(ServicePrincipal.key_hash == key_hash)
+                (
+                    await session.execute(
+                        select(ServicePrincipal).where(ServicePrincipal.key_hash == key_hash)
+                    )
+                )
+                .scalars()
                 .first()
             )
             if row is None:
@@ -444,10 +458,10 @@ def _lookup_sp_identity(key: str) -> dict | None:
                 logger.info("Service principal '%s' has expired", row.name)
                 return None
             row.last_used = datetime.datetime.now(datetime.UTC)
-            session.commit()
+            await session.commit()
             return {"id": row.id, "name": row.name, "role": row.role}
         except SQLAlchemyError:
-            session.rollback()
+            await session.rollback()
             logger.exception("SP key lookup failed")
             return None
 
@@ -455,7 +469,7 @@ def _lookup_sp_identity(key: str) -> dict | None:
 # ─── Credential resolution ──────────────────────────────────────────────────
 
 
-def check_request_auth(request: Request) -> str | None:
+async def check_request_auth(request: Request) -> str | None:
     """Return the role for the request, or None if unauthenticated.
 
     Sets ``request.state.role`` and ``request.state.user_id`` on success.
@@ -477,7 +491,7 @@ def check_request_auth(request: Request) -> str | None:
     if state.session_factory is None:
         logger.error("Auth check with no DB session factory — denying request")
         raise HTTPException(status_code=503, detail="Service not ready")
-    if not is_setup_complete():
+    if not await is_setup_complete():
         request.state.user_id = "setup-pending"
         # Only allow setup-related paths before first user is created
         path = request.url.path
@@ -491,7 +505,7 @@ def check_request_auth(request: Request) -> str | None:
     auth_header = request.headers.get("authorization", "")
     if auth_header[:7].lower() == "bearer ":
         token = auth_header[7:]
-        sp = _lookup_sp_identity(token)
+        sp = await _lookup_sp_identity(token)
         if sp:
             request.state.user_id = f"sp:{sp['name']}"
             request.state.sp_db_id = sp["id"]
@@ -506,7 +520,7 @@ def check_request_auth(request: Request) -> str | None:
         result = verify_session_token(cookie)
         if result:
             user_id, _token_role = result
-            user_info = _lookup_user(user_id)
+            user_info = await _lookup_user(user_id)
             if user_info:
                 request.state.user_id = user_info["email"]
                 request.state.user_db_id = user_info["id"]

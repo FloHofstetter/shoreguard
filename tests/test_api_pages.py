@@ -4,13 +4,8 @@ from __future__ import annotations
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from shoreguard.api import auth
 from shoreguard.api.auth import create_user
-from shoreguard.models import Base
 
 ADMIN_EMAIL = "admin@test.com"
 ADMIN_PASS = "adminpass123"
@@ -18,22 +13,16 @@ ADMIN_PASS = "adminpass123"
 
 @pytest.fixture
 def db():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    auth.init_auth_for_test(factory)
+    from tests.conftest import make_auth_test_db
+
+    factory, dispose = make_auth_test_db()
     yield factory
-    auth.reset()
-    engine.dispose()
+    dispose()
 
 
 @pytest.fixture
-def _with_admin(db):
-    create_user(ADMIN_EMAIL, ADMIN_PASS, "admin")
+async def _with_admin(db):
+    await create_user(ADMIN_EMAIL, ADMIN_PASS, "admin")
 
 
 @pytest.fixture

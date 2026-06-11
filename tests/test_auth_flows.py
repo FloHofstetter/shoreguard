@@ -6,30 +6,19 @@ import datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from shoreguard.api import auth
 from shoreguard.api.auth import create_service_principal, create_user
-from shoreguard.models import Base
 
 # ─── Fixtures ───────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
 def db():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    auth.init_auth_for_test(factory)
+    from tests.conftest import make_auth_test_db
+
+    factory, dispose = make_auth_test_db()
     yield factory
-    auth.reset()
-    engine.dispose()
+    dispose()
 
 
 @pytest.fixture
@@ -55,7 +44,7 @@ class TestInviteFlow:
         from shoreguard.api.deps import get_client
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         app.dependency_overrides[get_client] = lambda: mock_client
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -100,7 +89,7 @@ class TestInviteFlow:
         """After accepting an invite, the same token cannot be reused."""
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/api/auth/login",
@@ -133,7 +122,7 @@ class TestInviteFlow:
         """Bogus invite token should be rejected."""
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/api/auth/accept-invite",
@@ -145,7 +134,7 @@ class TestInviteFlow:
         """Password under 8 chars should be rejected on invite accept."""
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/api/auth/accept-invite",
@@ -194,7 +183,7 @@ class TestSingleUserMode:
         """Setup should fail when users already exist."""
         from shoreguard.api.main import app
 
-        create_user("existing@test.com", "password123", "admin")
+        await create_user("existing@test.com", "password123", "admin")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/api/auth/setup",
@@ -222,7 +211,7 @@ class TestSingleUserMode:
         from shoreguard.api.main import app
 
         # Create a user so setup is "complete" — normally would require login
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
 
         # Enable no-auth mode
         monkeypatch.setattr(auth_mod.state, "no_auth", True)
@@ -246,7 +235,7 @@ class TestRegistration:
         """Self-registration should create a viewer account when enabled."""
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         monkeypatch.setenv("SHOREGUARD_ALLOW_REGISTRATION", "1")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
@@ -261,7 +250,7 @@ class TestRegistration:
         """Registration should return 403 when disabled."""
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/api/auth/register",
@@ -273,7 +262,7 @@ class TestRegistration:
         """Duplicate email should return 409."""
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         monkeypatch.setenv("SHOREGUARD_ALLOW_REGISTRATION", "1")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
@@ -286,7 +275,7 @@ class TestRegistration:
         """Short password should be rejected."""
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         monkeypatch.setenv("SHOREGUARD_ALLOW_REGISTRATION", "1")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
@@ -316,7 +305,7 @@ class TestPasswordMaxLength:
     async def test_login_rejects_long_password(self, db):
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         long_pw = "a" * 129
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
@@ -327,7 +316,7 @@ class TestPasswordMaxLength:
     async def test_accept_invite_rejects_long_password(self, db):
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         long_pw = "a" * 129
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
@@ -338,7 +327,7 @@ class TestPasswordMaxLength:
     async def test_register_rejects_long_password(self, db, monkeypatch):
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         monkeypatch.setenv("SHOREGUARD_ALLOW_REGISTRATION", "1")
         long_pw = "a" * 129
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -356,7 +345,7 @@ class TestInviteTokenExpiry:
         """Invite tokens older than 7 days should be rejected."""
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             # Login as admin
             resp = await c.post(
@@ -403,7 +392,7 @@ class TestInvalidRole:
         from shoreguard.api.deps import get_client
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         app.dependency_overrides[get_client] = lambda: mock_client
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -426,7 +415,7 @@ class TestInvalidRole:
         from shoreguard.api.deps import get_client
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         app.dependency_overrides[get_client] = lambda: mock_client
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -455,7 +444,7 @@ class TestInactiveUser:
         from shoreguard.api.auth import authenticate_user
         from shoreguard.models import User
 
-        create_user("active@test.com", "password123", "viewer")
+        await create_user("active@test.com", "password123", "viewer")
 
         # Deactivate the user directly in DB
         session = db()
@@ -466,7 +455,7 @@ class TestInactiveUser:
         finally:
             session.close()
 
-        assert authenticate_user("active@test.com", "password123") is None
+        assert await authenticate_user("active@test.com", "password123") is None
 
     async def test_inactive_user_session_rejected(self, db, mock_client):
         """Existing session of a deactivated user should be rejected."""
@@ -474,8 +463,8 @@ class TestInactiveUser:
         from shoreguard.api.main import app
         from shoreguard.models import User
 
-        create_user("admin@test.com", "adminpass", "admin")
-        create_user("target@test.com", "password123", "viewer")
+        await create_user("admin@test.com", "adminpass", "admin")
+        await create_user("target@test.com", "password123", "viewer")
         app.dependency_overrides[get_client] = lambda: mock_client
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -509,7 +498,7 @@ class TestDuplicateInvite:
         from shoreguard.api.deps import get_client
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         app.dependency_overrides[get_client] = lambda: mock_client
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -544,9 +533,9 @@ class TestExpiredServicePrincipal:
         from shoreguard.api.deps import get_client
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         past = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)
-        key, _info = create_service_principal("expired-sp", "admin", expires_at=past)
+        key, _info = await create_service_principal("expired-sp", "admin", expires_at=past)
 
         app.dependency_overrides[get_client] = lambda: mock_client
         try:
@@ -564,9 +553,9 @@ class TestExpiredServicePrincipal:
         from shoreguard.api.deps import get_client
         from shoreguard.api.main import app
 
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         future = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=30)
-        key, _info = create_service_principal("valid-sp", "admin", expires_at=future)
+        key, _info = await create_service_principal("valid-sp", "admin", expires_at=future)
 
         app.dependency_overrides[get_client] = lambda: mock_client
         try:

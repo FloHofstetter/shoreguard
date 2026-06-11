@@ -83,8 +83,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Raises:
         Exception: If database initialisation fails.
     """
-    from sqlalchemy.orm import sessionmaker as sa_sessionmaker
-
     from shoreguard.settings import get_settings
 
     settings = get_settings()
@@ -113,7 +111,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.exception("Failed to initialise database")
         raise
-    session_factory = sa_sessionmaker(bind=engine)
     init_async_db(str(engine.url))
 
     # The exporter needs the running loop to schedule webhook dispatch
@@ -122,7 +119,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     audit_exporter = AuditExporter(settings.audit, loop=asyncio.get_running_loop())
     container = build_container(
         settings,
-        session_factory,
         get_async_session_factory(),
         audit_exporter=audit_exporter,
     )
@@ -161,13 +157,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from shoreguard.api.auth import bootstrap_admin_user, init_auth, is_setup_complete
     from shoreguard.api.oidc import init_oidc
 
-    init_auth(session_factory)
-    bootstrap_admin_user()
+    init_auth(get_async_session_factory())
+    await bootstrap_admin_user()
     init_oidc()
 
     # Hide OpenAPI docs when authentication is enabled to avoid leaking
     # the full API schema to unauthenticated users.
-    if is_setup_complete():
+    if await is_setup_complete():
         app.openapi_url = None
         app.docs_url = None
         app.redoc_url = None

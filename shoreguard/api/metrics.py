@@ -218,7 +218,7 @@ async def metrics(request: Request) -> Response:
     if not settings.auth.no_auth and not settings.auth.metrics_public:
         from .auth import check_request_auth
 
-        identity = check_request_auth(request)
+        identity = await check_request_auth(request)
         if identity is None:
             raise HTTPException(status_code=401, detail="Authentication required")
     await _collect_gauges()

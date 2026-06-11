@@ -6,9 +6,6 @@ import time
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from shoreguard.api.auth import (
     ROLES,
@@ -17,29 +14,20 @@ from shoreguard.api.auth import (
     create_session_token,
     create_user,
     hash_password,
-    init_auth_for_test,
     is_setup_complete,
-    reset,
     verify_password,
     verify_session_token,
 )
 from shoreguard.api.auth.core import _hash_key
-from shoreguard.models import Base
 
 
 @pytest.fixture
 def db():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    init_auth_for_test(factory)
+    from tests.conftest import make_auth_test_db
+
+    factory, dispose = make_auth_test_db()
     yield factory
-    reset()
-    engine.dispose()
+    dispose()
 
 
 class TestPasswordHashing:
@@ -109,36 +97,36 @@ class TestUserCRUD:
     def _setup(self, db):
         pass
 
-    def test_create_and_authenticate(self):
-        info = create_user("test@example.com", "password123", "operator")
+    async def test_create_and_authenticate(self):
+        info = await create_user("test@example.com", "password123", "operator")
         assert info["email"] == "test@example.com"
         assert info["role"] == "operator"
 
-        user = authenticate_user("test@example.com", "password123")
+        user = await authenticate_user("test@example.com", "password123")
         assert user is not None
         assert user["role"] == "operator"
 
-    def test_wrong_password(self):
-        create_user("test@example.com", "password123", "viewer")
-        assert authenticate_user("test@example.com", "wrong") is None
+    async def test_wrong_password(self):
+        await create_user("test@example.com", "password123", "viewer")
+        assert await authenticate_user("test@example.com", "wrong") is None
 
-    def test_nonexistent_user(self):
-        assert authenticate_user("nobody@example.com", "pass") is None
+    async def test_nonexistent_user(self):
+        assert await authenticate_user("nobody@example.com", "pass") is None
 
-    def test_invalid_role_raises(self):
+    async def test_invalid_role_raises(self):
         from shoreguard.exceptions import ValidationError as DomainValidationError
 
         with pytest.raises(DomainValidationError, match="Invalid role"):
-            create_user("test@example.com", "pass", "superadmin")
+            await create_user("test@example.com", "pass", "superadmin")
 
-    def test_email_normalized_on_create(self):
-        info = create_user("UPPER@Example.COM", "password123", "viewer")
+    async def test_email_normalized_on_create(self):
+        info = await create_user("UPPER@Example.COM", "password123", "viewer")
         assert info["email"] == "upper@example.com"
 
-    def test_email_normalized_on_authenticate(self):
-        create_user("user@test.com", "password123", "viewer")
-        assert authenticate_user("USER@Test.COM", "password123") is not None
-        assert authenticate_user("user@test.com", "password123") is not None
+    async def test_email_normalized_on_authenticate(self):
+        await create_user("user@test.com", "password123", "viewer")
+        assert await authenticate_user("USER@Test.COM", "password123") is not None
+        assert await authenticate_user("user@test.com", "password123") is not None
 
 
 class TestServicePrincipalCRUD:
@@ -146,17 +134,17 @@ class TestServicePrincipalCRUD:
     def _setup(self, db):
         pass
 
-    def test_create_sp(self):
-        key, info = create_service_principal("terraform", "operator")
+    async def test_create_sp(self):
+        key, info = await create_service_principal("terraform", "operator")
         assert len(key) > 20
         assert info["name"] == "terraform"
         assert info["role"] == "operator"
 
-    def test_invalid_role_raises(self):
+    async def test_invalid_role_raises(self):
         from shoreguard.exceptions import ValidationError as DomainValidationError
 
         with pytest.raises(DomainValidationError, match="Invalid role"):
-            create_service_principal("bad", "superadmin")
+            await create_service_principal("bad", "superadmin")
 
 
 class TestSetupComplete:
@@ -164,9 +152,9 @@ class TestSetupComplete:
     def _setup(self, db):
         pass
 
-    def test_empty_db(self):
-        assert not is_setup_complete()
+    async def test_empty_db(self):
+        assert not await is_setup_complete()
 
-    def test_with_user(self):
-        create_user("admin@localhost", "pass", "admin")
-        assert is_setup_complete()
+    async def test_with_user(self):
+        await create_user("admin@localhost", "pass", "admin")
+        assert await is_setup_complete()

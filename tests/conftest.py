@@ -54,22 +54,12 @@ async def container():
     as the production lifespan, so a service added to the container is
     automatically wired in tests too.
     """
-    from sqlalchemy import create_engine
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-    from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
 
     from shoreguard.container import build_container, install, uninstall
     from shoreguard.models import Base
     from shoreguard.settings import Settings
-
-    sync_engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(sync_engine)
-    sync_factory = sessionmaker(bind=sync_engine)
 
     async_engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
@@ -82,7 +72,7 @@ async def container():
 
     # Fresh Settings instance instead of get_settings(): the singleton must
     # stay unset so tests that monkeypatch.setenv still see their values.
-    container = build_container(Settings(), sync_factory, async_factory)
+    container = build_container(Settings(), async_factory)
     install(container)
 
     yield container
@@ -98,7 +88,6 @@ async def container():
             await task
 
     uninstall()
-    sync_engine.dispose()
     await async_engine.dispose()
 
 
@@ -145,3 +134,49 @@ async def api_client(mock_client):
     ) as client:
         yield client
     app.dependency_overrides.clear()
+
+
+def make_auth_test_db(*, foreign_keys: bool = False):
+    """Create a file-backed SQLite DB with sync + async access for auth tests.
+
+    The async session factory is installed into the auth state (the auth
+    subsystem is async-native); the returned sync factory lets tests
+    assert on rows directly. Returns ``(sync_factory, dispose)``.
+    """
+    import shutil
+    import tempfile
+
+    from sqlalchemy import create_engine, event
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from shoreguard.api import auth
+    from shoreguard.models import Base
+
+    tmpdir = tempfile.mkdtemp(prefix="sg-auth-test-")
+    db_path = f"{tmpdir}/auth.db"
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+    async_engine = create_async_engine(
+        f"sqlite+aiosqlite:///{db_path}", connect_args={"check_same_thread": False}
+    )
+
+    if foreign_keys:
+        for target in (engine, async_engine.sync_engine):
+
+            @event.listens_for(target, "connect")
+            def _enable_fk(dbapi_conn, _connection_record):
+                cursor = dbapi_conn.cursor()
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.close()
+
+    Base.metadata.create_all(engine)
+    auth.init_auth_for_test(async_sessionmaker(async_engine, expire_on_commit=False))
+    factory = sessionmaker(bind=engine)
+
+    def dispose() -> None:
+        auth.reset()
+        engine.dispose()
+        asyncio.run(async_engine.dispose())
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+    return factory, dispose

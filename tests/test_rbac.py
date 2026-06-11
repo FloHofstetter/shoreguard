@@ -6,11 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from shoreguard.api import auth
 from shoreguard.api.auth import (
     ROLES,
     bootstrap_admin_user,
@@ -22,24 +18,17 @@ from shoreguard.api.auth import (
     list_users,
 )
 from shoreguard.api.auth.core import _ROLE_RANK
-from shoreguard.models import Base
 
 # ─── Fixtures ───────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
 def db():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    auth.init_auth_for_test(factory)
+    from tests.conftest import make_auth_test_db
+
+    factory, dispose = make_auth_test_db()
     yield factory
-    auth.reset()
-    engine.dispose()
+    dispose()
 
 
 @pytest.fixture
@@ -87,7 +76,7 @@ async def admin_client(db, mock_client):
     from shoreguard.api.deps import get_client
     from shoreguard.api.main import app
 
-    create_user("admin@test.com", "adminpass", "admin")
+    await create_user("admin@test.com", "adminpass", "admin")
     app.dependency_overrides[get_client] = lambda: mock_client
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
@@ -103,8 +92,8 @@ async def operator_client(db, mock_client):
     from shoreguard.api.deps import get_client
     from shoreguard.api.main import app
 
-    create_user("admin@test.com", "adminpass", "admin")
-    create_user("operator@test.com", "oppass", "operator")
+    await create_user("admin@test.com", "adminpass", "admin")
+    await create_user("operator@test.com", "oppass", "operator")
     app.dependency_overrides[get_client] = lambda: mock_client
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
@@ -120,8 +109,8 @@ async def viewer_client(db, mock_client):
     from shoreguard.api.deps import get_client
     from shoreguard.api.main import app
 
-    create_user("admin@test.com", "adminpass", "admin")
-    create_user("viewer@test.com", "viewpass", "viewer")
+    await create_user("admin@test.com", "adminpass", "admin")
+    await create_user("viewer@test.com", "viewpass", "viewer")
     app.dependency_overrides[get_client] = lambda: mock_client
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
@@ -138,8 +127,8 @@ async def sp_client(db, mock_client):
     from shoreguard.api.deps import get_client
     from shoreguard.api.main import app
 
-    create_user("admin@test.com", "adminpass", "admin")
-    key, _ = create_service_principal("test-sp", "viewer")
+    await create_user("admin@test.com", "adminpass", "admin")
+    key, _ = await create_service_principal("test-sp", "viewer")
     app.dependency_overrides[get_client] = lambda: mock_client
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -173,31 +162,31 @@ class TestCRUD:
     def _setup(self, db):
         pass
 
-    def test_user_crud(self):
-        info = create_user("u@test.com", "pass", "operator")
+    async def test_user_crud(self):
+        info = await create_user("u@test.com", "pass", "operator")
         assert info["email"] == "u@test.com"
-        users = list_users()
+        users = await list_users()
         assert len(users) == 1
-        assert delete_user(info["id"])
-        assert list_users() == []
+        assert await delete_user(info["id"])
+        assert await list_users() == []
 
-    def test_sp_crud(self):
-        key, info = create_service_principal("sp1", "viewer")
+    async def test_sp_crud(self):
+        key, info = await create_service_principal("sp1", "viewer")
         assert info["name"] == "sp1"
-        sps = list_service_principals()
+        sps = await list_service_principals()
         assert len(sps) == 1
-        assert delete_service_principal(info["id"])
-        assert list_service_principals() == []
+        assert await delete_service_principal(info["id"])
+        assert await list_service_principals() == []
 
-    def test_duplicate_user_raises(self):
-        create_user("dup@test.com", "pass", "viewer")
+    async def test_duplicate_user_raises(self):
+        await create_user("dup@test.com", "pass", "viewer")
         with pytest.raises(Exception):
-            create_user("dup@test.com", "pass", "admin")
+            await create_user("dup@test.com", "pass", "admin")
 
-    def test_duplicate_sp_raises(self):
-        create_service_principal("dup", "viewer")
+    async def test_duplicate_sp_raises(self):
+        await create_service_principal("dup", "viewer")
         with pytest.raises(Exception):
-            create_service_principal("dup", "admin")
+            await create_service_principal("dup", "admin")
 
 
 # ─── Unit: Bootstrap ───────────────────────────────────────────────────────
@@ -209,35 +198,35 @@ class TestBootstrap:
         self._db = db
         self._monkeypatch = monkeypatch
 
-    def test_bootstrap_creates_admin(self):
+    async def test_bootstrap_creates_admin(self):
         self._monkeypatch.setenv("SHOREGUARD_ADMIN_PASSWORD", "secret")
-        bootstrap_admin_user()
-        users = list_users()
+        await bootstrap_admin_user()
+        users = await list_users()
         assert len(users) == 1
         assert users[0]["email"] == "admin@localhost"
         assert users[0]["role"] == "admin"
 
-    def test_bootstrap_noop_with_existing_users(self):
-        create_user("existing@test.com", "pass", "viewer")
+    async def test_bootstrap_noop_with_existing_users(self):
+        await create_user("existing@test.com", "pass", "viewer")
         self._monkeypatch.setenv("SHOREGUARD_ADMIN_PASSWORD", "secret")
-        bootstrap_admin_user()
-        users = list_users()
+        await bootstrap_admin_user()
+        users = await list_users()
         assert len(users) == 1
         assert users[0]["email"] == "existing@test.com"
 
-    def test_bootstrap_noop_without_env(self):
+    async def test_bootstrap_noop_without_env(self):
         self._monkeypatch.delenv("SHOREGUARD_ADMIN_PASSWORD", raising=False)
-        bootstrap_admin_user()
-        assert list_users() == []
+        await bootstrap_admin_user()
+        assert await list_users() == []
 
-    def test_bootstrap_propagates_exception(self, monkeypatch):
+    async def test_bootstrap_propagates_exception(self, monkeypatch):
         monkeypatch.setenv("SHOREGUARD_ADMIN_PASSWORD", "secret")
         monkeypatch.setattr(
             "shoreguard.api.auth.users.create_user",
             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("db down")),
         )
         with pytest.raises(RuntimeError, match="db down"):
-            bootstrap_admin_user()
+            await bootstrap_admin_user()
 
 
 # ─── Integration: Role enforcement on routes ────────────────────────────────
@@ -391,7 +380,7 @@ async def test_setup_creates_admin(db):
 async def test_setup_rejects_when_users_exist(db):
     from shoreguard.api.main import app
 
-    create_user("existing@test.com", "pass", "admin")
+    await create_user("existing@test.com", "pass", "admin")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
             "/api/auth/setup",
@@ -406,8 +395,8 @@ async def test_deleted_user_session_rejected(db, mock_client):
     from shoreguard.api.deps import get_client
     from shoreguard.api.main import app
 
-    info = create_user("doomed@test.com", "pass1234", "operator")
-    create_user("admin@test.com", "adminpass", "admin")
+    info = await create_user("doomed@test.com", "pass1234", "operator")
+    await create_user("admin@test.com", "adminpass", "admin")
     app.dependency_overrides[get_client] = lambda: mock_client
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -416,7 +405,7 @@ async def test_deleted_user_session_rejected(db, mock_client):
             )
             assert resp.status_code == 200
             # Delete the user while session is still valid
-            delete_user(info["id"])
+            await delete_user(info["id"])
             # Next request should fail
             resp = await c.get("/api/gateway/list")
             assert resp.status_code == 401
@@ -471,9 +460,9 @@ async def all_role_clients(db, mock_client):
     from shoreguard.api.deps import get_client
     from shoreguard.api.main import app
 
-    create_user("admin@test.com", "adminpass", "admin")
-    create_user("operator@test.com", "oppass", "operator")
-    create_user("viewer@test.com", "viewpass", "viewer")
+    await create_user("admin@test.com", "adminpass", "admin")
+    await create_user("operator@test.com", "oppass", "operator")
+    await create_user("viewer@test.com", "viewpass", "viewer")
     app.dependency_overrides[get_client] = lambda: mock_client
     async with (
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as admin_c,
@@ -541,7 +530,7 @@ async def test_role_enforcement(all_role_clients, method, path, min_role, body):
 async def test_login_returns_role(db):
     from shoreguard.api.main import app
 
-    create_user("test@test.com", "mypass", "operator")
+    await create_user("test@test.com", "mypass", "operator")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
             "/api/auth/login", json={"email": "test@test.com", "password": "mypass"}
@@ -611,8 +600,8 @@ async def test_cannot_delete_last_admin(db, mock_client):
     from shoreguard.api.deps import get_client
     from shoreguard.api.main import app
 
-    admin_info = create_user("admin@test.com", "adminpass", "admin")
-    viewer_info = create_user("viewer@test.com", "viewpass", "viewer")
+    admin_info = await create_user("admin@test.com", "adminpass", "admin")
+    viewer_info = await create_user("viewer@test.com", "viewpass", "viewer")
     app.dependency_overrides[get_client] = lambda: mock_client
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:

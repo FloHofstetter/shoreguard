@@ -16,9 +16,6 @@ import jwt as pyjwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from shoreguard.api import auth
 from shoreguard.api.auth import create_user
@@ -31,24 +28,17 @@ from shoreguard.api.oidc import (
     map_role,
     verify_state_cookie,
 )
-from shoreguard.models import Base
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
 def db():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    auth.init_auth_for_test(factory)
+    from tests.conftest import make_auth_test_db
+
+    factory, dispose = make_auth_test_db()
     yield factory
-    auth.reset()
-    engine.dispose()
+    dispose()
 
 
 @pytest.fixture
@@ -469,7 +459,7 @@ class TestOIDCCallback:
 
         # Create existing user if needed
         if existing_email:
-            create_user(existing_email, "password123", "operator")
+            await create_user(existing_email, "password123", "operator")
             if existing_oidc:
                 # Manually link OIDC
                 from shoreguard.models import User
@@ -637,7 +627,7 @@ class TestAuthCheckOIDC:
         _setup_oidc_provider(monkeypatch)
         reset_settings()
         init_oidc()
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         app.dependency_overrides[get_client] = lambda: mock_client
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
@@ -663,10 +653,10 @@ class TestListUsersOIDC:
         init_oidc()
 
         # Create admin and an OIDC user
-        create_user("admin@test.com", "adminpass", "admin")
+        await create_user("admin@test.com", "adminpass", "admin")
         from shoreguard.api.auth import find_or_create_oidc_user
 
-        find_or_create_oidc_user("oidcuser@test.com", "google", "sub123", "viewer")
+        await find_or_create_oidc_user("oidcuser@test.com", "google", "sub123", "viewer")
 
         app.dependency_overrides[get_client] = lambda: mock_client
         try:

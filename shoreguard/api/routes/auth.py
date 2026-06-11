@@ -99,7 +99,7 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
             the credentials are invalid.
     """
     _check_rate_limit(request)
-    if not is_setup_complete():
+    if not await is_setup_complete():
         raise HTTPException(400, "Setup not complete — create an admin user first")
     locked, lockout_retry = is_account_locked(body.email)
     if locked:
@@ -108,7 +108,7 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
             "Too many requests. Try again later.",
             headers={"Retry-After": str(lockout_retry)},
         )
-    user = authenticate_user(body.email, body.password)
+    user = await authenticate_user(body.email, body.password)
     if not user:
         record_failed_login(body.email)
         logger.warning("Login failed: invalid credentials (client=%s)", client_ip(request))
@@ -156,7 +156,7 @@ async def logout(request: Request) -> JSONResponse:
             # Resolve email for consistent audit logging
             from shoreguard.api.auth.core import _lookup_user
 
-            u = _lookup_user(user_id)
+            u = await _lookup_user(user_id)
             user_info = u["email"] if u else f"user_id={user_id}"
     logger.info("Logout (actor=%s, client=%s)", user_info, client_ip(request))
     await audit_log(request, "user.logout", "user", user_info)
@@ -175,7 +175,7 @@ async def auth_check(request: Request) -> dict[str, Any]:
     Returns:
         dict[str, Any]: Authentication state including role and setup status.
     """
-    needs_setup = not is_setup_complete()
+    needs_setup = not await is_setup_complete()
     if needs_setup:
         return {
             "authenticated": False,
@@ -185,24 +185,27 @@ async def auth_check(request: Request) -> dict[str, Any]:
             "registration_enabled": False,
         }
 
-    role = check_request_auth(request)
+    role = await check_request_auth(request)
     email = None
     # Extract email from session cookie if present
     cookie = request.cookies.get(COOKIE_NAME)
     if cookie and role:
         result = verify_session_token(cookie)
         if result:
+            from sqlalchemy import select
+
             from shoreguard.api.auth import state
             from shoreguard.models import User
 
             if state.session_factory:
-                session = state.session_factory()
-                try:
-                    user = session.query(User).filter(User.id == result[0]).first()
+                async with state.session_factory() as session:
+                    user = (
+                        (await session.execute(select(User).where(User.id == result[0])))
+                        .scalars()
+                        .first()
+                    )
                     if user:
                         email = user.email
-                finally:
-                    session.close()
     from shoreguard.api.oidc import get_providers
 
     return {
@@ -382,7 +385,7 @@ async def oidc_callback(request: Request) -> RedirectResponse:
 
     # Find or create user
     try:
-        result = find_or_create_oidc_user(email, provider_name, sub, role)
+        result = await find_or_create_oidc_user(email, provider_name, sub, role)
     except Exception:
         logger.exception("OIDC user lookup/creation failed (email=%s)", email)
         return RedirectResponse(url="/login?error=oidc_failed", status_code=302)
@@ -456,7 +459,7 @@ async def setup(request: Request, body: SetupRequest) -> JSONResponse:
             the user creation fails.
     """
     _check_rate_limit(request)
-    if is_setup_complete():
+    if await is_setup_complete():
         raise HTTPException(400, "Setup already complete")
     if not body.email.strip() or not body.password:
         raise HTTPException(400, "Email and password are required")
@@ -466,7 +469,7 @@ async def setup(request: Request, body: SetupRequest) -> JSONResponse:
     if pwd_err:
         raise HTTPException(400, pwd_err)
     try:
-        info = create_user(body.email.strip(), body.password, "admin")
+        info = await create_user(body.email.strip(), body.password, "admin")
     except IntegrityError:
         logger.warning("Setup failed: duplicate admin email (email=%s)", body.email.strip())
         raise HTTPException(409, f"A user with email '{body.email.strip()}' already exists")
@@ -532,7 +535,7 @@ async def accept_invite_endpoint(request: Request, body: AcceptInviteRequest) ->
     pwd_err = check_password(body.password)
     if pwd_err:
         raise HTTPException(400, pwd_err)
-    user = accept_invite(body.token, body.password)
+    user = await accept_invite(body.token, body.password)
     if not user:
         raise HTTPException(400, "Invalid or expired invite token")
 
@@ -593,7 +596,7 @@ async def register_endpoint(request: Request, body: RegisterRequest) -> JSONResp
     _check_rate_limit(request)
     if not is_registration_enabled():
         raise HTTPException(403, "Registration is disabled")
-    if not is_setup_complete():
+    if not await is_setup_complete():
         raise HTTPException(400, "Setup not complete — use /setup first")
     if not body.email.strip() or not body.password:
         raise HTTPException(400, "Email and password are required")
@@ -603,7 +606,7 @@ async def register_endpoint(request: Request, body: RegisterRequest) -> JSONResp
     if pwd_err:
         raise HTTPException(400, pwd_err)
     try:
-        info = create_user(body.email.strip(), body.password, "viewer")
+        info = await create_user(body.email.strip(), body.password, "viewer")
     except IntegrityError:
         logger.warning(
             "Duplicate registration attempt (email=%s, client=%s)",

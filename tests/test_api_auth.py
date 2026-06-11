@@ -4,13 +4,8 @@ from __future__ import annotations
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from shoreguard.api import auth
 from shoreguard.api.auth import create_service_principal, create_user
-from shoreguard.models import Base
 
 ADMIN_EMAIL = "admin@test.com"
 ADMIN_PASS = "adminpass123"
@@ -18,23 +13,17 @@ ADMIN_PASS = "adminpass123"
 
 @pytest.fixture
 def db():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    auth.init_auth_for_test(factory)
+    from tests.conftest import make_auth_test_db
+
+    factory, dispose = make_auth_test_db()
     yield factory
-    auth.reset()
-    engine.dispose()
+    dispose()
 
 
 @pytest.fixture
-def _with_admin(db):
+async def _with_admin(db):
     """Create an admin user for tests that need auth."""
-    create_user(ADMIN_EMAIL, ADMIN_PASS, "admin")
+    await create_user(ADMIN_EMAIL, ADMIN_PASS, "admin")
 
 
 @pytest.fixture
@@ -135,7 +124,7 @@ async def test_auth_check_needs_setup(db):
 async def test_bearer_auth_with_sp(db, _with_admin):
     from shoreguard.api.main import app
 
-    key, _ = create_service_principal("test-sp", "viewer")
+    key, _ = await create_service_principal("test-sp", "viewer")
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",

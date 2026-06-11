@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from shoreguard.exceptions import NotFoundError
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 # ─── Gateway-scoped role CRUD ─────────────────────────────────────────────
 
 
-def set_gateway_role(
+async def set_gateway_role(
     *, user_id: int | None = None, sp_id: int | None = None, gateway_name: str, role: str
 ) -> dict:
     """Create or update a per-gateway role override.
@@ -48,18 +49,26 @@ def set_gateway_role(
         raise RuntimeError("Database not available")
     from shoreguard.models import Gateway, SPGatewayRole, UserGatewayRole
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            gw = session.query(Gateway).filter(Gateway.name == gateway_name).first()
+            gw = (
+                (await session.execute(select(Gateway).where(Gateway.name == gateway_name)))
+                .scalars()
+                .first()
+            )
             if gw is None:
                 raise NotFoundError(f"Gateway '{gateway_name}' not found")
             if user_id is not None:
                 row = (
-                    session.query(UserGatewayRole)
-                    .filter(
-                        UserGatewayRole.user_id == user_id,
-                        UserGatewayRole.gateway_id == gw.id,
+                    (
+                        await session.execute(
+                            select(UserGatewayRole).where(
+                                UserGatewayRole.user_id == user_id,
+                                UserGatewayRole.gateway_id == gw.id,
+                            )
+                        )
                     )
+                    .scalars()
                     .first()
                 )
                 if row:
@@ -67,15 +76,19 @@ def set_gateway_role(
                 else:
                     row = UserGatewayRole(user_id=user_id, gateway_id=gw.id, role=role)
                     session.add(row)
-                session.commit()
+                await session.commit()
                 return {"user_id": user_id, "gateway_name": gateway_name, "role": role}
             elif sp_id is not None:
                 row = (
-                    session.query(SPGatewayRole)
-                    .filter(
-                        SPGatewayRole.sp_id == sp_id,
-                        SPGatewayRole.gateway_id == gw.id,
+                    (
+                        await session.execute(
+                            select(SPGatewayRole).where(
+                                SPGatewayRole.sp_id == sp_id,
+                                SPGatewayRole.gateway_id == gw.id,
+                            )
+                        )
                     )
+                    .scalars()
                     .first()
                 )
                 if row:
@@ -83,19 +96,19 @@ def set_gateway_role(
                 else:
                     row = SPGatewayRole(sp_id=sp_id, gateway_id=gw.id, role=role)
                     session.add(row)
-                session.commit()
+                await session.commit()
                 return {"sp_id": sp_id, "gateway_name": gateway_name, "role": role}
             else:
                 raise DomainValidationError("Either user_id or sp_id must be provided")
         except IntegrityError:
-            session.rollback()
+            await session.rollback()
             raise
         except Exception:
-            session.rollback()
+            await session.rollback()
             raise
 
 
-def remove_gateway_role(
+async def remove_gateway_role(
     *, user_id: int | None = None, sp_id: int | None = None, gateway_name: str
 ) -> bool:
     """Remove a per-gateway role override.
@@ -116,35 +129,47 @@ def remove_gateway_role(
         raise RuntimeError("Database not available")
     from shoreguard.models import Gateway, SPGatewayRole, UserGatewayRole
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            gw = session.query(Gateway).filter(Gateway.name == gateway_name).first()
+            gw = (
+                (await session.execute(select(Gateway).where(Gateway.name == gateway_name)))
+                .scalars()
+                .first()
+            )
             if gw is None:
                 return False
             if user_id is not None:
                 row = (
-                    session.query(UserGatewayRole)
-                    .filter(
-                        UserGatewayRole.user_id == user_id,
-                        UserGatewayRole.gateway_id == gw.id,
+                    (
+                        await session.execute(
+                            select(UserGatewayRole).where(
+                                UserGatewayRole.user_id == user_id,
+                                UserGatewayRole.gateway_id == gw.id,
+                            )
+                        )
                     )
+                    .scalars()
                     .first()
                 )
             elif sp_id is not None:
                 row = (
-                    session.query(SPGatewayRole)
-                    .filter(
-                        SPGatewayRole.sp_id == sp_id,
-                        SPGatewayRole.gateway_id == gw.id,
+                    (
+                        await session.execute(
+                            select(SPGatewayRole).where(
+                                SPGatewayRole.sp_id == sp_id,
+                                SPGatewayRole.gateway_id == gw.id,
+                            )
+                        )
                     )
+                    .scalars()
                     .first()
                 )
             else:
                 return False
             if row is None:
                 return False
-            session.delete(row)
-            session.commit()
+            await session.delete(row)
+            await session.commit()
             logger.info(
                 "Gateway role removed (user_id=%s, sp_id=%s, gateway=%s)",
                 user_id,
@@ -153,7 +178,7 @@ def remove_gateway_role(
             )
             return True
         except Exception:
-            session.rollback()
+            await session.rollback()
             logger.exception(
                 "Failed to remove gateway role (user_id=%s, sp_id=%s, gateway=%s)",
                 user_id,
@@ -163,7 +188,7 @@ def remove_gateway_role(
             raise
 
 
-def list_gateway_roles_for_user(user_id: int) -> list[dict]:
+async def list_gateway_roles_for_user(user_id: int) -> list[dict]:
     """Return all gateway-scoped role overrides for a user.
 
     Args:
@@ -176,22 +201,23 @@ def list_gateway_roles_for_user(user_id: int) -> list[dict]:
         return []
     from shoreguard.models import Gateway, UserGatewayRole
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             rows = (
-                session.query(UserGatewayRole, Gateway.name)
-                .join(Gateway, UserGatewayRole.gateway_id == Gateway.id)
-                .filter(UserGatewayRole.user_id == user_id)
-                .order_by(Gateway.name)
-                .all()
-            )
+                await session.execute(
+                    select(UserGatewayRole, Gateway.name)
+                    .join(Gateway, UserGatewayRole.gateway_id == Gateway.id)
+                    .where(UserGatewayRole.user_id == user_id)
+                    .order_by(Gateway.name)
+                )
+            ).all()
             return [{"gateway_name": gw_name, "role": r.role} for r, gw_name in rows]
         except SQLAlchemyError:
             logger.exception("Failed to list gateway roles for user %d", user_id)
             return []
 
 
-def list_gateway_roles_for_sp(sp_id: int) -> list[dict]:
+async def list_gateway_roles_for_sp(sp_id: int) -> list[dict]:
     """Return all gateway-scoped role overrides for a service principal.
 
     Args:
@@ -204,15 +230,16 @@ def list_gateway_roles_for_sp(sp_id: int) -> list[dict]:
         return []
     from shoreguard.models import Gateway, SPGatewayRole
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             rows = (
-                session.query(SPGatewayRole, Gateway.name)
-                .join(Gateway, SPGatewayRole.gateway_id == Gateway.id)
-                .filter(SPGatewayRole.sp_id == sp_id)
-                .order_by(Gateway.name)
-                .all()
-            )
+                await session.execute(
+                    select(SPGatewayRole, Gateway.name)
+                    .join(Gateway, SPGatewayRole.gateway_id == Gateway.id)
+                    .where(SPGatewayRole.sp_id == sp_id)
+                    .order_by(Gateway.name)
+                )
+            ).all()
             return [{"gateway_name": gw_name, "role": r.role} for r, gw_name in rows]
         except SQLAlchemyError:
             logger.exception("Failed to list gateway roles for SP %d", sp_id)

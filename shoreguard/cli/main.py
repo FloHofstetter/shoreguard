@@ -307,10 +307,8 @@ def _cli_init_db(database_url: str | None) -> Engine:
         Engine: The initialised SQLAlchemy engine.  Callers must ``dispose()``
         it when done.
     """
-    from sqlalchemy.orm import sessionmaker as sa_sessionmaker
-
     from shoreguard.api.auth import init_auth
-    from shoreguard.db import init_db
+    from shoreguard.db import get_async_session_factory, init_async_db, init_db
     from shoreguard.settings import get_settings, override_settings
 
     if database_url:
@@ -325,7 +323,8 @@ def _cli_init_db(database_url: str | None) -> Engine:
             ),
         )
     engine = init_db()
-    init_auth(sa_sessionmaker(bind=engine))
+    init_async_db(str(engine.url))
+    init_auth(get_async_session_factory())
     return engine
 
 
@@ -378,7 +377,7 @@ def create_user_cmd(
         raise typer.Exit(1) from e
 
     try:
-        info = create_user(email, password, role)
+        info = asyncio.run(create_user(email, password, role))
         typer.echo(f"User created: {info['email']} (role={info['role']})")
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
@@ -408,7 +407,7 @@ def list_users_cmd(
     logging.basicConfig(level=logging.WARNING)
     engine = _cli_init_db(database_url)
     try:
-        users = list_users()
+        users = asyncio.run(list_users())
         if not users:
             typer.echo("No users found.")
             return
@@ -440,13 +439,13 @@ def delete_user_cmd(
     logging.basicConfig(level=logging.WARNING)
     engine = _cli_init_db(database_url)
     try:
-        users = list_users()
+        users = asyncio.run(list_users())
         match = [u for u in users if u["email"] == email.strip().lower()]
         if not match:
             typer.echo(f"Error: no user with email '{email}'", err=True)
             raise typer.Exit(1)
         try:
-            delete_user(match[0]["id"])
+            asyncio.run(delete_user(match[0]["id"]))
         except ValueError as exc:
             typer.echo(f"Error: {exc}", err=True)
             raise typer.Exit(1)
@@ -482,7 +481,7 @@ def create_sp_cmd(
         raise typer.Exit(1)
     engine = _cli_init_db(database_url)
     try:
-        key, info = create_service_principal(name.strip(), role)
+        key, info = asyncio.run(create_service_principal(name.strip(), role))
         typer.echo(f"Service principal created: {info['name']} (role={info['role']})")
         typer.echo(f"API key: {key}")
         typer.echo("Store this key securely — it will not be shown again.")
@@ -510,7 +509,7 @@ def list_sps_cmd(
     logging.basicConfig(level=logging.WARNING)
     engine = _cli_init_db(database_url)
     try:
-        sps = list_service_principals()
+        sps = asyncio.run(list_service_principals())
         if not sps:
             typer.echo("No service principals found.")
             return

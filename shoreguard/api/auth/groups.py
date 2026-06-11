@@ -6,6 +6,7 @@ import datetime
 import logging
 from typing import TYPE_CHECKING
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from shoreguard.exceptions import NotFoundError
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 # ─── Group CRUD ────────────────────────────────────────────────────────────
 
 
-def create_group(name: str, role: str = "viewer", description: str | None = None) -> dict:
+async def create_group(name: str, role: str = "viewer", description: str | None = None) -> dict:
     """Create a new user group.
 
     Args:
@@ -46,11 +47,11 @@ def create_group(name: str, role: str = "viewer", description: str | None = None
     from shoreguard.models import Group
 
     now = datetime.datetime.now(datetime.UTC)
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             group = Group(name=name.strip(), description=description, role=role, created_at=now)
             session.add(group)
-            session.commit()
+            await session.commit()
             logger.info("Group created (id=%d, name=%s, role=%s)", group.id, name, role)
             return {
                 "id": group.id,
@@ -61,15 +62,15 @@ def create_group(name: str, role: str = "viewer", description: str | None = None
                 "member_count": 0,
             }
         except IntegrityError:
-            session.rollback()
+            await session.rollback()
             raise
         except Exception:
-            session.rollback()
+            await session.rollback()
             logger.exception("Failed to create group (name=%s)", name)
             raise
 
 
-def update_group(
+async def update_group(
     group_id: int,
     *,
     name: str | None = None,
@@ -100,9 +101,11 @@ def update_group(
         raise RuntimeError("Database not available")
     from shoreguard.models import Group
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            group = session.query(Group).filter(Group.id == group_id).first()
+            group = (
+                (await session.execute(select(Group).where(Group.id == group_id))).scalars().first()
+            )
             if group is None:
                 raise NotFoundError(f"Group {group_id} not found")
             if name is not None:
@@ -110,8 +113,8 @@ def update_group(
             if role is not None:
                 group.role = role
             if description is not _SENTINEL:
-                group.description = description
-            session.commit()
+                group.description = description if isinstance(description, str) else None
+            await session.commit()
             return {
                 "id": group.id,
                 "name": group.name,
@@ -120,14 +123,14 @@ def update_group(
                 "created_at": group.created_at.isoformat(),
             }
         except IntegrityError:
-            session.rollback()
+            await session.rollback()
             raise
         except Exception:
-            session.rollback()
+            await session.rollback()
             raise
 
 
-def delete_group(group_id: int) -> bool:
+async def delete_group(group_id: int) -> bool:
     """Delete a group (CASCADE removes memberships and gateway roles).
 
     Args:
@@ -144,22 +147,24 @@ def delete_group(group_id: int) -> bool:
         raise RuntimeError("Database not available")
     from shoreguard.models import Group
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            group = session.query(Group).filter(Group.id == group_id).first()
+            group = (
+                (await session.execute(select(Group).where(Group.id == group_id))).scalars().first()
+            )
             if group is None:
                 return False
-            session.delete(group)
-            session.commit()
+            await session.delete(group)
+            await session.commit()
             logger.info("Group deleted (id=%d)", group_id)
             return True
         except Exception:
-            session.rollback()
+            await session.rollback()
             logger.exception("Failed to delete group (id=%d)", group_id)
             raise
 
 
-def list_groups() -> list[dict]:
+async def list_groups() -> list[dict]:
     """Return all groups with member counts.
 
     Returns:
@@ -169,20 +174,21 @@ def list_groups() -> list[dict]:
         return []
     from shoreguard.models import Group, GroupMember
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             from sqlalchemy import func
 
             rows = (
-                session.query(
-                    Group,
-                    func.count(GroupMember.id).label("member_count"),
+                await session.execute(
+                    select(
+                        Group,
+                        func.count(GroupMember.id).label("member_count"),
+                    )
+                    .outerjoin(GroupMember, GroupMember.group_id == Group.id)
+                    .group_by(Group.id)
+                    .order_by(Group.name)
                 )
-                .outerjoin(GroupMember, GroupMember.group_id == Group.id)
-                .group_by(Group.id)
-                .order_by(Group.name)
-                .all()
-            )
+            ).all()
             return [
                 {
                     "id": g.id,
@@ -199,7 +205,7 @@ def list_groups() -> list[dict]:
             return []
 
 
-def get_group(group_id: int) -> dict | None:
+async def get_group(group_id: int) -> dict | None:
     """Return a group with its member list.
 
     Args:
@@ -212,18 +218,21 @@ def get_group(group_id: int) -> dict | None:
         return None
     from shoreguard.models import Group, GroupMember, User
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            group = session.query(Group).filter(Group.id == group_id).first()
+            group = (
+                (await session.execute(select(Group).where(Group.id == group_id))).scalars().first()
+            )
             if group is None:
                 return None
             members = (
-                session.query(User.id, User.email, User.role)
-                .join(GroupMember, GroupMember.user_id == User.id)
-                .filter(GroupMember.group_id == group_id)
-                .order_by(User.email)
-                .all()
-            )
+                await session.execute(
+                    select(User.id, User.email, User.role)
+                    .join(GroupMember, GroupMember.user_id == User.id)
+                    .where(GroupMember.group_id == group_id)
+                    .order_by(User.email)
+                )
+            ).all()
             return {
                 "id": group.id,
                 "name": group.name,
@@ -242,7 +251,7 @@ def get_group(group_id: int) -> dict | None:
 # ─── Group membership ──────────────────────────────────────────────────────
 
 
-def add_group_member(group_id: int, user_id: int) -> dict:
+async def add_group_member(group_id: int, user_id: int) -> dict:
     """Add a user to a group.
 
     Args:
@@ -262,17 +271,19 @@ def add_group_member(group_id: int, user_id: int) -> dict:
         raise RuntimeError("Database not available")
     from shoreguard.models import Group, GroupMember, User
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            group = session.query(Group).filter(Group.id == group_id).first()
+            group = (
+                (await session.execute(select(Group).where(Group.id == group_id))).scalars().first()
+            )
             if group is None:
                 raise NotFoundError(f"Group {group_id} not found")
-            user = session.query(User).filter(User.id == user_id).first()
+            user = (await session.execute(select(User).where(User.id == user_id))).scalars().first()
             if user is None:
                 raise NotFoundError(f"User {user_id} not found")
             membership = GroupMember(group_id=group_id, user_id=user_id)
             session.add(membership)
-            session.commit()
+            await session.commit()
             logger.info("Added user %d to group %d", user_id, group_id)
             return {
                 "group_id": group_id,
@@ -281,14 +292,14 @@ def add_group_member(group_id: int, user_id: int) -> dict:
                 "user_email": user.email,
             }
         except IntegrityError:
-            session.rollback()
+            await session.rollback()
             raise
         except Exception:
-            session.rollback()
+            await session.rollback()
             raise
 
 
-def remove_group_member(group_id: int, user_id: int) -> bool:
+async def remove_group_member(group_id: int, user_id: int) -> bool:
     """Remove a user from a group.
 
     Args:
@@ -306,25 +317,31 @@ def remove_group_member(group_id: int, user_id: int) -> bool:
         raise RuntimeError("Database not available")
     from shoreguard.models import GroupMember
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             row = (
-                session.query(GroupMember)
-                .filter(GroupMember.group_id == group_id, GroupMember.user_id == user_id)
+                (
+                    await session.execute(
+                        select(GroupMember).where(
+                            GroupMember.group_id == group_id, GroupMember.user_id == user_id
+                        )
+                    )
+                )
+                .scalars()
                 .first()
             )
             if row is None:
                 return False
-            session.delete(row)
-            session.commit()
+            await session.delete(row)
+            await session.commit()
             logger.info("Removed user %d from group %d", user_id, group_id)
             return True
         except Exception:
-            session.rollback()
+            await session.rollback()
             raise
 
 
-def list_group_members(group_id: int) -> list[dict]:
+async def list_group_members(group_id: int) -> list[dict]:
     """Return all members of a group.
 
     Args:
@@ -337,22 +354,23 @@ def list_group_members(group_id: int) -> list[dict]:
         return []
     from shoreguard.models import GroupMember, User
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             rows = (
-                session.query(User.id, User.email, User.role)
-                .join(GroupMember, GroupMember.user_id == User.id)
-                .filter(GroupMember.group_id == group_id)
-                .order_by(User.email)
-                .all()
-            )
+                await session.execute(
+                    select(User.id, User.email, User.role)
+                    .join(GroupMember, GroupMember.user_id == User.id)
+                    .where(GroupMember.group_id == group_id)
+                    .order_by(User.email)
+                )
+            ).all()
             return [{"id": uid, "email": email, "role": role} for uid, email, role in rows]
         except SQLAlchemyError:
             logger.exception("Failed to list members for group %d", group_id)
             return []
 
 
-def list_user_groups(user_id: int) -> list[dict]:
+async def list_user_groups(user_id: int) -> list[dict]:
     """Return all groups a user belongs to.
 
     Args:
@@ -365,15 +383,16 @@ def list_user_groups(user_id: int) -> list[dict]:
         return []
     from shoreguard.models import Group, GroupMember
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             rows = (
-                session.query(Group.id, Group.name, Group.role)
-                .join(GroupMember, GroupMember.group_id == Group.id)
-                .filter(GroupMember.user_id == user_id)
-                .order_by(Group.name)
-                .all()
-            )
+                await session.execute(
+                    select(Group.id, Group.name, Group.role)
+                    .join(GroupMember, GroupMember.group_id == Group.id)
+                    .where(GroupMember.user_id == user_id)
+                    .order_by(Group.name)
+                )
+            ).all()
             return [{"id": gid, "name": name, "role": role} for gid, name, role in rows]
         except SQLAlchemyError:
             logger.exception("Failed to list groups for user %d", user_id)
@@ -383,7 +402,7 @@ def list_user_groups(user_id: int) -> list[dict]:
 # ─── Group gateway-scoped roles ───────────────────────────────────────────
 
 
-def set_group_gateway_role(group_id: int, gateway_name: str, role: str) -> dict:
+async def set_group_gateway_role(group_id: int, gateway_name: str, role: str) -> dict:
     """Create or update a per-gateway role override for a group.
 
     Args:
@@ -407,20 +426,30 @@ def set_group_gateway_role(group_id: int, gateway_name: str, role: str) -> dict:
         raise RuntimeError("Database not available")
     from shoreguard.models import Gateway, Group, GroupGatewayRole
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            group = session.query(Group).filter(Group.id == group_id).first()
+            group = (
+                (await session.execute(select(Group).where(Group.id == group_id))).scalars().first()
+            )
             if group is None:
                 raise NotFoundError(f"Group {group_id} not found")
-            gw = session.query(Gateway).filter(Gateway.name == gateway_name).first()
+            gw = (
+                (await session.execute(select(Gateway).where(Gateway.name == gateway_name)))
+                .scalars()
+                .first()
+            )
             if gw is None:
                 raise NotFoundError(f"Gateway '{gateway_name}' not found")
             row = (
-                session.query(GroupGatewayRole)
-                .filter(
-                    GroupGatewayRole.group_id == group_id,
-                    GroupGatewayRole.gateway_id == gw.id,
+                (
+                    await session.execute(
+                        select(GroupGatewayRole).where(
+                            GroupGatewayRole.group_id == group_id,
+                            GroupGatewayRole.gateway_id == gw.id,
+                        )
+                    )
                 )
+                .scalars()
                 .first()
             )
             if row:
@@ -428,17 +457,17 @@ def set_group_gateway_role(group_id: int, gateway_name: str, role: str) -> dict:
             else:
                 row = GroupGatewayRole(group_id=group_id, gateway_id=gw.id, role=role)
                 session.add(row)
-            session.commit()
+            await session.commit()
             return {"group_id": group_id, "gateway_name": gateway_name, "role": role}
         except IntegrityError:
-            session.rollback()
+            await session.rollback()
             raise
         except Exception:
-            session.rollback()
+            await session.rollback()
             raise
 
 
-def remove_group_gateway_role(group_id: int, gateway_name: str) -> bool:
+async def remove_group_gateway_role(group_id: int, gateway_name: str) -> bool:
     """Remove a per-gateway role override for a group.
 
     Args:
@@ -456,30 +485,38 @@ def remove_group_gateway_role(group_id: int, gateway_name: str) -> bool:
         raise RuntimeError("Database not available")
     from shoreguard.models import Gateway, GroupGatewayRole
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
-            gw = session.query(Gateway).filter(Gateway.name == gateway_name).first()
+            gw = (
+                (await session.execute(select(Gateway).where(Gateway.name == gateway_name)))
+                .scalars()
+                .first()
+            )
             if gw is None:
                 return False
             row = (
-                session.query(GroupGatewayRole)
-                .filter(
-                    GroupGatewayRole.group_id == group_id,
-                    GroupGatewayRole.gateway_id == gw.id,
+                (
+                    await session.execute(
+                        select(GroupGatewayRole).where(
+                            GroupGatewayRole.group_id == group_id,
+                            GroupGatewayRole.gateway_id == gw.id,
+                        )
+                    )
                 )
+                .scalars()
                 .first()
             )
             if row is None:
                 return False
-            session.delete(row)
-            session.commit()
+            await session.delete(row)
+            await session.commit()
             return True
         except Exception:
-            session.rollback()
+            await session.rollback()
             raise
 
 
-def list_group_gateway_roles(group_id: int) -> list[dict]:
+async def list_group_gateway_roles(group_id: int) -> list[dict]:
     """Return all gateway-scoped role overrides for a group.
 
     Args:
@@ -492,15 +529,16 @@ def list_group_gateway_roles(group_id: int) -> list[dict]:
         return []
     from shoreguard.models import Gateway, GroupGatewayRole
 
-    with state.session_factory() as session:
+    async with state.session_factory() as session:
         try:
             rows = (
-                session.query(GroupGatewayRole, Gateway.name)
-                .join(Gateway, GroupGatewayRole.gateway_id == Gateway.id)
-                .filter(GroupGatewayRole.group_id == group_id)
-                .order_by(Gateway.name)
-                .all()
-            )
+                await session.execute(
+                    select(GroupGatewayRole, Gateway.name)
+                    .join(Gateway, GroupGatewayRole.gateway_id == Gateway.id)
+                    .where(GroupGatewayRole.group_id == group_id)
+                    .order_by(Gateway.name)
+                )
+            ).all()
             return [{"gateway_name": gw_name, "role": r.role} for r, gw_name in rows]
         except SQLAlchemyError:
             logger.exception("Failed to list gateway roles for group %d", group_id)

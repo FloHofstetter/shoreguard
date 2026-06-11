@@ -6,9 +6,6 @@ from datetime import UTC, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from shoreguard.api import auth
 from shoreguard.api.auth import (
@@ -21,7 +18,7 @@ from shoreguard.api.auth import (
 )
 from shoreguard.api.auth.rbac import _GatewayRoleLookupError, _lookup_gateway_role
 from shoreguard.exceptions import ValidationError as DomainValidationError
-from shoreguard.models import Base, Gateway
+from shoreguard.models import Gateway
 
 ADMIN_EMAIL = "admin@test.com"
 ADMIN_PASS = "adminpass123"
@@ -32,24 +29,11 @@ GW_NAME = "test-gw"
 
 @pytest.fixture
 def db():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    from tests.conftest import make_auth_test_db
 
-    @event.listens_for(engine, "connect")
-    def _enable_fk(dbapi_conn, _connection_record):
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    auth.init_auth_for_test(factory)
+    factory, dispose = make_auth_test_db(foreign_keys=True)
     yield factory
-    auth.reset()
-    engine.dispose()
+    dispose()
 
 
 @pytest.fixture
@@ -68,13 +52,13 @@ def _with_gateway(db):
 
 
 @pytest.fixture
-def _with_admin(db):
-    create_user(ADMIN_EMAIL, ADMIN_PASS, "admin")
+async def _with_admin(db):
+    await create_user(ADMIN_EMAIL, ADMIN_PASS, "admin")
 
 
 @pytest.fixture
-def _with_viewer(db):
-    create_user(VIEWER_EMAIL, VIEWER_PASS, "viewer")
+async def _with_viewer(db):
+    await create_user(VIEWER_EMAIL, VIEWER_PASS, "viewer")
 
 
 @pytest.fixture
@@ -113,82 +97,82 @@ async def viewer_client(db, _with_viewer):
 
 
 class TestSetGatewayRole:
-    def test_create_new_user_role(self, db, _with_gateway):
-        user = create_user("u@test.com", "password1", "viewer")
-        result = set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="admin")
+    async def test_create_new_user_role(self, db, _with_gateway):
+        user = await create_user("u@test.com", "password1", "viewer")
+        result = await set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="admin")
         assert result == {"user_id": user["id"], "gateway_name": GW_NAME, "role": "admin"}
 
-    def test_update_existing_user_role(self, db, _with_gateway):
-        user = create_user("u@test.com", "password1", "viewer")
-        set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="admin")
-        result = set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="operator")
+    async def test_update_existing_user_role(self, db, _with_gateway):
+        user = await create_user("u@test.com", "password1", "viewer")
+        await set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="admin")
+        result = await set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="operator")
         assert result["role"] == "operator"
 
-    def test_create_sp_role(self, db, _with_gateway):
-        _key, sp = create_service_principal("test-sp", "viewer")
-        result = set_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME, role="admin")
+    async def test_create_sp_role(self, db, _with_gateway):
+        _key, sp = await create_service_principal("test-sp", "viewer")
+        result = await set_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME, role="admin")
         assert result == {"sp_id": sp["id"], "gateway_name": GW_NAME, "role": "admin"}
 
-    def test_update_existing_sp_role(self, db, _with_gateway):
-        _key, sp = create_service_principal("test-sp", "viewer")
-        set_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME, role="admin")
-        result = set_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME, role="operator")
+    async def test_update_existing_sp_role(self, db, _with_gateway):
+        _key, sp = await create_service_principal("test-sp", "viewer")
+        await set_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME, role="admin")
+        result = await set_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME, role="operator")
         assert result["role"] == "operator"
 
-    def test_invalid_role_raises(self, db, _with_gateway):
-        user = create_user("u@test.com", "password1", "viewer")
+    async def test_invalid_role_raises(self, db, _with_gateway):
+        user = await create_user("u@test.com", "password1", "viewer")
         with pytest.raises(DomainValidationError, match="Invalid role"):
-            set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="superadmin")
+            await set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="superadmin")
 
-    def test_missing_both_ids_raises(self, db, _with_gateway):
+    async def test_missing_both_ids_raises(self, db, _with_gateway):
         with pytest.raises(DomainValidationError, match="Either user_id or sp_id must be provided"):
-            set_gateway_role(gateway_name=GW_NAME, role="admin")
+            await set_gateway_role(gateway_name=GW_NAME, role="admin")
 
 
 # ─── Unit tests: remove_gateway_role ──────────────────────────────────────
 
 
 class TestRemoveGatewayRole:
-    def test_remove_existing_user_role(self, db, _with_gateway):
-        user = create_user("u@test.com", "password1", "viewer")
-        set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="admin")
-        assert remove_gateway_role(user_id=user["id"], gateway_name=GW_NAME) is True
+    async def test_remove_existing_user_role(self, db, _with_gateway):
+        user = await create_user("u@test.com", "password1", "viewer")
+        await set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="admin")
+        assert await remove_gateway_role(user_id=user["id"], gateway_name=GW_NAME) is True
 
-    def test_remove_nonexistent_returns_false(self, db, _with_gateway):
-        user = create_user("u@test.com", "password1", "viewer")
-        assert remove_gateway_role(user_id=user["id"], gateway_name=GW_NAME) is False
+    async def test_remove_nonexistent_returns_false(self, db, _with_gateway):
+        user = await create_user("u@test.com", "password1", "viewer")
+        assert await remove_gateway_role(user_id=user["id"], gateway_name=GW_NAME) is False
 
-    def test_remove_sp_role(self, db, _with_gateway):
-        _key, sp = create_service_principal("test-sp", "viewer")
-        set_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME, role="admin")
-        assert remove_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME) is True
+    async def test_remove_sp_role(self, db, _with_gateway):
+        _key, sp = await create_service_principal("test-sp", "viewer")
+        await set_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME, role="admin")
+        assert await remove_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME) is True
 
-    def test_remove_without_ids_returns_false(self, db):
-        assert remove_gateway_role(gateway_name="anything") is False
+    async def test_remove_without_ids_returns_false(self, db):
+        assert await remove_gateway_role(gateway_name="anything") is False
 
 
 # ─── Unit tests: list_gateway_roles_for_user ──────────────────────────────
 
 
 class TestListGatewayRolesForUser:
-    def test_returns_roles(self, db, _with_gateway):
-        user = create_user("u@test.com", "password1", "viewer")
-        set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="admin")
-        roles = list_gateway_roles_for_user(user["id"])
+    async def test_returns_roles(self, db, _with_gateway):
+        user = await create_user("u@test.com", "password1", "viewer")
+        await set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="admin")
+        roles = await list_gateway_roles_for_user(user["id"])
         assert len(roles) == 1
         assert roles[0] == {"gateway_name": GW_NAME, "role": "admin"}
 
-    def test_empty_when_none(self, db):
-        user = create_user("u@test.com", "password1", "viewer")
-        assert list_gateway_roles_for_user(user["id"]) == []
+    async def test_empty_when_none(self, db):
+        user = await create_user("u@test.com", "password1", "viewer")
+        assert await list_gateway_roles_for_user(user["id"]) == []
 
-    def test_empty_when_session_factory_is_none(self, db):
-        user = create_user("u@test.com", "password1", "viewer")
+    async def test_empty_when_session_factory_is_none(self, db):
+        user = await create_user("u@test.com", "password1", "viewer")
         # Temporarily clear the session factory
         original = auth.state.session_factory
         auth.state.session_factory = None
         try:
-            assert list_gateway_roles_for_user(user["id"]) == []
+            assert await list_gateway_roles_for_user(user["id"]) == []
         finally:
             auth.state.session_factory = original
 
@@ -197,23 +181,23 @@ class TestListGatewayRolesForUser:
 
 
 class TestListGatewayRolesForSP:
-    def test_returns_roles(self, db, _with_gateway):
-        _key, sp = create_service_principal("test-sp", "viewer")
-        set_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME, role="operator")
-        roles = list_gateway_roles_for_sp(sp["id"])
+    async def test_returns_roles(self, db, _with_gateway):
+        _key, sp = await create_service_principal("test-sp", "viewer")
+        await set_gateway_role(sp_id=sp["id"], gateway_name=GW_NAME, role="operator")
+        roles = await list_gateway_roles_for_sp(sp["id"])
         assert len(roles) == 1
         assert roles[0] == {"gateway_name": GW_NAME, "role": "operator"}
 
-    def test_empty_when_none(self, db):
-        _key, sp = create_service_principal("test-sp", "viewer")
-        assert list_gateway_roles_for_sp(sp["id"]) == []
+    async def test_empty_when_none(self, db):
+        _key, sp = await create_service_principal("test-sp", "viewer")
+        assert await list_gateway_roles_for_sp(sp["id"]) == []
 
-    def test_empty_when_session_factory_is_none(self, db):
-        _key, sp = create_service_principal("test-sp", "viewer")
+    async def test_empty_when_session_factory_is_none(self, db):
+        _key, sp = await create_service_principal("test-sp", "viewer")
         original = auth.state.session_factory
         auth.state.session_factory = None
         try:
-            assert list_gateway_roles_for_sp(sp["id"]) == []
+            assert await list_gateway_roles_for_sp(sp["id"]) == []
         finally:
             auth.state.session_factory = original
 
@@ -222,49 +206,49 @@ class TestListGatewayRolesForSP:
 
 
 class TestLookupGatewayRole:
-    def test_returns_role_when_exists(self, db, _with_gateway):
-        user = create_user("u@test.com", "password1", "viewer")
-        set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="admin")
-        assert _lookup_gateway_role(user_id=user["id"], gateway=GW_NAME) == "admin"
+    async def test_returns_role_when_exists(self, db, _with_gateway):
+        user = await create_user("u@test.com", "password1", "viewer")
+        await set_gateway_role(user_id=user["id"], gateway_name=GW_NAME, role="admin")
+        assert await _lookup_gateway_role(user_id=user["id"], gateway=GW_NAME) == "admin"
 
-    def test_returns_none_when_not_found(self, db, _with_gateway):
-        user = create_user("u@test.com", "password1", "viewer")
-        assert _lookup_gateway_role(user_id=user["id"], gateway=GW_NAME) is None
+    async def test_returns_none_when_not_found(self, db, _with_gateway):
+        user = await create_user("u@test.com", "password1", "viewer")
+        assert await _lookup_gateway_role(user_id=user["id"], gateway=GW_NAME) is None
 
-    def test_returns_none_when_no_ids(self, db):
-        assert _lookup_gateway_role(gateway=GW_NAME) is None
+    async def test_returns_none_when_no_ids(self, db):
+        assert await _lookup_gateway_role(gateway=GW_NAME) is None
 
-    def test_returns_none_when_session_factory_is_none(self, db):
+    async def test_returns_none_when_session_factory_is_none(self, db):
         original = auth.state.session_factory
         auth.state.session_factory = None
         try:
-            assert _lookup_gateway_role(user_id=1, gateway=GW_NAME) is None
+            assert await _lookup_gateway_role(user_id=1, gateway=GW_NAME) is None
         finally:
             auth.state.session_factory = original
 
-    def test_raises_on_db_error(self, db, _with_gateway, monkeypatch):
+    async def test_raises_on_db_error(self, db, _with_gateway, monkeypatch):
         """Simulate a SQLAlchemyError during the query — should raise _GatewayRoleLookupError."""
         from sqlalchemy.exc import SQLAlchemyError
 
-        user = create_user("u@test.com", "password1", "viewer")
+        user = await create_user("u@test.com", "password1", "viewer")
 
         original_factory = auth.state.session_factory
         assert original_factory is not None
 
-        def broken_factory():
-            assert original_factory is not None
-            session = original_factory()
+        class _BrokenSession:
+            async def __aenter__(self):
+                return self
 
-            def patched_query(*args, **kwargs):
+            async def __aexit__(self, *exc):
+                return False
+
+            async def execute(self, *args, **kwargs):
                 raise SQLAlchemyError("simulated DB error")
 
-            session.query = patched_query
-            return session
-
-        auth.state.session_factory = broken_factory  # type: ignore[assignment]
+        auth.state.session_factory = _BrokenSession  # type: ignore[assignment]
         try:
             with pytest.raises(_GatewayRoleLookupError):
-                _lookup_gateway_role(user_id=user["id"], gateway=GW_NAME)
+                await _lookup_gateway_role(user_id=user["id"], gateway=GW_NAME)
         finally:
             auth.state.session_factory = original_factory
 
@@ -283,7 +267,7 @@ class TestGatewayRoleResolution:
         user_id = user.id
         session.close()
 
-        set_gateway_role(user_id=user_id, gateway_name=GW_NAME, role="admin")
+        await set_gateway_role(user_id=user_id, gateway_name=GW_NAME, role="admin")
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -300,7 +284,7 @@ class TestGatewayRoleResolution:
             # should grant access when _current_gateway is set.
             # We test the role resolution by directly checking _lookup_gateway_role
             # and the ContextVar mechanism.
-            gw_role = _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
+            gw_role = await _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
             assert gw_role == "admin"
 
     async def test_admin_gets_viewer_on_scoped_gateway(self, db, _with_gateway, _with_admin):
@@ -312,8 +296,8 @@ class TestGatewayRoleResolution:
         user_id = user.id
         session.close()
 
-        set_gateway_role(user_id=user_id, gateway_name=GW_NAME, role="viewer")
-        gw_role = _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
+        await set_gateway_role(user_id=user_id, gateway_name=GW_NAME, role="viewer")
+        gw_role = await _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
         assert gw_role == "viewer"
 
     async def test_no_gateway_role_falls_back_to_global(self, db, _with_gateway, _with_viewer):
@@ -324,7 +308,7 @@ class TestGatewayRoleResolution:
         user = session.query(User).filter(User.email == VIEWER_EMAIL).first()
         user_id = user.id
         session.close()
-        gw_role = _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
+        gw_role = await _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
         assert gw_role is None  # None means "use global role"
 
     async def test_role_resolution_only_when_gateway_set(self, db, _with_gateway, _with_viewer):
@@ -336,11 +320,11 @@ class TestGatewayRoleResolution:
         user_id = user.id
         session.close()
 
-        set_gateway_role(user_id=user_id, gateway_name=GW_NAME, role="admin")
+        await set_gateway_role(user_id=user_id, gateway_name=GW_NAME, role="admin")
 
         # The lookup function itself still works, but require_role won't call
         # it when no gateway context is present on the request.
-        gw_role = _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
+        gw_role = await _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
         assert gw_role == "admin"  # The role exists in DB, but require_role wouldn't use it
 
 

@@ -44,25 +44,13 @@ class TestMetricsEndpoint:
 @pytest.fixture
 def _auth_db():
     """Set up auth with a real DB session factory (no_auth=False)."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    from sqlalchemy.pool import StaticPool
-
     from shoreguard.api import auth
-    from shoreguard.models import Base
+    from tests.conftest import make_auth_test_db
 
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-    auth.init_auth_for_test(factory)
+    factory, dispose = make_auth_test_db()
     yield factory
-    auth.reset()
+    dispose()
     auth.state.no_auth = True  # noqa: SLF001 — restore default test state
-    engine.dispose()
 
 
 class TestMetricsAuth:
