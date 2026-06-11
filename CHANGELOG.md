@@ -12,6 +12,18 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Gateway kill switch** — reversible "big red button"
+  (`POST`/`DELETE /api/gateway/{name}/kill-switch`, card on the gateway
+  detail page): detaches every sandbox's providers so agents instantly
+  lose inference and tool credentials while keeping their state; the
+  detached set is persisted (new `kill_switch_entries` table, migration
+  `101_kill_switch`) and re-attached on resume, with per-provider retry
+  on partial failures. Fires `kill_switch.engaged` / `kill_switch.released`
+  webhook events.
+- **Gateway watchdog events** — the health monitor now fires
+  `gateway.unreachable` (ntfy priority: urgent) and `gateway.recovered`
+  webhook events on health transitions, replacing hand-rolled cron
+  watchdogs for "did my gateway die overnight?".
 - **Phone-first approvals** — new `telegram` webhook channel (Bot API
   `sendMessage` with inline buttons); opt-in **one-tap approve/reject
   links** (`SHOREGUARD_WEBHOOK_ONE_TAP_APPROVALS` + `SHOREGUARD_PUBLIC_URL`):

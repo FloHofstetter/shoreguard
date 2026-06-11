@@ -871,3 +871,97 @@ async def gateway_create(body: CreateGatewayRequest, request: Request) -> JSONRe
         actor=actor,
         idempotency_key=request.headers.get("Idempotency-Key"),
     )
+
+
+# ─── Kill switch ─────────────────────────────────────────────────────────────
+
+
+@router.get("/{name}/kill-switch", dependencies=[Depends(require_role("operator"))])
+async def kill_switch_status(name: str) -> dict[str, Any]:
+    """Return whether the provider kill switch is engaged for a gateway.
+
+    Args:
+        name: Gateway name.
+
+    Returns:
+        dict[str, Any]: Engaged flag, affected sandbox count, and metadata.
+    """
+    return await get_services().kill_switch.status(name)
+
+
+@router.post("/{name}/kill-switch", dependencies=[Depends(require_role("admin"))])
+async def engage_kill_switch(request: Request, name: str) -> dict[str, Any]:
+    """Engage the kill switch: detach all providers from every sandbox.
+
+    Agents keep their state but instantly lose inference and tool
+    credentials. Reversible via the DELETE endpoint.
+
+    Args:
+        request: Incoming HTTP request.
+        name: Gateway name.
+
+    Returns:
+        dict[str, Any]: Per-sandbox detach report.
+
+    Raises:
+        HTTPException: 409 if already engaged, 502 if the gateway is
+            unreachable.
+    """
+    from shoreguard.services.webhooks import fire_webhook
+
+    actor = get_actor(request)
+    try:
+        report = await get_services().kill_switch.engage(name, actor=actor)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — surface as gateway error
+        raise HTTPException(status_code=502, detail=f"Gateway unavailable: {exc}") from exc
+    await audit_log(
+        request,
+        "kill_switch.engage",
+        "gateway",
+        name,
+        gateway=name,
+        detail={"sandboxes": len(report["sandboxes"]), "errors": len(report["errors"])},
+    )
+    await fire_webhook(
+        "kill_switch.engaged",
+        {"gateway": name, "actor": actor, "sandboxes": len(report["sandboxes"])},
+    )
+    return report
+
+
+@router.delete("/{name}/kill-switch", dependencies=[Depends(require_role("admin"))])
+async def release_kill_switch(request: Request, name: str) -> dict[str, Any]:
+    """Release the kill switch: re-attach the providers detached at engage.
+
+    Args:
+        request: Incoming HTTP request.
+        name: Gateway name.
+
+    Returns:
+        dict[str, Any]: Per-sandbox re-attach report.
+
+    Raises:
+        HTTPException: 502 if the gateway is unreachable.
+    """
+    from shoreguard.services.webhooks import fire_webhook
+
+    actor = get_actor(request)
+    try:
+        report = await get_services().kill_switch.resume(name, actor=actor)
+    except Exception as exc:  # noqa: BLE001 — surface as gateway error
+        raise HTTPException(status_code=502, detail=f"Gateway unavailable: {exc}") from exc
+    await audit_log(
+        request,
+        "kill_switch.release",
+        "gateway",
+        name,
+        gateway=name,
+        detail={"sandboxes": len(report["sandboxes"]), "errors": len(report["errors"])},
+    )
+    await fire_webhook(
+        "kill_switch.released",
+        {"gateway": name, "actor": actor, "sandboxes": len(report["sandboxes"])},
+    )
+    return report

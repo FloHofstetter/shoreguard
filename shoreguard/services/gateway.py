@@ -561,7 +561,14 @@ class GatewayService:
     # ── Health monitor ────────────────────────────────────────────────────
 
     async def check_all_health(self) -> None:
-        """Probe all registered gateways concurrently and persist their health."""
+        """Probe all registered gateways concurrently and persist their health.
+
+        Fires ``gateway.unreachable`` / ``gateway.recovered`` webhook events
+        on health transitions, so a homelab operator gets a push the moment
+        a gateway dies overnight — without hand-rolling a cron watchdog. A
+        gateway that has never been reachable (previous status ``unknown``)
+        fires no event; registration problems surface in the register flow.
+        """
         from datetime import UTC, datetime
 
         gateways = await self._registry.list_all()
@@ -569,7 +576,9 @@ class GatewayService:
             return
         logger.debug("Starting health check for %d gateway(s)", len(gateways))
 
-        async def _probe(name: str) -> None:
+        down_statuses = ("unreachable", "offline")
+
+        async def _probe(name: str, previous: str) -> None:
             try:
                 client = await self.get_client(name=name)
                 health = await client.health()
@@ -582,7 +591,37 @@ class GatewayService:
             except Exception:
                 logger.warning("Failed to update health for '%s'", name, exc_info=True)
 
-        await asyncio.gather(*(_probe(gw["name"]) for gw in gateways))
+            was_up = previous not in down_statuses and previous != "unknown"
+            is_down = status in down_statuses
+            if was_up and is_down:
+                await self._fire_health_event("gateway.unreachable", name, previous, status)
+            elif previous in down_statuses and not is_down and status != "unknown":
+                await self._fire_health_event("gateway.recovered", name, previous, status)
+
+        await asyncio.gather(
+            *(_probe(gw["name"], str(gw.get("last_status") or "unknown")) for gw in gateways)
+        )
+
+    @staticmethod
+    async def _fire_health_event(event: str, name: str, previous: str, status: str) -> None:
+        """Fire a gateway health-transition webhook, never raising.
+
+        Args:
+            event: Event type (``gateway.unreachable`` / ``gateway.recovered``).
+            name: Gateway name.
+            previous: Previous health status.
+            status: New health status.
+        """
+        from shoreguard.services.webhooks import fire_webhook
+
+        logger.warning("Gateway health transition: %s %s → %s", name, previous, status)
+        try:
+            await fire_webhook(
+                event,
+                {"gateway": name, "previous_status": previous, "status": status},
+            )
+        except Exception:  # noqa: BLE001 — health loop must survive webhook errors
+            logger.exception("Failed to fire %s for gateway %s", event, name)
 
     def get_cached_client(self, name: str) -> ShoreGuardClient | None:
         """Return the cached client for a gateway, or None if not connected.

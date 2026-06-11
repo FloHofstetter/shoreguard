@@ -27,6 +27,10 @@ _EVENT_LABELS: dict[str, str] = {
     "sandbox.deleted": "Sandbox Deleted",
     "gateway.registered": "Gateway Registered",
     "gateway.unregistered": "Gateway Unregistered",
+    "gateway.unreachable": "Gateway UNREACHABLE",
+    "gateway.recovered": "Gateway Recovered",
+    "kill_switch.engaged": "Kill Switch ENGAGED",
+    "kill_switch.released": "Kill Switch Released",
     "inference.updated": "Inference Updated",
     "policy.updated": "Policy Updated",
     "webhook.test": "Test Event",
@@ -180,6 +184,10 @@ _NTFY_PRIORITIES: dict[str, int] = {
     "approval.pending": 4,
     "approval.escalated": 5,
     "approval.rejected": 4,
+    "gateway.unreachable": 5,
+    "gateway.recovered": 3,
+    "kill_switch.engaged": 5,
+    "kill_switch.released": 4,
 }
 
 # ntfy tags: leading entries that are emoji shortcodes render as emoji.
@@ -192,6 +200,10 @@ _NTFY_TAGS: dict[str, str] = {
     "sandbox.deleted": "wastebasket",
     "gateway.registered": "satellite",
     "gateway.unregistered": "satellite",
+    "gateway.unreachable": "rotating_light",
+    "gateway.recovered": "white_check_mark",
+    "kill_switch.engaged": "octagonal_sign",
+    "kill_switch.released": "arrow_forward",
     "policy.updated": "shield",
     "webhook.test": "bell",
 }

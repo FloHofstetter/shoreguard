@@ -55,3 +55,30 @@ class Gateway(Base):
     )
     last_seen: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
     last_status: Mapped[str] = mapped_column(String, default="unknown")
+
+
+class KillSwitchEntry(Base):
+    """One sandbox whose providers were detached by the kill switch.
+
+    The kill switch cuts every sandbox on a gateway off from inference and
+    tool credentials by detaching its providers — reversibly. Each entry
+    remembers which providers one sandbox had so ``resume`` can re-attach
+    them; releasing the switch deletes the entries.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name the sandbox lives on.
+        sandbox: Sandbox name.
+        providers_json: JSON-encoded list of detached provider names.
+        engaged_at: When the kill switch was engaged.
+        engaged_by: Actor who engaged it.
+    """
+
+    __tablename__ = "kill_switch_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False, index=True)
+    sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
+    providers_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    engaged_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    engaged_by: Mapped[str] = mapped_column(String, nullable=False, default="unknown")

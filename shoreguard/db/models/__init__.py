@@ -11,7 +11,7 @@ from shoreguard.db.models.auth import (
     UserGatewayRole,
 )
 from shoreguard.db.models.base import Base
-from shoreguard.db.models.gateway import Gateway
+from shoreguard.db.models.gateway import Gateway, KillSwitchEntry
 from shoreguard.db.models.operations import OperationRecord
 from shoreguard.db.models.policy import (
     ApprovalDecision,
@@ -32,6 +32,7 @@ __all__ = (
     "Group",
     "GroupGatewayRole",
     "GroupMember",
+    "KillSwitchEntry",
     "OperationRecord",
     "PolicyApplyProposal",
     "PolicyPin",

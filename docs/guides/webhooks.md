@@ -140,6 +140,10 @@ Subscribe to specific events or use `*` for all:
 | `sandbox.deleted` | A sandbox was deleted |
 | `gateway.registered` | A new gateway was registered |
 | `gateway.unregistered` | A gateway was removed |
+| `gateway.unreachable` | A previously healthy gateway stopped answering health probes |
+| `gateway.recovered` | An unreachable gateway is healthy again |
+| `kill_switch.engaged` | The provider kill switch was engaged on a gateway |
+| `kill_switch.released` | The kill switch was released (providers re-attached) |
 | `inference.updated` | Inference configuration changed |
 | `policy.updated` | A sandbox policy was modified |
 | `approval.pending` | A new approval request arrived |

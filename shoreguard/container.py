@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from shoreguard.services.discovery import DiscoveryService
     from shoreguard.services.drift_detection import DriftDetectionService
     from shoreguard.services.gateway import GatewayService
+    from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
     from shoreguard.services.operations import AsyncOperationService
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
@@ -63,6 +64,7 @@ class ServiceContainer:
         policy_apply_proposal: GitOps apply proposal service.
         drift_detection: Policy drift detection.
         cert_rotation: Proactive client-cert rotation.
+        kill_switch: Reversible per-gateway provider kill switch.
         denial_context: Denial context cache.
         local_gateway: Local gateway manager, or ``None`` outside local mode.
     """
@@ -84,6 +86,7 @@ class ServiceContainer:
     policy_apply_proposal: PolicyApplyProposalService
     drift_detection: DriftDetectionService
     cert_rotation: CertRotationService
+    kill_switch: KillSwitchService
     denial_context: DenialContextService
     local_gateway: LocalGatewayManager | None = None
 
@@ -115,6 +118,7 @@ def build_container(
     from shoreguard.services.discovery import DiscoveryService
     from shoreguard.services.drift_detection import DriftDetectionService
     from shoreguard.services.gateway import GatewayService
+    from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
     from shoreguard.services.operations import AsyncOperationService
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
@@ -168,6 +172,7 @@ def build_container(
             threshold_days=settings.cert_rotation.threshold_days,
             max_retries=settings.cert_rotation.max_retries,
         ),
+        kill_switch=KillSwitchService(async_session_factory, gateway),
         denial_context=DenialContextService(),
         local_gateway=(LocalGatewayManager(gateway) if settings.server.local_mode else None),
     )

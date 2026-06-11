@@ -275,6 +275,112 @@ function ObservabilityFieldset({ name, isAdmin }: { name: string; isAdmin: boole
 
 // ── Advanced settings (raw key-value editor) ─────────────────────────
 
+interface KillSwitchStatus {
+  engaged: boolean;
+  sandboxes: number;
+  engaged_at: string | null;
+  engaged_by: string | null;
+}
+
+function KillSwitchCard({ name, connected }: { name: string; connected: boolean }) {
+  const [status, setStatus] = useState<KillSwitchStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    apiFetch<KillSwitchStatus>(`/api/gateway/${name}/kill-switch`)
+      .then(setStatus)
+      .catch(() => setStatus(null));
+  };
+  useEffect(load, [name]);
+
+  const engage = async () => {
+    const confirmed = await showConfirm(
+      "Cut ALL sandboxes on this gateway off from providers? Agents keep their state " +
+        "but instantly lose inference and tool credentials. This is reversible.",
+      { btnLabel: "Engage kill switch", btnClass: "btn-danger", icon: "sign-stop" },
+    );
+    if (!confirmed) return;
+    setBusy(true);
+    try {
+      const report = await apiFetch<{ sandboxes: unknown[]; errors: string[] }>(
+        `/api/gateway/${name}/kill-switch`,
+        { method: "POST" },
+      );
+      showToast(
+        `Kill switch engaged — ${report.sandboxes.length} sandbox(es) cut` +
+          (report.errors.length ? `, ${report.errors.length} error(s)` : ""),
+        report.errors.length ? "warning" : "success",
+      );
+      load();
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const release = async () => {
+    setBusy(true);
+    try {
+      const report = await apiFetch<{ sandboxes: unknown[]; errors: string[] }>(
+        `/api/gateway/${name}/kill-switch`,
+        { method: "DELETE" },
+      );
+      showToast(
+        `Providers re-attached for ${report.sandboxes.length} sandbox(es)` +
+          (report.errors.length ? `, ${report.errors.length} error(s) — retry resume` : ""),
+        report.errors.length ? "warning" : "success",
+      );
+      load();
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!status) return null;
+  return (
+    <div class={`card sg-card-themed mb-4 ${status.engaged ? "border-danger" : ""}`}>
+      <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+          <div class="fw-semibold">
+            <i class={`bi bi-sign-stop me-2 ${status.engaged ? "text-danger" : ""}`} />
+            Kill switch
+            {status.engaged && (
+              <span class="badge text-bg-danger ms-2">
+                ENGAGED — {status.sandboxes} sandbox(es) cut
+              </span>
+            )}
+          </div>
+          <div class="text-muted small">
+            {status.engaged
+              ? `Engaged ${status.engaged_at ? new Date(status.engaged_at).toLocaleString() : ""} by ${status.engaged_by ?? "?"} — agents have no provider access.`
+              : "Reversibly detach every sandbox's providers — agents instantly lose inference and tool credentials, state is preserved."}
+          </div>
+        </div>
+        {status.engaged ? (
+          <button class="btn btn-outline-success" disabled={busy} onClick={() => void release()}>
+            {busy && <span class="spinner-border spinner-border-sm me-2" />}
+            <i class="bi bi-play-circle me-1" />
+            Resume providers
+          </button>
+        ) : (
+          <button
+            class="btn btn-outline-danger"
+            disabled={busy || !connected}
+            onClick={() => void engage()}
+          >
+            {busy && <span class="spinner-border spinner-border-sm me-2" />}
+            <i class="bi bi-sign-stop me-1" />
+            Cut all providers
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AdvancedSettings({ name, isAdmin }: { name: string; isAdmin: boolean }) {
   const [rows, setRows] = useState<Record<string, { current: string; draft: string; busy: boolean }>>(
     {},
@@ -831,6 +937,8 @@ export default function GatewayDetailPage({ name }: { name: string }) {
           </div>
         ))}
       </div>
+
+      {isAdmin && <KillSwitchCard name={name} connected={connected} />}
 
       {isAdmin && <GatewayTokenCard />}
 
