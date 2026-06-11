@@ -9,6 +9,7 @@ import { GW } from "../lib/constants";
 import { health } from "../lib/health";
 import { Modal } from "../lib/Modal";
 import { showToast } from "../lib/notify";
+import { isLoopbackHostname, rewriteToCandidate } from "../lib/phone-url";
 import { currentSubscription, disablePush, enablePush, pushSupported, sendTestPush } from "../lib/push";
 
 interface GatewayItem {
@@ -179,9 +180,110 @@ function PushToggle() {
   );
 }
 
+interface AccessUrls {
+  bind_host: string;
+  port: number;
+  loopback_only: boolean;
+  lan_urls: string[];
+}
+
+function PhoneQrContent() {
+  const onLoopback = isLoopbackHostname(window.location.hostname);
+  const [access, setAccess] = useState<AccessUrls | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [selected, setSelected] = useState(0);
+
+  useEffect(() => {
+    if (!onLoopback) return;
+    apiFetch<AccessUrls>(`/api/system/access-urls`)
+      .then(setAccess)
+      .catch(() => setFailed(true));
+  }, [onLoopback]);
+
+  if (onLoopback && !access && !failed) {
+    return (
+      <div class="text-muted py-4">
+        <span class="spinner-border spinner-border-sm me-1" />
+        Checking how this server is reachable…
+      </div>
+    );
+  }
+
+  if (onLoopback && access?.loopback_only) {
+    return (
+      <>
+        <div class="alert alert-warning text-start small mb-0">
+          <i class="bi bi-exclamation-triangle me-1" />
+          The server only listens on <code>{access.bind_host}</code> — your phone cannot reach
+          it{access.lan_urls.length > 0 && <>, even though this machine is on the network</>}.
+          Restart with <code>--host 0.0.0.0</code> to serve the LAN
+          {access.lan_urls.length > 0 && (
+            <>
+              {" "}
+              (then it will be reachable at <code>{access.lan_urls[0]}</code>)
+            </>
+          )}
+          , or keep the loopback bind and put <code>tailscale serve</code> in front.
+        </div>
+        <PushToggle />
+      </>
+    );
+  }
+
+  // On loopback with LAN candidates, re-host the current page onto one of
+  // them; otherwise the current location already works from the phone.
+  const candidates = onLoopback && access ? access.lan_urls : [];
+  const url =
+    candidates.length > 0
+      ? rewriteToCandidate(window.location.href, candidates[Math.min(selected, candidates.length - 1)])
+      : window.location.href;
+  const stillLoopback = isLoopbackHostname(new URL(url).hostname);
+
+  return (
+    <>
+      <div
+        class="bg-white d-inline-block p-2 rounded"
+        style={{ width: "220px" }}
+        // Self-generated SVG (uqr) from the current location or the
+        // server-reported LAN address — no external content reaches
+        // this sink.
+        dangerouslySetInnerHTML={{ __html: renderSVG(url) }}
+      />
+      <div class="small text-muted font-monospace mt-2">{url}</div>
+      {candidates.length > 1 && (
+        <div class="d-flex justify-content-center gap-1 mt-2">
+          {candidates.map((c, i) => (
+            <button
+              key={c}
+              class={`btn btn-sm ${i === selected ? "btn-secondary" : "btn-outline-secondary"}`}
+              onClick={() => setSelected(i)}
+            >
+              {new URL(c).hostname}
+            </button>
+          ))}
+        </div>
+      )}
+      {stillLoopback ? (
+        <div class="alert alert-warning text-start small mt-2 mb-0">
+          <i class="bi bi-exclamation-triangle me-1" />
+          This is a loopback address — it only works on this machine. Your phone needs a LAN
+          address (<code>--host 0.0.0.0</code>) or a tailnet (<code>tailscale serve</code>).
+        </div>
+      ) : (
+        url.startsWith("http:") && (
+          <div class="small text-muted mt-2">
+            The dashboard works over plain HTTP, but push notifications on the phone need
+            HTTPS — e.g. <code>tailscale serve</code> in front of this server.
+          </div>
+        )
+      )}
+      <PushToggle />
+    </>
+  );
+}
+
 function PhoneAccessButton() {
   const [open, setOpen] = useState(false);
-  const url = window.location.href;
   return (
     <>
       <button
@@ -203,19 +305,7 @@ function PhoneAccessButton() {
           }
         >
           <div class="text-center">
-            <div
-              class="bg-white d-inline-block p-2 rounded"
-              style={{ width: "220px" }}
-              // Self-generated SVG (uqr) from the current location — no
-              // external content reaches this sink.
-              dangerouslySetInnerHTML={{ __html: renderSVG(url) }}
-            />
-            <div class="small text-muted font-monospace mt-2">{url}</div>
-            <div class="small text-muted mt-2">
-              Your phone must reach this address — same network, or better: a
-              tailnet (<code>tailscale serve</code> in front of a loopback bind).
-            </div>
-            <PushToggle />
+            <PhoneQrContent />
           </div>
         </Modal>
       )}

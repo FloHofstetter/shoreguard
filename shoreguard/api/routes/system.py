@@ -73,6 +73,24 @@ async def probe_inference(body: ProbeInferenceRequest) -> dict[str, Any]:
     return await asyncio.to_thread(probe_endpoint, body.base_url)
 
 
+@router.get("/access-urls")
+async def get_access_urls() -> dict[str, Any]:
+    """Return URLs under which other devices can reach this server.
+
+    Backs the "Open on phone" QR dialog: when the operator browses via
+    ``localhost``, the UI swaps in a LAN address from ``lan_urls`` — or
+    warns that the server is bound to loopback only.
+
+    Returns:
+        dict[str, Any]: ``{"bind_host", "port", "loopback_only", "lan_urls"}``.
+    """
+    import asyncio
+
+    from shoreguard.services.access_urls import access_urls
+
+    return await asyncio.to_thread(access_urls)
+
+
 @router.get("/updates")
 async def get_update_status() -> dict[str, Any]:
     """Return update availability and gateway version skew.

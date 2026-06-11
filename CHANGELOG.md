@@ -12,6 +12,15 @@ local-agent deployment a first-class citizen.
 
 ### Fixed
 
+- **"Open on phone" no longer QR-encodes `localhost`** — the dialog
+  blindly encoded the current location, which is unreachable from any
+  other device when browsing via loopback. A new
+  `GET /api/system/access-urls` endpoint reports the actual bind
+  address and the host's LAN addresses; the dialog now re-hosts the QR
+  URL onto a reachable address (with a picker when there are several,
+  e.g. LAN + tailnet), warns explicitly when the server is bound to
+  loopback only (naming the `--host 0.0.0.0` / `tailscale serve`
+  escape hatches), and notes that push on the phone needs HTTPS.
 - **Island modulepreload requests 404ed on every page** — Vite resolved
   code-split chunk URLs against the default base `/`, so browsers
   requested `/islands/….js` instead of `/static/dist/islands/….js`.
