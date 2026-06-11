@@ -37,6 +37,29 @@ async def test_runs_periodically_and_tracks_success():
 
 
 @pytest.mark.asyncio
+async def test_run_at_start_fires_before_first_interval():
+    """run_at_start executes immediately; the default sleeps first."""
+    runs: list[str] = []
+
+    async def eager():
+        runs.append("eager")
+
+    async def lazy():
+        runs.append("lazy")
+
+    sup = TaskSupervisor()
+    sup.start(
+        [
+            PeriodicTask(name="eager", interval=3600, run=eager, run_at_start=True),
+            PeriodicTask(name="lazy", interval=3600, run=lazy),
+        ]
+    )
+    assert await _wait_for(lambda: "eager" in runs)
+    assert "lazy" not in runs  # still sleeping its first hour-long interval
+    await sup.shutdown(timeout=1.0)
+
+
+@pytest.mark.asyncio
 async def test_failure_counts_and_recovery():
     calls = {"n": 0}
 

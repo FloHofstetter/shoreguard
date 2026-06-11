@@ -144,6 +144,9 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
                 name="update_check",
                 interval=settings.updates.interval_hours * 3600,
                 run=_update_check,
+                # Sleep-first would push the first check past any
+                # realistic homelab uptime (interval is 24h).
+                run_at_start=True,
             )
         )
     if settings.backup.enabled:

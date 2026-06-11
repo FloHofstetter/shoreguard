@@ -12,6 +12,11 @@ local-agent deployment a first-class citizen.
 
 ### Fixed
 
+- **The update check now runs once at startup** — periodic tasks sleep a
+  full interval before their first run, so the 24-hour update check
+  never produced a result within any realistic homelab uptime and the
+  dashboard banner could not appear. `PeriodicTask` gained a
+  `run_at_start` flag; only the update check sets it.
 - **Startup crash on restart after running post-baseline migrations** —
   the v2-baseline stamp check rejected every `alembic_version` other
   than the v0.37 head and the baseline itself, so a persistent database

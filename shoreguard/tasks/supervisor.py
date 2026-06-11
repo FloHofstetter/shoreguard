@@ -32,6 +32,10 @@ class PeriodicTask:
             to ``interval * 8`` when not set.
         backoff_threshold: Consecutive failures after which the interval
             starts doubling.
+        run_at_start: Run once immediately instead of sleeping a full
+            interval first. For long intervals (update check: 24h) the
+            sleep-first default would delay the first result past any
+            realistic homelab uptime.
         effective_max_interval: Resolved backoff ceiling (property).
     """
 
@@ -40,6 +44,7 @@ class PeriodicTask:
     run: Callable[[], Awaitable[None]]
     max_interval: float | None = None
     backoff_threshold: int = 3
+    run_at_start: bool = False
 
     @property
     def effective_max_interval(self) -> float:
@@ -105,8 +110,12 @@ class TaskSupervisor:
             spec: The task to run.
         """
         interval = spec.interval
+        first = spec.run_at_start
         while True:
-            await asyncio.sleep(interval)
+            if first:
+                first = False
+            else:
+                await asyncio.sleep(interval)
             state = self._states[spec.name]
             try:
                 await spec.run()
