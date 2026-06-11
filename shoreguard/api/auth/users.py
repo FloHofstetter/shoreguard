@@ -346,20 +346,72 @@ async def delete_user(user_id: int) -> bool:
             raise
 
 
+BOOTSTRAP_ADMIN_EMAIL = "admin@localhost"
+
+
 async def bootstrap_admin_user() -> None:
     """Seed the first admin user from env var if the users table is empty.
+
+    In single-user mode (``SHOREGUARD_SINGLE_USER=true`` / ``--single-user``)
+    the configured admin password is authoritative on *every* startup: when
+    the bootstrap admin already exists with a different password, the stored
+    hash is updated to match. This makes ``SHOREGUARD_ADMIN_PASSWORD`` the
+    single credential a homelab operator manages — no CLI surgery needed to
+    rotate it.
 
     Raises:
         Exception: If user creation fails (re-raised after logging).
     """
-    password = _get_auth_settings().admin_password
+    auth_settings = _get_auth_settings()
+    password = auth_settings.admin_password
     if not password or state.session_factory is None:
         return
-    if await is_setup_complete():
+    if not await is_setup_complete():
+        try:
+            await create_user(BOOTSTRAP_ADMIN_EMAIL, password, "admin")
+            logger.info("Bootstrap admin user created (%s)", BOOTSTRAP_ADMIN_EMAIL)
+        except Exception:
+            logger.exception("Failed to bootstrap admin user")
+            raise
         return
-    try:
-        await create_user("admin@localhost", password, "admin")
-        logger.info("Bootstrap admin user created (admin@localhost)")
-    except Exception:
-        logger.exception("Failed to bootstrap admin user")
-        raise
+    if auth_settings.single_user:
+        await _sync_single_user_password(password)
+
+
+async def _sync_single_user_password(password: str) -> None:
+    """Update the bootstrap admin's password hash if it no longer matches.
+
+    Only called in single-user mode. Other accounts are left untouched, so
+    flipping single-user mode on in an existing multi-user deployment never
+    rewrites anyone's credentials except ``admin@localhost``.
+
+    Args:
+        password: The configured plaintext admin password.
+    """
+    if state.session_factory is None:  # pragma: no cover — guarded by caller
+        return
+    from shoreguard.api.auth.core import verify_password
+    from shoreguard.models import User
+
+    async with state.session_factory() as session:
+        try:
+            user = (
+                (await session.execute(select(User).where(User.email == BOOTSTRAP_ADMIN_EMAIL)))
+                .scalars()
+                .first()
+            )
+            if user is None:
+                logger.warning(
+                    "Single-user mode: bootstrap admin %s not found — leaving "
+                    "existing users untouched",
+                    BOOTSTRAP_ADMIN_EMAIL,
+                )
+                return
+            if user.hashed_password and verify_password(password, user.hashed_password):
+                return
+            user.hashed_password = hash_password(password)
+            await session.commit()
+            logger.info("Single-user mode: admin password synced from configuration")
+        except SQLAlchemyError:
+            await session.rollback()
+            logger.exception("Single-user mode: failed to sync admin password")

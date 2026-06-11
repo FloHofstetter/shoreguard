@@ -100,20 +100,27 @@ need a human decision — see [Webhooks](../guides/webhooks.md#ntfy-channel-push
 
 ## Optional: light auth on a headless box
 
-`--no-auth` is fine for a personal box. If you reach the machine only over SSH
-but still want a login, bootstrap the first admin **without** the browser setup
-wizard, in either of two ways:
+`--no-auth` is fine for a personal box that never leaves loopback. The moment
+the UI is reachable from anywhere else (LAN, tailnet), use **single-user
+mode** — one admin account, one password, no user management:
 
 ```bash
-# Env-var bootstrap: seeds admin@localhost on first start when no users exist
-SHOREGUARD_ADMIN_PASSWORD='choose-a-strong-one' shoreguard --local
-
-# …or create a user explicitly from the CLI
-shoreguard create-user you@example.com --role admin
+shoreguard --local --single-user
+# prompts for the admin password on a terminal; non-interactively:
+SHOREGUARD_ADMIN_PASSWORD='choose-a-strong-one' shoreguard --local --single-user
 ```
 
-Then start without `--no-auth` and log in. (With `--no-auth` these are moot —
-there is no login.)
+This logs you in as `admin@localhost`. The configured password is
+authoritative on every start: change `SHOREGUARD_ADMIN_PASSWORD` and restart
+to rotate it — no CLI surgery. Skip `--single-user` later when the box grows
+into a team and you want invites, roles, and groups (the full
+[RBAC setup](../admin/rbac.md)); the same account keeps working.
+
+Alternatively, bootstrap a named account once and manage users normally:
+
+```bash
+shoreguard create-user you@example.com --role admin
+```
 
 ## Where to go next
 

@@ -122,6 +122,29 @@ def main(
             rich_help_panel="Development",
         ),
     ] = False,
+    single_user: Annotated[
+        bool,
+        typer.Option(
+            "--single-user/--no-single-user",
+            envvar="SHOREGUARD_SINGLE_USER",
+            help="Single-user mode: authentication with exactly one admin account "
+            "(admin@localhost) whose password comes from --admin-password / "
+            "SHOREGUARD_ADMIN_PASSWORD and is kept in sync on every start. "
+            "The homelab middle ground between --no-auth and full RBAC.",
+            rich_help_panel="Server",
+        ),
+    ] = False,
+    admin_password: Annotated[
+        str | None,
+        typer.Option(
+            "--admin-password",
+            envvar="SHOREGUARD_ADMIN_PASSWORD",
+            help="Bootstrap admin password (created on first start; in "
+            "--single-user mode also re-synced on every start). Prompted "
+            "interactively when --single-user is set without a value.",
+            rich_help_panel="Server",
+        ),
+    ] = None,
     database_url: Annotated[
         str | None,
         typer.Option(
@@ -152,12 +175,16 @@ def main(
         local: Enable local mode with Docker lifecycle management.
         no_auth: Disable authentication entirely.
         unsafe_lan: Allow no_auth on a non-loopback bind address.
+        single_user: Single-user mode with one synced admin account.
+        admin_password: Bootstrap admin password (required by single-user mode).
         database_url: SQLAlchemy database URL override.
         version: Print version and exit (handled by callback).
 
     Raises:
         typer.BadParameter: If ``--no-auth`` is combined with an explicit
-            non-loopback ``--host`` without ``--unsafe-lan``.
+            non-loopback ``--host`` without ``--unsafe-lan``, if
+            ``--single-user`` is combined with ``--no-auth``, or if
+            ``--single-user`` has no admin password and stdin is not a TTY.
     """
     # If a subcommand (e.g. `shoreguard config show`) was invoked, the
     # callback still runs — but we must not start the server.
@@ -186,6 +213,32 @@ def main(
                 param_hint="--host",
             )
 
+    # Single-user mode is authentication — it cannot coexist with --no-auth,
+    # and it needs a password (interactively prompted as a fallback so
+    # `shoreguard --single-user` just works on a terminal).
+    if single_user:
+        if no_auth:
+            raise typer.BadParameter(
+                "--single-user and --no-auth contradict each other: single-user "
+                "mode IS authentication (one admin account). Drop one of the flags.",
+                param_hint="--single-user",
+            )
+        if not admin_password:
+            import sys
+
+            if sys.stdin.isatty():
+                admin_password = typer.prompt(
+                    "Admin password (account: admin@localhost)",
+                    hide_input=True,
+                    confirmation_prompt=True,
+                )
+            else:
+                raise typer.BadParameter(
+                    "--single-user needs an admin password: pass --admin-password "
+                    "or set SHOREGUARD_ADMIN_PASSWORD.",
+                    param_hint="--admin-password",
+                )
+
     # Push CLI-resolved values into the Settings singleton so the rest of
     # the application (lifespan, services, routes) reads from one place.
     settings = get_settings()
@@ -203,7 +256,13 @@ def main(
                         "database_url": database_url or settings.server.database_url,
                     },
                 ),
-                "auth": settings.auth.model_copy(update={"no_auth": no_auth}),
+                "auth": settings.auth.model_copy(
+                    update={
+                        "no_auth": no_auth,
+                        "single_user": single_user,
+                        "admin_password": admin_password or settings.auth.admin_password,
+                    },
+                ),
             },
         ),
     )
@@ -220,6 +279,9 @@ def main(
     os.environ["SHOREGUARD_LOCAL_MODE"] = "true" if local else "false"
     os.environ["SHOREGUARD_NO_AUTH"] = "true" if no_auth else "false"
     os.environ["SHOREGUARD_UNSAFE_LAN"] = "true" if unsafe_lan else "false"
+    os.environ["SHOREGUARD_SINGLE_USER"] = "true" if single_user else "false"
+    if admin_password:
+        os.environ["SHOREGUARD_ADMIN_PASSWORD"] = admin_password
     if database_url:
         os.environ["SHOREGUARD_DATABASE_URL"] = database_url
 

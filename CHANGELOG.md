@@ -12,6 +12,12 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Single-user mode** (`--single-user` / `SHOREGUARD_SINGLE_USER`) — the
+  homelab middle ground between `--no-auth` and full RBAC: authentication
+  with exactly one admin account (`admin@localhost`) whose password comes
+  from `--admin-password` / `SHOREGUARD_ADMIN_PASSWORD` (interactive prompt
+  on a TTY) and is re-synced on every start, so rotating it is just changing
+  the env var. Refuses to combine with `--no-auth`.
 - **arm64 / DGX Spark packaging** — CI now runs the unit suite natively on
   an arm64 runner (every GB10 device is aarch64); new
   `deploy/docker-compose.homelab.yml` (one container, SQLite, loopback-only

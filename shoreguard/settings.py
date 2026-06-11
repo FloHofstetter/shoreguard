@@ -247,6 +247,8 @@ class AuthSettings(BaseSettings):
     Attributes:
         model_config (SettingsConfigDict): Pydantic settings configuration.
         no_auth (bool): Disable authentication entirely (development only).
+        single_user (bool): Single-user mode — one admin account synced from
+            SHOREGUARD_ADMIN_PASSWORD on every startup.
         secret_key (str | None): HMAC secret for sessions and signed cookies. Unset falls back
             to on-disk .secret_key — set explicitly for multi-replica.
         allow_registration (bool): Allow unauthenticated self-signup via /register.
@@ -284,6 +286,12 @@ class AuthSettings(BaseSettings):
     no_auth: bool = Field(
         default=False,
         description="Disable authentication entirely (development only)",
+    )
+    single_user: bool = Field(
+        default=False,
+        description="Single-user mode: one admin account whose password is "
+        "SHOREGUARD_ADMIN_PASSWORD, kept in sync on every startup. The "
+        "homelab middle ground between --no-auth and full RBAC.",
     )
     secret_key: str | None = Field(
         default=None,

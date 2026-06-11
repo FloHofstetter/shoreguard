@@ -1022,6 +1022,56 @@ class TestBootstrapAdmin:
         # admin@localhost was not created
         assert await authenticate_user("admin@localhost", "otherpass") is None
 
+    async def test_single_user_syncs_changed_password(self, monkeypatch):
+        """Single-user mode treats SHOREGUARD_ADMIN_PASSWORD as authoritative."""
+        from shoreguard.api.auth import bootstrap_admin_user
+        from shoreguard.settings import reset_settings
+
+        await create_user("admin@localhost", "oldpass", "admin")
+        monkeypatch.setenv("SHOREGUARD_ADMIN_PASSWORD", "rotatedpass")
+        monkeypatch.setenv("SHOREGUARD_SINGLE_USER", "true")
+        reset_settings()
+        await bootstrap_admin_user()
+        assert await authenticate_user("admin@localhost", "rotatedpass") is not None
+        assert await authenticate_user("admin@localhost", "oldpass") is None
+
+    async def test_single_user_same_password_noop(self, monkeypatch):
+        from shoreguard.api.auth import bootstrap_admin_user
+        from shoreguard.settings import reset_settings
+
+        await create_user("admin@localhost", "samepass", "admin")
+        monkeypatch.setenv("SHOREGUARD_ADMIN_PASSWORD", "samepass")
+        monkeypatch.setenv("SHOREGUARD_SINGLE_USER", "true")
+        reset_settings()
+        await bootstrap_admin_user()
+        assert await authenticate_user("admin@localhost", "samepass") is not None
+
+    async def test_single_user_leaves_other_accounts_alone(self, monkeypatch):
+        """Without an admin@localhost account, single-user sync touches nothing."""
+        from shoreguard.api.auth import bootstrap_admin_user
+        from shoreguard.settings import reset_settings
+
+        await create_user("existing@x.com", "keepme", "admin")
+        monkeypatch.setenv("SHOREGUARD_ADMIN_PASSWORD", "newpass")
+        monkeypatch.setenv("SHOREGUARD_SINGLE_USER", "true")
+        reset_settings()
+        await bootstrap_admin_user()
+        assert await authenticate_user("existing@x.com", "keepme") is not None
+        assert await authenticate_user("admin@localhost", "newpass") is None
+
+    async def test_without_single_user_no_sync(self, monkeypatch):
+        """Outside single-user mode an existing admin password is never rewritten."""
+        from shoreguard.api.auth import bootstrap_admin_user
+        from shoreguard.settings import reset_settings
+
+        await create_user("admin@localhost", "oldpass", "admin")
+        monkeypatch.setenv("SHOREGUARD_ADMIN_PASSWORD", "rotatedpass")
+        monkeypatch.delenv("SHOREGUARD_SINGLE_USER", raising=False)
+        reset_settings()
+        await bootstrap_admin_user()
+        assert await authenticate_user("admin@localhost", "oldpass") is not None
+        assert await authenticate_user("admin@localhost", "rotatedpass") is None
+
 
 # ─── Gateway-scoped role override in require_role ────────────────────────
 
