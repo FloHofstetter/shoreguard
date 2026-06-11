@@ -38,6 +38,12 @@ const ISLANDS: Record<string, IslandLoader> = {
   "sandbox-prover": () => import("./islands/sandbox-prover"),
   "sandbox-hooks": () => import("./islands/sandbox-hooks"),
   "sandbox-forward": () => import("./islands/sandbox-forward"),
+  "gateways-page": () => import("./islands/gateways"),
+  "gateway-detail": () => import("./islands/gateway-detail"),
+  "gateway-register": () => import("./islands/gateway-register"),
+  "providers-page": () => import("./islands/providers"),
+  "provider-form": () => import("./islands/providers").then((m) => ({ default: m.ProviderForm })),
+  "wizard-page": () => import("./islands/wizard"),
 };
 
 async function mountIslands(): Promise<void> {

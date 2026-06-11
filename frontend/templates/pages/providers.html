@@ -10,25 +10,9 @@
 {% endblock %}
 
 {% block content %}
-<div x-data="providersPage">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="mb-0">Providers</h5>
-        <div class="btn-group btn-group-sm">
-            <button class="btn btn-outline-secondary" @click="refresh()" title="Refresh">
-                <i class="bi bi-arrow-clockwise"></i>
-            </button>
-            <a class="btn btn-outline-success" href="/gateways/{{ gateway_name }}/providers/new" data-sg-min-role="operator">
-                <i class="bi bi-plus-lg me-1"></i>New
-            </a>
-        </div>
+<div data-island="providers-page">
+    <div class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading...
     </div>
-    <div id="local-inference-hint"></div>
-    <div id="providers-page-content"></div>
 </div>
-{% endblock %}
-
-
-{% block extra_js %}
-<script src="/static/js/providers.js"></script>
-<script src="/static/js/provider_refresh.js"></script>
 {% endblock %}
