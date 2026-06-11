@@ -534,6 +534,45 @@ async def audit_page(request: Request) -> TemplateResponse | RedirectResponse | 
     )
 
 
+@router.get("/approvals/one-tap", response_model=None)
+async def one_tap_page(request: Request, token: str = "") -> TemplateResponse | HTMLResponse:
+    """Mobile confirmation page for a one-tap approval link.
+
+    The signed token in the query string is the credential — no session is
+    required. The page only *shows* the decision; casting it is a POST to
+    ``/api/approvals/one-tap`` from the island.
+
+    Args:
+        request: Incoming HTTP request.
+        token: Signed one-tap token from the notification link.
+
+    Returns:
+        TemplateResponse | HTMLResponse: Confirmation page, or an error page
+            when the feature is disabled or the token is invalid.
+    """
+    from shoreguard.services.approval_links import verify_one_tap_token
+    from shoreguard.settings import get_settings
+
+    if not get_settings().webhooks.one_tap_approvals:
+        return _render_error(
+            request, 404, "Not Found", "One-tap approvals are disabled.", icon="link-45deg"
+        )
+    data = verify_one_tap_token(token)
+    if data is None:
+        return _render_error(
+            request,
+            400,
+            "Invalid Link",
+            "This approval link is invalid or has expired. Open ShoreGuard to vote.",
+            icon="link-45deg",
+        )
+    return templates.TemplateResponse(
+        request,
+        "pages/one_tap.html",
+        {"props": {**data, "token": token}},
+    )
+
+
 @router.get("/security", response_model=None)
 async def security_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
     """Security posture self-check page (admin only).

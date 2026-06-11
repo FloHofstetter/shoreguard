@@ -92,6 +92,7 @@ shoreguard = "shoreguard.cli:cli"
 "frontend/vendor" = "shoreguard/_frontend/vendor"
 "frontend/dist" = "shoreguard/_frontend/dist"
 "frontend/favicon.svg" = "shoreguard/_frontend/favicon.svg"
+"frontend/manifest.webmanifest" = "shoreguard/_frontend/manifest.webmanifest"
 
 [tool.hatch.build.targets.sdist]
 include = ["shoreguard", "frontend", "LICENSE", "README.md"]

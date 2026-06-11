@@ -1,0 +1,17 @@
+{
+  "name": "ShoreGuard",
+  "short_name": "ShoreGuard",
+  "description": "Control plane for NVIDIA OpenShell agent sandboxes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111418",
+  "theme_color": "#76b900",
+  "icons": [
+    {
+      "src": "/static/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -42,6 +42,7 @@ Each webhook has a `channel_type` that controls payload formatting and delivery:
 | `discord` | HTTP POST to Discord webhook URL | Discord embed with color-coded fields |
 | `email` | SMTP delivery | Plain-text email |
 | `ntfy` | HTTP POST to an [ntfy](https://ntfy.sh) server | ntfy JSON publish with title, priority, and tags |
+| `telegram` | HTTP POST to the Telegram Bot API | `sendMessage` with HTML text and inline buttons |
 
 ### ntfy channel (push notifications)
 
@@ -65,6 +66,47 @@ agent run can ping your phone the moment it needs a human decision.
 A self-hosted ntfy on a LAN address is blocked by SSRF protection by default —
 exempt it via `SHOREGUARD_SSRF_ALLOWED_IPS` (see
 [SSRF protection](../concepts/security.md#ssrf-protection)).
+
+### Telegram channel
+
+Create a bot via [@BotFather](https://t.me/BotFather), find your chat id
+(e.g. via @userinfobot), and register the `sendMessage` endpoint including
+the chat id as a query parameter:
+
+```json
+{
+  "url": "https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>",
+  "channel_type": "telegram",
+  "event_types": ["approval.pending", "approval.escalated", "gateway.unreachable"]
+}
+```
+
+Messages arrive as HTML-formatted Telegram messages; approval events carry
+inline **Approve ✓ / Reject ✗** buttons when one-tap links are enabled.
+
+### One-tap approve/reject from your phone
+
+With these two settings, `approval.pending` / `approval.escalated`
+notifications carry **signed action links** that cast the vote from a
+minimal mobile confirmation page — no login round-trip:
+
+```bash
+SHOREGUARD_PUBLIC_URL=https://spark.tail1234.ts.net   # your reachable base URL
+SHOREGUARD_WEBHOOK_ONE_TAP_APPROVALS=true
+```
+
+On ntfy they appear as notification action buttons, on Telegram as inline
+keyboard buttons. Links are HMAC-signed, encode exactly one
+`(gateway, sandbox, chunk, decision)` vote, and expire after
+`SHOREGUARD_WEBHOOK_ONE_TAP_TTL` seconds (default 1 hour).
+
+!!! warning "Capability semantics"
+    Anyone holding such a link can cast that one vote until it expires —
+    the notification channel becomes part of the trust boundary. Use
+    private channels (your own ntfy topic with an access token, a direct
+    Telegram chat), keep the TTL short, and leave the feature off if the
+    channel is shared. Votes cast this way are audit-logged with actor
+    `one-tap-link`.
 
 ### Email channel
 

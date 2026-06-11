@@ -67,6 +67,8 @@ class ServerSettings(BaseSettings):
         model_config (SettingsConfigDict): Pydantic settings configuration.
         host (str): Bind address for the HTTP server.
         port (int): TCP port for the HTTP server.
+        public_url (str | None): Externally reachable base URL used to build
+            absolute links in notifications (one-tap approvals).
         log_level (str): Log level: critical|error|warning|info|debug|trace.
         log_format (str): Log output format — 'text' for humans, 'json' for aggregators.
         reload (bool): Auto-reload on code changes (dev only).
@@ -98,6 +100,12 @@ class ServerSettings(BaseSettings):
         description="Bind address for the HTTP server",
     )
     port: int = Field(default=8888, description="TCP port for the HTTP server")
+    public_url: str | None = Field(
+        default=None,
+        description="Externally reachable base URL of this ShoreGuard "
+        "(e.g. https://spark.tail1234.ts.net). Used to build absolute links "
+        "in notifications; required for one-tap approval links.",
+    )
     log_level: str = Field(
         default="info",
         description="Log level: critical|error|warning|info|debug|trace",
@@ -627,6 +635,9 @@ class WebhookSettings(BaseSettings):
         delivery_timeout (float): HTTP request timeout for webhook delivery in seconds.
         retry_delays (list[int]): Retry delays in seconds between failed delivery attempts.
         delivery_max_age_days (int): Days to retain webhook delivery records before cleanup.
+        one_tap_approvals (bool): Attach signed one-tap approve/reject links to
+            approval webhook events (requires SHOREGUARD_PUBLIC_URL).
+        one_tap_ttl (int): Validity window of one-tap links in seconds.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_WEBHOOK_")
@@ -641,6 +652,17 @@ class WebhookSettings(BaseSettings):
     delivery_max_age_days: int = Field(
         default=7,
         description="Days to retain webhook delivery records before cleanup",
+    )
+    one_tap_approvals: bool = Field(
+        default=False,
+        description="Attach signed one-tap approve/reject links to approval "
+        "webhook events. Anyone holding such a link can cast that one vote "
+        "until it expires — treat notification channels accordingly. "
+        "Requires SHOREGUARD_PUBLIC_URL.",
+    )
+    one_tap_ttl: int = Field(
+        default=3600,
+        description="Validity window of one-tap approval links in seconds",
     )
 
 

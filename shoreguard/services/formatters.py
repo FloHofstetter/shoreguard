@@ -1,11 +1,11 @@
 """Channel-specific payload formatters for webhook notifications.
 
-Each supported channel (Slack, Discord, Email, ntfy, generic JSON)
-expects a different payload shape. Rather than branch inside the
+Each supported channel (Slack, Discord, Email, ntfy, Telegram, generic
+JSON) expects a different payload shape. Rather than branch inside the
 delivery pipeline, these formatters take a uniform
 ``(event, resource)`` input and produce the channel-appropriate
 body: Slack Block Kit, Discord embed fields, plain-text email,
-an ntfy JSON publish, or signed generic JSON.
+an ntfy JSON publish, a Telegram sendMessage, or signed generic JSON.
 
 Pure functions with no I/O so the delivery pipeline in
 :mod:`shoreguard.services.webhooks` can render and sign a
@@ -204,6 +204,10 @@ def format_ntfy(event_type: str, payload: dict[str, Any], timestamp: str) -> str
     topic URL by :func:`prepare_ntfy_request` so this formatter stays a pure
     function of the event.
 
+    When the payload carries one-tap links (``approve_url`` /
+    ``reject_url``), they become tappable action buttons on the
+    notification; a ``page_url`` becomes the notification's click target.
+
     Args:
         event_type: Machine-readable event type.
         payload: Event data payload.
@@ -224,6 +228,15 @@ def format_ntfy(event_type: str, payload: dict[str, Any], timestamp: str) -> str
     tag = _NTFY_TAGS.get(event_type)
     if tag:
         message["tags"] = [tag]
+    if payload.get("page_url"):
+        message["click"] = payload["page_url"]
+    actions = []
+    if payload.get("approve_url"):
+        actions.append({"action": "view", "label": "Approve ✓", "url": payload["approve_url"]})
+    if payload.get("reject_url"):
+        actions.append({"action": "view", "label": "Reject ✗", "url": payload["reject_url"]})
+    if actions:
+        message["actions"] = actions
     return json.dumps(message)
 
 
@@ -251,6 +264,70 @@ def prepare_ntfy_request(url: str, body: str) -> tuple[str, str]:
     return root, json.dumps(data)
 
 
+def format_telegram(event_type: str, payload: dict[str, Any], timestamp: str) -> str:
+    """Format a Telegram Bot API ``sendMessage`` body (chat injected later).
+
+    The ``chat_id`` is left empty here — it is parsed from the webhook URL's
+    ``chat_id`` query parameter by :func:`prepare_telegram_request`. One-tap
+    links become inline keyboard URL buttons.
+
+    Args:
+        event_type: Machine-readable event type.
+        payload: Event data payload.
+        timestamp: ISO-8601 timestamp string.
+
+    Returns:
+        str: JSON-encoded Telegram sendMessage body.
+    """
+    label = _event_label(event_type)
+    lines = [f"<b>ShoreGuard — {label}</b>"]
+    for key, value in _payload_fields(payload):
+        lines.append(f"{key}: {value}")
+    lines.append(f"at {timestamp}")
+    message: dict[str, Any] = {
+        "chat_id": "",
+        "text": "\n".join(lines),
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+    buttons = []
+    if payload.get("approve_url"):
+        buttons.append({"text": "Approve ✓", "url": payload["approve_url"]})
+    if payload.get("reject_url"):
+        buttons.append({"text": "Reject ✗", "url": payload["reject_url"]})
+    if not buttons and payload.get("page_url"):
+        buttons.append({"text": "Open ShoreGuard", "url": payload["page_url"]})
+    if buttons:
+        message["reply_markup"] = {"inline_keyboard": [buttons]}
+    return json.dumps(message)
+
+
+def prepare_telegram_request(url: str, body: str) -> tuple[str, str]:
+    """Split a Telegram webhook URL into the API endpoint and a body with chat set.
+
+    Operators register the URL as
+    ``https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT>``;
+    the chat id moves from the query string into the JSON body, keeping
+    :func:`format_telegram` a pure function of the event.
+
+    Args:
+        url: The webhook's registered URL (with ``chat_id`` query parameter).
+        body: JSON body produced by :func:`format_telegram`.
+
+    Returns:
+        tuple[str, str]: ``(post_url, body)`` — the bare sendMessage endpoint
+            and the body with ``chat_id`` filled in.
+    """
+    from urllib.parse import parse_qs
+
+    parsed = urlsplit(url)
+    chat_id = (parse_qs(parsed.query).get("chat_id") or [""])[0]
+    post_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+    data = json.loads(body)
+    data["chat_id"] = chat_id
+    return post_url, json.dumps(data)
+
+
 def format_email_body(event_type: str, payload: dict[str, Any], timestamp: str) -> str:
     """Format a plain-text email body.
 
@@ -275,4 +352,5 @@ FORMATTERS: dict[str, Any] = {
     "discord": format_discord,
     "email": format_email_body,
     "ntfy": format_ntfy,
+    "telegram": format_telegram,
 }

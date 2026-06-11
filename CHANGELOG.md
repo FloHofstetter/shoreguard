@@ -12,6 +12,13 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Phone-first approvals** — new `telegram` webhook channel (Bot API
+  `sendMessage` with inline buttons); opt-in **one-tap approve/reject
+  links** (`SHOREGUARD_WEBHOOK_ONE_TAP_APPROVALS` + `SHOREGUARD_PUBLIC_URL`):
+  approval notifications carry signed, expiring action links that cast a
+  single vote from a mobile confirmation page (ntfy action buttons /
+  Telegram inline keyboard); PWA manifest so the dashboard installs to a
+  phone home screen.
 - **Tailscale-first remote access** — new operations guide for
   `tailscale serve` in front of a loopback bind; opt-in authentication via
   Tailscale Serve identity headers (`SHOREGUARD_TAILSCALE_IDENTITY`,

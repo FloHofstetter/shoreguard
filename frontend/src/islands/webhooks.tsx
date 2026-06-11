@@ -28,7 +28,7 @@ interface Delivery {
   error_message?: string;
 }
 
-const CHANNELS = ["generic", "slack", "discord", "email", "ntfy"];
+const CHANNELS = ["generic", "slack", "discord", "email", "ntfy", "telegram"];
 
 function formatDateTime(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleString() : "—";
@@ -496,6 +496,17 @@ export default function WebhooksPage() {
                         pushes.
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+              {newChannel === "telegram" && (
+                <div class="col-12">
+                  <div class="form-text small">
+                    Target URL is your bot's sendMessage endpoint including the chat id, e.g.{" "}
+                    <code>
+                      https://api.telegram.org/bot&lt;TOKEN&gt;/sendMessage?chat_id=&lt;CHAT&gt;
+                    </code>
+                    . Create a bot via @BotFather; @userinfobot tells you the chat id.
                   </div>
                 </div>
               )}

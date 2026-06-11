@@ -36,7 +36,12 @@ if TYPE_CHECKING:
     from shoreguard.settings import WebhookSettings
 
 from shoreguard.models import Webhook, WebhookDelivery
-from shoreguard.services.formatters import FORMATTERS, prepare_ntfy_request
+from shoreguard.services.approval_links import enrich_approval_payload
+from shoreguard.services.formatters import (
+    FORMATTERS,
+    prepare_ntfy_request,
+    prepare_telegram_request,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +272,7 @@ class WebhookService:
         if not targets:
             return
 
+        payload = enrich_approval_payload(event_type, payload)
         timestamp = datetime.datetime.now(datetime.UTC).isoformat()
         payload_json = json.dumps(payload, default=str)
 
@@ -303,6 +309,7 @@ class WebhookService:
         if target is None:
             return False
 
+        payload = enrich_approval_payload(event_type, payload)
         timestamp = datetime.datetime.now(datetime.UTC).isoformat()
         payload_json = json.dumps(payload, default=str)
         delivery_id = await self._create_delivery(target.webhook_id, event_type, payload_json)
@@ -488,6 +495,10 @@ class WebhookService:
             token = self._extra_config_value(target, "token")
             if token:
                 headers["Authorization"] = f"Bearer {token}"
+        elif target.channel_type == "telegram":
+            # The chat id rides in the registered URL's query string and
+            # moves into the sendMessage body at delivery time.
+            post_url, body = prepare_telegram_request(target.url, body)
 
         wh_cfg = _webhook_settings()
         retry_delays = wh_cfg.retry_delays

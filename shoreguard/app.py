@@ -238,6 +238,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         gateway,
         health,
         inference,
+        one_tap,
         operations,
         policies,
         prover,
@@ -368,6 +369,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ── Auth + user management APIs (self-guarded routes) ────────────────
     app.include_router(auth_routes.router)
     app.include_router(user_routes.router)
+    # One-tap approval votes: the signed token IS the credential, so the
+    # route mounts without the session-auth dependency (and 404s unless
+    # the feature is explicitly enabled).
+    app.include_router(one_tap.router, tags=["approvals"])
 
     # ── WebSocket, pages, and static files ───────────────────────────────
     app.include_router(ws_router)
