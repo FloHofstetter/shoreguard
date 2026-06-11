@@ -225,6 +225,43 @@ def _hash_key(key: str) -> str:
 # ─── Session cookie helpers ─────────────────────────────────────────────────
 
 
+def _sign_token(nonce: str, expiry: int, user_id: int, role: str) -> str:
+    """Assemble and HMAC-sign a session token from its parts.
+
+    Args:
+        nonce: Random per-session nonce (also the session id material).
+        expiry: Absolute expiry as a unix timestamp.
+        user_id: Database ID of the authenticated user.
+        role: The user's role.
+
+    Returns:
+        str: Signed token ``<nonce>.<expiry>.<user_id>.<role>.<signature>``.
+    """
+    payload = f"{nonce}.{expiry}.{user_id}.{role}"
+    sig = hmac.new(state.hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def mint_session(user_id: int, role: str, max_age: int | None = None) -> tuple[str, str, int]:
+    """Mint a session token and expose its nonce and expiry.
+
+    Used by session tracking, which needs the nonce to record the
+    session in the revocation ledger.
+
+    Args:
+        user_id: Database ID of the authenticated user.
+        role: The user's current role.
+        max_age: Token lifetime in seconds (defaults to ``session_max_age``).
+
+    Returns:
+        tuple[str, str, int]: ``(token, nonce, expiry_epoch)``.
+    """
+    nonce = secrets.token_urlsafe(24)
+    ttl = max_age if max_age is not None else _get_auth_settings().session_max_age
+    expiry = int(time.time()) + ttl
+    return _sign_token(nonce, expiry, user_id, role), nonce, expiry
+
+
 def create_session_token(user_id: int, role: str, max_age: int | None = None) -> str:
     """Create an HMAC-signed session token.
 
@@ -240,12 +277,20 @@ def create_session_token(user_id: int, role: str, max_age: int | None = None) ->
     Returns:
         str: Signed session token string.
     """
-    nonce = secrets.token_urlsafe(24)
-    ttl = max_age if max_age is not None else _get_auth_settings().session_max_age
-    expiry = str(int(time.time()) + ttl)
-    payload = f"{nonce}.{expiry}.{user_id}.{role}"
-    sig = hmac.new(state.hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{sig}"
+    return mint_session(user_id, role, max_age)[0]
+
+
+def session_nonce(token: str) -> str | None:
+    """Return the nonce of a session token without verifying it.
+
+    Args:
+        token: A session cookie value.
+
+    Returns:
+        str | None: The leading nonce, or ``None`` if the token is malformed.
+    """
+    parts = token.split(".")
+    return parts[0] if len(parts) == 5 and parts[0] else None
 
 
 def verify_session_token(token: str) -> tuple[int, str] | None:
@@ -552,8 +597,23 @@ async def check_request_auth(request: Request) -> str | None:
             user_id, _token_role = result
             user_info = await _lookup_user(user_id)
             if user_info:
+                # Session tracking: reject a cookie whose session has been
+                # revoked (logged out from another device). Unrecorded
+                # sessions pass — the ledger is a revocation list, not an
+                # allowlist, so pre-tracking cookies keep working.
+                nonce = None
+                if _get_auth_settings().session_tracking:
+                    from shoreguard.api.auth import user_sessions
+
+                    nonce = session_nonce(cookie)
+                    if nonce and await user_sessions.is_revoked(nonce):
+                        logger.info("Rejected revoked session for user=%s", user_info["email"])
+                        return None
+                    if nonce:
+                        await user_sessions.touch(nonce)
                 request.state.user_id = user_info["email"]
                 request.state.user_db_id = user_info["id"]
+                request.state.session_nonce = nonce
                 logger.debug(
                     "Auth via session cookie (path=%s, role=%s, user=%s)",
                     request.url.path,

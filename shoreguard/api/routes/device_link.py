@@ -28,7 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from shoreguard.api.auth import COOKIE_NAME, create_session_token, require_auth
+from shoreguard.api.auth import COOKIE_NAME, require_auth, user_sessions
 from shoreguard.api.auth import device_link as dl
 from shoreguard.api.ratelimit import get_limiter
 from shoreguard.api.validation import client_ip
@@ -276,7 +276,9 @@ async def redeem(request: Request, body: RedeemRequest) -> JSONResponse:
     from shoreguard.settings import get_settings
 
     max_age = get_settings().auth.device_link_session_max_age
-    token = create_session_token(user_id=mint["user_id"], role=mint["role"], max_age=max_age)
+    token = await user_sessions.create_tracked_session(
+        request, mint["user_id"], mint["role"], kind="device-link", max_age=max_age
+    )
     response = JSONResponse(content={"status": "approved", "email": email, "role": mint["role"]})
     response.set_cookie(
         COOKIE_NAME,

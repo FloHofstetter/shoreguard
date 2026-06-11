@@ -4176,6 +4176,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sessions
+         * @description List the current user's active sessions (devices).
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"sessions": [...]}`` newest first, with the
+         *         requesting session flagged ``current``.
+         */
+        get: operations["list_sessions_api_auth_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/sessions/{session_pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Session
+         * @description Revoke one of the current user's sessions by id.
+         *
+         *     Args:
+         *         session_pk: Primary key of the session to revoke.
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, str]: ``{"status": "revoked"}``.
+         *
+         *     Raises:
+         *         HTTPException: 404 when no matching active session exists.
+         */
+        delete: operations["revoke_session_api_auth_sessions__session_pk__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/sessions/revoke-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Other Sessions
+         * @description Revoke all of the current user's sessions except this one.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, int]: ``{"revoked": <count>}``.
+         */
+        post: operations["revoke_other_sessions_api_auth_sessions_revoke_others_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/oidc/providers": {
         parameters: {
             query?: never;
@@ -6055,6 +6138,7 @@ export interface components {
          *         local_mode (bool | None): Whether the server runs in local (single-user) mode.
          *         oidc_providers (list[dict[str, str]] | None): Public OIDC providers available for login.
          *         device_link_enabled (bool): Whether QR device-link sign-in handoff is enabled.
+         *         session_tracking (bool): Whether sessions are tracked and revocable.
          */
         AuthCheckResponse: {
             /** Authenticated */
@@ -6083,6 +6167,11 @@ export interface components {
              * @default false
              */
             device_link_enabled: boolean;
+            /**
+             * Session Tracking
+             * @default false
+             */
+            session_tracking: boolean;
         };
         /**
          * BootHookCreate
@@ -13805,6 +13894,83 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthCheckResponse"];
+                };
+            };
+        };
+    };
+    list_sessions_api_auth_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    revoke_session_api_auth_sessions__session_pk__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_other_sessions_api_auth_sessions_revoke_others_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
                 };
             };
         };

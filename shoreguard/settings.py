@@ -275,6 +275,7 @@ class AuthSettings(BaseSettings):
             users exist.
         cookie_name (str): Session cookie name.
         session_max_age (int): Session cookie lifetime in seconds (default: 7 days).
+        session_tracking (bool): Record sessions so users can list/revoke active devices.
         invite_max_age (int): Invite token validity in seconds (default: 7 days).
         password_min_length (int): Minimum password length for user registration.
         password_require_complexity (bool): Require mixed-case, digit, and symbol in passwords.
@@ -380,6 +381,13 @@ class AuthSettings(BaseSettings):
     session_max_age: int = Field(
         default=86400 * 7,
         description="Session cookie lifetime in seconds (default: 7 days)",
+    )
+    session_tracking: bool = Field(
+        default=True,
+        description="Record each signed-in session (device, IP, last seen) so users can "
+        "list and individually revoke their active sessions. When off, sessions remain "
+        "stateless and the only revocation levers are deactivating the user or rotating "
+        "the secret key.",
     )
     invite_max_age: int = Field(
         default=86400 * 7,

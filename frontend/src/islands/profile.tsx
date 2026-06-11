@@ -230,6 +230,142 @@ function PushDevicesSection() {
   );
 }
 
+interface SessionItem {
+  id: number;
+  kind: string;
+  ip: string | null;
+  user_agent: string | null;
+  created_at: string;
+  last_seen_at: string;
+  current: boolean;
+}
+
+const KIND_META: Record<string, { icon: string; label: string }> = {
+  password: { icon: "key", label: "Password" },
+  passkey: { icon: "fingerprint", label: "Passkey" },
+  oidc: { icon: "box-arrow-in-right", label: "SSO" },
+  "device-link": { icon: "qr-code", label: "Phone (QR handoff)" },
+  invite: { icon: "envelope", label: "Invite" },
+  setup: { icon: "person-gear", label: "Setup" },
+  register: { icon: "person-plus", label: "Self-registration" },
+};
+
+function SessionsSection() {
+  const [sessions, setSessions] = useState<SessionItem[] | null>(null);
+  const [tracking, setTracking] = useState<boolean | null>(null);
+
+  const load = async () => {
+    const check = await fetch("/api/auth/check").then((r) => r.json()).catch(() => ({}));
+    if (!check.session_tracking) {
+      setTracking(false);
+      return;
+    }
+    setTracking(true);
+    try {
+      const r = await apiFetch<{ sessions: SessionItem[] }>(`/api/auth/sessions`);
+      setSessions(r?.sessions ?? []);
+    } catch {
+      setSessions([]);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const revoke = async (s: SessionItem) => {
+    if (s.current) {
+      if (!(await showConfirm("Sign out this device? You will be returned to the login page.")))
+        return;
+    }
+    try {
+      await apiFetch(`/api/auth/sessions/${s.id}`, { method: "DELETE" });
+      if (s.current) {
+        window.location.href = "/login";
+        return;
+      }
+      setSessions((cur) => (cur ?? []).filter((x) => x.id !== s.id));
+      showToast("Session revoked — that device is now signed out.", "success");
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    }
+  };
+
+  const revokeOthers = async () => {
+    if (!(await showConfirm("Sign out all other devices?"))) return;
+    try {
+      const r = await apiFetch<{ revoked: number }>(`/api/auth/sessions/revoke-others`, {
+        method: "POST",
+      });
+      showToast(`Signed out ${r?.revoked ?? 0} other device(s).`, "success");
+      void load();
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    }
+  };
+
+  if (tracking === false) return null;
+  const others = (sessions ?? []).filter((s) => !s.current).length;
+
+  return (
+    <div class="card mb-3">
+      <div class="card-body">
+        <h6 class="mb-3 d-flex justify-content-between align-items-center">
+          <span>
+            <i class="bi bi-display me-2" />
+            Active sessions
+          </span>
+          {others > 0 && (
+            <button class="btn btn-sm btn-outline-danger" onClick={() => void revokeOthers()}>
+              <i class="bi bi-box-arrow-right me-1" />
+              Sign out other devices
+            </button>
+          )}
+        </h6>
+        {sessions === null ? (
+          <div class="text-muted small">
+            <span class="spinner-border spinner-border-sm me-1" />
+            Loading…
+          </div>
+        ) : sessions.length === 0 ? (
+          <div class="text-muted small">No active sessions.</div>
+        ) : (
+          <div class="list-group list-group-flush">
+            {sessions.map((s) => {
+              const meta = KIND_META[s.kind] ?? { icon: "display", label: s.kind };
+              return (
+                <div
+                  key={s.id}
+                  class="list-group-item d-flex justify-content-between align-items-center px-0"
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div>
+                      <i class={`bi bi-${meta.icon} me-2`} />
+                      {meta.label}
+                      {s.current && <span class="badge bg-success ms-2">This device</span>}
+                    </div>
+                    <div class="small text-muted text-truncate">
+                      {s.ip ?? "unknown IP"}
+                      {s.user_agent ? ` · ${s.user_agent}` : ""}
+                    </div>
+                    <div class="small text-muted">Last seen {fmt(s.last_seen_at)}</div>
+                  </div>
+                  <button
+                    class={`btn btn-sm ${s.current ? "btn-outline-secondary" : "btn-outline-danger"}`}
+                    onClick={() => void revoke(s)}
+                  >
+                    {s.current ? "Sign out" : "Revoke"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   return (
     <div>
@@ -238,6 +374,7 @@ export default function ProfilePage() {
         Profile
       </h5>
       <PasskeySection />
+      <SessionsSection />
       <PushDevicesSection />
     </div>
   );

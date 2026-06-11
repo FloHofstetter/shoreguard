@@ -6,7 +6,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
@@ -20,13 +20,14 @@ from shoreguard.api.auth import (
     authenticate_user,
     check_request_auth,
     clear_lockout,
-    create_session_token,
     create_user,
     find_or_create_oidc_user,
     is_account_locked,
     is_registration_enabled,
     is_setup_complete,
     record_failed_login,
+    require_auth,
+    user_sessions,
     verify_session_token,
 )
 from shoreguard.api.deps import get_services
@@ -122,7 +123,9 @@ async def login(request: Request, body: LoginRequest) -> JSONResponse:
     request.state.user_id = user["email"]
     request.state.role = user["role"]
     await audit_log(request, "user.login", "user", user["email"])
-    token = create_session_token(user_id=user["id"], role=user["role"])
+    token = await user_sessions.create_tracked_session(
+        request, user["id"], user["role"], kind="password"
+    )
     response = JSONResponse(content={"ok": True, "role": user["role"], "email": user["email"]})
     secure = request.url.scheme == "https"
     response.set_cookie(
@@ -154,10 +157,15 @@ async def logout(request: Request) -> JSONResponse:
         if result:
             user_id = result[0]
             # Resolve email for consistent audit logging
-            from shoreguard.api.auth.core import _lookup_user
+            from shoreguard.api.auth.core import _lookup_user, session_nonce
 
             u = await _lookup_user(user_id)
             user_info = u["email"] if u else f"user_id={user_id}"
+            # Revoke the ledger row so this session disappears from the
+            # device list and can never be reused.
+            nonce = session_nonce(cookie)
+            if nonce:
+                await user_sessions.revoke_by_nonce(nonce)
     logger.info("Logout (actor=%s, client=%s)", user_info, client_ip(request))
     await audit_log(request, "user.logout", "user", user_info)
     response = JSONResponse(content={"ok": True})
@@ -221,7 +229,96 @@ async def auth_check(request: Request) -> dict[str, Any]:
             {"name": p.name, "display_name": p.display_name} for p in get_providers()
         ],
         "device_link_enabled": get_settings().auth.device_link_enabled,
+        "session_tracking": get_settings().auth.session_tracking,
     }
+
+
+# ─── Active sessions (self-service revocation) ──────────────────────────────
+
+
+def _session_user_id(request: Request) -> int:
+    """Return the database id of the session-authenticated user.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        int: The user's database id.
+
+    Raises:
+        HTTPException: 400 when the caller has no real user session
+            (service principals, ``--no-auth`` dev bypass).
+    """
+    user_db_id = getattr(request.state, "user_db_id", None)
+    if not isinstance(user_db_id, int):
+        raise HTTPException(400, "Session management needs a real user session")
+    return user_db_id
+
+
+@router.get("/api/auth/sessions", dependencies=[Depends(require_auth)])
+async def list_sessions(request: Request) -> dict[str, Any]:
+    """List the current user's active sessions (devices).
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: ``{"sessions": [...]}`` newest first, with the
+        requesting session flagged ``current``.
+    """
+    user_id = _session_user_id(request)
+    current = getattr(request.state, "session_nonce", None)
+    return {"sessions": await user_sessions.list_for_user(user_id, current)}
+
+
+@router.delete("/api/auth/sessions/{session_pk}", dependencies=[Depends(require_auth)])
+async def revoke_session(session_pk: int, request: Request) -> dict[str, str]:
+    """Revoke one of the current user's sessions by id.
+
+    Args:
+        session_pk: Primary key of the session to revoke.
+        request: The incoming HTTP request.
+
+    Returns:
+        dict[str, str]: ``{"status": "revoked"}``.
+
+    Raises:
+        HTTPException: 404 when no matching active session exists.
+    """
+    user_id = _session_user_id(request)
+    if not await user_sessions.revoke(user_id, session_pk):
+        raise HTTPException(404, "No such active session")
+    await audit_log(
+        request,
+        "user.session.revoke",
+        "user",
+        str(getattr(request.state, "user_id", "")),
+        detail={"session_id": session_pk},
+    )
+    return {"status": "revoked"}
+
+
+@router.post("/api/auth/sessions/revoke-others", dependencies=[Depends(require_auth)])
+async def revoke_other_sessions(request: Request) -> dict[str, int]:
+    """Revoke all of the current user's sessions except this one.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict[str, int]: ``{"revoked": <count>}``.
+    """
+    user_id = _session_user_id(request)
+    current = getattr(request.state, "session_nonce", None)
+    revoked = await user_sessions.revoke_others(user_id, current)
+    await audit_log(
+        request,
+        "user.session.revoke_others",
+        "user",
+        str(getattr(request.state, "user_id", "")),
+        detail={"revoked": revoked},
+    )
+    return {"revoked": revoked}
 
 
 # ─── OIDC / OpenID Connect ──────────────────────────────────────────────────
@@ -407,7 +504,9 @@ async def oidc_callback(request: Request) -> RedirectResponse:
         await audit_log(request, "oidc.create", "user", user["email"], detail=detail)
 
     # Create session
-    token = create_session_token(user_id=user["id"], role=user["role"])
+    token = await user_sessions.create_tracked_session(
+        request, user["id"], user["role"], kind="oidc"
+    )
     response = RedirectResponse(url=next_url, status_code=302)
     secure = request.url.scheme == "https"
     response.set_cookie(
@@ -487,7 +586,7 @@ async def setup(request: Request, body: SetupRequest) -> JSONResponse:
     request.state.user_id = info["email"]
     request.state.role = "admin"
     await audit_log(request, "user.setup", "user", info["email"])
-    token = create_session_token(user_id=info["id"], role="admin")
+    token = await user_sessions.create_tracked_session(request, info["id"], "admin", kind="setup")
     response = JSONResponse(content={"ok": True, "role": "admin", "email": info["email"]})
     secure = request.url.scheme == "https"
     response.set_cookie(
@@ -550,7 +649,9 @@ async def accept_invite_endpoint(request: Request, body: AcceptInviteRequest) ->
     request.state.user_id = user["email"]
     request.state.role = user["role"]
     await audit_log(request, "user.invite.accept", "user", user["email"])
-    token = create_session_token(user_id=user["id"], role=user["role"])
+    token = await user_sessions.create_tracked_session(
+        request, user["id"], user["role"], kind="invite"
+    )
     response = JSONResponse(content={"ok": True, "role": user["role"], "email": user["email"]})
     secure = request.url.scheme == "https"
     response.set_cookie(
@@ -624,7 +725,9 @@ async def register_endpoint(request: Request, body: RegisterRequest) -> JSONResp
     request.state.user_id = info["email"]
     request.state.role = "viewer"
     await audit_log(request, "user.register", "user", info["email"])
-    token = create_session_token(user_id=info["id"], role="viewer")
+    token = await user_sessions.create_tracked_session(
+        request, info["id"], "viewer", kind="register"
+    )
     response = JSONResponse(
         content={"ok": True, "role": "viewer", "email": info["email"]}, status_code=201
     )

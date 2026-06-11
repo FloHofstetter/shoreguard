@@ -121,6 +121,47 @@ class DeviceLinkCode(Base):
     consumed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class UserSession(Base):
+    """A signed-in session, recorded so users can list and revoke devices.
+
+    Sessions are stateless HMAC cookies; this table is the revocation
+    ledger that gives them a visible, killable lifetime. One row per
+    minted session (keyed by the SHA-256 of the token nonce), carrying
+    the device/IP for display. The per-request auth check rejects a
+    cookie whose nonce has a row with ``revoked_at`` set — so revoking a
+    row logs that one device out without touching the others or rotating
+    the global secret.
+
+    Attributes:
+        id: Auto-incremented primary key (the opaque id the UI revokes by).
+        session_id: SHA-256 hex of the token nonce (unique).
+        user_id: FK to the owning user (cascade delete).
+        kind: How the session was created (``password``, ``passkey``,
+            ``oidc``, ``invite``, ``setup``, ``register``, ``device-link``).
+        created_at: When the session was minted.
+        last_seen_at: When a request last used this session.
+        expires_at: When the underlying token expires.
+        ip: Client IP at sign-in.
+        user_agent: Browser user-agent at sign-in.
+        revoked_at: When the session was revoked, or ``None`` if active.
+    """
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="password")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ip: Mapped[str | None] = mapped_column(String(64))
+    user_agent: Mapped[str | None] = mapped_column(String(512))
+    revoked_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ServicePrincipal(Base):
     """A service principal (API key) for programmatic access.
 

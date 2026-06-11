@@ -61,6 +61,20 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Active sessions — see and revoke your signed-in devices** — sessions
+  are stateless HMAC cookies, so until now they could not be listed or
+  individually killed (the only levers were deactivating the user or
+  rotating the secret). A new session ledger records each sign-in
+  (device, IP, kind, last seen), the per-request auth check rejects a
+  revoked session, and the profile page gains an **Active sessions**
+  section with a per-device **Revoke** and a **Sign out other devices**
+  button. Logout now revokes its own session too. It is a denylist, not
+  an allowlist — a valid cookie with no ledger row still authenticates,
+  so enabling tracking does not force everyone to log in again. New
+  endpoints `GET/DELETE /api/auth/sessions` and
+  `POST /api/auth/sessions/revoke-others`, migration `108_user_sessions`,
+  and `SHOREGUARD_SESSION_TRACKING` (on by default). Especially relevant
+  now that device-link can mint sessions onto phones.
 - **QR device-link sign-in handoff** — the "Open on phone" dialog can
   mint a one-time code so a phone gets its own session without typing a
   password. The flow is deliberately conservative: the code is 256-bit,

@@ -22,6 +22,7 @@ class AuthCheckResponse(BaseModel):
         local_mode (bool | None): Whether the server runs in local (single-user) mode.
         oidc_providers (list[dict[str, str]] | None): Public OIDC providers available for login.
         device_link_enabled (bool): Whether QR device-link sign-in handoff is enabled.
+        session_tracking (bool): Whether sessions are tracked and revocable.
     """
 
     authenticated: bool
@@ -33,6 +34,7 @@ class AuthCheckResponse(BaseModel):
     local_mode: bool | None = None
     oidc_providers: list[dict[str, str]] | None = None
     device_link_enabled: bool = False
+    session_tracking: bool = False
 
 
 class OidcProviderInfo(BaseModel):

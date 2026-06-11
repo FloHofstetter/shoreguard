@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from shoreguard.api.auth import COOKIE_NAME, create_session_token, require_auth
+from shoreguard.api.auth import COOKIE_NAME, require_auth, user_sessions
 from shoreguard.api.auth import passkeys as pk
 from shoreguard.api.ratelimit import get_login_limiter
 from shoreguard.api.validation import client_ip
@@ -223,7 +223,9 @@ async def login_verify(body: LoginVerifyRequest, request: Request) -> JSONRespon
     request.state.user_id = user["email"]
     request.state.role = user["role"]
     await audit_log(request, "user.login_passkey", "user", user["email"])
-    token = create_session_token(user_id=user["id"], role=user["role"])
+    token = await user_sessions.create_tracked_session(
+        request, user["id"], user["role"], kind="passkey"
+    )
     response = JSONResponse(content={"ok": True, "role": user["role"], "email": user["email"]})
     response.set_cookie(
         COOKIE_NAME,

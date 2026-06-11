@@ -10,6 +10,7 @@ from shoreguard.db.models.auth import (
     SPGatewayRole,
     User,
     UserGatewayRole,
+    UserSession,
     WebAuthnCredential,
 )
 from shoreguard.db.models.base import Base
@@ -59,6 +60,7 @@ __all__ = (
     "UsageCursor",
     "User",
     "UserGatewayRole",
+    "UserSession",
     "WebAuthnCredential",
     "Webhook",
     "WebhookDelivery",
