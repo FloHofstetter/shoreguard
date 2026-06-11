@@ -217,15 +217,27 @@ def test_migrations_postgres_fresh_db():
 # ─── v2 baseline squash (v0.38) ─────────────────────────────────────────────
 
 
-def test_init_db_fresh_database_lands_on_baseline():
-    """init_db() on a fresh file database applies the squashed baseline."""
+def _head_revision() -> str:
+    """Return the current alembic head from the embedded migration scripts."""
+    from alembic.script import ScriptDirectory
+
+    from shoreguard.db import _alembic_config
+
+    cfg = _alembic_config("sqlite://")
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+    assert head is not None
+    return head
+
+
+def test_init_db_fresh_database_lands_on_head():
+    """init_db() on a fresh file database lands on the migration head."""
     from shoreguard.db import init_db
 
     with tempfile.TemporaryDirectory() as d:
         url = f"sqlite:///{d}/fresh.db"
         engine = init_db(url)
         try:
-            assert _current_revision(url) == "v2_baseline"
+            assert _current_revision(url) == _head_revision()
             tables = set(inspect(engine).get_table_names())
             assert EXPECTED_TABLES.issubset(tables)
         finally:
@@ -259,7 +271,8 @@ def test_init_db_stamps_v037_database():
 
         engine = init_db(url)
         try:
-            assert _current_revision(url) == "v2_baseline"
+            # Stamped to the baseline, then migrated forward to the head.
+            assert _current_revision(url) == _head_revision()
             with engine.connect() as conn:
                 name = conn.execute(text("SELECT name FROM gateways")).scalar()
             assert name == "legacy-gw"

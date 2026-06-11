@@ -412,7 +412,14 @@ class TestPrepareNtfyRequest:
 
 class TestFormattersDict:
     def test_all_keys_present(self):
-        assert set(FORMATTERS.keys()) == {"generic", "slack", "discord", "email", "ntfy"}
+        assert set(FORMATTERS.keys()) == {
+            "generic",
+            "slack",
+            "discord",
+            "email",
+            "ntfy",
+            "telegram",
+        }
 
     def test_ntfy_is_format_ntfy(self):
         assert FORMATTERS["ntfy"] is format_ntfy

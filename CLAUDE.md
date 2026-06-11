@@ -91,18 +91,23 @@ through the **same** `build_container()` code path (autouse `container` fixture 
 everywhere at once. Per-request wrappers (`SandboxService`, `PolicyService`, …) are
 constructed in route dependencies around the gateway-bound client and are async-native.
 
-**Background tasks:** the five periodic loops (cleanup, gateway health, discovery,
-drift detection, cert rotation) are declarative `PeriodicTask` specs in
+**Background tasks:** the periodic loops (cleanup, gateway health, discovery,
+drift detection, cert rotation, usage metering, daily digest) are declarative
+`PeriodicTask` specs in
 [tasks/definitions.py](shoreguard/tasks/definitions.py), driven by the generic
 `TaskSupervisor` ([tasks/supervisor.py](shoreguard/tasks/supervisor.py)) with failure
 backoff and a health snapshot consumed by `/readyz`. Disabled features register no task.
+The gateway health loop fires `gateway.unreachable`/`gateway.recovered` webhook events
+on status transitions.
 
 **Database** ([shoreguard/db/](shoreguard/db/)): SQLAlchemy 2.0. Defaults to SQLite (WAL
 mode, 0600 perms); PostgreSQL for production and the integration/postgres suites.
 `init_db()` runs the **Alembic migrations embedded in the package** on startup. The
 pre-v0.38 17-step chain is squashed into a single `v2_baseline` revision generated from
 the models; v0.37 databases are stamped automatically, older ones must pass through
-v0.37 first. The **async engine**
+v0.37 first. Because the baseline does `create_all` from the live models, migrations
+ON TOP of it (101+, e.g. kill switch, budgets) must guard `create_table` with an
+existence check — fresh DBs already have the tables. The **async engine**
 (`init_async_db()` + `get_async_session_factory()`) backs every service — including
 auth — with `AsyncSession`; a sync engine exists only to run Alembic at startup.
 The ShoreGuard DB only holds management-plane state (gateway registry, audit log,

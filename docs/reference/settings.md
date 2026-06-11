@@ -8,6 +8,7 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 |---|---|---|
 | `SHOREGUARD_HOST` | `0.0.0.0` | Bind address for the HTTP server |
 | `SHOREGUARD_PORT` | `8888` | TCP port for the HTTP server |
+| `SHOREGUARD_PUBLIC_URL` | `` | Externally reachable base URL of this ShoreGuard (e.g. https://spark.tail1234.ts.net). Used to build absolute links in notifications; required for one-tap approval links. |
 | `SHOREGUARD_LOG_LEVEL` | `info` | Log level: critical\|error\|warning\|info\|debug\|trace |
 | `SHOREGUARD_LOG_FORMAT` | `text` | Log output format — 'text' for humans, 'json' for aggregators |
 | `SHOREGUARD_RELOAD` | `true` | Auto-reload on code changes (dev only) |
@@ -37,6 +38,8 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | Environment variable | Default | Description |
 |---|---|---|
 | `SHOREGUARD_NO_AUTH` | `false` | Disable authentication entirely (development only) |
+| `SHOREGUARD_SINGLE_USER` | `false` | Single-user mode: one admin account whose password is SHOREGUARD_ADMIN_PASSWORD, kept in sync on every startup. The homelab middle ground between --no-auth and full RBAC. |
+| `SHOREGUARD_TAILSCALE_IDENTITY` | `false` | Trust Tailscale Serve identity headers (Tailscale-User-Login) from a loopback proxy as authentication. The login must match an existing user's email. Only honoured for connections from 127.0.0.1/::1 — i.e. `tailscale serve` in front of a loopback-bound ShoreGuard. |
 | `SHOREGUARD_SECRET_KEY` | `` | HMAC secret for sessions and signed cookies. Unset falls back to on-disk .secret_key — set explicitly for multi-replica. |
 | `SHOREGUARD_ALLOW_REGISTRATION` | `false` | Allow unauthenticated self-signup via /register |
 | `SHOREGUARD_ADMIN_PASSWORD` | `` | Bootstrap admin password used on first startup if no users exist |
@@ -104,6 +107,8 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_WEBHOOK_DELIVERY_TIMEOUT` | `10.0` | HTTP request timeout for webhook delivery in seconds |
 | `SHOREGUARD_WEBHOOK_RETRY_DELAYS` | `[5, 30, 120]` | Retry delays in seconds between failed webhook delivery attempts |
 | `SHOREGUARD_WEBHOOK_DELIVERY_MAX_AGE_DAYS` | `7` | Days to retain webhook delivery records before cleanup |
+| `SHOREGUARD_WEBHOOK_ONE_TAP_APPROVALS` | `false` | Attach signed one-tap approve/reject links to approval webhook events. Anyone holding such a link can cast that one vote until it expires — treat notification channels accordingly. Requires SHOREGUARD_PUBLIC_URL. |
+| `SHOREGUARD_WEBHOOK_ONE_TAP_TTL` | `3600` | Validity window of one-tap approval links in seconds |
 ## `background`
 
 | Environment variable | Default | Description |
@@ -194,6 +199,8 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_DISCOVERY_DEFAULT_SCHEME` | `grpc+tls` | Connection scheme assigned to auto-registered gateways |
 | `SHOREGUARD_DISCOVERY_AUTO_REGISTER` | `true` | If false, discovery only lists endpoints without registering |
 | `SHOREGUARD_DISCOVERY_RESOLVER_TIMEOUT_SECONDS` | `5.0` | Per-query DNS resolver timeout in seconds |
+| `SHOREGUARD_DISCOVERY_MDNS_ENABLED` | `false` | Also browse mDNS/zeroconf (`_openshell._tcp.local.`) during discovery scans — finds gateways on the local network without any DNS server (homelab) |
+| `SHOREGUARD_DISCOVERY_MDNS_TIMEOUT_SECONDS` | `3.0` | How long an mDNS browse listens for announcements |
 ## `drift_detection`
 
 | Environment variable | Default | Description |
@@ -216,4 +223,19 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_CERT_ROTATION_THRESHOLD_DAYS` | `7` | Rotate when remaining validity drops below this many days |
 | `SHOREGUARD_CERT_ROTATION_POLL_INTERVAL_S` | `3600` | Seconds between rotation-check passes across gateways |
 | `SHOREGUARD_CERT_ROTATION_MAX_RETRIES` | `3` | Retry attempts per rotation before deferring to the next cycle |
+## `digest`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_DIGEST_ENABLED` | `false` | Dispatch a daily digest.daily webhook event summarising the last 24h (audit activity, sandbox churn, approvals, gateway health, webhook failures) |
+| `SHOREGUARD_DIGEST_HOUR` | `7` | Local hour of day after which the daily digest is sent |
+| `SHOREGUARD_DIGEST_CHECK_INTERVAL` | `600` | Seconds between digest due-checks by the background task |
+## `budget`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_BUDGET_METERING_ENABLED` | `false` | Meter per-sandbox inference usage by polling gateway logs (phase 1 — replaced by the upstream metering RPC when it lands). Required for budgets and the usage/spend views. |
+| `SHOREGUARD_BUDGET_INTERVAL_SECONDS` | `60` | Usage metering poll interval in seconds |
+| `SHOREGUARD_BUDGET_INFERENCE_SOURCES` | `["inference", "proxy"]` | Log source substrings counted as inference requests |
+| `SHOREGUARD_BUDGET_LOG_BATCH_LINES` | `2000` | Maximum log lines fetched per sandbox per metering poll |
 
