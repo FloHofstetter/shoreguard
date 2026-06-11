@@ -50,6 +50,7 @@ dependencies = [
     "opentelemetry-instrumentation-grpc>=0.50b0",
     "opentelemetry-exporter-otlp-proto-http>=1.29",
     "paho-mqtt>=2.1.0",
+    "pywebpush>=2.3.0",
 ]
 
 [dependency-groups]
@@ -95,6 +96,7 @@ shoreguard = "shoreguard.cli:cli"
 "frontend/dist" = "shoreguard/_frontend/dist"
 "frontend/favicon.svg" = "shoreguard/_frontend/favicon.svg"
 "frontend/manifest.webmanifest" = "shoreguard/_frontend/manifest.webmanifest"
+"frontend/sw.js" = "shoreguard/_frontend/sw.js"
 
 [tool.hatch.build.targets.sdist]
 include = ["shoreguard", "frontend", "LICENSE", "README.md"]

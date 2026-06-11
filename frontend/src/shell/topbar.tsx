@@ -8,6 +8,8 @@ import { auth, logout } from "../lib/auth";
 import { GW } from "../lib/constants";
 import { health } from "../lib/health";
 import { Modal } from "../lib/Modal";
+import { showToast } from "../lib/notify";
+import { currentSubscription, disablePush, enablePush, pushSupported, sendTestPush } from "../lib/push";
 
 interface GatewayItem {
   name: string;
@@ -110,6 +112,73 @@ export function GatewaySwitcher() {
   );
 }
 
+function PushToggle() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    currentSubscription()
+      .then((sub) => setEnabled(sub !== null))
+      .catch(() => setEnabled(false));
+  }, []);
+
+  if (!pushSupported()) {
+    return (
+      <div class="small text-muted mt-3">
+        <i class="bi bi-bell-slash me-1" />
+        Push notifications need HTTPS (or localhost) and a modern browser.
+      </div>
+    );
+  }
+
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      if (enabled) {
+        await disablePush();
+        setEnabled(false);
+        showToast("Push notifications disabled on this device.", "info");
+      } else {
+        await enablePush();
+        setEnabled(true);
+        showToast("Push notifications enabled on this device.", "success");
+      }
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const test = async () => {
+    try {
+      const r = await sendTestPush();
+      showToast(`Test notification sent to ${r.sent} device(s).`, "success");
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    }
+  };
+
+  return (
+    <div class="mt-3 border-top pt-3">
+      <div class="d-flex justify-content-center gap-2">
+        <button class="btn btn-sm btn-outline-primary" disabled={busy} onClick={() => void toggle()}>
+          <i class={`bi ${enabled ? "bi-bell-slash" : "bi-bell"} me-1`} />
+          {enabled ? "Disable push on this device" : "Enable push on this device"}
+        </button>
+        {enabled && (
+          <button class="btn btn-sm btn-outline-secondary" onClick={() => void test()}>
+            Test
+          </button>
+        )}
+      </div>
+      <div class="small text-muted mt-2">
+        Pair with a <code>webpush</code> webhook to choose which events reach this device.
+      </div>
+    </div>
+  );
+}
+
 function PhoneAccessButton() {
   const [open, setOpen] = useState(false);
   const url = window.location.href;
@@ -146,6 +215,7 @@ function PhoneAccessButton() {
               Your phone must reach this address — same network, or better: a
               tailnet (<code>tailscale serve</code> in front of a loopback bind).
             </div>
+            <PushToggle />
           </div>
         </Modal>
       )}

@@ -376,6 +376,27 @@ def format_email_body(event_type: str, payload: dict[str, Any], timestamp: str) 
     return "\n".join(lines)
 
 
+def format_webpush(event_type: str, payload: dict[str, Any], timestamp: str) -> str:
+    """Format a Web Push notification payload for the service worker.
+
+    Args:
+        event_type: Machine-readable event type.
+        payload: Event data payload.
+        timestamp: ISO-8601 timestamp string.
+
+    Returns:
+        str: JSON with ``title``, ``body``, and a click-through ``url``.
+    """
+    lines = [f"{key}: {value}" for key, value in _payload_fields(payload)]
+    return json.dumps(
+        {
+            "title": _event_label(event_type),
+            "body": "\n".join(lines) or timestamp,
+            "url": payload.get("approve_url") or payload.get("page_url") or "/",
+        }
+    )
+
+
 FORMATTERS: dict[str, Any] = {
     "generic": format_generic,
     "slack": format_slack,
@@ -386,4 +407,5 @@ FORMATTERS: dict[str, Any] = {
     # MQTT publishes the same envelope as generic; the topic carries the
     # event type, so consumers (Home Assistant) can subscribe selectively.
     "mqtt": format_generic,
+    "webpush": format_webpush,
 }

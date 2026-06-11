@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from shoreguard.services.operations import AsyncOperationService
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
     from shoreguard.services.policy_pin import PolicyPinService
+    from shoreguard.services.push import PushService
     from shoreguard.services.registry import GatewayRegistry
     from shoreguard.services.sandbox_meta import SandboxMetaStore
     from shoreguard.services.sbom import SBOMService
@@ -73,6 +74,7 @@ class ServiceContainer:
         budget: Inference usage metering and per-sandbox budgets.
         node_stats: Host resource stats for the ShoreGuard machine.
         node_alerts: Threshold alerts over the host node-stats sample.
+        push: Web Push subscriptions and delivery (PWA notifications).
         denial_context: Denial context cache.
         local_gateway: Local gateway manager, or ``None`` outside local mode.
     """
@@ -99,6 +101,7 @@ class ServiceContainer:
     budget: BudgetService
     node_stats: NodeStatsService
     node_alerts: NodeAlertService
+    push: PushService
     denial_context: DenialContextService
     local_gateway: LocalGatewayManager | None = None
 
@@ -139,6 +142,7 @@ def build_container(
     from shoreguard.services.operations import AsyncOperationService
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
     from shoreguard.services.policy_pin import PolicyPinService
+    from shoreguard.services.push import PushService
     from shoreguard.services.registry import GatewayRegistry
     from shoreguard.services.sandbox_meta import SandboxMetaStore
     from shoreguard.services.sbom import SBOMService
@@ -194,6 +198,7 @@ def build_container(
         budget=BudgetService(async_session_factory, gateway, registry, settings.budget),
         node_stats=node_stats,
         node_alerts=NodeAlertService(node_stats, settings.node_alert),
+        push=PushService(async_session_factory, settings.push),
         denial_context=DenialContextService(),
         local_gateway=(LocalGatewayManager(gateway) if settings.server.local_mode else None),
     )

@@ -246,6 +246,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         prover,
         provider_profiles,
         providers,
+        push,
         sandboxes,
         sbom,
         security,
@@ -379,6 +380,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         system.router,
         prefix="/api/system",
         tags=["system"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        push.router,
+        prefix="/api/push",
+        tags=["push"],
         dependencies=[Depends(require_auth)],
     )
     app.include_router(

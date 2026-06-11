@@ -799,6 +799,45 @@ class TestMqttDelivery:
         mock_deliver.assert_called_once()
 
 
+# ─── Web Push delivery tests ─────────────────────────────────────────────────
+
+
+class TestWebPushDelivery:
+    """Tests for the _deliver_webpush path (push service via container)."""
+
+    async def test_fire_webpush_channel_routes_to_webpush_deliver(self, webhook_svc):
+        await webhook_svc.create(
+            url="webpush:all",
+            event_types=["*"],
+            created_by="admin@test.com",
+            channel_type="webpush",
+        )
+        with patch.object(
+            WebhookService, "_deliver_webpush", new_callable=AsyncMock
+        ) as mock_deliver:
+            await webhook_svc.fire("sandbox.created", {"sandbox": "x"})
+            await asyncio.sleep(0.05)
+        mock_deliver.assert_called_once()
+
+    async def test_webpush_no_subscriptions_marks_failed(self, webhook_svc):
+        # The autouse test container provides a push service with an
+        # empty subscription table.
+        wh = await webhook_svc.create(
+            url="webpush:all",
+            event_types=["*"],
+            created_by="admin@test.com",
+            channel_type="webpush",
+        )
+        delivery_id = await webhook_svc._create_delivery(wh["id"], "webhook.test", "{}")
+        target = _make_target(webhook_id=wh["id"], url="webpush:all", channel_type="webpush")
+
+        await webhook_svc._deliver_webpush(target, '{"title":"t"}', delivery_id)
+
+        deliveries = await webhook_svc.list_deliveries(wh["id"])
+        failed = [d for d in deliveries if d["status"] == "failed"]
+        assert failed and "no push subscriptions" in failed[0]["error_message"]
+
+
 # ─── Convenience function tests ─────────────────────────────────────────────
 
 

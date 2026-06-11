@@ -438,7 +438,48 @@ class WebhookService:
         if target.channel_type == "mqtt":
             await self._deliver_mqtt(target, body, delivery_id)
             return
+        if target.channel_type == "webpush":
+            await self._deliver_webpush(target, body, delivery_id)
+            return
         await self._deliver_http_with_retry(target, body, delivery_id)
+
+    async def _deliver_webpush(self, target: _Target, body: str, delivery_id: int) -> None:
+        """Fan a notification out to all registered Web Push devices.
+
+        The webhook row is the event subscription; the actual recipients
+        are the devices in ``push_subscriptions``. Delivery counts as
+        success when at least one device accepted the message.
+
+        Args:
+            target: Delivery target (URL is the ``webpush:all`` marker).
+            body: JSON payload from :func:`format_webpush`.
+            delivery_id: Delivery record ID.
+        """
+        try:
+            from shoreguard.container import get_container
+
+            result = await get_container().push.send_payload(body)
+            if result["sent"] > 0:
+                await self._update_delivery(delivery_id, status="success", attempt=1)
+                self._inc_delivery_counter("success")
+            else:
+                await self._update_delivery(
+                    delivery_id,
+                    status="failed",
+                    error_message=(
+                        "no push subscriptions registered"
+                        if result["failed"] == 0 and result["pruned"] == 0
+                        else f"0 sent, {result['failed']} failed, {result['pruned']} pruned"
+                    ),
+                    attempt=1,
+                )
+                self._inc_delivery_counter("failed")
+        except Exception as e:
+            logger.warning("Web push delivery failed", exc_info=True)
+            await self._update_delivery(
+                delivery_id, status="failed", error_message=str(e), attempt=1
+            )
+            self._inc_delivery_counter("failed")
 
     @staticmethod
     def _extra_config_value(target: _Target, key: str) -> str | None:

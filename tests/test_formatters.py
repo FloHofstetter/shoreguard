@@ -420,7 +420,22 @@ class TestFormattersDict:
             "ntfy",
             "telegram",
             "mqtt",
+            "webpush",
         }
+
+    def test_webpush_payload_shape(self):
+        from shoreguard.services.formatters import format_webpush
+
+        body = json.loads(
+            format_webpush(
+                "approval.pending",
+                {"sandbox": "dev", "approve_url": "https://sg/one-tap?t=x"},
+                _SAMPLE_TIMESTAMP,
+            )
+        )
+        assert body["title"] == "Approval Pending"
+        assert "Sandbox: dev" in body["body"]
+        assert body["url"] == "https://sg/one-tap?t=x"
 
     def test_mqtt_uses_generic_envelope(self):
         assert FORMATTERS["mqtt"] is format_generic

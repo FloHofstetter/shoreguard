@@ -44,6 +44,7 @@ Each webhook has a `channel_type` that controls payload formatting and delivery:
 | `ntfy` | HTTP POST to an [ntfy](https://ntfy.sh) server | ntfy JSON publish with title, priority, and tags |
 | `telegram` | HTTP POST to the Telegram Bot API | `sendMessage` with HTML text and inline buttons |
 | `mqtt` | One-shot MQTT publish to a broker | JSON envelope `{event, timestamp, data}` on topic `<base>/<event>` |
+| `webpush` | Encrypted Web Push to every registered device | `{title, body, url}` shown by the PWA service worker |
 
 ### ntfy channel (push notifications)
 
@@ -151,6 +152,38 @@ SHOREGUARD_SMTP_FROM_ADDR=shoreguard@example.com
 
 This pairs well with the daily digest (`SHOREGUARD_DIGEST_ENABLED`) — a
 `digest.daily` email at 07:00 is the classic homelab morning report.
+
+### Web Push channel (no third party)
+
+ntfy and Telegram route through an external service; Web Push does not.
+Enable notifications on a device via the phone dialog (the
+<i class="bi bi-qr-code"></i> button in the top bar) — the browser
+registers a push endpoint with ShoreGuard. Then create a `webpush`
+webhook to choose which events reach your devices:
+
+```json
+{
+  "url": "webpush:all",
+  "channel_type": "webpush",
+  "event_types": ["approval.pending", "gateway.unreachable",
+                  "budget.exceeded", "node.threshold_breached"]
+}
+```
+
+Notes:
+
+- Requires a **secure context** in the browser: HTTPS or localhost.
+  `tailscale serve` gives you HTTPS on the tailnet with zero certificate
+  work — see the Tailscale guide.
+- The VAPID keypair is generated on first use and stored next to the
+  secret key (`~/.config/shoreguard/.vapid_private`); set
+  `SHOREGUARD_PUSH_CONTACT` to a real contact address if your instance
+  is internet-facing.
+- Payloads are end-to-end encrypted to each device's keys; the push
+  relay (run by the browser vendor) cannot read them. Expired devices
+  are pruned automatically.
+- Tapping a notification opens the approval link when the event carries
+  one (one-tap approvals), otherwise the dashboard.
 
 ### MQTT channel (Home Assistant bridge)
 

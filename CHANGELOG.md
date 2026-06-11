@@ -20,6 +20,17 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Web Push — phone notifications without a third party** — the
+  installed PWA now receives push notifications directly: a service
+  worker (`/sw.js`), VAPID keys generated on first use (stored next to
+  the secret key, contact via `SHOREGUARD_PUSH_CONTACT`), device
+  enrolment from the phone dialog in the top bar
+  (`/api/push/public-key|subscriptions|test`, new
+  `push_subscriptions` table, migration `103_push_subscriptions`), and
+  a `webpush` webhook channel that fans events out to every registered
+  device with end-to-end-encrypted payloads. Expired devices are pruned
+  automatically. Requires HTTPS (or localhost) — `tailscale serve`
+  provides exactly that. New dependency `pywebpush`.
 - **Host threshold alerts + GPU power draw** — the node-stats sample now
   includes `power_w` (nvidia-smi `power.draw`), and a new background
   task (`SHOREGUARD_NODE_ALERT_*`, on by default) evaluates GPU

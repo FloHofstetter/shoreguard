@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.responses import HTMLResponse
 from starlette.templating import _TemplateResponse as TemplateResponse
@@ -179,6 +179,20 @@ async def _require_page_auth(request: Request) -> RedirectResponse | None:
 
 
 # ─── Global pages ────────────────────────────────────────────────────────────
+
+
+@router.get("/sw.js", include_in_schema=False)
+async def service_worker() -> FileResponse:
+    """Serve the Web Push service worker from the app root.
+
+    Served at ``/sw.js`` (not ``/static/``) so its scope covers the
+    whole app — a service worker can only control pages under its own
+    path.
+
+    Returns:
+        FileResponse: The service worker script.
+    """
+    return FileResponse(FRONTEND_DIR / "sw.js", media_type="text/javascript")
 
 
 @router.get("/login", response_model=None)

@@ -28,7 +28,7 @@ interface Delivery {
   error_message?: string;
 }
 
-const CHANNELS = ["generic", "slack", "discord", "email", "ntfy", "telegram", "mqtt"];
+const CHANNELS = ["generic", "slack", "discord", "email", "ntfy", "telegram", "mqtt", "webpush"];
 
 function formatDateTime(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleString() : "—";
@@ -258,7 +258,7 @@ export default function WebhooksPage() {
 
   const createWebhook = async () => {
     setCreateError("");
-    const url = newUrl.trim();
+    const url = newUrl.trim() || (newChannel === "webpush" ? "webpush:all" : "");
     const events = splitCsv(newEvents);
     if (!url) {
       setCreateError("URL is required.");
@@ -517,6 +517,15 @@ export default function WebhooksPage() {
                       https://api.telegram.org/bot&lt;TOKEN&gt;/sendMessage?chat_id=&lt;CHAT&gt;
                     </code>
                     . Create a bot via @BotFather; @userinfobot tells you the chat id.
+                  </div>
+                </div>
+              )}
+              {newChannel === "webpush" && (
+                <div class="col-12">
+                  <div class="form-text small">
+                    No URL needed — events push to every device that enabled notifications via
+                    the <i class="bi bi-qr-code" /> phone dialog in the top bar. Needs HTTPS
+                    (e.g. <code>tailscale serve</code>) or localhost.
                   </div>
                 </div>
               )}

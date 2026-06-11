@@ -807,6 +807,26 @@ class SmtpSettings(BaseSettings):
     )
 
 
+class PushSettings(BaseSettings):
+    """Web Push (PWA notifications) configuration.
+
+    The VAPID keypair is generated on first use and persisted next to
+    the secret key; only the contact claim is configurable.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        contact (str): VAPID ``sub`` contact claim sent to push services.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_PUSH_")
+
+    contact: str = Field(
+        default="mailto:admin@localhost",
+        description="VAPID contact claim (mailto: or https:) sent to "
+        "browser push services with each notification",
+    )
+
+
 class NodeAlertSettings(BaseSettings):
     """Threshold alerts on the host node-stats sample.
 
@@ -1258,6 +1278,7 @@ class Settings(BaseSettings):
         budget (BudgetSettings): Inference usage metering and budgets.
         smtp (SmtpSettings): Server-wide SMTP defaults for email webhooks.
         node_alert (NodeAlertSettings): Host threshold alert evaluation.
+        push (PushSettings): Web Push (PWA notification) configuration.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -1283,6 +1304,7 @@ class Settings(BaseSettings):
     budget: BudgetSettings = Field(default_factory=BudgetSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     node_alert: NodeAlertSettings = Field(default_factory=NodeAlertSettings)
+    push: PushSettings = Field(default_factory=PushSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

@@ -19,6 +19,7 @@ from shoreguard.db.models.policy import (
     PolicyApplyProposal,
     PolicyPin,
 )
+from shoreguard.db.models.push import PushSubscription
 from shoreguard.db.models.sandbox import (
     SandboxBootHook,
     SandboxBudget,
@@ -42,6 +43,7 @@ __all__ = (
     "OperationRecord",
     "PolicyApplyProposal",
     "PolicyPin",
+    "PushSubscription",
     "SBOMComponent",
     "SBOMSnapshot",
     "SPGatewayRole",

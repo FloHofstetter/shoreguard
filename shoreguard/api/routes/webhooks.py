@@ -41,7 +41,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-VALID_CHANNEL_TYPES = ("generic", "slack", "discord", "email", "ntfy", "telegram", "mqtt")
+VALID_CHANNEL_TYPES = (
+    "generic",
+    "slack",
+    "discord",
+    "email",
+    "ntfy",
+    "telegram",
+    "mqtt",
+    "webpush",
+)
+
+# The webpush channel has no external URL — devices come from the
+# push_subscriptions table. The stored URL is a fixed marker.
+WEBPUSH_URL_MARKER = "webpush:all"
 
 
 def _require_telegram_chat_id(url: str) -> None:
@@ -233,7 +246,9 @@ async def create_webhook(body: WebhookCreateRequest, request: Request) -> dict[s
     """
     check_write_rate_limit(request)
     svc = _get_svc()
-    if body.channel_type == "mqtt":
+    if body.channel_type == "webpush":
+        body.url = WEBPUSH_URL_MARKER
+    elif body.channel_type == "mqtt":
         validate_mqtt_url(body.url)
     else:
         validate_webhook_url(body.url)
@@ -328,7 +343,9 @@ async def update_webhook(
     check_write_rate_limit(request)
     svc = _get_svc()
     if body.url is not None:
-        if body.channel_type == "mqtt":
+        if body.channel_type == "webpush":
+            body.url = WEBPUSH_URL_MARKER
+        elif body.channel_type == "mqtt":
             validate_mqtt_url(body.url)
         else:
             validate_webhook_url(body.url)

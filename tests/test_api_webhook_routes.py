@@ -208,6 +208,15 @@ class TestCreateWebhook:
         assert resp.status_code == 400
         assert "private" in resp.json()["detail"]
 
+    async def test_create_webpush_normalizes_url(self, admin_client):
+        data = await _create_webhook(
+            admin_client,
+            url="anything",
+            channel_type="webpush",
+        )
+        assert data["channel_type"] == "webpush"
+        assert data["url"] == "webpush:all"
+
     async def test_create_email_missing_config(self, admin_client):
         resp = await admin_client.post(
             "/api/webhooks",
