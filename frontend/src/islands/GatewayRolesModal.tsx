@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "preact/hooks";
 
 import { apiFetch, type GatewayRole, type GatewaySummary } from "../lib/api";
 import { roleBadge } from "../lib/format";
+import { showToast } from "../lib/notify";
 import { Modal } from "../lib/Modal";
 
 export type RoleEntityType = "user" | "sp" | "group";

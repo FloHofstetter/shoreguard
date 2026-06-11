@@ -12,6 +12,12 @@ type IslandLoader = () => Promise<{ default: (props: Record<string, unknown>) =>
 
 const ISLANDS: Record<string, IslandLoader> = {
   "users-page": () => import("./islands/users"),
+  "groups-page": () => import("./islands/groups"),
+  "webhooks-page": () => import("./islands/webhooks"),
+  "audit-page": () => import("./islands/audit"),
+  "dashboard-page": () => import("./islands/dashboard"),
+  "provider-profiles-page": () => import("./islands/provider-profiles"),
+  "services-page": () => import("./islands/services"),
 };
 
 async function mountIslands(): Promise<void> {
