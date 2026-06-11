@@ -208,6 +208,33 @@ async def login_page(request: Request) -> TemplateResponse:
     return templates.TemplateResponse(request, "pages/login.html", {})
 
 
+@router.get("/login/device", response_model=None)
+async def device_link_page(request: Request) -> TemplateResponse | HTMLResponse:
+    """Serve the device-link confirmation page (phone side of the QR).
+
+    Anonymous: the page reads the one-time code from the URL fragment
+    (never sent to the server) and drives the redeem poll client-side.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | HTMLResponse: Rendered confirmation page, or
+        an error page when device-link is disabled.
+    """
+    from shoreguard.settings import get_settings
+
+    if not get_settings().auth.device_link_enabled:
+        return _render_error(
+            request,
+            404,
+            "Sign-in Handoff Disabled",
+            "Device-link sign-in is not enabled on this instance.",
+            icon="qr-code",
+        )
+    return templates.TemplateResponse(request, "pages/device_link.html", {})
+
+
 @router.get("/register", response_model=None)
 async def register_page(request: Request) -> TemplateResponse | HTMLResponse:
     """Serve the self-registration page.

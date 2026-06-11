@@ -260,6 +260,12 @@ class AuthSettings(BaseSettings):
         tailscale_identity (bool): Trust Tailscale Serve identity headers from
             a loopback proxy as authentication (login must match a user email).
         passkeys_enabled (bool): Enable WebAuthn passkey registration/login.
+        device_link_enabled (bool): Enable the QR device-link sign-in handoff.
+        device_link_ttl (int): Seconds a device-link code stays valid to be claimed.
+        device_link_session_max_age (int): Lifetime of a handoff-minted session.
+        device_link_rate_limit_attempts (int): Max redeem attempts per IP.
+        device_link_rate_limit_window (int): Redeem rate-limit window in seconds.
+        device_link_rate_limit_lockout (int): Redeem rate-limit lockout in seconds.
         passkey_rp_id (str | None): Override the WebAuthn relying-party ID
             (defaults to the host of public_url, else the request host).
         secret_key (str | None): HMAC secret for sessions and signed cookies. Unset falls back
@@ -318,6 +324,39 @@ class AuthSettings(BaseSettings):
         default=True,
         description="Enable WebAuthn passkey registration and login "
         "(requires HTTPS or localhost in the browser)",
+    )
+    device_link_enabled: bool = Field(
+        default=False,
+        description="Enable QR 'device-link' sign-in handoff: a logged-in "
+        "operator mints a one-time code, the phone that scans it gets its own "
+        "session after the operator approves the request on the original "
+        "device. Off by default — opt-in like passkeys/one-tap.",
+    )
+    device_link_ttl: int = Field(
+        default=120,
+        ge=30,
+        le=600,
+        description="Seconds a device-link code stays valid before it must be "
+        "scanned and claimed (default: 120).",
+    )
+    device_link_session_max_age: int = Field(
+        default=86400,
+        ge=300,
+        description="Lifetime in seconds of the session minted for a "
+        "device-link handoff. Deliberately shorter than the desktop session "
+        "(default: 24h) — these sessions cannot be individually revoked.",
+    )
+    device_link_rate_limit_attempts: int = Field(
+        default=20,
+        description="Max device-link redeem attempts per IP before rate limit",
+    )
+    device_link_rate_limit_window: int = Field(
+        default=60,
+        description="Device-link redeem rate-limit sliding window in seconds",
+    )
+    device_link_rate_limit_lockout: int = Field(
+        default=120,
+        description="Device-link redeem rate-limit lockout duration in seconds",
     )
     passkey_rp_id: str | None = Field(
         default=None,

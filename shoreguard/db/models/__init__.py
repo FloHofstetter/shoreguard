@@ -2,6 +2,7 @@
 
 from shoreguard.db.models.audit import AuditEntry
 from shoreguard.db.models.auth import (
+    DeviceLinkCode,
     Group,
     GroupGatewayRole,
     GroupMember,
@@ -36,6 +37,7 @@ __all__ = (
     "ApprovalWorkflow",
     "AuditEntry",
     "Base",
+    "DeviceLinkCode",
     "Gateway",
     "GatewayCurfew",
     "Group",

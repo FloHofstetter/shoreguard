@@ -236,6 +236,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         boot_hooks,
         budgets,
         bypass,
+        device_link,
         digest,
         fleet,
         gateway,
@@ -416,6 +417,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # route mounts without the session-auth dependency (and 404s unless
     # the feature is explicitly enabled).
     app.include_router(one_tap.router, tags=["approvals"])
+    # Device-link sign-in handoff: mint/pending/approve carry their own
+    # require_auth; redeem is anonymous-but-same-origin by design. Every
+    # route 404s unless the feature is explicitly enabled.
+    app.include_router(device_link.router, tags=["auth"])
 
     # ── WebSocket, pages, and static files ───────────────────────────────
     app.include_router(ws_router)

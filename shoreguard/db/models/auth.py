@@ -76,6 +76,51 @@ class WebAuthnCredential(Base):
     last_used: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class DeviceLinkCode(Base):
+    """A one-time code for the QR 'device-link' sign-in handoff.
+
+    A logged-in operator mints a code (stored only as a SHA-256 hash);
+    the QR encodes it in a URL fragment. The phone that scans it claims
+    the code, the operator approves the request on the original device,
+    and only then is a fresh session minted for the phone. Timestamps
+    encode the state machine: minted -> claimed (``redeemed_at``) ->
+    approved (``approved_at``) / denied (``denied_at``) -> consumed
+    (``consumed_at``). Single-use is enforced by atomic conditional
+    UPDATEs, not by deletion, so replays and races are auditable.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        code_hash: SHA-256 hex digest of the one-time code (unique).
+        user_id: FK to the issuing user (cascade delete).
+        role: Role to grant the handoff session (<= the issuer's role).
+        created_at: When the code was minted.
+        expires_at: When the code stops being claimable.
+        redeemed_at: When a device claimed the code, or ``None``.
+        redeemer_ip: Client IP that claimed the code, or ``None``.
+        redeemer_user_agent: User-agent that claimed the code, or ``None``.
+        approved_at: When the issuer approved the request, or ``None``.
+        denied_at: When the issuer denied the request, or ``None``.
+        consumed_at: When the handoff session was minted, or ``None``.
+    """
+
+    __tablename__ = "device_link_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    redeemed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    redeemer_ip: Mapped[str | None] = mapped_column(String(64))
+    redeemer_user_agent: Mapped[str | None] = mapped_column(String(512))
+    approved_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    denied_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ServicePrincipal(Base):
     """A service principal (API key) for programmatic access.
 

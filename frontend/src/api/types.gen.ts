@@ -916,6 +916,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gateways/{gw}/sandboxes/{name}/policy/presets/{preset_name}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Preset
+         * @description Preview what applying a preset would change, without applying it.
+         *
+         *     Args:
+         *         name: Sandbox name.
+         *         preset_name: Name of the preset to preview.
+         *         svc: Injected policy service.
+         *
+         *     Returns:
+         *         dict[str, Any]: Added/overwritten rule keys and the preset's
+         *         endpoints per rule.
+         */
+        get: operations["preview_preset_api_gateways__gw__sandboxes__name__policy_presets__preset_name__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/gateways/{gw}/sandboxes/{name}/policy/presets/{preset_name}": {
         parameters: {
             query?: never;
@@ -1753,6 +1782,120 @@ export interface paths {
          *         HTTPException: ``404`` if missing.
          */
         post: operations["run_hook_api_gateways__gw__sandboxes__name__hooks__hook_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gateways/{gw}/sandboxes/{name}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Timeline
+         * @description Return the merged activity timeline for one sandbox.
+         *
+         *     Stitches audit entries, approval decisions, kill-switch engagements,
+         *     and metered usage into one chronology — "what did this agent do last
+         *     night?". Pure DB reads, so it answers even while the gateway is down.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Sandbox name.
+         *         hours: Look-back window in hours.
+         *         limit: Maximum number of entries.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"items": [...], "hours": n}`` newest first.
+         */
+        get: operations["get_timeline_api_gateways__gw__sandboxes__name__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gateways/{gw}/sandboxes/{name}/budget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Budget
+         * @description Return the budget configured for a sandbox (or null).
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Sandbox name.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"budget": {...} | None, "metering_enabled"}``.
+         */
+        get: operations["get_budget_api_gateways__gw__sandboxes__name__budget_get"];
+        /**
+         * Put Budget
+         * @description Create or update a sandbox budget.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Sandbox name.
+         *         body: Budget parameters.
+         *
+         *     Returns:
+         *         dict[str, Any]: The saved budget record.
+         *
+         *     Raises:
+         *         HTTPException: 400 on invalid window/action/limit.
+         */
+        put: operations["put_budget_api_gateways__gw__sandboxes__name__budget_put"];
+        post?: never;
+        /**
+         * Delete Budget
+         * @description Remove a sandbox budget.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Sandbox name.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"deleted": bool}``.
+         */
+        delete: operations["delete_budget_api_gateways__gw__sandboxes__name__budget_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gateways/{gw}/sandboxes/{name}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Usage
+         * @description Return per-day inference usage for a sandbox.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Sandbox name.
+         *         days: Trailing days to include.
+         *
+         *     Returns:
+         *         dict[str, Any]: Usage rows, today's count, budget, window usage.
+         */
+        get: operations["get_usage_api_gateways__gw__sandboxes__name__usage_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2920,6 +3063,151 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gateway/{name}/kill-switch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Kill Switch Status
+         * @description Return whether the provider kill switch is engaged for a gateway.
+         *
+         *     Args:
+         *         name: Gateway name.
+         *
+         *     Returns:
+         *         dict[str, Any]: Engaged flag, affected sandbox count, and metadata.
+         */
+        get: operations["kill_switch_status_api_gateway__name__kill_switch_get"];
+        put?: never;
+        /**
+         * Engage Kill Switch
+         * @description Engage the kill switch: detach all providers from every sandbox.
+         *
+         *     Agents keep their state but instantly lose inference and tool
+         *     credentials. Reversible via the DELETE endpoint.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Gateway name.
+         *
+         *     Returns:
+         *         dict[str, Any]: Per-sandbox detach report.
+         *
+         *     Raises:
+         *         HTTPException: 409 if already engaged, 502 if the gateway is
+         *             unreachable.
+         */
+        post: operations["engage_kill_switch_api_gateway__name__kill_switch_post"];
+        /**
+         * Release Kill Switch
+         * @description Release the kill switch: re-attach the providers detached at engage.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Gateway name.
+         *
+         *     Returns:
+         *         dict[str, Any]: Per-sandbox re-attach report.
+         *
+         *     Raises:
+         *         HTTPException: 502 if the gateway is unreachable.
+         */
+        delete: operations["release_kill_switch_api_gateway__name__kill_switch_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gateway/{name}/curfew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Curfew
+         * @description Return the curfew configured for a gateway.
+         *
+         *     Args:
+         *         name: Gateway name.
+         *
+         *     Returns:
+         *         dict[str, Any]: The curfew record, or ``{"configured": False}``.
+         */
+        get: operations["get_curfew_api_gateway__name__curfew_get"];
+        /**
+         * Set Curfew
+         * @description Create or update a gateway's quiet-hours curfew.
+         *
+         *     Inside the window the background task engages the reversible kill
+         *     switch (actor ``curfew``); outside it, only curfew-engaged switches
+         *     are released.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Gateway name.
+         *         body: Curfew window configuration.
+         *
+         *     Returns:
+         *         dict[str, Any]: The stored curfew record.
+         *
+         *     Raises:
+         *         HTTPException: 400 on an unknown timezone.
+         */
+        put: operations["set_curfew_api_gateway__name__curfew_put"];
+        post?: never;
+        /**
+         * Delete Curfew
+         * @description Remove a gateway's curfew (a curfew-engaged switch stays engaged).
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Gateway name.
+         *
+         *     Raises:
+         *         HTTPException: 404 when no curfew is configured.
+         */
+        delete: operations["delete_curfew_api_gateway__name__curfew_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gateway/import-filesystem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Filesystem
+         * @description Scan this machine's OpenShell config for gateways and import them.
+         *
+         *     Re-runs the same import that local mode performs at startup
+         *     (``~/.config/openshell/gateways/*\/metadata.json``, including
+         *     NemoClaw-provisioned gateways) — with the per-entry log lines so the
+         *     operator can see exactly why an entry was skipped.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"imported", "skipped", "log"}`` report.
+         */
+        post: operations["import_filesystem_api_gateway_import_filesystem_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/policies/presets": {
         parameters: {
             query?: never;
@@ -3128,6 +3416,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audit/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verify Audit Chain
+         * @description Verify the tamper-evidence hash chain over the audit log.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``ok``, ``checked``, ``legacy`` (pre-chain rows),
+         *         and ``first_bad_id`` when a break was found.
+         */
+        get: operations["verify_audit_chain_api_audit_verify_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audit/export": {
         parameters: {
             query?: never;
@@ -3306,6 +3618,423 @@ export interface paths {
         get: operations["list_deliveries_api_webhooks__webhook_id__deliveries_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/security/posture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Security Posture
+         * @description Return the security posture report for this deployment (admin only).
+         *
+         *     Returns:
+         *         dict[str, Any]: Posture checks, severity summary, and Tailscale
+         *             detection flag.
+         */
+        get: operations["get_security_posture_api_security_posture_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/digest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Digest
+         * @description Return the activity digest for the trailing window.
+         *
+         *     Args:
+         *         hours: Window size in hours (1-168, default 24).
+         *
+         *     Returns:
+         *         dict[str, Any]: Digest payload (audit summary, sandbox churn,
+         *             approvals, gateway health, webhook failures, kill switch).
+         */
+        get: operations["get_digest_api_digest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/usage/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Usage Summary
+         * @description Return the top inference consumers across all gateways.
+         *
+         *     Args:
+         *         days: Trailing window for the totals.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"since", "top": [...]}``.
+         */
+        get: operations["usage_summary_api_usage_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/node-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Node Stats
+         * @description Return CPU, memory, disk, and GPU stats for the ShoreGuard host.
+         *
+         *     Returns:
+         *         dict[str, Any]: Host stats sample (``scope: shoreguard-host``).
+         */
+        get: operations["get_node_stats_api_system_node_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/node-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Node Alerts
+         * @description Return host threshold-alert configuration and current breaches.
+         *
+         *     Returns:
+         *         dict[str, Any]: Enabled flag, thresholds, and breached metrics.
+         */
+        get: operations["get_node_alerts_api_system_node_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/probe-inference": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe Inference
+         * @description Probe an OpenAI-compatible endpoint on the LAN for served models.
+         *
+         *     Lets the operator test ``base_url`` before creating a provider —
+         *     e.g. Ollama on another homelab box. Restricted to private/LAN
+         *     addresses; one read-only GET, nothing is stored.
+         *
+         *     Args:
+         *         body: The endpoint to probe.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"ok", "models", "error"}``.
+         */
+        post: operations["probe_inference_api_system_probe_inference_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/access-urls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Access Urls
+         * @description Return URLs under which other devices can reach this server.
+         *
+         *     Backs the "Open on phone" QR dialog: when the operator browses via
+         *     ``localhost``, the UI swaps in a LAN address from ``lan_urls`` — or
+         *     warns that the server is bound to loopback only.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"bind_host", "port", "loopback_only", "lan_urls"}``.
+         */
+        get: operations["get_access_urls_api_system_access_urls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Update Status
+         * @description Return update availability and gateway version skew.
+         *
+         *     Returns:
+         *         dict[str, Any]: Current/latest ShoreGuard version, check state,
+         *         per-gateway OpenShell versions, and a skew flag.
+         */
+        get: operations["get_update_status_api_system_updates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/system/backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Backup
+         * @description Create a backup archive and stream it as a download (admin only).
+         *
+         *     The archive contains the SQLite snapshot **and the secret-key
+         *     material** — treat it like a credential.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         FileResponse: The tar.gz backup archive.
+         *
+         *     Raises:
+         *         HTTPException: 400 when the deployment is not SQLite-backed
+         *             (use ``pg_dump``).
+         */
+        get: operations["download_backup_api_system_backup_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/push/public-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Key
+         * @description Return the VAPID public key for ``pushManager.subscribe``.
+         *
+         *     Returns:
+         *         dict[str, str]: ``{"public_key": <base64url>}``.
+         */
+        get: operations["get_public_key_api_push_public_key_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/push/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Subscriptions
+         * @description List the calling user's registered devices.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         list[dict[str, Any]]: Subscription records, newest first.
+         */
+        get: operations["list_subscriptions_api_push_subscriptions_get"];
+        put?: never;
+        /**
+         * Subscribe
+         * @description Register (or refresh) this device's push subscription.
+         *
+         *     Args:
+         *         body: The browser subscription (endpoint + keys).
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, Any]: The stored subscription record.
+         */
+        post: operations["subscribe_api_push_subscriptions_post"];
+        /**
+         * Unsubscribe
+         * @description Remove this device's push subscription.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *         endpoint: The push-service endpoint URL to remove.
+         *
+         *     Raises:
+         *         HTTPException: 404 when no subscription matches the endpoint.
+         */
+        delete: operations["unsubscribe_api_push_subscriptions_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/push/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Test
+         * @description Send a test notification to the calling user's devices.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, int]: ``sent`` / ``failed`` / ``pruned`` counts.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the user has no registered devices.
+         */
+        post: operations["send_test_api_push_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fleet/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fleet Overview
+         * @description Return per-gateway status, version, and sandbox policy hashes.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"gateways": [...]}``.
+         */
+        get: operations["fleet_overview_api_fleet_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fleet/policy-drift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fleet Policy Drift
+         * @description Return policy drift between same-named sandboxes across gateways.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"items": [...]}`` — one entry per sandbox
+         *         name present on two or more reachable gateways.
+         */
+        get: operations["fleet_policy_drift_api_fleet_policy_drift_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fleet/policy-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fleet Policy Sync
+         * @description Push a sandbox's policy from one gateway to others.
+         *
+         *     Args:
+         *         body: Source gateway, sandbox name, and target gateways.
+         *         request: Incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, Any]: Per-target sync results and errors.
+         *
+         *     Raises:
+         *         HTTPException: 400 on an invalid request (unknown source policy,
+         *             source among targets), 403 when a per-gateway role override
+         *             denies one of the touched gateways, 502 when the source is
+         *             unreachable.
+         */
+        post: operations["fleet_policy_sync_api_fleet_policy_sync_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4186,6 +4915,334 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/passkeys/register/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register Options
+         * @description Start passkey registration for the logged-in user.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, Any]: WebAuthn creation options plus the state token.
+         */
+        post: operations["register_options_api_auth_passkeys_register_options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/passkeys/register/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register Verify
+         * @description Finish passkey registration and store the credential.
+         *
+         *     Args:
+         *         body: State token, credential, and device label.
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, Any]: The stored credential record.
+         *
+         *     Raises:
+         *         HTTPException: 400 when verification fails.
+         */
+        post: operations["register_verify_api_auth_passkeys_register_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Passkeys
+         * @description List the logged-in user's passkeys.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         list[dict[str, Any]]: Credential records, oldest first.
+         */
+        get: operations["list_passkeys_api_auth_passkeys_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/passkeys/{credential_pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Passkey
+         * @description Delete one of the logged-in user's passkeys.
+         *
+         *     Args:
+         *         credential_pk: Primary key of the credential.
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, str]: Confirmation message.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the passkey does not exist or belongs to
+         *             another user.
+         */
+        delete: operations["delete_passkey_api_auth_passkeys__credential_pk__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/login/passkey/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login Options
+         * @description Start a passkey login (discoverable credentials).
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, Any]: WebAuthn request options plus the state token.
+         */
+        post: operations["login_options_api_auth_login_passkey_options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/login/passkey/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login Verify
+         * @description Finish a passkey login and set the session cookie.
+         *
+         *     Args:
+         *         body: State token and assertion.
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         JSONResponse: Same shape and cookie as password login.
+         *
+         *     Raises:
+         *         HTTPException: 401 when the assertion fails verification, 429
+         *             when rate-limited.
+         */
+        post: operations["login_verify_api_auth_login_passkey_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/one-tap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cast One Tap Vote
+         * @description Cast the vote encoded in a signed one-tap token.
+         *
+         *     Args:
+         *         request: Incoming HTTP request (used for audit logging).
+         *         body: Request body with the signed token.
+         *
+         *     Returns:
+         *         dict[str, Any] | JSONResponse: Vote outcome — ``approved`` /
+         *             ``rejected``, or a 202 receipt when quorum is not yet met.
+         *
+         *     Raises:
+         *         HTTPException: 404 if the feature is disabled, 400 if the token is
+         *             invalid or expired, 403/409 if the workflow refuses the vote,
+         *             502 if the gateway is unreachable.
+         */
+        post: operations["cast_one_tap_vote_api_approvals_one_tap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/device-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint Code
+         * @description Mint a one-time device-link code for the logged-in operator.
+         *
+         *     The handoff session inherits the operator's role — like any login,
+         *     the role is re-read from the database on every request, so a token
+         *     cannot pin a stale or downscoped role. Blast radius is instead
+         *     bounded by a deliberately short session lifetime
+         *     (``device_link_session_max_age``).
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"id", "code", "expires_at", "role"}`` — the
+         *         plaintext code is encoded into the QR fragment by the caller.
+         */
+        post: operations["mint_code_api_auth_device_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/device-link/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Pending
+         * @description List device-link requests awaiting this operator's approval.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"pending": [...]}`` claimed-but-undecided
+         *         requests issued by the caller.
+         */
+        get: operations["list_pending_api_auth_device_link_pending_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/device-link/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Request
+         * @description Approve or deny a claimed device-link request.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *         body: The code id and the decision.
+         *
+         *     Returns:
+         *         dict[str, str]: ``{"status": "approved" | "denied"}``.
+         *
+         *     Raises:
+         *         HTTPException: 404 when no matching claimable request exists.
+         */
+        post: operations["approve_request_api_auth_device_link_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/device-link/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem
+         * @description Claim, poll, and ultimately consume a device-link code (phone side).
+         *
+         *     Anonymous by design — the code is the credential — but same-origin
+         *     only and rate-limited. On approval, mints a fresh short-lived
+         *     session cookie identical in shape to a password login.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *         body: The presented code.
+         *
+         *     Returns:
+         *         JSONResponse: ``{"status": ...}``; sets the session cookie when
+         *         status is ``approved``.
+         *
+         *     Raises:
+         *         HTTPException: 429 when the client IP is rate-limited.
+         */
+        post: operations["redeem_api_auth_device_link_redeem_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -4204,6 +5261,36 @@ export interface paths {
          *         TemplateResponse: Rendered login page.
          */
         get: operations["login_page_login_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/login/device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Device Link Page
+         * @description Serve the device-link confirmation page (phone side of the QR).
+         *
+         *     Anonymous: the page reads the one-time code from the URL fragment
+         *     (never sent to the server) and drives the redeem poll client-side.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *
+         *     Returns:
+         *         TemplateResponse | HTMLResponse: Rendered confirmation page, or
+         *         an error page when device-link is disabled.
+         */
+        get: operations["device_link_page_login_device_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4441,6 +5528,119 @@ export interface paths {
          *             page or access denied error.
          */
         get: operations["audit_page_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/approvals/one-tap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One Tap Page
+         * @description Mobile confirmation page for a one-tap approval link.
+         *
+         *     The signed token in the query string is the credential — no session is
+         *     required. The page only *shows* the decision; casting it is a POST to
+         *     ``/api/approvals/one-tap`` from the island.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         token: Signed one-tap token from the notification link.
+         *
+         *     Returns:
+         *         TemplateResponse | HTMLResponse: Confirmation page, or an error page
+         *             when the feature is disabled or the token is invalid.
+         */
+        get: operations["one_tap_page_approvals_one_tap_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fleet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fleet Page
+         * @description Cross-gateway fleet overview and policy drift page.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *
+         *     Returns:
+         *         TemplateResponse | RedirectResponse: Rendered fleet page, or a
+         *             redirect to login.
+         */
+        get: operations["fleet_page_fleet_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Profile Page
+         * @description Personal settings: passkeys and push devices.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *
+         *     Returns:
+         *         TemplateResponse | RedirectResponse: Rendered profile page, or a
+         *             redirect to login.
+         */
+        get: operations["profile_page_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Security Page
+         * @description Security posture self-check page (admin only).
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *
+         *     Returns:
+         *         TemplateResponse | RedirectResponse | HTMLResponse: Rendered security
+         *             posture page or access denied error.
+         */
+        get: operations["security_page_security_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4854,6 +6054,7 @@ export interface components {
          *         registration_enabled (bool): Whether self-registration is permitted.
          *         local_mode (bool | None): Whether the server runs in local (single-user) mode.
          *         oidc_providers (list[dict[str, str]] | None): Public OIDC providers available for login.
+         *         device_link_enabled (bool): Whether QR device-link sign-in handoff is enabled.
          */
         AuthCheckResponse: {
             /** Authenticated */
@@ -4877,6 +6078,11 @@ export interface components {
             oidc_providers?: {
                 [key: string]: string;
             }[] | null;
+            /**
+             * Device Link Enabled
+             * @default false
+             */
+            device_link_enabled: boolean;
         };
         /**
          * BootHookCreate
@@ -4958,6 +6164,29 @@ export interface components {
             enabled?: boolean | null;
             /** Continue On Failure */
             continue_on_failure?: boolean | null;
+        };
+        /**
+         * BudgetRequest
+         * @description Budget upsert payload.
+         *
+         *     Attributes:
+         *         limit_requests: Inference request ceiling for the window.
+         *         window: ``daily`` / ``weekly`` / ``monthly`` / ``total``.
+         *         action: ``notify`` or ``detach``.
+         */
+        BudgetRequest: {
+            /** Limit Requests */
+            limit_requests: number;
+            /**
+             * Window
+             * @default daily
+             */
+            window: string;
+            /**
+             * Action
+             * @default notify
+             */
+            action: string;
         };
         /**
          * ConfigureProviderRefreshRequest
@@ -5195,6 +6424,46 @@ export interface components {
              * @default viewer
              */
             role: string;
+        };
+        /**
+         * CurfewRequest
+         * @description Request body for configuring a gateway curfew.
+         *
+         *     Attributes:
+         *         enabled: Whether the curfew is active.
+         *         start_minute: Window start as minutes after local midnight.
+         *         end_minute: Window end; smaller than start wraps overnight.
+         *         timezone: IANA timezone the window is evaluated in.
+         */
+        CurfewRequest: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Start Minute */
+            start_minute: number;
+            /** End Minute */
+            end_minute: number;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
+        };
+        /**
+         * DecisionRequest
+         * @description Request body for approving or denying a device-link request.
+         *
+         *     Attributes:
+         *         id: Primary key of the device-link code.
+         *         approve: ``True`` to approve, ``False`` to deny.
+         */
+        DecisionRequest: {
+            /** Id */
+            id: number;
+            /** Approve */
+            approve: boolean;
         };
         /**
          * DeleteProviderProfileResponse
@@ -5698,6 +6967,22 @@ export interface components {
             password: string;
         };
         /**
+         * LoginVerifyRequest
+         * @description Request body for finishing passkey login.
+         *
+         *     Attributes:
+         *         state: The state token issued with the options.
+         *         credential: The browser's assertion (``toJSON()`` output).
+         */
+        LoginVerifyRequest: {
+            /** State */
+            state: string;
+            /** Credential */
+            credential: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * MessageResponse
          * @description Response with a status message string.
          *
@@ -5751,6 +7036,17 @@ export interface components {
              * @default true
              */
             ok: boolean;
+        };
+        /**
+         * OneTapRequest
+         * @description Request body carrying the signed one-tap token.
+         *
+         *     Attributes:
+         *         token: The signed token from the notification link.
+         */
+        OneTapRequest: {
+            /** Token */
+            token: string;
         };
         /**
          * OperationListResponse
@@ -6043,6 +7339,23 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * PolicySyncRequest
+         * @description Request body for a cross-gateway policy sync.
+         *
+         *     Attributes:
+         *         source_gateway: Gateway whose policy is the source of truth.
+         *         sandbox: Sandbox name (same on source and targets).
+         *         targets: Gateways to push the policy to.
+         */
+        PolicySyncRequest: {
+            /** Source Gateway */
+            source_gateway: string;
+            /** Sandbox */
+            sandbox: string;
+            /** Targets */
+            targets: string[];
+        };
+        /**
          * PresetSummaryResponse
          * @description Policy preset list entry.
          *
@@ -6058,6 +7371,17 @@ export interface components {
             description?: string | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * ProbeInferenceRequest
+         * @description Request body for probing a local inference endpoint.
+         *
+         *     Attributes:
+         *         base_url: OpenAI-compatible base URL on a private/LAN address.
+         */
+        ProbeInferenceRequest: {
+            /** Base Url */
+            base_url: string;
         };
         /**
          * ProcessPolicyRequest
@@ -6402,6 +7726,44 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * PushKeys
+         * @description Client encryption keys from ``PushSubscription.toJSON()``.
+         *
+         *     Attributes:
+         *         p256dh: Client public key (base64url).
+         *         auth: Client auth secret (base64url).
+         */
+        PushKeys: {
+            /** P256Dh */
+            p256dh: string;
+            /** Auth */
+            auth: string;
+        };
+        /**
+         * PushSubscribeRequest
+         * @description Request body for registering a device subscription.
+         *
+         *     Attributes:
+         *         endpoint: Push-service endpoint URL.
+         *         keys: Client encryption keys.
+         */
+        PushSubscribeRequest: {
+            /** Endpoint */
+            endpoint: string;
+            keys: components["schemas"]["PushKeys"];
+        };
+        /**
+         * RedeemRequest
+         * @description Request body for the phone's redeem poll.
+         *
+         *     Attributes:
+         *         code: The one-time code read from the QR fragment.
+         */
+        RedeemRequest: {
+            /** Code */
+            code: string;
+        };
+        /**
          * RegisterGatewayRequest
          * @description Request body for registering a remote gateway.
          *
@@ -6462,6 +7824,28 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * RegisterVerifyRequest
+         * @description Request body for finishing passkey registration.
+         *
+         *     Attributes:
+         *         state: The state token issued with the options.
+         *         credential: The browser's ``PublicKeyCredential.toJSON()`` output.
+         *         name: Operator-given device label.
+         */
+        RegisterVerifyRequest: {
+            /** State */
+            state: string;
+            /** Credential */
+            credential: {
+                [key: string]: unknown;
+            };
+            /**
+             * Name
+             * @default passkey
+             */
+            name: string;
         };
         /**
          * RejectRequest
@@ -7052,11 +8436,16 @@ export interface components {
          *
          *     Attributes:
          *         url: Target URL for POST requests. For ntfy this is the topic URL
-         *             (e.g. ``https://ntfy.sh/my-topic``).
+         *             (e.g. ``https://ntfy.sh/my-topic``); for telegram the bot
+         *             sendMessage endpoint with a ``chat_id`` query parameter; for
+         *             mqtt the broker URL (``mqtt://host:1883`` or ``mqtts://``).
          *         event_types: List of event type strings to subscribe to.
-         *         channel_type: Channel type (generic, slack, discord, email, ntfy).
+         *         channel_type: Channel type (generic, slack, discord, email, ntfy,
+         *             telegram, mqtt).
          *         extra_config: Optional channel-specific config (e.g. SMTP settings,
-         *             or ``{"token": "tk_..."}`` for ntfy access tokens).
+         *             ``{"token": "tk_..."}`` for ntfy access tokens, or
+         *             ``{"topic": "...", "username": "...", "password": "..."}``
+         *             for mqtt).
          */
         WebhookCreateRequest: {
             /** Url */
@@ -8342,6 +9731,41 @@ export interface operations {
             };
         };
     };
+    preview_preset_api_gateways__gw__sandboxes__name__policy_presets__preset_name__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                preset_name: string;
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     apply_preset_api_gateways__gw__sandboxes__name__policy_presets__preset_name__post: {
         parameters: {
             query?: never;
@@ -9383,6 +10807,185 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_timeline_api_gateways__gw__sandboxes__name__timeline_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                name: string;
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_budget_api_gateways__gw__sandboxes__name__budget_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_budget_api_gateways__gw__sandboxes__name__budget_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_budget_api_gateways__gw__sandboxes__name__budget_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_usage_api_gateways__gw__sandboxes__name__usage_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path: {
+                name: string;
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -10928,6 +12531,226 @@ export interface operations {
             };
         };
     };
+    kill_switch_status_api_gateway__name__kill_switch_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    engage_kill_switch_api_gateway__name__kill_switch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_kill_switch_api_gateway__name__kill_switch_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_curfew_api_gateway__name__curfew_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_curfew_api_gateway__name__curfew_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CurfewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_curfew_api_gateway__name__curfew_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_filesystem_api_gateway_import_filesystem_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     list_presets_api_policies_presets_get: {
         parameters: {
             query?: never;
@@ -11147,6 +12970,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_audit_chain_api_audit_verify_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -11387,6 +13232,446 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WebhookDeliveryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_security_posture_api_security_posture_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    get_digest_api_digest_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    usage_summary_api_usage_summary_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_node_stats_api_system_node_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    get_node_alerts_api_system_node_alerts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    probe_inference_api_system_probe_inference_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProbeInferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_access_urls_api_system_access_urls_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    get_update_status_api_system_updates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    download_backup_api_system_backup_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_public_key_api_push_public_key_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    list_subscriptions_api_push_subscriptions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    subscribe_api_push_subscriptions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushSubscribeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsubscribe_api_push_subscriptions_delete: {
+        parameters: {
+            query: {
+                endpoint: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_test_api_push_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
+    fleet_overview_api_fleet_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    fleet_policy_drift_api_fleet_policy_drift_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    fleet_policy_sync_api_fleet_policy_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PolicySyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -12407,7 +14692,339 @@ export interface operations {
             };
         };
     };
+    register_options_api_auth_passkeys_register_options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    register_verify_api_auth_passkeys_register_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_passkeys_api_auth_passkeys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    delete_passkey_api_auth_passkeys__credential_pk__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_options_api_auth_login_passkey_options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    login_verify_api_auth_login_passkey_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cast_one_tap_vote_api_approvals_one_tap_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OneTapRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mint_code_api_auth_device_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    list_pending_api_auth_device_link_pending_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    approve_request_api_auth_device_link_approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    redeem_api_auth_device_link_redeem_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedeemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     login_page_login_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    device_link_page_login_device_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -12610,6 +15227,97 @@ export interface operations {
         };
     };
     audit_page_audit_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    one_tap_page_approvals_one_tap_get: {
+        parameters: {
+            query?: {
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fleet_page_fleet_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    profile_page_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    security_page_security_get: {
         parameters: {
             query?: never;
             header?: never;

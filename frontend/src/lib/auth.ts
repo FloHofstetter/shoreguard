@@ -8,6 +8,7 @@ export interface AuthState {
   email: string | null;
   registrationEnabled: boolean;
   localMode: boolean;
+  deviceLinkEnabled: boolean;
   loaded: boolean;
 }
 
@@ -17,6 +18,7 @@ export const auth = signal<AuthState>({
   email: null,
   registrationEnabled: false,
   localMode: false,
+  deviceLinkEnabled: false,
   loaded: false,
 });
 
@@ -47,6 +49,7 @@ export function ensureAuth(): Promise<void> {
           email: d.email || null,
           registrationEnabled: Boolean(d.registration_enabled),
           localMode: Boolean(d.local_mode),
+          deviceLinkEnabled: Boolean(d.device_link_enabled),
           loaded: true,
         };
       } catch {

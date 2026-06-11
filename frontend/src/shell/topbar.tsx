@@ -192,6 +192,8 @@ function PhoneQrContent() {
   const [access, setAccess] = useState<AccessUrls | null>(null);
   const [failed, setFailed] = useState(false);
   const [selected, setSelected] = useState(0);
+  const [mode, setMode] = useState<"page" | "signin">("page");
+  const deviceLinkEnabled = auth.value.deviceLinkEnabled;
 
   useEffect(() => {
     if (!onLoopback) return;
@@ -238,47 +240,234 @@ function PhoneQrContent() {
       ? rewriteToCandidate(window.location.href, candidates[Math.min(selected, candidates.length - 1)])
       : window.location.href;
   const stillLoopback = isLoopbackHostname(new URL(url).hostname);
+  const canSignin = deviceLinkEnabled && !stillLoopback;
 
   return (
     <>
-      <div
-        class="bg-white d-inline-block p-2 rounded"
-        style={{ width: "220px" }}
-        // Self-generated SVG (uqr) from the current location or the
-        // server-reported LAN address — no external content reaches
-        // this sink.
-        dangerouslySetInnerHTML={{ __html: renderSVG(url) }}
-      />
-      <div class="small text-muted font-monospace mt-2">{url}</div>
-      {candidates.length > 1 && (
-        <div class="d-flex justify-content-center gap-1 mt-2">
-          {candidates.map((c, i) => (
-            <button
-              key={c}
-              class={`btn btn-sm ${i === selected ? "btn-secondary" : "btn-outline-secondary"}`}
-              onClick={() => setSelected(i)}
-            >
-              {new URL(c).hostname}
-            </button>
-          ))}
+      {canSignin && (
+        <div class="btn-group btn-group-sm mb-3" role="group">
+          <button
+            class={`btn ${mode === "page" ? "btn-secondary" : "btn-outline-secondary"}`}
+            onClick={() => setMode("page")}
+          >
+            <i class="bi bi-window me-1" />
+            Open page
+          </button>
+          <button
+            class={`btn ${mode === "signin" ? "btn-secondary" : "btn-outline-secondary"}`}
+            onClick={() => setMode("signin")}
+          >
+            <i class="bi bi-box-arrow-in-right me-1" />
+            Sign in on phone
+          </button>
         </div>
       )}
-      {stillLoopback ? (
-        <div class="alert alert-warning text-start small mt-2 mb-0">
-          <i class="bi bi-exclamation-triangle me-1" />
-          This is a loopback address — it only works on this machine. Your phone needs a LAN
-          address (<code>--host 0.0.0.0</code>) or a tailnet (<code>tailscale serve</code>).
+
+      {mode === "signin" && canSignin ? (
+        <DeviceLinkPanel origin={new URL(url).origin} />
+      ) : (
+        <>
+          <div
+            class="bg-white d-inline-block p-2 rounded"
+            style={{ width: "220px" }}
+            // Self-generated SVG (uqr) from the current location or the
+            // server-reported LAN address — no external content reaches
+            // this sink.
+            dangerouslySetInnerHTML={{ __html: renderSVG(url) }}
+          />
+          <div class="small text-muted font-monospace mt-2">{url}</div>
+          {candidates.length > 1 && (
+            <div class="d-flex justify-content-center gap-1 mt-2">
+              {candidates.map((c, i) => (
+                <button
+                  key={c}
+                  class={`btn btn-sm ${i === selected ? "btn-secondary" : "btn-outline-secondary"}`}
+                  onClick={() => setSelected(i)}
+                >
+                  {new URL(c).hostname}
+                </button>
+              ))}
+            </div>
+          )}
+          {stillLoopback ? (
+            <div class="alert alert-warning text-start small mt-2 mb-0">
+              <i class="bi bi-exclamation-triangle me-1" />
+              This is a loopback address — it only works on this machine. Your phone needs a LAN
+              address (<code>--host 0.0.0.0</code>) or a tailnet (<code>tailscale serve</code>).
+            </div>
+          ) : (
+            url.startsWith("http:") && (
+              <div class="small text-muted mt-2">
+                The dashboard works over plain HTTP, but push notifications on the phone need
+                HTTPS — e.g. <code>tailscale serve</code> in front of this server.
+              </div>
+            )
+          )}
+          <PushToggle />
+        </>
+      )}
+    </>
+  );
+}
+
+interface PendingRequest {
+  id: number;
+  ip: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+function DeviceLinkPanel({ origin }: { origin: string }) {
+  const [code, setCode] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState(0);
+  const [pending, setPending] = useState<PendingRequest[]>([]);
+  const [error, setError] = useState("");
+  const [now, setNow] = useState(0);
+
+  const mint = async () => {
+    setError("");
+    setCode(null);
+    setPending([]);
+    try {
+      const r = await apiFetch<{ code: string; expires_at: string }>(`/api/auth/device-link`, {
+        method: "POST",
+      });
+      setCode(r.code);
+      setExpiresAt(new Date(r.expires_at).getTime());
+      setNow(Date.now());
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  // Mint a code as soon as the operator opens this panel.
+  useEffect(() => {
+    void mint();
+  }, []);
+
+  // 1 Hz tick drives the expiry countdown.
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  // Poll for devices that have claimed the code and await approval.
+  useEffect(() => {
+    if (!code) return;
+    let active = true;
+    let timer = 0;
+    const poll = async () => {
+      try {
+        const r = await apiFetch<{ pending: PendingRequest[] }>(`/api/auth/device-link/pending`);
+        if (active) setPending(r?.pending ?? []);
+      } catch {
+        /* transient — keep polling */
+      }
+      if (active) timer = window.setTimeout(poll, 2000);
+    };
+    void poll();
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [code]);
+
+  const decide = async (id: number, approve: boolean) => {
+    try {
+      await apiFetch(`/api/auth/device-link/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, approve }),
+      });
+      setPending((p) => p.filter((x) => x.id !== id));
+      showToast(approve ? "Device approved — it is signing in." : "Request denied.",
+        approve ? "success" : "info");
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    }
+  };
+
+  if (error) {
+    return (
+      <div class="alert alert-danger small mb-0">
+        <i class="bi bi-exclamation-octagon me-1" />
+        {error}
+      </div>
+    );
+  }
+  if (!code) {
+    return (
+      <div class="text-muted py-4">
+        <span class="spinner-border spinner-border-sm me-1" />
+        Generating a one-time sign-in code…
+      </div>
+    );
+  }
+
+  const remaining = Math.max(0, Math.round((expiresAt - now) / 1000));
+  const url = `${origin}/login/device#${code}`;
+
+  if (remaining <= 0 && pending.length === 0) {
+    return (
+      <div class="text-center">
+        <p class="text-muted small">This sign-in code expired.</p>
+        <button class="btn btn-sm btn-outline-primary" onClick={() => void mint()}>
+          <i class="bi bi-arrow-clockwise me-1" />
+          Generate a new code
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div class="text-center">
+      {pending.length > 0 ? (
+        <div class="alert alert-warning text-start mb-0">
+          <div class="fw-medium mb-2">
+            <i class="bi bi-phone-vibrate me-1" />
+            A device wants to sign in as you
+          </div>
+          {pending.map((p) => (
+            <div key={p.id} class="small mb-2">
+              <div class="text-muted font-monospace">{p.ip ?? "unknown IP"}</div>
+              {p.user_agent && <div class="text-muted text-truncate">{p.user_agent}</div>}
+              <div class="d-flex gap-2 mt-2">
+                <button class="btn btn-sm btn-success" onClick={() => void decide(p.id, true)}>
+                  <i class="bi bi-check-lg me-1" />
+                  Approve
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onClick={() => void decide(p.id, false)}>
+                  <i class="bi bi-x-lg me-1" />
+                  Deny
+                </button>
+              </div>
+            </div>
+          ))}
+          <div class="small text-muted">
+            Only approve if you are holding the phone that just scanned the code.
+          </div>
         </div>
       ) : (
-        url.startsWith("http:") && (
+        <>
+          <div
+            class="bg-white d-inline-block p-2 rounded"
+            style={{ width: "220px" }}
+            // Self-generated SVG (uqr) of a one-time, server-minted
+            // device-link URL — no external content reaches this sink.
+            dangerouslySetInnerHTML={{ __html: renderSVG(url) }}
+          />
           <div class="small text-muted mt-2">
-            The dashboard works over plain HTTP, but push notifications on the phone need
-            HTTPS — e.g. <code>tailscale serve</code> in front of this server.
+            Scan to sign in — expires in {remaining}s. You will approve the request here.
           </div>
-        )
+        </>
       )}
-      <PushToggle />
-    </>
+      {url.startsWith("http:") && (
+        <div class="small text-muted mt-2">
+          Sent over plain HTTP on the LAN. For a credential like this, prefer HTTPS
+          (<code>tailscale serve</code>).
+        </div>
+      )}
+    </div>
   );
 }
 

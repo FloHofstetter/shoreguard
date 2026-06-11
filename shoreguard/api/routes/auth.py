@@ -207,6 +207,7 @@ async def auth_check(request: Request) -> dict[str, Any]:
                     if user:
                         email = user.email
     from shoreguard.api.oidc import get_providers
+    from shoreguard.settings import get_settings
 
     return {
         "authenticated": role is not None,
@@ -219,6 +220,7 @@ async def auth_check(request: Request) -> dict[str, Any]:
         "oidc_providers": [
             {"name": p.name, "display_name": p.display_name} for p in get_providers()
         ],
+        "device_link_enabled": get_settings().auth.device_link_enabled,
     }
 
 

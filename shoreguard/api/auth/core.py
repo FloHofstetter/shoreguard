@@ -225,7 +225,7 @@ def _hash_key(key: str) -> str:
 # ─── Session cookie helpers ─────────────────────────────────────────────────
 
 
-def create_session_token(user_id: int, role: str) -> str:
+def create_session_token(user_id: int, role: str, max_age: int | None = None) -> str:
     """Create an HMAC-signed session token.
 
     Format: ``<nonce>.<expiry>.<user_id>.<role>.<signature>``
@@ -233,12 +233,16 @@ def create_session_token(user_id: int, role: str) -> str:
     Args:
         user_id: Database ID of the authenticated user.
         role: The user's current role.
+        max_age: Token lifetime in seconds. Defaults to the configured
+            ``session_max_age``; pass a shorter value for a scoped
+            session (e.g. a device-link handoff).
 
     Returns:
         str: Signed session token string.
     """
     nonce = secrets.token_urlsafe(24)
-    expiry = str(int(time.time()) + _get_auth_settings().session_max_age)
+    ttl = max_age if max_age is not None else _get_auth_settings().session_max_age
+    expiry = str(int(time.time()) + ttl)
     payload = f"{nonce}.{expiry}.{user_id}.{role}"
     sig = hmac.new(state.hmac_secret, payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}.{sig}"

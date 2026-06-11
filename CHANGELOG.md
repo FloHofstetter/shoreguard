@@ -61,6 +61,22 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **QR device-link sign-in handoff** — the "Open on phone" dialog can
+  mint a one-time code so a phone gets its own session without typing a
+  password. The flow is deliberately conservative: the code is 256-bit,
+  stored only as a SHA-256 hash, travels in the URL **fragment** (never
+  reaches server/proxy logs), is single-use via atomic conditional
+  UPDATEs, and — crucially — only becomes a session after the operator
+  **approves the request on the original, already-trusted device**, so a
+  scanned-from-a-screen-share QR is caught. The phone is shown whose
+  account it is joining (defends QR-swap phishing), the redeem endpoint
+  is same-origin-guarded (`Sec-Fetch-Site`/`Origin`, blocks login-CSRF)
+  with a `SameSite=Strict` cookie, and the handoff session is short-lived
+  (`device_link_session_max_age`, default 24h) since these sessions
+  cannot be individually revoked. Off by default
+  (`SHOREGUARD_DEVICE_LINK_ENABLED`); failed/expired/replayed redeems are
+  audit-logged. New endpoints under `/api/auth/device-link/*`, a
+  `/login/device` confirmation page, and migration `107_device_link_codes`.
 - **Grafana dashboard expansion + metrics docs** — the shipped
   dashboard (`deploy/grafana/shoreguard.json`) gains panels for gRPC
   latency/errors/retries against the gateways, sandbox phase

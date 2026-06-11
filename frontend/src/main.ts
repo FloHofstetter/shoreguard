@@ -32,6 +32,7 @@ const ISLANDS: Record<string, IslandLoader> = {
   "auth-register": () => import("./islands/auth-pages").then((m) => ({ default: m.RegisterPage })),
   "auth-setup": () => import("./islands/auth-pages").then((m) => ({ default: m.SetupPage })),
   "auth-invite": () => import("./islands/auth-pages").then((m) => ({ default: m.InvitePage })),
+  "device-link-confirm": () => import("./islands/device-link-confirm"),
   "user-new-form": () => import("./islands/user-forms").then((m) => ({ default: m.UserNewForm })),
   "sp-new-form": () => import("./islands/user-forms").then((m) => ({ default: m.SpNewForm })),
   "sandboxes-page": () => import("./islands/sandboxes"),
