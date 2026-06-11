@@ -20,6 +20,15 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Fleet view — the second-box step** — new `/fleet` page and
+  `/api/fleet/*` endpoints for the moment the second Spark arrives:
+  per-gateway status/OpenShell-version/sandbox table with a skew
+  warning, **policy drift** between same-named sandboxes across
+  gateways (compared by policy hash), and one-click **policy sync**
+  ("use as source") that pushes a sandbox's policy to its namesakes —
+  every push is a normal revision, so it shows up in history and can
+  be reverted. Unreachable gateways degrade gracefully instead of
+  blocking the view.
 - **Per-sandbox activity timeline** — "what did this agent do last
   night?" answered for one sandbox:
   `GET /api/gateways/{gw}/sandboxes/{name}/timeline` merges audit

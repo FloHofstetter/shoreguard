@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from shoreguard.services.digest import DigestService
     from shoreguard.services.discovery import DiscoveryService
     from shoreguard.services.drift_detection import DriftDetectionService
+    from shoreguard.services.fleet import FleetService
     from shoreguard.services.gateway import GatewayService
     from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
@@ -81,6 +82,7 @@ class ServiceContainer:
         push: Web Push subscriptions and delivery (PWA notifications).
         update_check: Release update checks and gateway version skew.
         timeline: Per-sandbox merged activity timeline.
+        fleet: Cross-gateway overview, drift, and policy sync.
         denial_context: Denial context cache.
         local_gateway: Local gateway manager, or ``None`` outside local mode.
     """
@@ -111,6 +113,7 @@ class ServiceContainer:
     push: PushService
     update_check: UpdateCheckService
     timeline: TimelineService
+    fleet: FleetService
     denial_context: DenialContextService
     local_gateway: LocalGatewayManager | None = None
 
@@ -144,6 +147,7 @@ def build_container(
     from shoreguard.services.digest import DigestService
     from shoreguard.services.discovery import DiscoveryService
     from shoreguard.services.drift_detection import DriftDetectionService
+    from shoreguard.services.fleet import FleetService
     from shoreguard.services.gateway import GatewayService
     from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
@@ -215,6 +219,7 @@ def build_container(
         push=PushService(async_session_factory, settings.push),
         update_check=UpdateCheckService(gateway, settings.updates),
         timeline=TimelineService(async_session_factory),
+        fleet=FleetService(registry, gateway),
         denial_context=DenialContextService(),
         local_gateway=(LocalGatewayManager(gateway) if settings.server.local_mode else None),
     )

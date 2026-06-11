@@ -23,6 +23,7 @@ const ISLANDS: Record<string, IslandLoader> = {
   "audit-page": () => import("./islands/audit"),
   "security-posture": () => import("./islands/security-posture"),
   "profile-page": () => import("./islands/profile"),
+  "fleet-page": () => import("./islands/fleet"),
   "one-tap-approval": () => import("./islands/one-tap"),
   "dashboard-page": () => import("./islands/dashboard"),
   "provider-profiles-page": () => import("./islands/provider-profiles"),

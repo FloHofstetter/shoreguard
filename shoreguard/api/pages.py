@@ -587,6 +587,27 @@ async def one_tap_page(request: Request, token: str = "") -> TemplateResponse | 
     )
 
 
+@router.get("/fleet", response_model=None)
+async def fleet_page(request: Request) -> TemplateResponse | RedirectResponse:
+    """Cross-gateway fleet overview and policy drift page.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse: Rendered fleet page, or a
+            redirect to login.
+    """
+    redirect = await _require_page_auth(request)
+    if redirect:
+        return redirect
+    return templates.TemplateResponse(
+        request,
+        "pages/fleet.html",
+        {"active_page": "fleet"},
+    )
+
+
 @router.get("/profile", response_model=None)
 async def profile_page(request: Request) -> TemplateResponse | RedirectResponse:
     """Personal settings: passkeys and push devices.

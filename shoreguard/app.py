@@ -237,6 +237,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         budgets,
         bypass,
         digest,
+        fleet,
         gateway,
         health,
         inference,
@@ -389,6 +390,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         push.router,
         prefix="/api/push",
         tags=["push"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        fleet.router,
+        prefix="/api/fleet",
+        tags=["fleet"],
         dependencies=[Depends(require_auth)],
     )
     app.include_router(
