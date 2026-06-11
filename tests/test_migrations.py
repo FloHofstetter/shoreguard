@@ -212,3 +212,72 @@ def test_migrations_postgres_fresh_db():
             for table in all_tables:
                 conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
         engine.dispose()
+
+
+# ─── v2 baseline squash (v0.38) ─────────────────────────────────────────────
+
+
+def test_init_db_fresh_database_lands_on_baseline():
+    """init_db() on a fresh file database applies the squashed baseline."""
+    from shoreguard.db import init_db
+
+    with tempfile.TemporaryDirectory() as d:
+        url = f"sqlite:///{d}/fresh.db"
+        engine = init_db(url)
+        try:
+            assert _current_revision(url) == "v2_baseline"
+            tables = set(inspect(engine).get_table_names())
+            assert EXPECTED_TABLES.issubset(tables)
+        finally:
+            engine.dispose()
+
+
+def test_init_db_stamps_v037_database():
+    """A v0.37 database (old head revision 017) is stamped, not migrated."""
+    from shoreguard.db import init_db
+    from shoreguard.models import Base
+
+    with tempfile.TemporaryDirectory() as d:
+        url = f"sqlite:///{d}/v037.db"
+        # Build a v0.37 fixture: the 017 schema is identical to the
+        # baseline, so create it from the models and stamp the old head.
+        engine = create_engine(url)
+        Base.metadata.create_all(engine)
+        with engine.begin() as conn:
+            conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+            conn.execute(text("INSERT INTO alembic_version VALUES ('017')"))
+        # Seed a row so we can prove data survives the stamp.
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO gateways (name, endpoint, scheme, auth_mode, registered_at,"
+                    " last_status) VALUES ('legacy-gw', '10.0.0.1:8443', 'https', 'mtls',"
+                    " '2026-01-01', 'unknown')"
+                )
+            )
+        engine.dispose()
+
+        engine = init_db(url)
+        try:
+            assert _current_revision(url) == "v2_baseline"
+            with engine.connect() as conn:
+                name = conn.execute(text("SELECT name FROM gateways")).scalar()
+            assert name == "legacy-gw"
+        finally:
+            engine.dispose()
+
+
+def test_init_db_rejects_pre_v037_database():
+    """Databases on revisions older than the v0.37 head are rejected clearly."""
+    from shoreguard.db import init_db
+
+    with tempfile.TemporaryDirectory() as d:
+        url = f"sqlite:///{d}/old.db"
+        engine = create_engine(url)
+        with engine.begin() as conn:
+            conn.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+            conn.execute(text("INSERT INTO alembic_version VALUES ('012')"))
+        engine.dispose()
+
+        with pytest.raises(RuntimeError, match="upgrade to v0.37"):
+            init_db(url)

@@ -47,6 +47,52 @@ def _alembic_config(url: str) -> AlembicConfig:
     return cfg
 
 
+# Final revision of the pre-squash migration chain (the v0.37 head).
+# Databases sitting exactly here are schema-identical to the squashed
+# v2 baseline and are stamped instead of migrated.
+_PRE_SQUASH_HEAD = "017"
+_BASELINE_REVISION = "v2_baseline"
+
+
+def _maybe_stamp_v2_baseline(engine: Engine, cfg: AlembicConfig) -> None:
+    """Stamp a v0.37 database to the squashed v2 baseline revision.
+
+    The 17-step pre-v0.38 migration chain was squashed into a single
+    baseline. A database whose ``alembic_version`` sits at the old head
+    has exactly the baseline schema, so it is stamped without running
+    DDL. Older revisions cannot be upgraded by this version anymore.
+
+    Args:
+        engine: Engine connected to the target database.
+        cfg: Alembic config pointing at the embedded migrations.
+
+    Raises:
+        RuntimeError: If the database is at a pre-v0.37 schema revision.
+    """
+    from sqlalchemy import text
+
+    try:
+        with engine.connect() as conn:
+            version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    except OperationalError, SQLAlchemyError:
+        return  # fresh database — no alembic_version table yet
+    if version == _PRE_SQUASH_HEAD:
+        logger.info(
+            "Stamping v0.37 database (revision %s) to squashed baseline %s",
+            version,
+            _BASELINE_REVISION,
+        )
+        # purge=True clears the old version row without resolving the
+        # (now deleted) pre-squash revision in the script directory.
+        command.stamp(cfg, _BASELINE_REVISION, purge=True)
+    elif version is not None and version != _BASELINE_REVISION:
+        raise RuntimeError(
+            f"Database schema revision '{version}' predates ShoreGuard v0.37. "
+            "The migration chain was squashed in v0.38 — upgrade to v0.37 "
+            "first, then to this version."
+        )
+
+
 def init_db(url: str | None = None) -> Engine:
     """Create the engine, run migrations, and configure the session factory.
 
@@ -128,6 +174,7 @@ def init_db(url: str | None = None) -> Engine:
         Base.metadata.create_all(_engine)
     else:
         cfg = _alembic_config(database_url)
+        _maybe_stamp_v2_baseline(_engine, cfg)
         from shoreguard.settings import get_settings
 
         db_cfg2 = get_settings().database
