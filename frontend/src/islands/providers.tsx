@@ -626,6 +626,37 @@ export function ProviderForm({ mode, providerName }: { mode: string; providerNam
 
   const cancelHref = window.location.pathname.replace(/\/providers\/.*$/, "/providers");
 
+  const configBaseUrl = (() => {
+    const m = config.match(/^\s*base_url\s*=\s*(\S+)/m);
+    return m ? m[1] : "";
+  })();
+
+  const [probing, setProbing] = useState(false);
+  const probeEndpoint = async () => {
+    setProbing(true);
+    setOutput(null);
+    try {
+      const r = await apiFetch<{ ok: boolean; models: string[]; error: string | null }>(
+        `/api/system/probe-inference`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ base_url: configBaseUrl }),
+        },
+      );
+      if (r.ok) {
+        const models = r.models.length ? r.models.join(", ") : "no models listed";
+        setOutput({ ok: true, text: `Endpoint is up — serving: ${models}` });
+      } else {
+        setOutput({ ok: false, text: `Endpoint probe failed: ${r.error}` });
+      }
+    } catch (e) {
+      setOutput({ ok: false, text: (e as Error).message });
+    } finally {
+      setProbing(false);
+    }
+  };
+
   return (
     <div class="card sg-card-themed">
       <div class="card-body">
@@ -704,6 +735,21 @@ export function ProviderForm({ mode, providerName }: { mode: string; providerNam
               value={config}
               onInput={(e) => setConfig((e.target as HTMLTextAreaElement).value)}
             />
+            {configBaseUrl && (
+              <div class="mt-2">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-secondary"
+                  disabled={probing}
+                  title="Probe the base_url for served models (LAN/local endpoints only)"
+                  onClick={() => void probeEndpoint()}
+                >
+                  {probing && <span class="spinner-border spinner-border-sm me-1" />}
+                  <i class="bi bi-activity me-1" />
+                  Test endpoint
+                </button>
+              </div>
+            )}
           </div>
 
           {output && (

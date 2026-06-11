@@ -12,6 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from shoreguard.api.auth import require_role
 from shoreguard.api.deps import get_services
@@ -39,6 +40,37 @@ async def get_node_alerts() -> dict[str, Any]:
         dict[str, Any]: Enabled flag, thresholds, and breached metrics.
     """
     return get_services().node_alerts.status()
+
+
+class ProbeInferenceRequest(BaseModel):
+    """Request body for probing a local inference endpoint.
+
+    Attributes:
+        base_url: OpenAI-compatible base URL on a private/LAN address.
+    """
+
+    base_url: str = Field(max_length=2048)
+
+
+@router.post("/probe-inference", dependencies=[Depends(require_role("operator"))])
+async def probe_inference(body: ProbeInferenceRequest) -> dict[str, Any]:
+    """Probe an OpenAI-compatible endpoint on the LAN for served models.
+
+    Lets the operator test ``base_url`` before creating a provider —
+    e.g. Ollama on another homelab box. Restricted to private/LAN
+    addresses; one read-only GET, nothing is stored.
+
+    Args:
+        body: The endpoint to probe.
+
+    Returns:
+        dict[str, Any]: ``{"ok", "models", "error"}``.
+    """
+    import asyncio
+
+    from shoreguard.services.local_inference import probe_endpoint
+
+    return await asyncio.to_thread(probe_endpoint, body.base_url)
 
 
 @router.get("/updates")

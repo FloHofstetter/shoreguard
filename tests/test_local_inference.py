@@ -143,3 +143,115 @@ async def test_route_probes_in_local_mode(api_client, monkeypatch):
     assert body["local_mode"] is True
     assert body["detected"] == fake
     mock_detect.assert_called_once()
+
+
+# ─── probe_endpoint (operator-supplied LAN URL) ──────────────────────────────
+
+
+class TestProbeEndpoint:
+    def test_rejects_bad_scheme(self):
+        from shoreguard.services.local_inference import probe_endpoint
+
+        result = probe_endpoint("ftp://192.168.1.10/v1")
+        assert result["ok"] is False
+        assert "scheme" in result["error"]
+
+    def test_rejects_public_address(self):
+        from shoreguard.services.local_inference import probe_endpoint
+
+        result = probe_endpoint("http://8.8.8.8/v1")
+        assert result["ok"] is False
+        assert "private" in result["error"]
+
+    def test_probes_openai_models(self):
+        from shoreguard.services.local_inference import probe_endpoint
+
+        responses = {
+            "http://192.168.1.20:11434/v1/models": httpx.Response(
+                200, json={"data": [{"id": "llama3:8b"}]}
+            )
+        }
+        with _client_with(responses):
+            result = probe_endpoint("http://192.168.1.20:11434/v1")
+        assert result == {"ok": True, "models": ["llama3:8b"], "error": None}
+
+    def test_falls_back_to_ollama_tags(self):
+        from shoreguard.services.local_inference import probe_endpoint
+
+        responses = {
+            "http://192.168.1.20:11434/api/tags": httpx.Response(
+                200, json={"models": [{"name": "qwen3:4b"}]}
+            )
+        }
+        with _client_with(responses):
+            result = probe_endpoint("http://192.168.1.20:11434/v1")
+        assert result["ok"] is True
+        assert result["models"] == ["qwen3:4b"]
+
+    def test_unreachable_endpoint_reports_error(self):
+        from shoreguard.services.local_inference import probe_endpoint
+
+        with _client_with({}):
+            result = probe_endpoint("http://192.168.1.20:9999/v1")
+        assert result["ok"] is False
+        assert result["models"] == []
+        assert result["error"]
+
+    def test_localhost_allowed(self):
+        from shoreguard.services.local_inference import probe_endpoint
+
+        responses = {
+            "http://localhost:1234/v1/models": httpx.Response(200, json={"data": []})
+        }
+        with _client_with(responses):
+            result = probe_endpoint("http://localhost:1234/v1")
+        assert result["ok"] is True
+
+
+@pytest.fixture
+def auth_db():
+    from tests.conftest import make_auth_test_db
+
+    factory, dispose = make_auth_test_db()
+    yield factory
+    dispose()
+
+
+async def test_probe_route_requires_operator(auth_db):
+    from shoreguard.api.auth import create_user
+    from shoreguard.api.main import app
+
+    await create_user("viewer@test.com", "viewerpass1", "viewer")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/auth/login", json={"email": "viewer@test.com", "password": "viewerpass1"}
+        )
+        assert resp.status_code == 200
+        resp = await client.post(
+            "/api/system/probe-inference", json={"base_url": "http://192.168.1.20/v1"}
+        )
+        assert resp.status_code == 403
+
+
+async def test_probe_route_operator_ok(auth_db):
+    from shoreguard.api.auth import create_user
+    from shoreguard.api.main import app
+
+    await create_user("op@test.com", "operatorpass1", "operator")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/auth/login", json={"email": "op@test.com", "password": "operatorpass1"}
+        )
+        assert resp.status_code == 200
+        responses = {
+            "http://192.168.1.20:8000/v1/models": httpx.Response(
+                200, json={"data": [{"id": "nim/llama"}]}
+            )
+        }
+        with _client_with(responses):
+            resp = await client.post(
+                "/api/system/probe-inference",
+                json={"base_url": "http://192.168.1.20:8000/v1"},
+            )
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True, "models": ["nim/llama"], "error": None}

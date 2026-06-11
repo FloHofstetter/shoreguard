@@ -89,6 +89,64 @@ def _extract_models(payload: Any) -> list[str]:
     return models
 
 
+def probe_endpoint(base_url: str) -> dict[str, Any]:
+    """Probe an operator-supplied OpenAI-compatible endpoint for models.
+
+    The multi-box homelab counterpart to :func:`detect_local_inference`:
+    the Spark serves models for the whole LAN, so the endpoint worth
+    testing is often *not* loopback. The probe is restricted to
+    **private/LAN addresses** — public endpoints don't need probing and
+    allowing them would turn this into a general SSRF primitive. The
+    probe is read-only: one GET to ``<base>/models`` (with an Ollama
+    ``/api/tags`` fallback), response parsed for model names only.
+
+    Synchronous — call via ``asyncio.to_thread`` from async routes.
+
+    Args:
+        base_url: The OpenAI-compatible base URL (e.g.
+            ``http://192.168.1.20:11434/v1``).
+
+    Returns:
+        dict[str, Any]: ``{"ok", "models", "error"}``.
+    """
+    from urllib.parse import urlsplit
+
+    from shoreguard.config import is_private_ip
+
+    base_url = base_url.strip().rstrip("/")
+    parts = urlsplit(base_url)
+    if parts.scheme not in ("http", "https"):
+        return {"ok": False, "models": [], "error": "URL scheme must be http or https"}
+    if not parts.hostname:
+        return {"ok": False, "models": [], "error": "URL must include a hostname"}
+    if not is_private_ip(parts.hostname):
+        return {
+            "ok": False,
+            "models": [],
+            "error": "Probe is for local/LAN endpoints only (private addresses)",
+        }
+
+    candidates = [f"{base_url}/models"]
+    if base_url.endswith("/v1"):
+        # Ollama's native API answers /api/tags even when /v1/models does.
+        candidates.append(f"{parts.scheme}://{parts.netloc}/api/tags")
+
+    last_error = "no response"
+    with httpx.Client(
+        timeout=httpx.Timeout(3.0, connect=1.5), follow_redirects=False
+    ) as client:
+        for url in candidates:
+            try:
+                resp = client.get(url)
+                resp.raise_for_status()
+                payload = resp.json()
+            except (httpx.HTTPError, ValueError) as e:
+                last_error = str(e) or e.__class__.__name__
+                continue
+            return {"ok": True, "models": _extract_models(payload), "error": None}
+    return {"ok": False, "models": [], "error": last_error}
+
+
 def detect_local_inference() -> list[dict[str, Any]]:
     """Probe well-known loopback ports for running local inference servers.
 

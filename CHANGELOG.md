@@ -20,6 +20,13 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **LAN inference endpoint probe** — the provider form gains a **Test
+  endpoint** button (`POST /api/system/probe-inference`, operator+)
+  that probes an OpenAI-compatible `base_url` for served models before
+  the provider is created — the multi-box complement to the existing
+  loopback auto-detection (the Spark often serves models for the whole
+  LAN). Restricted to private/LAN addresses; read-only single GET with
+  an Ollama `/api/tags` fallback.
 - **Update awareness & gateway version skew** — health probes now
   record each gateway's OpenShell version; `GET /api/system/updates`
   reports them plus a skew flag, and the dashboard shows a banner when
