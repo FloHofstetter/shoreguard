@@ -55,6 +55,7 @@ from shoreguard.api.auth.rbac import (
     _lookup_gateway_role,
     _lookup_group_global_role,
 )
+from shoreguard.api.deps import GatewayContext
 from shoreguard.models import Base
 
 
@@ -464,7 +465,7 @@ class TestRequireRoleBranches:
         token = create_session_token(user_id=info["id"], role="operator")
         dep = require_role("viewer")
         req = _make_request(cookies={"sg_session": token}, path="/api/gateways/foo/thing")
-        req.state._gateway = "foo"
+        req.state.gateway = GatewayContext(name="foo")
         with patch(
             "shoreguard.api.auth.rbac._lookup_gateway_role",
             side_effect=_GatewayRoleLookupError("boom"),
@@ -1053,7 +1054,7 @@ class TestRequireRoleGatewayOverride:
         token = create_session_token(user_id=info["id"], role="viewer")
         dep = require_role("admin")
         req = _make_request(cookies={"sg_session": token})
-        req.state._gateway = "prod"
+        req.state.gateway = GatewayContext(name="prod")
         await dep(req)  # should pass — gateway override is admin
         assert req.state.role == "admin"
 
@@ -1092,7 +1093,7 @@ class TestRequireRoleGatewayOverride:
 
         dep = require_role("operator")
         req = _make_request(headers={"authorization": f"Bearer {key}"})
-        req.state._gateway = "stage"
+        req.state.gateway = GatewayContext(name="stage")
         await dep(req)
         assert req.state.role == "operator"
 

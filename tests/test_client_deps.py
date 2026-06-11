@@ -8,7 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from shoreguard.api.deps import (
-    _current_gateway,
+    GatewayContext,
     get_client,
     reset_backoff,
     resolve_gateway,
@@ -22,10 +22,10 @@ def _fake_request(gateway: str | None = None) -> MagicMock:
     req = MagicMock()
     req.state = MagicMock()
     if gateway is not None:
-        req.state._gateway = gateway
+        req.state.gateway = GatewayContext(name=gateway)
     else:
         # Simulate missing attribute
-        del req.state._gateway
+        del req.state.gateway
     return req
 
 
@@ -59,11 +59,10 @@ async def test_reset_backoff_delegates():
 
 
 async def test_resolve_gateway_valid_name():
-    """resolve_gateway sets request.state._gateway and ContextVar."""
+    """resolve_gateway stores a typed GatewayContext on request.state."""
     req = _fake_request()
     resolve_gateway("my-gw", req)
-    assert req.state._gateway == "my-gw"
-    assert _current_gateway.get() == "my-gw"
+    assert req.state.gateway == GatewayContext(name="my-gw")
 
 
 async def test_resolve_gateway_invalid_name_raises():
@@ -85,21 +84,9 @@ async def test_resolve_gateway_rejects_empty():
 async def test_get_client_with_none_gateway():
     """get_client raises HTTPException(500) when no gateway context is set."""
     req = _fake_request()  # no gateway
-    _current_gateway.set(None)
     with pytest.raises(HTTPException) as exc_info:
         await get_client(req)
     assert exc_info.value.status_code == 500
-
-
-async def test_get_client_falls_back_to_contextvar():
-    """get_client falls back to ContextVar when request.state has no gateway."""
-    _current_gateway.set("fallback-gw")
-    req = _fake_request()  # no gateway on state
-    with patch.object(get_container(), "gateway", new_callable=AsyncMock) as mock_svc:
-        mock_svc.get_client.return_value = MagicMock()
-        await get_client(req)
-        mock_svc.get_client.assert_called_once_with(name="fallback-gw")
-    _current_gateway.set(None)
 
 
 # ─── _get_gateway_service None check ──────────────────────────────────────

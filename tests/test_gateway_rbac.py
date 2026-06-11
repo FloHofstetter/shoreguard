@@ -20,7 +20,6 @@ from shoreguard.api.auth import (
     set_gateway_role,
 )
 from shoreguard.api.auth.rbac import _GatewayRoleLookupError, _lookup_gateway_role
-from shoreguard.api.deps import _current_gateway
 from shoreguard.exceptions import ValidationError as DomainValidationError
 from shoreguard.models import Base, Gateway
 
@@ -301,12 +300,8 @@ class TestGatewayRoleResolution:
             # should grant access when _current_gateway is set.
             # We test the role resolution by directly checking _lookup_gateway_role
             # and the ContextVar mechanism.
-            token = _current_gateway.set(GW_NAME)
-            try:
-                gw_role = _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
-                assert gw_role == "admin"
-            finally:
-                _current_gateway.reset(token)
+            gw_role = _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
+            assert gw_role == "admin"
 
     async def test_admin_gets_viewer_on_scoped_gateway(self, db, _with_gateway, _with_admin):
         """A global admin with a gateway-scoped viewer role gets viewer on that gateway."""
@@ -318,13 +313,8 @@ class TestGatewayRoleResolution:
         session.close()
 
         set_gateway_role(user_id=user_id, gateway_name=GW_NAME, role="viewer")
-
-        token = _current_gateway.set(GW_NAME)
-        try:
-            gw_role = _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
-            assert gw_role == "viewer"
-        finally:
-            _current_gateway.reset(token)
+        gw_role = _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
+        assert gw_role == "viewer"
 
     async def test_no_gateway_role_falls_back_to_global(self, db, _with_gateway, _with_viewer):
         """No gateway-scoped role means the global role applies."""
@@ -334,13 +324,8 @@ class TestGatewayRoleResolution:
         user = session.query(User).filter(User.email == VIEWER_EMAIL).first()
         user_id = user.id
         session.close()
-
-        token = _current_gateway.set(GW_NAME)
-        try:
-            gw_role = _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
-            assert gw_role is None  # None means "use global role"
-        finally:
-            _current_gateway.reset(token)
+        gw_role = _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
+        assert gw_role is None  # None means "use global role"
 
     async def test_role_resolution_only_when_gateway_set(self, db, _with_gateway, _with_viewer):
         """Role resolution only applies when _current_gateway is set."""
@@ -353,10 +338,8 @@ class TestGatewayRoleResolution:
 
         set_gateway_role(user_id=user_id, gateway_name=GW_NAME, role="admin")
 
-        # Without setting _current_gateway, the ContextVar is None
-        assert _current_gateway.get() is None
-        # The lookup function itself still works, but require_role won't call it
-        # because gateway is None. Verify the ContextVar default.
+        # The lookup function itself still works, but require_role won't call
+        # it when no gateway context is present on the request.
         gw_role = _lookup_gateway_role(user_id=user_id, gateway=GW_NAME)
         assert gw_role == "admin"  # The role exists in DB, but require_role wouldn't use it
 

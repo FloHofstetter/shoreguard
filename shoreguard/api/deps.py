@@ -1,20 +1,23 @@
 """Shared dependencies for API routes.
 
-Stores the gateway name on ``request.state`` so it is visible to all
-downstream dependencies and route handlers within the same request.
+The ``resolve_gateway`` dependency validates the ``{gw}`` path segment
+and stores a typed :class:`GatewayContext` on ``request.state`` — the
+single way gateway-scoped routes learn which gateway a request targets.
 
 .. note::
 
    Starlette ≥ 1.0 runs each ``Depends()`` callable in its own
    ``contextvars.copy_context()``, so a ``ContextVar`` set in one
    dependency is invisible to siblings.  ``request.state`` is the
-   supported way to share per-request data.
+   supported way to share per-request data. WebSocket handlers do not
+   go through this dependency at all — they receive the gateway name
+   as an explicit path parameter.
 """
 
 from __future__ import annotations
 
 import logging
-from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, Request
@@ -28,10 +31,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Kept for the WebSocket handler which has no Request object.
-_current_gateway: ContextVar[str | None] = ContextVar("_current_gateway", default=None)
-
 _VALID_GW_RE = VALID_GATEWAY_NAME_RE
+
+
+@dataclass(frozen=True)
+class GatewayContext:
+    """Per-request gateway scope, set by :func:`resolve_gateway`.
+
+    Attributes:
+        name: Validated gateway name from the URL path.
+    """
+
+    name: str
 
 
 def get_services() -> ServiceContainer:
@@ -75,7 +86,7 @@ def get_actor(request: Request) -> str:
 def resolve_gateway(gw: str, request: Request) -> None:
     """FastAPI dependency — set the gateway context for this request.
 
-    Stores the gateway name on ``request.state`` so downstream
+    Stores a :class:`GatewayContext` on ``request.state`` so downstream
     dependencies and route handlers can retrieve it.
 
     Args:
@@ -88,30 +99,25 @@ def resolve_gateway(gw: str, request: Request) -> None:
     if not _VALID_GW_RE.match(gw):
         raise HTTPException(400, "Invalid gateway name: must match [a-zA-Z0-9][a-zA-Z0-9._-]*")
     logger.debug("Resolved gateway context: '%s'", gw)
-    request.state._gateway = gw
-    # Also set the ContextVar for WebSocket and background-task compat.
-    _current_gateway.set(gw)
+    request.state.gateway = GatewayContext(name=gw)
 
 
-def _require_gateway_name(request: Request) -> str:
-    """Return the current gateway name from request state.
+def get_gateway_context(request: Request) -> GatewayContext:
+    """Return the gateway context set by :func:`resolve_gateway`.
 
     Args:
         request: The incoming HTTP request.
 
     Returns:
-        str: The gateway name from the request context.
+        GatewayContext: The per-request gateway scope.
 
     Raises:
         HTTPException: If no gateway context has been set.
     """
-    gw: str | None = getattr(request.state, "_gateway", None)
-    if gw is None:
-        # Fallback to ContextVar (WebSocket path).
-        gw = _current_gateway.get()
-    if gw is None:
+    ctx = getattr(request.state, "gateway", None)
+    if ctx is None:
         raise HTTPException(500, "No gateway context — resolve_gateway dependency missing")
-    return gw
+    return ctx
 
 
 def get_gateway_name(request: Request) -> str:
@@ -125,7 +131,8 @@ def get_gateway_name(request: Request) -> str:
     Returns:
         str: The gateway name, or empty string if not set.
     """
-    return getattr(request.state, "_gateway", "") or _current_gateway.get() or ""
+    ctx = getattr(request.state, "gateway", None)
+    return ctx.name if ctx is not None else ""
 
 
 async def get_client(request: Request) -> ShoreGuardClient:
@@ -137,7 +144,7 @@ async def get_client(request: Request) -> ShoreGuardClient:
     Returns:
         ShoreGuardClient: The client bound to the current gateway context.
     """
-    return await _get_gateway_service().get_client(name=_require_gateway_name(request))
+    return await _get_gateway_service().get_client(name=get_gateway_context(request).name)
 
 
 def set_client(client: ShoreGuardClient | None, request: Request) -> None:
@@ -147,7 +154,7 @@ def set_client(client: ShoreGuardClient | None, request: Request) -> None:
         client: The client instance to set, or ``None`` to clear.
         request: The incoming HTTP request.
     """
-    _get_gateway_service().set_client(client, name=_require_gateway_name(request))
+    _get_gateway_service().set_client(client, name=get_gateway_context(request).name)
 
 
 def reset_backoff(request: Request) -> None:
@@ -156,4 +163,4 @@ def reset_backoff(request: Request) -> None:
     Args:
         request: The incoming HTTP request.
     """
-    _get_gateway_service().reset_backoff(name=_require_gateway_name(request))
+    _get_gateway_service().reset_backoff(name=get_gateway_context(request).name)

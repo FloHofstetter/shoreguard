@@ -24,7 +24,7 @@ from shoreguard.services.ocsf import parse_log_line as parse_ocsf_log
 from shoreguard.services.webhooks import fire_webhook
 
 from .auth import require_auth_ws, require_role_ws
-from .deps import _VALID_GW_RE, _current_gateway, _get_gateway_service
+from .deps import _VALID_GW_RE, _get_gateway_service
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,6 @@ async def sandbox_events(
             )
         return
 
-    _current_gateway.set(gw)
     try:
         client = await _get_gateway_service().get_client(name=gw)
     except GatewayNotConnectedError:
@@ -239,7 +238,6 @@ async def _accept_and_resolve_sandbox(
                 {"type": "error", "data": {"message": "Invalid gateway name"}}
             )
         return None
-    _current_gateway.set(gw)
     try:
         client = await _get_gateway_service().get_client(name=gw)
         sandbox = await client.sandboxes.get(sandbox_name)
