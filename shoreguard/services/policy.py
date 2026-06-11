@@ -228,6 +228,45 @@ class PolicyService:
         """
         return await self._client.policies.list_revisions(sandbox_name, limit=limit, offset=offset)
 
+    async def preview_preset(self, sandbox_name: str, preset_name: str) -> dict[str, Any]:
+        """Compute what applying a preset would change, without applying it.
+
+        Args:
+            sandbox_name: Name of the sandbox.
+            preset_name: Name of the preset to preview.
+
+        Returns:
+            dict[str, Any]: ``preset``, ``adds`` (new rule keys),
+            ``overwrites`` (existing rule keys the preset replaces), and
+            ``rules`` (rule key → list of ``host:port`` endpoints).
+
+        Raises:
+            NotFoundError: If the preset name is not found.
+        """
+        preset_data = get_preset(preset_name)
+        if not preset_data:
+            raise NotFoundError(f"Preset '{preset_name}' not found")
+        policy_content = preset_data.get("policy", preset_data)
+        preset_rules = policy_content.get("network_policies", {})
+
+        current = await self.get(sandbox_name)
+        existing = set(((current.get("policy") or {}).get("network_policies") or {}).keys())
+
+        def _endpoints(rule: dict[str, Any]) -> list[str]:
+            out = []
+            for ep in rule.get("endpoints", []) or []:
+                host = ep.get("host", "?")
+                port = ep.get("port", "")
+                out.append(f"{host}:{port}" if port else str(host))
+            return out
+
+        return {
+            "preset": preset_name,
+            "adds": sorted(set(preset_rules) - existing),
+            "overwrites": sorted(set(preset_rules) & existing),
+            "rules": {key: _endpoints(rule) for key, rule in preset_rules.items()},
+        }
+
     async def apply_preset(self, sandbox_name: str, preset_name: str) -> dict[str, Any]:
         """Apply a policy preset to a sandbox (merges network_policies).
 

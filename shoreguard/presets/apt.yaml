@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Read-only access to the Debian/Ubuntu package archives over HTTPS.
+# ports.ubuntu.com carries the arm64 packages — on a DGX Spark (GB10,
+# aarch64) that is where `apt install` actually fetches from. Point your
+# sources at the https:// variants of these mirrors.
+
+preset:
+  name: apt
+  description: "Debian/Ubuntu package archives over HTTPS (incl. arm64 ports)"
+
+network_policies:
+  apt:
+    name: apt
+    endpoints:
+      - host: deb.debian.org
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }
+      - host: security.debian.org
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }
+      - host: archive.ubuntu.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }
+      - host: security.ubuntu.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }
+      - host: ports.ubuntu.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }

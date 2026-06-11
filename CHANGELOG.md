@@ -20,6 +20,14 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Policy preset preview + agent-workflow presets** — applying a
+  preset is no longer blind: **Preview**
+  (`GET …/policy/presets/{p}/preview`) shows which network rules a
+  preset would add or overwrite before you commit. Two presets every
+  coding agent needs join the pack: `github` (clone/fetch via
+  smart-HTTP, raw files, releases, API reads) and `apt` (Debian/Ubuntu
+  archives over HTTPS, including `ports.ubuntu.com` — where arm64/Spark
+  actually fetches from).
 - **LAN inference endpoint probe** — the provider form gains a **Test
   endpoint** button (`POST /api/system/probe-inference`, operator+)
   that probes an OpenAI-compatible `base_url` for served models before

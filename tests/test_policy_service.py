@@ -184,6 +184,35 @@ async def test_list_revisions(policy_svc, mock_client):
     assert result == [{"revision": 1}]
 
 
+async def test_preview_preset_reports_adds_and_overwrites(policy_svc, mock_client):
+    """preview_preset() classifies preset rules without writing anything."""
+    mock_client.policies.get.return_value = _make_policy({"pypi": {"hosts": ["old"]}})
+
+    result = await policy_svc.preview_preset("sb1", "pypi")
+
+    assert result["preset"] == "pypi"
+    assert result["overwrites"] == ["pypi"]
+    assert result["adds"] == []
+    assert any("pypi.org" in ep for ep in result["rules"]["pypi"])
+    mock_client.policies.update.assert_not_called()
+
+
+async def test_preview_preset_all_new_rules(policy_svc, mock_client):
+    """preview_preset() on a fresh policy reports every rule as an add."""
+    mock_client.policies.get.return_value = _make_policy({})
+
+    result = await policy_svc.preview_preset("sb1", "github")
+
+    assert result["adds"] == ["github"]
+    assert result["overwrites"] == []
+
+
+async def test_preview_preset_not_found(policy_svc, mock_client):
+    """preview_preset() raises NotFoundError for unknown presets."""
+    with pytest.raises(NotFoundError, match="Preset"):
+        await policy_svc.preview_preset("sb1", "nonexistent-xyz")
+
+
 async def test_apply_preset_found(policy_svc, mock_client):
     """apply_preset() merges preset network_policies into current policy."""
     mock_client.policies.get.return_value = _make_policy()

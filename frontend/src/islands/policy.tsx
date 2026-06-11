@@ -1321,11 +1321,19 @@ interface Preset {
   description?: string;
 }
 
+interface PresetPreview {
+  preset: string;
+  adds: string[];
+  overwrites: string[];
+  rules: Record<string, string[]>;
+}
+
 export function ApplyPresetSection({ name }: { name: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [presets, setPresets] = useState<Preset[]>([]);
   const [pin, setPin] = useState<Pin | null>(null);
+  const [preview, setPreview] = useState<PresetPreview | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -1342,6 +1350,17 @@ export function ApplyPresetSection({ name }: { name: string }) {
       setLoading(false);
     })();
   }, [name]);
+
+  const loadPreview = async (presetName: string) => {
+    try {
+      const p = await apiFetch<PresetPreview>(
+        `${API}/sandboxes/${name}/policy/presets/${presetName}/preview`,
+      );
+      setPreview(p);
+    } catch (e) {
+      showToast(`Preview failed: ${(e as Error).message}`, "danger");
+    }
+  };
 
   const apply = async (presetName: string) => {
     if (pin) {
@@ -1380,7 +1399,14 @@ export function ApplyPresetSection({ name }: { name: string }) {
                   <h6 class="mb-2">{p.name}</h6>
                   <p class="text-muted small mb-0">{p.description || ""}</p>
                 </div>
-                <div class="card-footer border-0 pt-0 bg-transparent">
+                <div class="card-footer border-0 pt-0 bg-transparent d-flex gap-2">
+                  <button
+                    class="btn btn-outline-secondary btn-sm"
+                    onClick={() => void loadPreview(p.name)}
+                  >
+                    <i class="bi bi-eye me-1" />
+                    Preview
+                  </button>
                   <button
                     class="btn btn-outline-success btn-sm"
                     disabled={Boolean(pin)}
@@ -1393,6 +1419,39 @@ export function ApplyPresetSection({ name }: { name: string }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+      {preview && (
+        <div class="card sg-card-themed mt-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h6 class="mb-0">
+                <i class="bi bi-eye me-2" />
+                Preview: {preview.preset} → {name}
+              </h6>
+              <button
+                class="btn btn-sm btn-outline-secondary"
+                onClick={() => setPreview(null)}
+                aria-label="Close preview"
+              >
+                <i class="bi bi-x-lg" />
+              </button>
+            </div>
+            {preview.adds.length === 0 && preview.overwrites.length === 0 && (
+              <div class="text-muted small">This preset would change nothing.</div>
+            )}
+            {Object.entries(preview.rules).map(([key, endpoints]) => (
+              <div key={key} class="small mb-1">
+                {preview.overwrites.includes(key) ? (
+                  <span class="badge text-bg-warning me-2">overwrites</span>
+                ) : (
+                  <span class="badge text-bg-success me-2">adds</span>
+                )}
+                <code>{key}</code>
+                <span class="text-muted ms-2">{endpoints.join(", ")}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

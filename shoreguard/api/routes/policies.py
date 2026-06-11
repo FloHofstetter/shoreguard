@@ -988,6 +988,26 @@ async def get_preset(preset_name: str) -> dict[str, Any]:
     return result
 
 
+@router.get("/sandboxes/{name}/policy/presets/{preset_name}/preview")
+async def preview_preset(
+    name: str,
+    preset_name: str,
+    svc: PolicyService = Depends(_get_policy_service),
+) -> dict[str, Any]:
+    """Preview what applying a preset would change, without applying it.
+
+    Args:
+        name: Sandbox name.
+        preset_name: Name of the preset to preview.
+        svc: Injected policy service.
+
+    Returns:
+        dict[str, Any]: Added/overwritten rule keys and the preset's
+        endpoints per rule.
+    """
+    return await svc.preview_preset(name, preset_name)
+
+
 # Apply-preset stays on the gateway-scoped router (needs a sandbox context).
 @router.post(
     "/sandboxes/{name}/policy/presets/{preset_name}",

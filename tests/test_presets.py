@@ -312,3 +312,25 @@ class TestGetPresetEdgeCases:
             result = list_presets()
             # OSError is caught, file is skipped
             assert isinstance(result, list)
+
+
+def test_github_preset_covers_clone_and_raw():
+    """The github preset allows smart-HTTP clone and raw file access."""
+    result = get_preset("github")
+    assert result is not None
+    rule = result["policy"]["network_policies"]["github"]
+    hosts = {ep["host"] for ep in rule["endpoints"]}
+    assert {"github.com", "api.github.com", "raw.githubusercontent.com"} <= hosts
+    github_ep = next(ep for ep in rule["endpoints"] if ep["host"] == "github.com")
+    methods = {(r["allow"]["method"], r["allow"]["path"]) for r in github_ep["rules"]}
+    assert ("POST", "/**/git-upload-pack") in methods  # git clone/fetch
+
+
+def test_apt_preset_includes_arm64_ports():
+    """The apt preset includes ports.ubuntu.com — where arm64 (Spark) fetches from."""
+    result = get_preset("apt")
+    assert result is not None
+    rule = result["policy"]["network_policies"]["apt"]
+    hosts = {ep["host"] for ep in rule["endpoints"]}
+    assert "ports.ubuntu.com" in hosts
+    assert "deb.debian.org" in hosts
