@@ -5,6 +5,57 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.38.0] — Unreleased
+
+### Architecture redesign
+
+Ground-up internal redesign, applied in-place over eight staged refactors.
+REST API paths/responses and CLI commands are unchanged; internals are not.
+
+### Changed
+
+- **Composition root** — the 16 module-global service singletons are replaced
+  by a single `ServiceContainer` built in `shoreguard/container.py`. The
+  FastAPI lifespan and the test suite construct services through the same
+  `build_container()` code path.
+- **App factory** — `shoreguard.app:create_app()` assembles the application;
+  `shoreguard.api.main` is a compatibility shim for `uvicorn
+  shoreguard.api.main:app`. CORS is no longer configured at import time.
+- **Async-native gRPC** *(breaking for embedders)* — `ShoreGuardClient` and
+  all submanagers run on `grpc.aio`; every RPC is a coroutine, streams are
+  async iterators, and ~150 `asyncio.to_thread` call sites collapsed to
+  direct awaits. The WebSocket thread bridge (`api/ws_bridge.py`) is gone.
+- **Async data layer** *(breaking for embedders)* — the nine DB-backed
+  services use `AsyncSession` on the async engine; legacy `session.query`
+  call sites were rewritten to `select()`. The sync engine remains only for
+  the auth subsystem and Alembic migrations.
+- **Module layout** *(breaking for importers)* — the CLI moved to
+  `shoreguard/cli/` (console script target is now `shoreguard.cli:cli`);
+  `api/pages.py` split into auth/user routes + HTML pages; `api/auth.py`
+  and `api/schemas.py` became packages; `db.py` became `shoreguard/db/`
+  with per-domain model modules (re-exported via `shoreguard.models`).
+- **Background tasks** — the five hand-rolled lifespan polling loops are
+  declarative `PeriodicTask` specs run by a generic `TaskSupervisor`
+  (failure backoff, `/readyz` health snapshot). Disabled features no longer
+  register — and no longer report as dead — background tasks.
+- **Gateway request scope** — a typed, frozen `GatewayContext` on
+  `request.state` replaces the private string attribute + ContextVar pair.
+
+### Added
+
+- **Preact + TypeScript islands toolchain** — Vite 6 build in `frontend/`
+  (strict tsc, vitest) emitting code-split bundles into `frontend/dist`;
+  pages opt in with `<div data-island="…">`. The users & service-principals
+  page is the first migrated island; remaining pages migrate page-by-page
+  on the legacy Alpine bundle. New `just frontend-*` recipes and a CI job.
+
+### Fixed
+
+- Approval escalation no longer crashes comparing tz-naive and tz-aware
+  decision timestamps when fresh and round-tripped rows mix.
+- Sandbox event WebSockets now send an explicit close frame when the
+  watch stream ends.
+
 ## [0.37.0] — 2026-06-10
 
 ### Solo-dev quality of life

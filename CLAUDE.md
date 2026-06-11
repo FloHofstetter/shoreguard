@@ -12,17 +12,22 @@ agent workloads itself — it talks to gateways over **gRPC + mTLS**, and the
 gateways run the actual sandboxes. Provider API keys live in ShoreGuard and are
 injected by OpenShell's L7 proxy; agents only ever see `inference.local/v1`.
 
-Python 3.14, managed with `uv`. Entry point is `shoreguard.api.main:cli`.
+Python 3.14, managed with `uv`. Entry point is `shoreguard.cli:cli`; the ASGI
+app for uvicorn is `shoreguard.api.main:app` (a thin shim over
+`shoreguard.app:create_app`).
 
 ## Commands
 
 ```bash
 uv sync --group dev                       # install deps (dev group required for tests/lint)
 
-just dev                                  # run dev server: shoreguard --local --no-auth (http://localhost:8888)
+just dev                                  # build islands bundle + run dev server: shoreguard --local --no-auth (http://localhost:8888)
 just test                                 # unit tests (pytest -m 'not integration')
-just check                                # ruff check + ruff format --check + pyright + unit tests
+just check                                # frontend typecheck/tests + ruff + pyright + unit tests
 just lint / just format                   # ruff check . / ruff format .
+just frontend-install                     # npm install in frontend/
+just frontend-build / frontend-watch      # Vite build of the Preact islands into frontend/dist
+just frontend-check                       # tsc --noEmit + vitest
 
 uv run pytest tests/test_foo.py::test_bar # run a single test
 uv run pytest -n auto -m 'not integration'# parallel via pytest-xdist
@@ -66,29 +71,43 @@ multi-gateway design — see [deps.py](shoreguard/api/deps.py).
   dead channel doesn't wedge the service.
 
 **gRPC client** ([shoreguard/client/](shoreguard/client/)): `ShoreGuardClient` wraps a
-single OpenShell channel and exposes submanagers (`SandboxManager`, `PolicyManager`,
-`ProviderManager`, `ProviderProfileManager`, `ApprovalManager`). It is deliberately
-**synchronous** — service layers wrap calls in `asyncio.to_thread` when called from
-async routes. Generated proto stubs live in [shoreguard/client/_proto/](shoreguard/client/_proto/);
-**do not hand-edit them** — regenerate with `scripts/generate_proto.py`. The `_proto`
-tree is excluded from ruff, pyright, coverage, and mutmut.
+single OpenShell **grpc.aio** channel and exposes submanagers (`SandboxManager`,
+`PolicyManager`, `ProviderManager`, `ProviderProfileManager`, `ApprovalManager`,
+`ServiceManager`). Every RPC is **async**; server streams are async iterators and the
+bidi exec/forward streams take an `asyncio.Queue` request feed. Retry/backoff lives in
+[client/_resilience.py](shoreguard/client/_resilience.py) (async). Synchronous callers
+(the Typer CLI) wrap calls in `asyncio.run`. Generated proto stubs live in
+[shoreguard/client/_proto/](shoreguard/client/_proto/); **do not hand-edit them** —
+regenerate with `scripts/generate_proto.py`. The `_proto` tree is excluded from ruff,
+pyright, coverage, and mutmut.
 
-**Service singletons:** services in [shoreguard/services/](shoreguard/services/) are
-module-global singletons (`gateway_service`, `audit_service`, `operation_service`,
-`webhook_service`, …) initialized in the FastAPI **lifespan** in
-[main.py](shoreguard/api/main.py) and torn down / re-created per test in
-[tests/conftest.py](tests/conftest.py). When adding a service, follow this pattern and
-wire it into both lifespan and the conftest fixture, or it will be `None` in tests.
+**Composition root:** all application services are constructed once per process by
+`build_container()` in [container.py](shoreguard/container.py), which returns a
+`ServiceContainer` dataclass. The lifespan in [app.py](shoreguard/app.py) installs it
+(`install()` / `try_get_container()`); routes resolve services via
+`get_services()` in [api/deps.py](shoreguard/api/deps.py). Tests build their container
+through the **same** `build_container()` code path (autouse `container` fixture in
+[tests/conftest.py](tests/conftest.py)) — adding a field to the container wires it
+everywhere at once. Per-request wrappers (`SandboxService`, `PolicyService`, …) are
+constructed in route dependencies around the gateway-bound client and are async-native.
 
-**Database** ([db.py](shoreguard/db.py)): SQLAlchemy 2.0. Defaults to SQLite (WAL mode,
-0600 perms); PostgreSQL for production and the integration/postgres suites. `init_db()`
-runs the **Alembic migrations embedded in the package** on startup (versions in
-[shoreguard/alembic/versions/](shoreguard/alembic/versions/)). There are **two engines**: a
-sync engine for most services and a separate **async** engine for `AsyncOperationService`
-(long-running operations). The ShoreGuard DB only holds management-plane state (gateway
-registry, audit log, operations/LROs, approval workflows, policy pins, SBOM, boot hooks,
-sandbox metadata, users); the sandboxes and policies themselves live on the OpenShell
-gateways. All models are in the single file [models.py](shoreguard/models.py).
+**Background tasks:** the five periodic loops (cleanup, gateway health, discovery,
+drift detection, cert rotation) are declarative `PeriodicTask` specs in
+[tasks/definitions.py](shoreguard/tasks/definitions.py), driven by the generic
+`TaskSupervisor` ([tasks/supervisor.py](shoreguard/tasks/supervisor.py)) with failure
+backoff and a health snapshot consumed by `/readyz`. Disabled features register no task.
+
+**Database** ([shoreguard/db/](shoreguard/db/)): SQLAlchemy 2.0. Defaults to SQLite (WAL
+mode, 0600 perms); PostgreSQL for production and the integration/postgres suites.
+`init_db()` runs the **Alembic migrations embedded in the package** on startup (versions
+in [shoreguard/alembic/versions/](shoreguard/alembic/versions/)). The **async engine**
+(`init_async_db()` + `get_async_session_factory()`) backs all data services with
+`AsyncSession`; the sync engine remains only for the **auth subsystem** and Alembic.
+The ShoreGuard DB only holds management-plane state (gateway registry, audit log,
+operations/LROs, approval workflows, policy pins, SBOM, boot hooks, sandbox metadata,
+users); the sandboxes and policies themselves live on the OpenShell gateways. Models are
+split per domain in [shoreguard/db/models/](shoreguard/db/models/) and re-exported from
+`shoreguard.models` for compatibility (Alembic env included).
 
 **Long-running operations (LRO):** sandbox create and similar slow gateway calls return an
 operation id and run as supervised async tasks — [api/lro.py](shoreguard/api/lro.py) +
@@ -99,14 +118,26 @@ classes, each with its own `SHOREGUARD_*` / `SHOREGUARD_<AREA>_` env prefix, agg
 one `Settings`. Access via the `get_settings()` singleton; `reset_settings()` clears it (tests
 do this so `monkeypatch.setenv` takes effect). `enforce_production_safety()` runs at startup.
 
-**Auth** ([api/auth.py](shoreguard/api/auth.py), [api/oidc.py](shoreguard/api/oidc.py)):
-session + JWT, RBAC roles Admin/Operator/Viewer with gateway-scoped overrides, optional OIDC.
-Routes guard with `require_auth` / `require_role`. `--no-auth` sets a global bypass for dev.
+**Auth** ([api/auth/](shoreguard/api/auth/), [api/oidc.py](shoreguard/api/oidc.py)): a
+package — `core` (passwords, sessions, lockout, shared `AuthState`), `rbac` (FastAPI
+dependencies), `users`, `service_principals`, `gateway_roles`, `groups`; everything
+public re-exported from the package `__init__`. Session + JWT, RBAC roles
+Admin/Operator/Viewer with gateway-scoped overrides, optional OIDC. Routes guard with
+`require_auth` / `require_role`. `--no-auth` (or `set_no_auth(True)` in tests) enables
+the dev bypass. The auth REST endpoints live in
+[api/routes/auth.py](shoreguard/api/routes/auth.py) and
+[api/routes/users.py](shoreguard/api/routes/users.py);
+[api/pages.py](shoreguard/api/pages.py) only renders HTML.
 
 **Frontend:** server-rendered Jinja2 templates in [frontend/templates/](frontend/templates/)
-served by [api/pages.py](shoreguard/api/pages.py), with Alpine.js + vanilla JS in
-[frontend/js/](frontend/js/). At build time hatch force-includes `frontend/` into the wheel as
-`shoreguard/_frontend`; it is mounted at `/static`.
+served by [api/pages.py](shoreguard/api/pages.py). Interactivity is migrating
+page-by-page from Alpine.js + vanilla JS ([frontend/js/](frontend/js/)) to **Preact +
+TypeScript islands** ([frontend/src/](frontend/src/), built with Vite into
+`frontend/dist`). A page opts in with `<div data-island="…">`; `src/main.ts` mounts the
+code-split component. Build with `just frontend-build` (or `frontend-watch` during dev);
+gates are `tsc --noEmit` + vitest (`just frontend-check`). Hatch ships `frontend/dist`
+plus the legacy assets into the wheel as `shoreguard/_frontend`, mounted at `/static`
+(node_modules and TS sources are excluded). The users page is the migration reference.
 
 ## Conventions & gates
 
@@ -115,8 +146,9 @@ served by [api/pages.py](shoreguard/api/pages.py), with Alpine.js + vanilla JS i
   the signature. Tests and `_proto/` are exempt. This bites often; check `pydoclint` before pushing.
 - **Surface-coverage invariant:** every upstream OpenShell RPC ShoreGuard covers must be reachable
   through a client method, a REST route, **and** a UI `apiFetch` call. `scripts/check_coverage.py`
-  enforces this as a required CI job — adding an RPC/route without all three layers fails CI. Use the
-  explicit allowlist in that script for intentionally-unconsumed (supervisor-side) RPCs.
+  enforces this as a required CI job — adding an RPC/route without all three layers fails CI. It
+  scans both `frontend/js` (legacy) and `frontend/src` (islands). Use the explicit allowlist in
+  that script for intentionally-unconsumed (supervisor-side) RPCs.
 - Ruff line length 100, target py314, rules `E,F,I,UP,D`. Pyright standard mode over `shoreguard` + `tests`.
 - **Conventional Commits** with a subsystem scope: `feat(api): …`, `fix(policy): …` (`api`, `ui`,
   `policy`, `sandbox`, `tf`, `alembic`, `docs`, `ci`, …). Update `CHANGELOG.md` in the same PR.
