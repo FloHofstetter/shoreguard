@@ -99,8 +99,10 @@ backoff and a health snapshot consumed by `/readyz`. Disabled features register 
 
 **Database** ([shoreguard/db/](shoreguard/db/)): SQLAlchemy 2.0. Defaults to SQLite (WAL
 mode, 0600 perms); PostgreSQL for production and the integration/postgres suites.
-`init_db()` runs the **Alembic migrations embedded in the package** on startup (versions
-in [shoreguard/alembic/versions/](shoreguard/alembic/versions/)). The **async engine**
+`init_db()` runs the **Alembic migrations embedded in the package** on startup. The
+pre-v0.38 17-step chain is squashed into a single `v2_baseline` revision generated from
+the models; v0.37 databases are stamped automatically, older ones must pass through
+v0.37 first. The **async engine**
 (`init_async_db()` + `get_async_session_factory()`) backs all data services with
 `AsyncSession`; the sync engine remains only for the **auth subsystem** and Alembic.
 The ShoreGuard DB only holds management-plane state (gateway registry, audit log,
@@ -129,15 +131,18 @@ the dev bypass. The auth REST endpoints live in
 [api/routes/users.py](shoreguard/api/routes/users.py);
 [api/pages.py](shoreguard/api/pages.py) only renders HTML.
 
-**Frontend:** server-rendered Jinja2 templates in [frontend/templates/](frontend/templates/)
-served by [api/pages.py](shoreguard/api/pages.py). Interactivity is migrating
-page-by-page from Alpine.js + vanilla JS ([frontend/js/](frontend/js/)) to **Preact +
+**Frontend:** server-rendered Jinja2 shells in [frontend/templates/](frontend/templates/)
+served by [api/pages.py](shoreguard/api/pages.py); all interactivity is **Preact +
 TypeScript islands** ([frontend/src/](frontend/src/), built with Vite into
-`frontend/dist`). A page opts in with `<div data-island="…">`; `src/main.ts` mounts the
-code-split component. Build with `just frontend-build` (or `frontend-watch` during dev);
-gates are `tsc --noEmit` + vitest (`just frontend-check`). Hatch ships `frontend/dist`
-plus the legacy assets into the wheel as `shoreguard/_frontend`, mounted at `/static`
-(node_modules and TS sources are excluded). The users page is the migration reference.
+`frontend/dist` — there is no Alpine.js or vanilla-JS bundle anymore). A page mounts a
+component via `<div data-island="…" data-props='…'>`; `src/main.ts` lazy-loads the
+code-split chunk, and `src/shell/` provides the app chrome (gateway switcher, command
+palette, theme, health, shortcuts). Shared libs live in `src/lib/` (`api.ts` apiFetch,
+`notify.tsx` toasts/confirm, `sandbox-ws.ts` live events). Build with
+`just frontend-build` (or `frontend-watch` during dev); gates are `tsc --noEmit` +
+vitest (`just frontend-check`). `scripts/generate_api_types.py` regenerates
+`src/api/types.gen.ts` from the OpenAPI schema. Hatch ships `frontend/dist` plus
+css/templates/vendor into the wheel as `shoreguard/_frontend`, mounted at `/static`.
 
 ## Conventions & gates
 
@@ -147,8 +152,9 @@ plus the legacy assets into the wheel as `shoreguard/_frontend`, mounted at `/st
 - **Surface-coverage invariant:** every upstream OpenShell RPC ShoreGuard covers must be reachable
   through a client method, a REST route, **and** a UI `apiFetch` call. `scripts/check_coverage.py`
   enforces this as a required CI job — adding an RPC/route without all three layers fails CI. It
-  scans both `frontend/js` (legacy) and `frontend/src` (islands). Use the explicit allowlist in
-  that script for intentionally-unconsumed (supervisor-side) RPCs.
+  scans `frontend/src/**/*.{ts,tsx}` for `apiFetch(`…`)` template literals (use the `API` constant
+  as the URL prefix so normalization works). Use the explicit allowlist in that script for
+  intentionally-unconsumed (supervisor-side) RPCs.
 - Ruff line length 100, target py314, rules `E,F,I,UP,D`. Pyright standard mode over `shoreguard` + `tests`.
 - **Conventional Commits** with a subsystem scope: `feat(api): …`, `fix(policy): …` (`api`, `ui`,
   `policy`, `sandbox`, `tf`, `alembic`, `docs`, `ci`, …). Update `CHANGELOG.md` in the same PR.

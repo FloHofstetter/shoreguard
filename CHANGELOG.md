@@ -43,11 +43,18 @@ REST API paths/responses and CLI commands are unchanged; internals are not.
 
 ### Added
 
-- **Preact + TypeScript islands toolchain** — Vite 6 build in `frontend/`
-  (strict tsc, vitest) emitting code-split bundles into `frontend/dist`;
-  pages opt in with `<div data-island="…">`. The users & service-principals
-  page is the first migrated island; remaining pages migrate page-by-page
-  on the legacy Alpine bundle. New `just frontend-*` recipes and a CI job.
+- **Preact + TypeScript frontend** *(complete rewrite)* — Vite 6 build in
+  `frontend/` (strict tsc, vitest) emitting code-split island bundles into
+  `frontend/dist`. Every page is a typed Preact island; the app shell
+  (gateway switcher, command palette, theme, health polling, keyboard
+  shortcuts, toasts/confirm) is TypeScript. Alpine.js and all 33 legacy JS
+  files are deleted, and `'unsafe-eval'` is dropped from both CSP policies.
+  `scripts/generate_api_types.py` generates TypeScript API types from the
+  OpenAPI schema. New `just frontend-*` recipes, pre-commit hooks, and a CI
+  job.
+- **Migration squash** — the 17-step Alembic chain is replaced by a single
+  `v2_baseline` revision built from the models. v0.37 databases are stamped
+  in place; older databases must upgrade through v0.37 first.
 
 ### Fixed
 
@@ -55,6 +62,11 @@ REST API paths/responses and CLI commands are unchanged; internals are not.
   decision timestamps when fresh and round-tripped rows mix.
 - Sandbox event WebSockets now send an explicit close frame when the
   watch stream ends.
+- The SBOM, bypass-detection, prover, and boot-hooks pages called an
+  `sgFetch()` helper that was never defined — all four tabs threw a
+  ReferenceError at runtime. The quorum-approval "voted" badge likewise
+  read an unset `window.sgCurrentUser` and never displayed. Both work in
+  the rewritten islands.
 
 ## [0.37.0] — 2026-06-10
 

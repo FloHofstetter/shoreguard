@@ -89,6 +89,22 @@ repos:
         exclude: ^shoreguard/client/_proto/
         stages: [pre-commit]
 
+      - id: frontend-typecheck
+        name: frontend typecheck (tsc)
+        entry: bash -c 'cd frontend && npx tsc --noEmit'
+        language: system
+        files: ^frontend/(src/|tsconfig\.json|vite\.config\.ts)
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: frontend-test
+        name: frontend tests (vitest)
+        entry: bash -c 'cd frontend && npx vitest run'
+        language: system
+        files: ^frontend/src/
+        pass_filenames: false
+        stages: [pre-push]
+
       - id: pip-audit
         name: pip-audit
         entry: uv run pip-audit
