@@ -44,6 +44,19 @@ const ISLANDS: Record<string, IslandLoader> = {
   "providers-page": () => import("./islands/providers"),
   "provider-form": () => import("./islands/providers").then((m) => ({ default: m.ProviderForm })),
   "wizard-page": () => import("./islands/wizard"),
+  "sandbox-approvals": () => import("./islands/sandbox-approvals"),
+  "sandbox-policy": () => import("./islands/policy"),
+  "policy-network": () =>
+    import("./islands/policy").then((m) => ({ default: m.NetworkPoliciesSection })),
+  "policy-filesystem": () =>
+    import("./islands/policy").then((m) => ({ default: m.FilesystemPolicySection })),
+  "policy-process": () =>
+    import("./islands/policy").then((m) => ({ default: m.ProcessPolicySection })),
+  "policy-apply-preset": () =>
+    import("./islands/policy").then((m) => ({ default: m.ApplyPresetSection })),
+  "presets-list": () => import("./islands/policy").then((m) => ({ default: m.PresetsListPage })),
+  "preset-detail": () => import("./islands/policy").then((m) => ({ default: m.PresetDetailPage })),
+  "rule-detail": () => import("./islands/rule-detail"),
 };
 
 async function mountIslands(): Promise<void> {
