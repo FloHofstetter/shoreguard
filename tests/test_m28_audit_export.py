@@ -36,14 +36,14 @@ _SAMPLE_ENTRY: dict[str, Any] = {
 }
 
 
-def test_exporter_disabled_by_default():
+async def test_exporter_disabled_by_default():
     exp = AuditExporter(_mk_settings())
     assert exp.enabled is False
     # dispatch is a cheap no-op
     exp.dispatch(_SAMPLE_ENTRY)
 
 
-def test_stdout_lane_emits_json_line(capsys):
+async def test_stdout_lane_emits_json_line(capsys):
     settings = _mk_settings(export_stdout_json=True)
     exp = AuditExporter(settings)
     assert exp.enabled is True
@@ -59,7 +59,7 @@ def test_stdout_lane_emits_json_line(capsys):
     assert parsed["detail"] == {"before": "deny", "after": "allow"}
 
 
-def test_stdout_lane_failure_is_swallowed(monkeypatch, caplog):
+async def test_stdout_lane_failure_is_swallowed(monkeypatch, caplog):
     settings = _mk_settings(export_stdout_json=True)
     exp = AuditExporter(settings)
 
@@ -75,7 +75,7 @@ def test_stdout_lane_failure_is_swallowed(monkeypatch, caplog):
     assert any("stdout lane failed" in rec.message for rec in caplog.records)
 
 
-def test_webhook_lane_schedules_fire_on_loop(monkeypatch):
+async def test_webhook_lane_schedules_fire_on_loop(monkeypatch):
     settings = _mk_settings(export_webhook_enabled=True)
 
     calls: list[tuple[str, dict[str, Any]]] = []
@@ -95,14 +95,14 @@ def test_webhook_lane_schedules_fire_on_loop(monkeypatch):
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
-    asyncio.run(_run())
+    await _run()
 
     assert len(calls) == 1
     assert calls[0][0] == "audit.entry"
     assert calls[0][1]["id"] == 42
 
 
-def test_webhook_lane_noop_without_loop():
+async def test_webhook_lane_noop_without_loop():
     """Without a loop reference the webhook lane silently skips."""
     settings = _mk_settings(export_webhook_enabled=True)
     exp = AuditExporter(settings, loop=None)
@@ -110,7 +110,7 @@ def test_webhook_lane_noop_without_loop():
     exp.dispatch(_SAMPLE_ENTRY)
 
 
-def test_lane_errors_are_isolated(capsys, caplog):
+async def test_lane_errors_are_isolated(capsys, caplog):
     """A failing lane must not prevent siblings from firing."""
     settings = _mk_settings(export_stdout_json=True, export_syslog_enabled=True)
     exp = AuditExporter(settings)
@@ -132,18 +132,18 @@ def test_lane_errors_are_isolated(capsys, caplog):
     assert any("syslog lane failed" in rec.message for rec in caplog.records)
 
 
-def test_audit_service_dispatch_on_write(tmp_path, monkeypatch):
+async def test_audit_service_dispatch_on_write(tmp_path, monkeypatch):
     """Integration: AuditService.log() triggers the exporter."""
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from shoreguard.models import Base
     from shoreguard.services.audit import AuditService
 
     db_path = tmp_path / "audit.db"
-    engine = create_engine(f"sqlite:///{db_path}")
-    Base.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine)
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     dispatched: list[dict[str, Any]] = []
 
@@ -154,7 +154,7 @@ def test_audit_service_dispatch_on_write(tmp_path, monkeypatch):
             dispatched.append(entry)
 
     svc = AuditService(session_factory, exporter=_StubExporter())  # type: ignore[arg-type]
-    svc.log(
+    await svc.log(
         actor="admin",
         actor_role="admin",
         action="test.action",

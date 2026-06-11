@@ -18,7 +18,6 @@ a sandbox has a quorum workflow attached.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any, Literal
 
@@ -66,7 +65,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _check_policy_pin(request: Request, sandbox_name: str) -> None:
+async def _check_policy_pin(request: Request, sandbox_name: str) -> None:
     """Raise HTTP 423 if the sandbox's policy is pinned.
 
     Args:
@@ -77,7 +76,7 @@ def _check_policy_pin(request: Request, sandbox_name: str) -> None:
         HTTPException: 423 Locked if an active pin exists.
     """
     try:
-        get_services().policy_pin.check_pin(get_gateway_name(request), sandbox_name)
+        await get_services().policy_pin.check_pin(get_gateway_name(request), sandbox_name)
     except PolicyLockedError as exc:
         raise HTTPException(status_code=423, detail=str(exc)) from exc
 
@@ -350,7 +349,7 @@ async def apply_policy(
             409 reject vote, 423 pinned.
     """
     check_write_rate_limit(request)
-    _check_policy_pin(request, name)
+    await _check_policy_pin(request, name)
 
     try:
         new_policy, metadata = parse_yaml(body.yaml)
@@ -407,26 +406,14 @@ async def apply_policy(
 
     # ── Approval workflow gate ───────────────────────────────────────────
     wf_svc = get_services().approval_workflow
-    workflow = wf_svc.get_workflow(gw, name)
+    workflow = await wf_svc.get_workflow(gw, name)
     if workflow is not None:
-        await asyncio.to_thread(
-            get_services().policy_apply_proposal.upsert,
-            gw,
-            name,
-            chunk_id,
-            yaml_text=body.yaml,
-            expected_hash=current_hash,
-            proposed_by=actor,
+        await get_services().policy_apply_proposal.upsert(
+            gw, name, chunk_id, yaml_text=body.yaml, expected_hash=current_hash, proposed_by=actor
         )
         try:
-            vote = await asyncio.to_thread(
-                wf_svc.record_decision,
-                gw,
-                name,
-                chunk_id,
-                actor=actor,
-                role=role,
-                decision="approve",
+            vote = await wf_svc.record_decision(
+                gw, name, chunk_id, actor=actor, role=role, decision="approve"
             )
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -470,7 +457,7 @@ async def apply_policy(
             )
 
         # Quorum met — clear proposal, fall through to write
-        await asyncio.to_thread(get_services().policy_apply_proposal.delete, gw, name, chunk_id)
+        await get_services().policy_apply_proposal.delete(gw, name, chunk_id)
         await fire_webhook(
             "approval.quorum_met",
             {
@@ -559,7 +546,7 @@ async def update_policy(
     Returns:
         dict[str, Any]: Updated policy record.
     """
-    _check_policy_pin(request, name)
+    await _check_policy_pin(request, name)
     result = await svc.update(name, body)
     logger.info(
         "Policy updated (sandbox=%s, actor=%s)",
@@ -643,7 +630,7 @@ async def add_network_rule(
         dict[str, Any]: Updated policy after rule addition.
     """
     check_write_rate_limit(request)
-    _check_policy_pin(request, name)
+    await _check_policy_pin(request, name)
     result = await svc.add_network_rule(name, body.key, body.rule)
     logger.info(
         "Network rule added (sandbox=%s, actor=%s)",
@@ -683,7 +670,7 @@ async def delete_network_rule(
     Returns:
         dict[str, Any]: Updated policy after rule deletion.
     """
-    _check_policy_pin(request, name)
+    await _check_policy_pin(request, name)
     result = await svc.delete_network_rule(name, key)
     logger.info(
         "Network rule deleted (sandbox=%s, key=%s, actor=%s)",
@@ -728,7 +715,7 @@ async def add_filesystem_path(
         dict[str, Any]: Updated policy after path addition.
     """
     check_write_rate_limit(request)
-    _check_policy_pin(request, name)
+    await _check_policy_pin(request, name)
     result = await svc.add_filesystem_path(name, body.path, body.access)
     logger.info(
         "Filesystem path added (sandbox=%s, actor=%s)",
@@ -768,7 +755,7 @@ async def delete_filesystem_path(
     Returns:
         dict[str, Any]: Updated policy after path deletion.
     """
-    _check_policy_pin(request, name)
+    await _check_policy_pin(request, name)
     result = await svc.delete_filesystem_path(name, path)
     logger.info(
         "Filesystem path deleted (sandbox=%s, actor=%s)",
@@ -812,7 +799,7 @@ async def update_process_policy(
         dict[str, Any]: Updated policy record.
     """
     check_write_rate_limit(request)
-    _check_policy_pin(request, name)
+    await _check_policy_pin(request, name)
     result = await svc.update_process_policy(
         name,
         run_as_user=body.run_as_user,
@@ -854,7 +841,7 @@ async def get_policy_pin(
     Raises:
         HTTPException: 404 if no active pin exists.
     """
-    pin = get_services().policy_pin.get_pin(get_gateway_name(request), name)
+    pin = await get_services().policy_pin.get_pin(get_gateway_name(request), name)
     if pin is None:
         raise HTTPException(status_code=404, detail="No active pin for this sandbox")
     return pin
@@ -906,7 +893,7 @@ async def pin_policy(
         if body.expires_at:
             expires_at = datetime.datetime.fromisoformat(body.expires_at)
 
-    pin = get_services().policy_pin.pin(
+    pin = await get_services().policy_pin.pin(
         gw, name, version, actor, reason=reason, expires_at=expires_at
     )
     logger.info("Policy pinned (sandbox=%s, version=%d, actor=%s)", name, version, actor)
@@ -944,7 +931,7 @@ async def unpin_policy(
         HTTPException: 404 if no active pin exists.
     """
     gw = get_gateway_name(request)
-    removed = get_services().policy_pin.unpin(gw, name)
+    removed = await get_services().policy_pin.unpin(gw, name)
     if not removed:
         raise HTTPException(status_code=404, detail="No active pin for this sandbox")
     actor = get_actor(request)
@@ -1024,7 +1011,7 @@ async def apply_preset(
     Returns:
         dict[str, Any]: Updated policy after preset application.
     """
-    _check_policy_pin(request, name)
+    await _check_policy_pin(request, name)
     result = await svc.apply_preset(name, preset_name)
     logger.info(
         "Preset applied (sandbox=%s, preset=%s, actor=%s)",

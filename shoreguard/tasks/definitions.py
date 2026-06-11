@@ -10,7 +10,6 @@ not supposed to run.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -37,8 +36,8 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
     async def _cleanup() -> None:
         # Purge expired operations, audit entries, and webhook deliveries.
         await container.operations.cleanup()
-        await asyncio.to_thread(container.audit.cleanup)
-        await asyncio.to_thread(container.webhooks.cleanup_old_deliveries)
+        await container.audit.cleanup()
+        await container.webhooks.cleanup_old_deliveries()
 
     async def _health_monitor() -> None:
         await container.gateway.check_all_health()

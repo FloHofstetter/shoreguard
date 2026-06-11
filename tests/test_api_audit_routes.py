@@ -6,7 +6,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import shoreguard.services.audit as audit_mod
 from shoreguard.api import auth
 from shoreguard.api.auth import create_user
 from shoreguard.container import get_container
@@ -27,7 +26,6 @@ def db():
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     auth.init_auth_for_test(factory)
-    get_container().audit = audit_mod.AuditService(factory)
     yield factory
     auth.reset()
     engine.dispose()
@@ -75,9 +73,9 @@ async def viewer_client(db, _with_viewer):
         yield client
 
 
-def _seed_audit(count=3):
+async def _seed_audit(count=3):
     for i in range(count):
-        get_container().audit.log(
+        await get_container().audit.log(
             actor=f"user{i}@test.com",
             actor_role="admin",
             action=f"sandbox.action{i}",
@@ -86,14 +84,14 @@ def _seed_audit(count=3):
         )
 
 
-def _seed_gateway_sequence(gateway: str) -> None:
+async def _seed_gateway_sequence(gateway: str) -> None:
     """Seed an M7-style story for one gateway: register → create → approve."""
     for action, rt, rid in (
         ("gateway.register", "gateway", gateway),
         ("sandbox.create", "sandbox", "demo-sb"),
         ("approval.approve", "approval", "chunk-1"),
     ):
-        get_container().audit.log(
+        await get_container().audit.log(
             actor="demo@test.com",
             actor_role="admin",
             action=action,
@@ -105,7 +103,7 @@ def _seed_gateway_sequence(gateway: str) -> None:
 
 class TestListAudit:
     async def test_list_returns_entries(self, admin_client):
-        _seed_audit(3)
+        await _seed_audit(3)
         resp = await admin_client.get("/api/audit")
         assert resp.status_code == 200
         data = resp.json()
@@ -122,7 +120,7 @@ class TestListAudit:
         assert data["total"] >= 1
 
     async def test_list_with_filters(self, admin_client):
-        _seed_audit(5)
+        await _seed_audit(5)
         resp = await admin_client.get("/api/audit?actor=user0@test.com")
         assert resp.status_code == 200
         data = resp.json()
@@ -131,8 +129,8 @@ class TestListAudit:
         assert data["total"] == 1
 
     async def test_list_filter_by_gateway(self, admin_client):
-        _seed_gateway_sequence("nemoclaw")
-        _seed_gateway_sequence("staging-gw")
+        await _seed_gateway_sequence("nemoclaw")
+        await _seed_gateway_sequence("staging-gw")
         resp = await admin_client.get("/api/audit?gateway=nemoclaw")
         assert resp.status_code == 200
         data = resp.json()
@@ -142,7 +140,7 @@ class TestListAudit:
         assert all(e["gateway"] == "nemoclaw" for e in data["entries"])
 
     async def test_list_pagination(self, admin_client):
-        _seed_audit(10)
+        await _seed_audit(10)
         resp = await admin_client.get("/api/audit?limit=3&offset=0")
         assert resp.status_code == 200
         data = resp.json()
@@ -152,14 +150,14 @@ class TestListAudit:
 
 class TestExportAudit:
     async def test_export_json(self, admin_client):
-        _seed_audit(2)
+        await _seed_audit(2)
         resp = await admin_client.get("/api/audit/export?format=json")
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/json"
         assert "attachment" in resp.headers.get("content-disposition", "")
 
     async def test_export_csv(self, admin_client):
-        _seed_audit(2)
+        await _seed_audit(2)
         resp = await admin_client.get("/api/audit/export?format=csv")
         assert resp.status_code == 200
         assert "text/csv" in resp.headers["content-type"]

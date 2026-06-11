@@ -338,7 +338,7 @@ async def test_create_with_labels_stores_metadata(sandbox_svc_with_meta, mock_cl
     assert result["description"] == "test sandbox"
     assert result["labels"] == {"team": "platform", "env": "dev"}
     # Verify metadata is persisted
-    stored = meta_store.get("gw1", "sb1")
+    stored = await meta_store.get("gw1", "sb1")
     assert stored["description"] == "test sandbox"
     assert stored["labels"] == {"team": "platform", "env": "dev"}
 
@@ -351,12 +351,12 @@ async def test_create_without_metadata_no_store_call(
 
     await sandbox_svc_with_meta.create(name="sb1", gateway_name="gw1")
 
-    assert meta_store.get("gw1", "sb1") is None
+    assert await meta_store.get("gw1", "sb1") is None
 
 
 async def test_get_merges_metadata(sandbox_svc_with_meta, mock_client, meta_store):
     """get() merges stored metadata into gateway response."""
-    meta_store.upsert("gw1", "sb1", description="my sb", labels={"app": "web"})
+    await meta_store.upsert("gw1", "sb1", description="my sb", labels={"app": "web"})
     mock_client.sandboxes.get.return_value = {"name": "sb1", "phase": "ready"}
 
     result = await sandbox_svc_with_meta.get("sb1", gateway_name="gw1")
@@ -378,7 +378,7 @@ async def test_get_without_metadata_returns_defaults(sandbox_svc_with_meta, mock
 
 async def test_list_merges_metadata(sandbox_svc_with_meta, mock_client, meta_store):
     """list() merges metadata for all sandboxes."""
-    meta_store.upsert("gw1", "sb1", labels={"team": "a"})
+    await meta_store.upsert("gw1", "sb1", labels={"team": "a"})
     mock_client.sandboxes.list.return_value = [{"name": "sb1"}, {"name": "sb2"}]
 
     result = await sandbox_svc_with_meta.list(gateway_name="gw1")
@@ -389,8 +389,8 @@ async def test_list_merges_metadata(sandbox_svc_with_meta, mock_client, meta_sto
 
 async def test_list_filters_by_labels(sandbox_svc_with_meta, mock_client, meta_store):
     """list() with labels_filter returns only matching sandboxes."""
-    meta_store.upsert("gw1", "sb1", labels={"team": "a"})
-    meta_store.upsert("gw1", "sb2", labels={"team": "b"})
+    await meta_store.upsert("gw1", "sb1", labels={"team": "a"})
+    await meta_store.upsert("gw1", "sb2", labels={"team": "b"})
     mock_client.sandboxes.list.return_value = [{"name": "sb1"}, {"name": "sb2"}]
 
     result = await sandbox_svc_with_meta.list(gateway_name="gw1", labels_filter={"team": "a"})
@@ -401,22 +401,22 @@ async def test_list_filters_by_labels(sandbox_svc_with_meta, mock_client, meta_s
 
 async def test_delete_cleans_up_metadata(sandbox_svc_with_meta, mock_client, meta_store):
     """delete() removes metadata row after successful gateway delete."""
-    meta_store.upsert("gw1", "sb1", description="to delete", labels={"x": "y"})
+    await meta_store.upsert("gw1", "sb1", description="to delete", labels={"x": "y"})
     mock_client.sandboxes.delete.return_value = True
 
     await sandbox_svc_with_meta.delete("sb1", gateway_name="gw1")
 
-    assert meta_store.get("gw1", "sb1") is None
+    assert await meta_store.get("gw1", "sb1") is None
 
 
 async def test_delete_keeps_metadata_on_failure(sandbox_svc_with_meta, mock_client, meta_store):
     """delete() keeps metadata when gateway delete returns False."""
-    meta_store.upsert("gw1", "sb1", description="keep me")
+    await meta_store.upsert("gw1", "sb1", description="keep me")
     mock_client.sandboxes.delete.return_value = False
 
     await sandbox_svc_with_meta.delete("sb1", gateway_name="gw1")
 
-    assert meta_store.get("gw1", "sb1") is not None
+    assert await meta_store.get("gw1", "sb1") is not None
 
 
 async def test_update_metadata(sandbox_svc_with_meta, mock_client, meta_store):
@@ -436,7 +436,7 @@ async def test_update_metadata_partial(sandbox_svc_with_meta, mock_client, meta_
     """update_metadata() with _UNSET leaves existing fields untouched."""
     from shoreguard.services.sandbox import _UNSET
 
-    meta_store.upsert("gw1", "sb1", description="original", labels={"a": "1"})
+    await meta_store.upsert("gw1", "sb1", description="original", labels={"a": "1"})
     mock_client.sandboxes.get.return_value = {"name": "sb1", "phase": "ready"}
 
     result = await sandbox_svc_with_meta.update_metadata(

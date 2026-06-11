@@ -25,13 +25,14 @@ import secrets
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import httpx
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from shoreguard.config import is_private_ip
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import sessionmaker as SessionMaker
-
     from shoreguard.settings import WebhookSettings
 
 from shoreguard.models import Webhook, WebhookDelivery
@@ -75,25 +76,29 @@ class WebhookService:
         session_factory: SQLAlchemy session factory for database access.
     """
 
-    def __init__(self, session_factory: SessionMaker) -> None:  # noqa: D107
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:  # noqa: D107
         self._session_factory = session_factory
         self._delivery_tasks: set[asyncio.Task[None]] = set()
 
-    def list(self) -> list[dict[str, Any]]:
+    async def list(self) -> list[dict[str, Any]]:
         """Return all registered webhooks.
 
         Returns:
             list[dict[str, Any]]: All webhook entries.
         """
         try:
-            with self._session_factory() as session:
-                rows = session.query(Webhook).order_by(Webhook.created_at.desc()).all()
+            async with self._session_factory() as session:
+                rows = (
+                    (await session.execute(select(Webhook).order_by(Webhook.created_at.desc())))
+                    .scalars()
+                    .all()
+                )
                 return [self._to_dict(w) for w in rows]
         except SQLAlchemyError:
             logger.exception("Failed to list webhooks")
             return []
 
-    def get(self, webhook_id: int) -> dict[str, Any] | None:
+    async def get(self, webhook_id: int) -> dict[str, Any] | None:
         """Return a single webhook by ID.
 
         Args:
@@ -103,14 +108,14 @@ class WebhookService:
             dict[str, Any] | None: Webhook data, or None if not found.
         """
         try:
-            with self._session_factory() as session:
-                wh = session.get(Webhook, webhook_id)
+            async with self._session_factory() as session:
+                wh = await session.get(Webhook, webhook_id)
                 return self._to_dict(wh) if wh else None
         except SQLAlchemyError:
             logger.exception("Failed to get webhook %d", webhook_id)
             return None
 
-    def create(
+    async def create(
         self,
         *,
         url: str,
@@ -132,7 +137,7 @@ class WebhookService:
             dict[str, Any]: Created webhook data including the secret.
         """
         secret = secrets.token_hex(32)
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             wh = Webhook(
                 url=url,
                 secret=secret,
@@ -144,11 +149,11 @@ class WebhookService:
                 created_at=datetime.datetime.now(datetime.UTC),
             )
             session.add(wh)
-            session.commit()
-            session.refresh(wh)
+            await session.commit()
+            await session.refresh(wh)
             return self._to_dict_with_secret(wh)
 
-    def update(
+    async def update(
         self,
         webhook_id: int,
         *,
@@ -172,8 +177,8 @@ class WebhookService:
             dict[str, Any] | None: Updated webhook data, or None if not found.
         """
         try:
-            with self._session_factory() as session:
-                wh = session.get(Webhook, webhook_id)
+            async with self._session_factory() as session:
+                wh = await session.get(Webhook, webhook_id)
                 if not wh:
                     return None
                 if url is not None:
@@ -186,14 +191,14 @@ class WebhookService:
                     wh.channel_type = channel_type
                 if extra_config is not None:
                     wh.extra_config = extra_config
-                session.commit()
-                session.refresh(wh)
+                await session.commit()
+                await session.refresh(wh)
                 return self._to_dict(wh)
         except SQLAlchemyError:
             logger.exception("Failed to update webhook %d", webhook_id)
             return None
 
-    def delete(self, webhook_id: int) -> bool:
+    async def delete(self, webhook_id: int) -> bool:
         """Delete a webhook by ID.
 
         Args:
@@ -203,18 +208,18 @@ class WebhookService:
             bool: True if deleted, False if not found.
         """
         try:
-            with self._session_factory() as session:
-                wh = session.get(Webhook, webhook_id)
+            async with self._session_factory() as session:
+                wh = await session.get(Webhook, webhook_id)
                 if not wh:
                     return False
-                session.delete(wh)
-                session.commit()
+                await session.delete(wh)
+                await session.commit()
                 return True
         except SQLAlchemyError:
             logger.exception("Failed to delete webhook %d", webhook_id)
             return False
 
-    def _get_active_for_event(self, event_type: str) -> list[_Target]:
+    async def _get_active_for_event(self, event_type: str) -> list[_Target]:
         """Return targets for active webhooks subscribed to event_type.
 
         Args:
@@ -224,8 +229,12 @@ class WebhookService:
             list[_Target]: Matching delivery targets.
         """
         try:
-            with self._session_factory() as session:
-                rows = session.query(Webhook).filter(Webhook.is_active.is_(True)).all()
+            async with self._session_factory() as session:
+                rows = (
+                    (await session.execute(select(Webhook).where(Webhook.is_active.is_(True))))
+                    .scalars()
+                    .all()
+                )
                 result = []
                 for wh in rows:
                     try:
@@ -254,7 +263,7 @@ class WebhookService:
             event_type: Type of event (e.g. "approval.approved").
             payload: Event data payload.
         """
-        targets = await asyncio.to_thread(self._get_active_for_event, event_type)
+        targets = await self._get_active_for_event(event_type)
         if not targets:
             return
 
@@ -262,9 +271,7 @@ class WebhookService:
         payload_json = json.dumps(payload, default=str)
 
         for target in targets:
-            delivery_id = await asyncio.to_thread(
-                self._create_delivery, target.webhook_id, event_type, payload_json
-            )
+            delivery_id = await self._create_delivery(target.webhook_id, event_type, payload_json)
             formatter = FORMATTERS.get(target.channel_type, FORMATTERS["generic"])
             body = formatter(event_type, payload, timestamp)
             task = asyncio.create_task(self._deliver(target, body, delivery_id))
@@ -292,15 +299,13 @@ class WebhookService:
             bool: ``True`` if a delivery task was scheduled, ``False`` if
                 the webhook was missing or inactive.
         """
-        target = await asyncio.to_thread(self._target_for_webhook, webhook_id)
+        target = await self._target_for_webhook(webhook_id)
         if target is None:
             return False
 
         timestamp = datetime.datetime.now(datetime.UTC).isoformat()
         payload_json = json.dumps(payload, default=str)
-        delivery_id = await asyncio.to_thread(
-            self._create_delivery, target.webhook_id, event_type, payload_json
-        )
+        delivery_id = await self._create_delivery(target.webhook_id, event_type, payload_json)
         formatter = FORMATTERS.get(target.channel_type, FORMATTERS["generic"])
         body = formatter(event_type, payload, timestamp)
         task = asyncio.create_task(self._deliver(target, body, delivery_id))
@@ -308,7 +313,7 @@ class WebhookService:
         task.add_done_callback(self._delivery_tasks.discard)
         return True
 
-    def _target_for_webhook(self, webhook_id: int) -> _Target | None:
+    async def _target_for_webhook(self, webhook_id: int) -> _Target | None:
         """Build a delivery ``_Target`` for one specific active webhook.
 
         Args:
@@ -319,12 +324,12 @@ class WebhookService:
                 is missing or paused.
         """
         try:
-            with self._session_factory() as session:
+            async with self._session_factory() as session:
                 wh = (
-                    session.query(Webhook)
-                    .filter(Webhook.id == webhook_id, Webhook.is_active.is_(True))
-                    .first()
-                )
+                    await session.execute(
+                        select(Webhook).where(Webhook.id == webhook_id, Webhook.is_active.is_(True))
+                    )
+                ).scalar_one_or_none()
                 if wh is None:
                     return None
                 return _Target(
@@ -355,7 +360,7 @@ class WebhookService:
         await asyncio.wait(tasks, timeout=timeout)
         return len(tasks)
 
-    def _create_delivery(self, webhook_id: int, event_type: str, payload_json: str) -> int:
+    async def _create_delivery(self, webhook_id: int, event_type: str, payload_json: str) -> int:
         """Create a pending delivery record.
 
         Args:
@@ -366,7 +371,7 @@ class WebhookService:
         Returns:
             int: Delivery row ID.
         """
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             delivery = WebhookDelivery(
                 webhook_id=webhook_id,
                 event_type=event_type,
@@ -376,11 +381,11 @@ class WebhookService:
                 created_at=datetime.datetime.now(datetime.UTC),
             )
             session.add(delivery)
-            session.commit()
-            session.refresh(delivery)
+            await session.commit()
+            await session.refresh(delivery)
             return delivery.id
 
-    def _update_delivery(
+    async def _update_delivery(
         self,
         delivery_id: int,
         *,
@@ -399,8 +404,8 @@ class WebhookService:
             attempt: Current attempt number.
         """
         try:
-            with self._session_factory() as session:
-                row = session.get(WebhookDelivery, delivery_id)
+            async with self._session_factory() as session:
+                row = await session.get(WebhookDelivery, delivery_id)
                 if row:
                     row.status = status
                     row.response_code = response_code
@@ -408,7 +413,7 @@ class WebhookService:
                     row.attempt = attempt
                     if status == "success":
                         row.delivered_at = datetime.datetime.now(datetime.UTC)
-                    session.commit()
+                    await session.commit()
         except SQLAlchemyError:
             logger.exception("Failed to update delivery %d", delivery_id)
 
@@ -461,8 +466,7 @@ class WebhookService:
                 target.webhook_id,
                 target.url,
             )
-            await asyncio.to_thread(
-                self._update_delivery,
+            await self._update_delivery(
                 delivery_id,
                 status="failed",
                 error_message="SSRF blocked: target resolves to private address "
@@ -495,8 +499,7 @@ class WebhookService:
                 async with httpx.AsyncClient(timeout=wh_cfg.delivery_timeout) as client:
                     resp = await client.post(post_url, content=body, headers=headers)
                     if resp.status_code < 400:
-                        await asyncio.to_thread(
-                            self._update_delivery,
+                        await self._update_delivery(
                             delivery_id,
                             status="success",
                             response_code=resp.status_code,
@@ -512,8 +515,7 @@ class WebhookService:
                         return
                     if resp.status_code < 500:
                         # Client error — don't retry
-                        await asyncio.to_thread(
-                            self._update_delivery,
+                        await self._update_delivery(
                             delivery_id,
                             status="failed",
                             response_code=resp.status_code,
@@ -544,12 +546,8 @@ class WebhookService:
                 await asyncio.sleep(delay)
 
         # All attempts exhausted
-        await asyncio.to_thread(
-            self._update_delivery,
-            delivery_id,
-            status="failed",
-            error_message=error_msg,
-            attempt=max_attempts,
+        await self._update_delivery(
+            delivery_id, status="failed", error_message=error_msg, attempt=max_attempts
         )
         self._inc_delivery_counter("failed")
         logger.warning(
@@ -583,8 +581,7 @@ class WebhookService:
                     target.webhook_id,
                     smtp_host,
                 )
-                await asyncio.to_thread(
-                    self._update_delivery,
+                await self._update_delivery(
                     delivery_id,
                     status="failed",
                     error_message="SSRF blocked: SMTP host resolves to private address "
@@ -615,28 +612,19 @@ class WebhookService:
                 kwargs["use_tls"] = True
 
             await aiosmtplib.send(msg, **kwargs)
-            await asyncio.to_thread(
-                self._update_delivery,
-                delivery_id,
-                status="success",
-                attempt=1,
-            )
+            await self._update_delivery(delivery_id, status="success", attempt=1)
             self._inc_delivery_counter("success")
             logger.info("Email notification delivered for webhook %d", target.webhook_id)
         except Exception as e:
             logger.warning("Email delivery failed", exc_info=True)
-            await asyncio.to_thread(
-                self._update_delivery,
-                delivery_id,
-                status="failed",
-                error_message=str(e),
-                attempt=1,
+            await self._update_delivery(
+                delivery_id, status="failed", error_message=str(e), attempt=1
             )
             self._inc_delivery_counter("failed")
 
     # ─── Delivery log queries ────────────────────────────────────────────────
 
-    def list_deliveries(self, webhook_id: int, *, limit: int = 50) -> list[dict[str, Any]]:
+    async def list_deliveries(self, webhook_id: int, *, limit: int = 50) -> list[dict[str, Any]]:
         """Return recent deliveries for a webhook.
 
         Args:
@@ -647,12 +635,17 @@ class WebhookService:
             list[dict[str, Any]]: Delivery records, newest first.
         """
         try:
-            with self._session_factory() as session:
+            async with self._session_factory() as session:
                 rows = (
-                    session.query(WebhookDelivery)
-                    .filter(WebhookDelivery.webhook_id == webhook_id)
-                    .order_by(WebhookDelivery.created_at.desc())
-                    .limit(limit)
+                    (
+                        await session.execute(
+                            select(WebhookDelivery)
+                            .where(WebhookDelivery.webhook_id == webhook_id)
+                            .order_by(WebhookDelivery.created_at.desc())
+                            .limit(limit)
+                        )
+                    )
+                    .scalars()
                     .all()
                 )
                 return [
@@ -673,7 +666,7 @@ class WebhookService:
             logger.exception("Failed to list deliveries for webhook %d", webhook_id)
             return []
 
-    def cleanup_old_deliveries(self, max_age_days: int | None = None) -> int:
+    async def cleanup_old_deliveries(self, max_age_days: int | None = None) -> int:
         """Purge delivery records older than max_age_days.
 
         Args:
@@ -686,13 +679,13 @@ class WebhookService:
             max_age_days = _webhook_settings().delivery_max_age_days
         cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=max_age_days)
         try:
-            with self._session_factory() as session:
+            async with self._session_factory() as session:
                 count = (
-                    session.query(WebhookDelivery)
-                    .filter(WebhookDelivery.created_at < cutoff)
-                    .delete()
-                )
-                session.commit()
+                    await session.execute(
+                        sa_delete(WebhookDelivery).where(WebhookDelivery.created_at < cutoff)
+                    )
+                ).rowcount  # type: ignore[attr-defined]
+                await session.commit()
                 if count:
                     logger.info("Purged %d old webhook deliveries", count)
                 return count

@@ -29,8 +29,7 @@ from sqlalchemy import delete, select
 from shoreguard.models import ApprovalDecision, ApprovalWorkflow
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
-    from sqlalchemy.orm import sessionmaker as SessionMaker
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +69,12 @@ class ApprovalWorkflowService:
             short-lived sessions for each operation.
     """
 
-    def __init__(self, session_factory: SessionMaker) -> None:  # noqa: D107
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:  # noqa: D107
         self._session_factory = session_factory
 
     # ── Workflow CRUD ──────────────────────────────────────────────────
 
-    def get_workflow(self, gateway_name: str, sandbox_name: str) -> dict[str, Any] | None:
+    async def get_workflow(self, gateway_name: str, sandbox_name: str) -> dict[str, Any] | None:
         """Return the workflow config for a sandbox, or None if unconfigured.
 
         Args:
@@ -85,11 +84,11 @@ class ApprovalWorkflowService:
         Returns:
             dict[str, Any] | None: Workflow as a dict or None.
         """
-        with self._session_factory() as session:
-            row = self._get_workflow_row(session, gateway_name, sandbox_name)
+        async with self._session_factory() as session:
+            row = await self._get_workflow_row(session, gateway_name, sandbox_name)
             return self._workflow_to_dict(row) if row else None
 
-    def upsert_workflow(
+    async def upsert_workflow(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -120,9 +119,9 @@ class ApprovalWorkflowService:
         if required_approvals < 1:
             raise ValueError("required_approvals must be >= 1")
 
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             now = datetime.datetime.now(datetime.UTC)
-            row = self._get_workflow_row(session, gateway_name, sandbox_name)
+            row = await self._get_workflow_row(session, gateway_name, sandbox_name)
             roles_json = json.dumps(sorted(required_roles))
             if row is not None:
                 row.required_approvals = required_approvals
@@ -143,11 +142,11 @@ class ApprovalWorkflowService:
                     updated_at=now,
                 )
                 session.add(row)
-            session.commit()
-            session.refresh(row)
+            await session.commit()
+            await session.refresh(row)
             return self._workflow_to_dict(row)
 
-    def delete_workflow(self, gateway_name: str, sandbox_name: str) -> bool:
+    async def delete_workflow(self, gateway_name: str, sandbox_name: str) -> bool:
         """Delete the workflow (cascades to decisions).
 
         Args:
@@ -157,17 +156,17 @@ class ApprovalWorkflowService:
         Returns:
             bool: True if a workflow row was removed.
         """
-        with self._session_factory() as session:
-            row = self._get_workflow_row(session, gateway_name, sandbox_name)
+        async with self._session_factory() as session:
+            row = await self._get_workflow_row(session, gateway_name, sandbox_name)
             if row is None:
                 return False
-            session.delete(row)
-            session.commit()
+            await session.delete(row)
+            await session.commit()
             return True
 
     # ── Vote operations ────────────────────────────────────────────────
 
-    def record_decision(
+    async def record_decision(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -200,8 +199,8 @@ class ApprovalWorkflowService:
         if decision not in {"approve", "reject"}:
             raise ValueError(f"decision must be 'approve' or 'reject', got {decision!r}")
 
-        with self._session_factory() as session:
-            workflow = self._get_workflow_row(session, gateway_name, sandbox_name)
+        async with self._session_factory() as session:
+            workflow = await self._get_workflow_row(session, gateway_name, sandbox_name)
             if workflow is None:
                 raise LookupError(f"No workflow configured for {gateway_name}/{sandbox_name}")
 
@@ -209,7 +208,7 @@ class ApprovalWorkflowService:
             if required_roles and role not in required_roles:
                 raise PermissionError(f"Role '{role}' not permitted (required: {required_roles})")
 
-            existing = self._list_decision_rows(session, gateway_name, sandbox_name, chunk_id)
+            existing = await self._list_decision_rows(session, gateway_name, sandbox_name, chunk_id)
             if workflow.distinct_actors and any(d.actor == actor for d in existing):
                 raise ValueError(f"Actor '{actor}' has already voted on chunk {chunk_id}")
 
@@ -226,9 +225,11 @@ class ApprovalWorkflowService:
                 created_at=now,
             )
             session.add(row)
-            session.commit()
+            await session.commit()
 
-            decisions = self._list_decision_rows(session, gateway_name, sandbox_name, chunk_id)
+            decisions = await self._list_decision_rows(
+                session, gateway_name, sandbox_name, chunk_id
+            )
             approvals = [d for d in decisions if d.decision == "approve"]
             reject_seen = any(d.decision == "reject" for d in decisions)
             quorum_met = not reject_seen and len(approvals) >= workflow.required_approvals
@@ -247,18 +248,18 @@ class ApprovalWorkflowService:
             # Clear rows eagerly once terminal state is reached — the upstream
             # approve/reject fires from the route handler after this returns.
             if quorum_met or reject_seen:
-                session.execute(
+                await session.execute(
                     delete(ApprovalDecision).where(
                         ApprovalDecision.gateway_name == gateway_name,
                         ApprovalDecision.sandbox_name == sandbox_name,
                         ApprovalDecision.chunk_id == chunk_id,
                     )
                 )
-                session.commit()
+                await session.commit()
 
             return result
 
-    def list_decisions(
+    async def list_decisions(
         self, gateway_name: str, sandbox_name: str, chunk_id: str
     ) -> list[dict[str, Any]]:
         """Return all decisions currently on a chunk.
@@ -271,11 +272,11 @@ class ApprovalWorkflowService:
         Returns:
             list[dict[str, Any]]: Decision dicts sorted by ``created_at`` asc.
         """
-        with self._session_factory() as session:
-            rows = self._list_decision_rows(session, gateway_name, sandbox_name, chunk_id)
+        async with self._session_factory() as session:
+            rows = await self._list_decision_rows(session, gateway_name, sandbox_name, chunk_id)
             return [self._decision_to_dict(d) for d in rows]
 
-    def has_pending(self, gateway_name: str, sandbox_name: str) -> bool:
+    async def has_pending(self, gateway_name: str, sandbox_name: str) -> bool:
         """Return True if any decisions exist for the sandbox.
 
         Used by approve_all to refuse when workflow votes are mid-flight.
@@ -287,14 +288,16 @@ class ApprovalWorkflowService:
         Returns:
             bool: True if at least one decision row exists.
         """
-        with self._session_factory() as session:
-            row = session.execute(
-                select(ApprovalDecision.id)
-                .where(
-                    ApprovalDecision.gateway_name == gateway_name,
-                    ApprovalDecision.sandbox_name == sandbox_name,
+        async with self._session_factory() as session:
+            row = (
+                await session.execute(
+                    select(ApprovalDecision.id)
+                    .where(
+                        ApprovalDecision.gateway_name == gateway_name,
+                        ApprovalDecision.sandbox_name == sandbox_name,
+                    )
+                    .limit(1)
                 )
-                .limit(1)
             ).first()
             return row is not None
 
@@ -329,16 +332,20 @@ class ApprovalWorkflowService:
         """
         if workflow.escalation_timeout_minutes is None or not decisions:
             return False
-        first = min(decisions, key=lambda d: d.created_at)
-        started = first.created_at
-        if started.tzinfo is None:
-            started = started.replace(tzinfo=datetime.UTC)
+
+        def _aware(ts: datetime.datetime) -> datetime.datetime:
+            # SQLite round-trips naive datetimes while fresh in-session rows
+            # keep their tz — normalise so the comparison never mixes.
+            return ts.replace(tzinfo=datetime.UTC) if ts.tzinfo is None else ts
+
+        first = min(decisions, key=lambda d: _aware(d.created_at))
+        started = _aware(first.created_at)
         elapsed = datetime.datetime.now(datetime.UTC) - started
         return elapsed.total_seconds() >= workflow.escalation_timeout_minutes * 60
 
     @staticmethod
-    def _get_workflow_row(
-        session: Session, gateway_name: str, sandbox_name: str
+    async def _get_workflow_row(
+        session: AsyncSession, gateway_name: str, sandbox_name: str
     ) -> ApprovalWorkflow | None:
         """Fetch the workflow row, if any.
 
@@ -350,16 +357,17 @@ class ApprovalWorkflowService:
         Returns:
             ApprovalWorkflow | None: Row if a workflow is configured, else None.
         """
-        return session.execute(
+        result = await session.execute(
             select(ApprovalWorkflow).where(
                 ApprovalWorkflow.gateway_name == gateway_name,
                 ApprovalWorkflow.sandbox_name == sandbox_name,
             )
-        ).scalar_one_or_none()
+        )
+        return result.scalar_one_or_none()
 
     @staticmethod
-    def _list_decision_rows(
-        session: Session, gateway_name: str, sandbox_name: str, chunk_id: str
+    async def _list_decision_rows(
+        session: AsyncSession, gateway_name: str, sandbox_name: str, chunk_id: str
     ) -> list[ApprovalDecision]:
         """Return decision rows for a chunk, ordered by creation time.
 
@@ -372,19 +380,16 @@ class ApprovalWorkflowService:
         Returns:
             list[ApprovalDecision]: Decision rows in insertion order.
         """
-        return list(
-            session.execute(
-                select(ApprovalDecision)
-                .where(
-                    ApprovalDecision.gateway_name == gateway_name,
-                    ApprovalDecision.sandbox_name == sandbox_name,
-                    ApprovalDecision.chunk_id == chunk_id,
-                )
-                .order_by(ApprovalDecision.created_at)
+        result = await session.execute(
+            select(ApprovalDecision)
+            .where(
+                ApprovalDecision.gateway_name == gateway_name,
+                ApprovalDecision.sandbox_name == sandbox_name,
+                ApprovalDecision.chunk_id == chunk_id,
             )
-            .scalars()
-            .all()
+            .order_by(ApprovalDecision.created_at)
         )
+        return list(result.scalars().all())
 
     @staticmethod
     def _workflow_to_dict(row: ApprovalWorkflow) -> dict[str, Any]:

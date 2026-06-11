@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def import_filesystem_gateways(
+async def import_filesystem_gateways(
     registry: GatewayRegistry,
     *,
     log_fn: Callable[[str], None] | None = None,
@@ -69,7 +69,7 @@ def import_filesystem_gateways(
             _log(f"  skip  {name} (invalid name format)")
             skipped += 1
             continue
-        if registry.get(name) is not None:
+        if await registry.get(name) is not None:
             _log(f"  skip  {name} (already registered)")
             skipped += 1
             continue
@@ -161,7 +161,7 @@ def import_filesystem_gateways(
             continue
 
         try:
-            registry.register(
+            await registry.register(
                 name,
                 clean_endpoint,
                 scheme,

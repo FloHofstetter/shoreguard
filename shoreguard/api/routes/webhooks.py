@@ -13,7 +13,6 @@ without opening the database. Actual dispatch logic lives in
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Any
@@ -187,7 +186,7 @@ async def list_webhooks() -> dict[str, Any]:
         dict[str, Any]: Paginated webhook entries.
     """
     svc = _get_svc()
-    items = await asyncio.to_thread(svc.list)
+    items = await svc.list()
     return {"items": items, "total": len(items)}
 
 
@@ -220,8 +219,7 @@ async def create_webhook(body: WebhookCreateRequest, request: Request) -> dict[s
 
     extra_config_json = json.dumps(body.extra_config) if body.extra_config else None
     actor = getattr(request.state, "user_id", "unknown")
-    result = await asyncio.to_thread(
-        svc.create,
+    result = await svc.create(
         url=body.url,
         event_types=body.event_types,
         created_by=str(actor),
@@ -263,7 +261,7 @@ async def get_webhook(webhook_id: int) -> dict[str, Any]:
         HTTPException: If webhook is not found.
     """
     svc = _get_svc()
-    result = await asyncio.to_thread(svc.get, webhook_id)
+    result = await svc.get(webhook_id)
     if result is None:
         raise HTTPException(404, "Webhook not found")
     return result
@@ -296,8 +294,7 @@ async def update_webhook(
         validate_smtp_host(str(body.extra_config["smtp_host"]))
 
     extra_config_json = json.dumps(body.extra_config) if body.extra_config else None
-    result = await asyncio.to_thread(
-        svc.update,
+    result = await svc.update(
         webhook_id,
         url=body.url,
         event_types=body.event_types,
@@ -334,7 +331,7 @@ async def delete_webhook(webhook_id: int, request: Request) -> None:
         HTTPException: If webhook is not found.
     """
     svc = _get_svc()
-    deleted = await asyncio.to_thread(svc.delete, webhook_id)
+    deleted = await svc.delete(webhook_id)
     if not deleted:
         raise HTTPException(404, "Webhook not found")
     await audit_log(request, "webhook.delete", "webhook", str(webhook_id))
@@ -355,7 +352,7 @@ async def test_webhook(webhook_id: int, request: Request) -> dict[str, str]:
         HTTPException: If webhook is not found.
     """
     svc = _get_svc()
-    wh = await asyncio.to_thread(svc.get, webhook_id)
+    wh = await svc.get(webhook_id)
     if wh is None:
         raise HTTPException(404, "Webhook not found")
     delivered = await svc.fire_to(
@@ -386,7 +383,7 @@ async def list_deliveries(
         HTTPException: If webhook is not found.
     """
     svc = _get_svc()
-    wh = await asyncio.to_thread(svc.get, webhook_id)
+    wh = await svc.get(webhook_id)
     if wh is None:
         raise HTTPException(404, "Webhook not found")
-    return await asyncio.to_thread(svc.list_deliveries, webhook_id, limit=limit)
+    return await svc.list_deliveries(webhook_id, limit=limit)

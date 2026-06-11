@@ -48,8 +48,8 @@ class ServiceContainer:
 
     Attributes:
         settings: The settings snapshot the container was built from.
-        session_factory: Sync SQLAlchemy session factory.
-        async_session_factory: Async SQLAlchemy session factory.
+        session_factory: Sync SQLAlchemy session factory (auth subsystem only).
+        async_session_factory: Async SQLAlchemy session factory (all data services).
         registry: Persistent gateway CRUD (what gateways exist).
         gateway: Live gateway connections (clients, health, backoff).
         sandbox_meta: Sandbox metadata store.
@@ -129,10 +129,10 @@ def build_container(
     from shoreguard.services.sbom import SBOMService
     from shoreguard.services.webhooks import WebhookService
 
-    registry = GatewayRegistry(session_factory)
+    registry = GatewayRegistry(async_session_factory)
     gateway = GatewayService(registry)
-    sandbox_meta = SandboxMetaStore(session_factory)
-    audit = AuditService(session_factory, exporter=audit_exporter)
+    sandbox_meta = SandboxMetaStore(async_session_factory)
+    audit = AuditService(async_session_factory, exporter=audit_exporter)
 
     async def _resolve_sandbox_service(gateway_name: str):  # type: ignore[no-untyped-def]  # noqa: D103
         # Build a SandboxService for post-create boot-hook dispatch.
@@ -156,17 +156,17 @@ def build_container(
             retention_days=settings.ops.retention_days,
         ),
         audit=audit,
-        webhooks=WebhookService(session_factory),
+        webhooks=WebhookService(async_session_factory),
         bypass=BypassService(),
-        sbom=SBOMService(session_factory),
+        sbom=SBOMService(async_session_factory),
         boot_hooks=BootHookService(
-            session_factory,
+            async_session_factory,
             sandbox_service_provider=_resolve_sandbox_service,
         ),
         discovery=DiscoveryService(registry, gateway, settings.discovery),
-        policy_pin=PolicyPinService(session_factory),
-        approval_workflow=ApprovalWorkflowService(session_factory),
-        policy_apply_proposal=PolicyApplyProposalService(session_factory),
+        policy_pin=PolicyPinService(async_session_factory),
+        approval_workflow=ApprovalWorkflowService(async_session_factory),
+        policy_apply_proposal=PolicyApplyProposalService(async_session_factory),
         drift_detection=DriftDetectionService(gateway, settings.drift_detection),
         cert_rotation=CertRotationService(
             gateway,

@@ -198,7 +198,7 @@ class DiscoveryService:
         Returns:
             dict[str, Any]: ``{registered, skipped, errors}`` summary.
         """
-        existing = {gw.get("endpoint") for gw in await asyncio.to_thread(self._registry.list_all)}
+        existing = {gw.get("endpoint") for gw in await self._registry.list_all()}
         registered: list[dict[str, Any]] = []
         skipped: list[dict[str, Any]] = []
         errors: list[dict[str, Any]] = []

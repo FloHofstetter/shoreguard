@@ -10,7 +10,6 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import shoreguard.services.audit as audit_mod
 from shoreguard.api import auth
 from shoreguard.api.auth import (
     create_service_principal,
@@ -22,7 +21,6 @@ from shoreguard.api.auth import (
 )
 from shoreguard.api.auth.rbac import _GatewayRoleLookupError, _lookup_gateway_role
 from shoreguard.api.deps import _current_gateway
-from shoreguard.container import get_container
 from shoreguard.exceptions import ValidationError as DomainValidationError
 from shoreguard.models import Base, Gateway
 
@@ -50,7 +48,6 @@ def db():
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     auth.init_auth_for_test(factory)
-    get_container().audit = audit_mod.AuditService(factory)
     yield factory
     auth.reset()
     engine.dispose()

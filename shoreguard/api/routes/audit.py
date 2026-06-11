@@ -11,7 +11,6 @@ appended from inside every mutating endpoint via
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Any
@@ -53,8 +52,7 @@ async def list_audit_entries(
     Returns:
         dict[str, Any]: Paginated entries with total count.
     """
-    entries, total = await asyncio.to_thread(
-        get_services().audit.list_with_count,
+    entries, total = await get_services().audit.list_with_count(
         limit=limit,
         offset=offset,
         actor=actor,
@@ -92,8 +90,7 @@ async def export_audit(
         Response: The exported audit data as a downloadable response.
     """
     if fmt == "csv":
-        csv_data = await asyncio.to_thread(
-            get_services().audit.export_csv,
+        csv_data = await get_services().audit.export_csv(
             actor=actor,
             action=action,
             resource_type=resource_type,
@@ -107,8 +104,7 @@ async def export_audit(
             headers={"Content-Disposition": "attachment; filename=audit_log.csv"},
         )
 
-    entries = await asyncio.to_thread(
-        get_services().audit.list,
+    entries = await get_services().audit.list(
         limit=10000,
         actor=actor,
         action=action,

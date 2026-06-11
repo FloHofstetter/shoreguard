@@ -85,7 +85,7 @@ async def upload_sbom(
     svc = _get_sbom_service()
     actor = get_actor(request)
     try:
-        snapshot = svc.ingest(gw, name, raw_text, uploaded_by=actor)
+        snapshot = await svc.ingest(gw, name, raw_text, uploaded_by=actor)
     except InvalidSBOMError as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -126,7 +126,7 @@ async def get_sbom(
         HTTPException: ``404`` if no snapshot has been uploaded.
     """
     svc = _get_sbom_service()
-    snapshot = svc.get_snapshot(gw, name)
+    snapshot = await svc.get_snapshot(gw, name)
     if snapshot is None:
         raise HTTPException(404, "No SBOM uploaded for this sandbox")
     return snapshot
@@ -162,7 +162,7 @@ async def list_sbom_components(
         dict[str, Any]: ``{items, total, offset, limit}``.
     """
     svc = _get_sbom_service()
-    items, total = svc.search_components(
+    items, total = await svc.search_components(
         gw,
         name,
         search=search or None,
@@ -195,7 +195,7 @@ async def list_sbom_vulnerabilities(
         HTTPException: ``404`` if no snapshot has been uploaded.
     """
     svc = _get_sbom_service()
-    vulns = svc.get_vulnerabilities(gw, name)
+    vulns = await svc.get_vulnerabilities(gw, name)
     if vulns is None:
         raise HTTPException(404, "No SBOM uploaded for this sandbox")
     return {"vulnerabilities": vulns, "count": len(vulns)}
@@ -223,7 +223,7 @@ async def get_sbom_raw(
         HTTPException: ``404`` if no snapshot has been uploaded.
     """
     svc = _get_sbom_service()
-    raw = svc.get_raw_json(gw, name)
+    raw = await svc.get_raw_json(gw, name)
     if raw is None:
         raise HTTPException(404, "No SBOM uploaded for this sandbox")
     return Response(
@@ -257,7 +257,7 @@ async def delete_sbom(
         HTTPException: ``404`` if no snapshot was present.
     """
     svc = _get_sbom_service()
-    deleted = svc.delete_snapshot(gw, name)
+    deleted = await svc.delete_snapshot(gw, name)
     if not deleted:
         raise HTTPException(404, "No SBOM uploaded for this sandbox")
     await audit_log(

@@ -20,8 +20,9 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from shoreguard.exceptions import ConflictError
 from shoreguard.models import Gateway
@@ -42,14 +43,14 @@ class GatewayRegistry:
     API route layer before any call reaches this service.
 
     Args:
-        session_factory: SQLAlchemy session factory used to open a
+        session_factory: Async SQLAlchemy session factory used to open a
             fresh session per call.
     """
 
-    def __init__(self, session_factory: sessionmaker[Session]) -> None:  # noqa: D107
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:  # noqa: D107
         self._session_factory = session_factory
 
-    def register(
+    async def register(
         self,
         name: str,
         endpoint: str,
@@ -83,7 +84,7 @@ class GatewayRegistry:
         Raises:
             ConflictError: If a gateway with the given name already exists.
         """
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             gw = Gateway(
                 name=name,
                 endpoint=endpoint,
@@ -100,15 +101,15 @@ class GatewayRegistry:
             )
             session.add(gw)
             try:
-                session.commit()
+                await session.commit()
             except IntegrityError as e:
-                session.rollback()
+                await session.rollback()
                 logger.warning("Duplicate gateway registration attempt: '%s'", name)
                 raise ConflictError(f"Gateway '{name}' is already registered") from e
             logger.info("Registered gateway '%s' (endpoint=%s, scheme=%s)", name, endpoint, scheme)
             return self._to_dict(gw)
 
-    def unregister(self, name: str) -> bool:
+    async def unregister(self, name: str) -> bool:
         """Remove a gateway.
 
         Args:
@@ -120,22 +121,24 @@ class GatewayRegistry:
         Raises:
             SQLAlchemyError: If the commit fails.
         """
-        with self._session_factory() as session:
-            gw = session.query(Gateway).filter(Gateway.name == name).first()
+        async with self._session_factory() as session:
+            gw = (
+                await session.execute(select(Gateway).where(Gateway.name == name))
+            ).scalar_one_or_none()
             if gw is None:
                 logger.debug("Unregister called for unknown gateway '%s'", name)
                 return False
-            session.delete(gw)
+            await session.delete(gw)
             try:
-                session.commit()
+                await session.commit()
             except SQLAlchemyError:
-                session.rollback()
+                await session.rollback()
                 logger.error("Failed to unregister gateway '%s'", name, exc_info=True)
                 raise
             logger.info("Unregistered gateway '%s'", name)
             return True
 
-    def get(self, name: str) -> dict[str, Any] | None:
+    async def get(self, name: str) -> dict[str, Any] | None:
         """Return a single gateway or None.
 
         Args:
@@ -148,8 +151,10 @@ class GatewayRegistry:
             SQLAlchemyError: If the query fails.
         """
         try:
-            with self._session_factory() as session:
-                gw = session.query(Gateway).filter(Gateway.name == name).first()
+            async with self._session_factory() as session:
+                gw = (
+                    await session.execute(select(Gateway).where(Gateway.name == name))
+                ).scalar_one_or_none()
                 if gw is None:
                     return None
                 return self._to_dict(gw)
@@ -157,7 +162,9 @@ class GatewayRegistry:
             logger.error("Failed to get gateway '%s'", name, exc_info=True)
             raise
 
-    def list_all(self, *, labels_filter: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    async def list_all(
+        self, *, labels_filter: dict[str, str] | None = None
+    ) -> list[dict[str, Any]]:
         """Return all registered gateways, optionally filtered by labels.
 
         Args:
@@ -171,8 +178,10 @@ class GatewayRegistry:
             SQLAlchemyError: If the query fails.
         """
         try:
-            with self._session_factory() as session:
-                gateways = session.query(Gateway).order_by(Gateway.name).all()
+            async with self._session_factory() as session:
+                gateways = (
+                    (await session.execute(select(Gateway).order_by(Gateway.name))).scalars().all()
+                )
                 result = [self._to_dict(gw) for gw in gateways]
         except SQLAlchemyError:
             logger.error("Failed to list gateways", exc_info=True)
@@ -185,7 +194,7 @@ class GatewayRegistry:
             ]
         return result
 
-    def update_health(self, name: str, status: str, last_seen: datetime) -> None:
+    async def update_health(self, name: str, status: str, last_seen: datetime) -> None:
         """Update health status and last-seen timestamp.
 
         Args:
@@ -196,8 +205,10 @@ class GatewayRegistry:
         Raises:
             SQLAlchemyError: If the commit fails.
         """
-        with self._session_factory() as session:
-            gw = session.query(Gateway).filter(Gateway.name == name).first()
+        async with self._session_factory() as session:
+            gw = (
+                await session.execute(select(Gateway).where(Gateway.name == name))
+            ).scalar_one_or_none()
             if gw is None:
                 logger.debug("update_health called for unknown gateway '%s'", name)
                 return
@@ -205,15 +216,15 @@ class GatewayRegistry:
             gw.last_status = status
             gw.last_seen = last_seen
             try:
-                session.commit()
+                await session.commit()
             except SQLAlchemyError:
-                session.rollback()
+                await session.rollback()
                 logger.error("Failed to update health for gateway '%s'", name, exc_info=True)
                 raise
             if old_status != status:
                 logger.info("Gateway '%s' health: %s → %s", name, old_status, status)
 
-    def update_metadata(self, name: str, metadata: dict[str, Any]) -> None:
+    async def update_metadata(self, name: str, metadata: dict[str, Any]) -> None:
         """Replace the metadata JSON blob.
 
         Args:
@@ -223,20 +234,22 @@ class GatewayRegistry:
         Raises:
             SQLAlchemyError: If the commit fails.
         """
-        with self._session_factory() as session:
-            gw = session.query(Gateway).filter(Gateway.name == name).first()
+        async with self._session_factory() as session:
+            gw = (
+                await session.execute(select(Gateway).where(Gateway.name == name))
+            ).scalar_one_or_none()
             if gw is None:
                 logger.debug("update_metadata called for unknown gateway '%s'", name)
                 return
             gw.metadata_json = json.dumps(metadata)
             try:
-                session.commit()
+                await session.commit()
             except SQLAlchemyError:
-                session.rollback()
+                await session.rollback()
                 logger.error("Failed to update metadata for gateway '%s'", name, exc_info=True)
                 raise
 
-    def update_gateway_metadata(
+    async def update_gateway_metadata(
         self,
         name: str,
         *,
@@ -256,8 +269,10 @@ class GatewayRegistry:
         Raises:
             SQLAlchemyError: If the commit fails.
         """
-        with self._session_factory() as session:
-            gw = session.query(Gateway).filter(Gateway.name == name).first()
+        async with self._session_factory() as session:
+            gw = (
+                await session.execute(select(Gateway).where(Gateway.name == name))
+            ).scalar_one_or_none()
             if gw is None:
                 return None
             if description is not _UNSET:
@@ -267,15 +282,15 @@ class GatewayRegistry:
                     json.dumps(cast("dict[str, str] | None", labels)) if labels else None
                 )
             try:
-                session.commit()
+                await session.commit()
             except SQLAlchemyError:
-                session.rollback()
+                await session.rollback()
                 logger.error("Failed to update metadata for gateway '%s'", name, exc_info=True)
                 raise
             logger.info("Updated metadata for gateway '%s'", name)
             return self._to_dict(gw)
 
-    def get_credentials(self, name: str) -> dict[str, str | bytes | None] | None:
+    async def get_credentials(self, name: str) -> dict[str, str | bytes | None] | None:
         """Return raw cert bytes for a gateway (for connection logic only).
 
         Args:
@@ -289,8 +304,10 @@ class GatewayRegistry:
             SQLAlchemyError: If the query fails.
         """
         try:
-            with self._session_factory() as session:
-                gw = session.query(Gateway).filter(Gateway.name == name).first()
+            async with self._session_factory() as session:
+                gw = (
+                    await session.execute(select(Gateway).where(Gateway.name == name))
+                ).scalar_one_or_none()
                 if gw is None:
                     return None
                 return {

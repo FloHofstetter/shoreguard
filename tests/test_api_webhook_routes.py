@@ -6,7 +6,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import shoreguard.services.webhooks as webhook_mod
 from shoreguard.api import auth
 from shoreguard.api.auth import create_user
 from shoreguard.container import get_container, install, uninstall
@@ -26,7 +25,6 @@ def db():
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     auth.init_auth_for_test(factory)
-    get_container().webhooks = webhook_mod.WebhookService(factory)
     yield factory
     auth.reset()
     engine.dispose()
@@ -332,9 +330,7 @@ class TestAuditHookup:
 
     @pytest.fixture
     async def audit_admin_client(self, db, _with_admin):
-        import shoreguard.services.audit as audit_mod
 
-        get_container().audit = audit_mod.AuditService(db)
         from shoreguard.api.main import app
 
         async with AsyncClient(

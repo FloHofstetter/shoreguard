@@ -11,7 +11,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import shoreguard.services.audit as audit_mod
 from shoreguard.api import auth
 from shoreguard.api.auth import (
     add_group_member,
@@ -29,7 +28,6 @@ from shoreguard.api.auth import (
     update_group,
 )
 from shoreguard.api.auth.rbac import _lookup_gateway_role, _lookup_group_global_role
-from shoreguard.container import get_container
 from shoreguard.exceptions import NotFoundError
 from shoreguard.exceptions import ValidationError as DomainValidationError
 from shoreguard.models import Base, Gateway
@@ -59,7 +57,6 @@ def db():
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     auth.init_auth_for_test(factory)
-    get_container().audit = audit_mod.AuditService(factory)
     yield factory
     auth.reset()
     engine.dispose()

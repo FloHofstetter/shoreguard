@@ -8,8 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import grpc
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from shoreguard.exceptions import GatewayNotConnectedError
@@ -22,17 +21,18 @@ GW = "test-gw"
 
 
 @pytest.fixture
-def registry():
-    engine = create_engine(
-        "sqlite:///:memory:",
+async def registry():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
     reg = GatewayRegistry(factory)
     yield reg
-    engine.dispose()
+    await engine.dispose()
 
 
 @pytest.fixture

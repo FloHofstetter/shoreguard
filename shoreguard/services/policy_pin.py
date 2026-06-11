@@ -25,8 +25,7 @@ from shoreguard.exceptions import PolicyLockedError
 from shoreguard.models import PolicyPin
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
-    from sqlalchemy.orm import sessionmaker as SessionMaker
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +44,10 @@ class PolicyPinService:
             short-lived sessions for each call.
     """
 
-    def __init__(self, session_factory: SessionMaker) -> None:  # noqa: D107
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:  # noqa: D107
         self._session_factory = session_factory
 
-    def pin(
+    async def pin(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -74,8 +73,8 @@ class PolicyPinService:
         Returns:
             dict[str, Any]: The created/updated pin as a dict.
         """
-        with self._session_factory() as session:
-            existing = self._get_pin_row(session, gateway_name, sandbox_name)
+        async with self._session_factory() as session:
+            existing = await self._get_pin_row(session, gateway_name, sandbox_name)
             now = datetime.datetime.now(datetime.UTC)
 
             if existing is not None:
@@ -84,8 +83,8 @@ class PolicyPinService:
                 existing.reason = reason
                 existing.pinned_at = now
                 existing.expires_at = expires_at
-                session.commit()
-                session.refresh(existing)
+                await session.commit()
+                await session.refresh(existing)
                 return self._pin_to_dict(existing)
 
             pin = PolicyPin(
@@ -98,11 +97,11 @@ class PolicyPinService:
                 expires_at=expires_at,
             )
             session.add(pin)
-            session.commit()
-            session.refresh(pin)
+            await session.commit()
+            await session.refresh(pin)
             return self._pin_to_dict(pin)
 
-    def unpin(self, gateway_name: str, sandbox_name: str) -> bool:
+    async def unpin(self, gateway_name: str, sandbox_name: str) -> bool:
         """Remove a policy pin.
 
         Args:
@@ -112,17 +111,17 @@ class PolicyPinService:
         Returns:
             bool: True if a pin was removed, False if no pin existed.
         """
-        with self._session_factory() as session:
-            result = session.execute(
+        async with self._session_factory() as session:
+            result = await session.execute(
                 delete(PolicyPin).where(
                     PolicyPin.gateway_name == gateway_name,
                     PolicyPin.sandbox_name == sandbox_name,
                 )
             )
-            session.commit()
+            await session.commit()
             return result.rowcount > 0  # type: ignore[union-attr]
 
-    def get_pin(self, gateway_name: str, sandbox_name: str) -> dict[str, Any] | None:
+    async def get_pin(self, gateway_name: str, sandbox_name: str) -> dict[str, Any] | None:
         """Get the active pin for a sandbox, or None if not pinned.
 
         Expired pins are automatically deleted and treated as absent.
@@ -134,8 +133,8 @@ class PolicyPinService:
         Returns:
             dict[str, Any] | None: Pin data or None.
         """
-        with self._session_factory() as session:
-            pin = self._get_pin_row(session, gateway_name, sandbox_name)
+        async with self._session_factory() as session:
+            pin = await self._get_pin_row(session, gateway_name, sandbox_name)
             if pin is None:
                 return None
 
@@ -145,8 +144,8 @@ class PolicyPinService:
                 if expires.tzinfo is None:
                     expires = expires.replace(tzinfo=datetime.UTC)
                 if expires <= datetime.datetime.now(datetime.UTC):
-                    session.delete(pin)
-                    session.commit()
+                    await session.delete(pin)
+                    await session.commit()
                     logger.info(
                         "Auto-expired policy pin (gw=%s, sandbox=%s)",
                         gateway_name,
@@ -156,7 +155,7 @@ class PolicyPinService:
 
             return self._pin_to_dict(pin)
 
-    def is_pinned(self, gateway_name: str, sandbox_name: str) -> bool:
+    async def is_pinned(self, gateway_name: str, sandbox_name: str) -> bool:
         """Check whether a sandbox's policy is currently pinned.
 
         Args:
@@ -166,9 +165,9 @@ class PolicyPinService:
         Returns:
             bool: True if an active (non-expired) pin exists.
         """
-        return self.get_pin(gateway_name, sandbox_name) is not None
+        return await self.get_pin(gateway_name, sandbox_name) is not None
 
-    def check_pin(self, gateway_name: str, sandbox_name: str) -> None:
+    async def check_pin(self, gateway_name: str, sandbox_name: str) -> None:
         """Raise PolicyLockedError if the sandbox's policy is pinned.
 
         Intended as a guard call before any policy-mutating operation.
@@ -180,7 +179,7 @@ class PolicyPinService:
         Raises:
             PolicyLockedError: If an active pin exists.
         """
-        pin = self.get_pin(gateway_name, sandbox_name)
+        pin = await self.get_pin(gateway_name, sandbox_name)
         if pin is not None:
             raise PolicyLockedError(
                 f"Policy is pinned at version {pin['pinned_version']} "
@@ -188,7 +187,9 @@ class PolicyPinService:
             )
 
     @staticmethod
-    def _get_pin_row(session: Session, gateway_name: str, sandbox_name: str) -> PolicyPin | None:
+    async def _get_pin_row(
+        session: AsyncSession, gateway_name: str, sandbox_name: str
+    ) -> PolicyPin | None:
         """Fetch the raw PolicyPin row, if any.
 
         Args:
@@ -199,10 +200,12 @@ class PolicyPinService:
         Returns:
             PolicyPin | None: The pin row, or None if not found.
         """
-        return session.execute(
-            select(PolicyPin).where(
-                PolicyPin.gateway_name == gateway_name,
-                PolicyPin.sandbox_name == sandbox_name,
+        return (
+            await session.execute(
+                select(PolicyPin).where(
+                    PolicyPin.gateway_name == gateway_name,
+                    PolicyPin.sandbox_name == sandbox_name,
+                )
             )
         ).scalar_one_or_none()
 

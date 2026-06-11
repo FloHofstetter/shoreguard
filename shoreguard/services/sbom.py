@@ -28,7 +28,7 @@ from shoreguard.exceptions import InvalidSBOMError
 from shoreguard.models import SBOMComponent, SBOMSnapshot
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import sessionmaker as SessionMaker
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
 
@@ -356,10 +356,10 @@ class SBOMService:
         session_factory: SQLAlchemy session factory for database access.
     """
 
-    def __init__(self, session_factory: SessionMaker) -> None:  # noqa: D107
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:  # noqa: D107
         self._session_factory = session_factory
 
-    def ingest(
+    async def ingest(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -386,17 +386,17 @@ class SBOMService:
         # Persist the **original** payload for later download. Re-serialising
         # the parsed view would lose unknown fields and fail signature
         # verification if the user later wires that up.
-        with self._session_factory() as session:
-            existing = self._get_snapshot_row(session, gateway_name, sandbox_name)
+        async with self._session_factory() as session:
+            existing = await self._get_snapshot_row(session, gateway_name, sandbox_name)
             if existing is not None:
                 # Explicit delete of dependent rows: SQLite with the default
                 # connection pragma does not enforce ON DELETE CASCADE, so
                 # we cannot rely on the FK alone.
-                session.execute(
+                await session.execute(
                     delete(SBOMComponent).where(SBOMComponent.snapshot_id == existing.id)
                 )
-                session.delete(existing)
-                session.flush()
+                await session.delete(existing)
+                await session.flush()
             now = datetime.datetime.now(datetime.UTC)
             snapshot = SBOMSnapshot(
                 gateway_name=gateway_name,
@@ -412,11 +412,11 @@ class SBOMService:
                 raw_json=raw_json,
             )
             session.add(snapshot)
-            session.flush()
+            await session.flush()
             for row in parsed.components:
                 session.add(SBOMComponent(snapshot_id=snapshot.id, **row))
-            session.commit()
-            session.refresh(snapshot)
+            await session.commit()
+            await session.refresh(snapshot)
             logger.info(
                 "SBOM ingested (gateway=%s, sandbox=%s, components=%d, vulns=%d, max=%s, actor=%s)",
                 gateway_name,
@@ -428,7 +428,7 @@ class SBOMService:
             )
             return _snapshot_to_dict(snapshot)
 
-    def get_snapshot(self, gateway_name: str, sandbox_name: str) -> dict[str, Any] | None:
+    async def get_snapshot(self, gateway_name: str, sandbox_name: str) -> dict[str, Any] | None:
         """Return snapshot metadata for a sandbox, or ``None`` if not present.
 
         Args:
@@ -438,11 +438,11 @@ class SBOMService:
         Returns:
             dict[str, Any] | None: Snapshot metadata or ``None``.
         """
-        with self._session_factory() as session:
-            row = self._get_snapshot_row(session, gateway_name, sandbox_name)
+        async with self._session_factory() as session:
+            row = await self._get_snapshot_row(session, gateway_name, sandbox_name)
             return _snapshot_to_dict(row) if row is not None else None
 
-    def get_raw_json(self, gateway_name: str, sandbox_name: str) -> str | None:
+    async def get_raw_json(self, gateway_name: str, sandbox_name: str) -> str | None:
         """Return the original CycloneDX JSON payload for download.
 
         Args:
@@ -452,11 +452,11 @@ class SBOMService:
         Returns:
             str | None: Raw JSON document, or ``None`` if no snapshot exists.
         """
-        with self._session_factory() as session:
-            row = self._get_snapshot_row(session, gateway_name, sandbox_name)
+        async with self._session_factory() as session:
+            row = await self._get_snapshot_row(session, gateway_name, sandbox_name)
             return row.raw_json if row is not None else None
 
-    def delete_snapshot(self, gateway_name: str, sandbox_name: str) -> bool:
+    async def delete_snapshot(self, gateway_name: str, sandbox_name: str) -> bool:
         """Delete a sandbox's SBOM snapshot, cascading components.
 
         Args:
@@ -466,16 +466,16 @@ class SBOMService:
         Returns:
             bool: ``True`` if a snapshot was removed, ``False`` if none existed.
         """
-        with self._session_factory() as session:
-            row = self._get_snapshot_row(session, gateway_name, sandbox_name)
+        async with self._session_factory() as session:
+            row = await self._get_snapshot_row(session, gateway_name, sandbox_name)
             if row is None:
                 return False
-            session.execute(delete(SBOMComponent).where(SBOMComponent.snapshot_id == row.id))
-            session.delete(row)
-            session.commit()
+            await session.execute(delete(SBOMComponent).where(SBOMComponent.snapshot_id == row.id))
+            await session.delete(row)
+            await session.commit()
             return True
 
-    def search_components(
+    async def search_components(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -510,8 +510,8 @@ class SBOMService:
         if offset < 0:
             offset = 0
 
-        with self._session_factory() as session:
-            snapshot = self._get_snapshot_row(session, gateway_name, sandbox_name)
+        async with self._session_factory() as session:
+            snapshot = await self._get_snapshot_row(session, gateway_name, sandbox_name)
             if snapshot is None:
                 return [], 0
 
@@ -535,13 +535,13 @@ class SBOMService:
                 # behaves predictably for the operator.
 
             total_stmt = select(func.count()).select_from(stmt.subquery())
-            total = int(session.execute(total_stmt).scalar() or 0)
+            total = int((await session.execute(total_stmt)).scalar() or 0)
 
             stmt = stmt.order_by(SBOMComponent.name.asc()).offset(offset).limit(limit)
-            rows = session.execute(stmt).scalars().all()
+            rows = (await session.execute(stmt)).scalars().all()
             return [_component_to_dict(r) for r in rows], total
 
-    def get_vulnerabilities(
+    async def get_vulnerabilities(
         self, gateway_name: str, sandbox_name: str
     ) -> list[dict[str, Any]] | None:
         """Return the structured vulnerability list for a sandbox.
@@ -559,7 +559,7 @@ class SBOMService:
             list[dict[str, Any]] | None: Vulnerability list, or ``None`` if
             no snapshot exists.  Sorted highest-severity first.
         """
-        raw = self.get_raw_json(gateway_name, sandbox_name)
+        raw = await self.get_raw_json(gateway_name, sandbox_name)
         if raw is None:
             return None
         parsed = parse_cyclonedx(raw)
@@ -573,7 +573,7 @@ class SBOMService:
         )
 
     @staticmethod
-    def _get_snapshot_row(
+    async def _get_snapshot_row(
         session: Any, gateway_name: str, sandbox_name: str
     ) -> SBOMSnapshot | None:
         """Fetch the raw ``SBOMSnapshot`` row, if any.
@@ -586,9 +586,11 @@ class SBOMService:
         Returns:
             SBOMSnapshot | None: The snapshot row, or ``None``.
         """
-        return session.execute(
-            select(SBOMSnapshot).where(
-                SBOMSnapshot.gateway_name == gateway_name,
-                SBOMSnapshot.sandbox_name == sandbox_name,
+        return (
+            await session.execute(
+                select(SBOMSnapshot).where(
+                    SBOMSnapshot.gateway_name == gateway_name,
+                    SBOMSnapshot.sandbox_name == sandbox_name,
+                )
             )
         ).scalar_one_or_none()

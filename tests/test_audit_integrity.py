@@ -8,8 +8,8 @@ import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from shoreguard.models import AuditEntry, Base
@@ -17,21 +17,22 @@ from shoreguard.services.audit import AuditIntegrityError, AuditService
 
 
 @pytest.fixture
-def audit_svc():
-    engine = create_engine(
-        "sqlite:///:memory:",
+async def audit_svc():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
     svc = AuditService(factory)
     yield svc
-    engine.dispose()
+    await engine.dispose()
 
 
-def _insert_entry(svc: AuditService) -> None:
-    svc.log(
+async def _insert_entry(svc: AuditService) -> None:
+    await svc.log(
         actor="admin@test.com",
         actor_role="admin",
         action="sandbox.create",
@@ -40,32 +41,32 @@ def _insert_entry(svc: AuditService) -> None:
     )
 
 
-def test_update_is_blocked(audit_svc: AuditService) -> None:
-    _insert_entry(audit_svc)
+async def test_update_is_blocked(audit_svc: AuditService) -> None:
+    await _insert_entry(audit_svc)
     factory = audit_svc._session_factory
-    with factory() as session:
-        entry = session.query(AuditEntry).first()
+    async with factory() as session:
+        entry = (await session.execute(select(AuditEntry))).scalars().first()
         assert entry is not None
         entry.actor = "tampered@evil.com"
         with pytest.raises(AuditIntegrityError, match="UPDATE is not allowed"):
-            session.commit()
+            await session.commit()
 
 
-def test_delete_outside_cleanup_is_blocked(audit_svc: AuditService) -> None:
-    _insert_entry(audit_svc)
+async def test_delete_outside_cleanup_is_blocked(audit_svc: AuditService) -> None:
+    await _insert_entry(audit_svc)
     factory = audit_svc._session_factory
-    with factory() as session:
-        entry = session.query(AuditEntry).first()
+    async with factory() as session:
+        entry = (await session.execute(select(AuditEntry))).scalars().first()
         assert entry is not None
-        session.delete(entry)
+        await session.delete(entry)
         with pytest.raises(AuditIntegrityError, match="DELETE only allowed"):
-            session.commit()
+            await session.commit()
 
 
-def test_cleanup_can_delete(audit_svc: AuditService) -> None:
+async def test_cleanup_can_delete(audit_svc: AuditService) -> None:
     # Insert an old entry directly so cleanup's threshold matches
     factory = audit_svc._session_factory
-    with factory() as session:
+    async with factory() as session:
         session.add(
             AuditEntry(
                 timestamp=datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC),
@@ -75,29 +76,29 @@ def test_cleanup_can_delete(audit_svc: AuditService) -> None:
                 resource_type="y",
             )
         )
-        session.commit()
-    removed = audit_svc.cleanup(older_than_days=1)
+        await session.commit()
+    removed = await audit_svc.cleanup(older_than_days=1)
     assert removed == 1
-    assert audit_svc.list() == []
+    assert await audit_svc.list() == []
 
 
-def test_cleanup_bypass_is_scoped(audit_svc: AuditService) -> None:
+async def test_cleanup_bypass_is_scoped(audit_svc: AuditService) -> None:
     """After cleanup() returns, deletion must be blocked again."""
-    _insert_entry(audit_svc)
+    await _insert_entry(audit_svc)
     # cleanup with no old rows — should return 0 without raising
-    audit_svc.cleanup(older_than_days=3650)
+    await audit_svc.cleanup(older_than_days=3650)
     # Now try a normal delete — must still raise
     factory = audit_svc._session_factory
-    with factory() as session:
-        entry = session.query(AuditEntry).first()
-        session.delete(entry)
+    async with factory() as session:
+        entry = (await session.execute(select(AuditEntry))).scalars().first()
+        await session.delete(entry)
         with pytest.raises(AuditIntegrityError):
-            session.commit()
+            await session.commit()
 
 
-def test_export_json_serializes_entries(audit_svc: AuditService) -> None:
-    _insert_entry(audit_svc)
-    out = audit_svc.export_json()
+async def test_export_json_serializes_entries(audit_svc: AuditService) -> None:
+    await _insert_entry(audit_svc)
+    out = await audit_svc.export_json()
     data = json.loads(out)
     assert isinstance(data, list)
     assert len(data) == 1
@@ -106,33 +107,35 @@ def test_export_json_serializes_entries(audit_svc: AuditService) -> None:
 
 
 def test_audit_export_cli_writes_three_files(
-    audit_svc: AuditService,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``shoreguard audit export`` writes export, sha256 digest, and manifest."""
-    _insert_entry(audit_svc)
+    import asyncio
 
-    # The CLI calls get_engine() which in tests is not initialised.  We
-    # patch the CLI's lazy imports so it uses our in-memory fixture.
-    from shoreguard.cli import audit as cli_audit
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-    engine = audit_svc._session_factory.kw["bind"]
+    from shoreguard.models import Base
+    from shoreguard.services.audit import AuditService
 
-    def _fake_get_engine():
-        return engine
+    # Seed a file-backed DB the CLI's own event loop can reopen.
+    db_path = tmp_path / "audit.db"
 
-    def _fake_sessionmaker(*_args, **_kwargs):
-        return audit_svc._session_factory
+    async def _seed() -> None:
+        engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        svc = AuditService(async_sessionmaker(engine, expire_on_commit=False))
+        await _insert_entry(svc)
+        await engine.dispose()
 
-    monkeypatch.setattr(cli_audit, "audit_export", cli_audit.audit_export)
+    asyncio.run(_seed())
+
     import shoreguard.db as _db
 
-    monkeypatch.setattr(_db, "get_engine", _fake_get_engine)
-    monkeypatch.setattr(_db, "init_db", lambda *_a, **_kw: engine)
-    import sqlalchemy.orm as _orm
-
-    monkeypatch.setattr(_orm, "sessionmaker", lambda **_kw: audit_svc._session_factory)
+    sync_engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+    monkeypatch.setattr(_db, "get_engine", lambda: sync_engine)
+    monkeypatch.setattr(_db, "init_db", lambda *_a, **_kw: sync_engine)
 
     from typer.testing import CliRunner
 

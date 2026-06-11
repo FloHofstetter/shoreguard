@@ -123,7 +123,7 @@ async def list_hooks(
         HTTPException: ``400`` if ``phase`` is provided and invalid.
     """
     try:
-        items = _service().list(gw, name, phase=phase)
+        items = await _service().list(gw, name, phase=phase)
     except ValidationError as exc:
         raise HTTPException(400, str(exc)) from exc
     return {"items": items}
@@ -152,7 +152,7 @@ async def get_hook(
     Raises:
         HTTPException: ``404`` if missing or owned by another sandbox.
     """
-    hook = _service().get(hook_id)
+    hook = await _service().get(hook_id)
     if hook is None or hook["gateway_name"] != gw or hook["sandbox_name"] != name:
         raise HTTPException(404, "Boot hook not found")
     return hook
@@ -187,7 +187,7 @@ async def create_hook(
     """
     actor = get_actor(request)
     try:
-        hook = _service().create(
+        hook = await _service().create(
             gateway_name=gw,
             sandbox_name=name,
             name=body.name,
@@ -248,11 +248,11 @@ async def update_hook(
     Raises:
         HTTPException: ``404`` if missing, ``400`` on invalid input.
     """
-    existing = _service().get(hook_id)
+    existing = await _service().get(hook_id)
     if existing is None or existing["gateway_name"] != gw or existing["sandbox_name"] != name:
         raise HTTPException(404, "Boot hook not found")
     try:
-        updated = _service().update(
+        updated = await _service().update(
             hook_id,
             command=body.command,
             workdir=body.workdir,
@@ -302,10 +302,10 @@ async def delete_hook(
     Raises:
         HTTPException: ``404`` if no such hook.
     """
-    existing = _service().get(hook_id)
+    existing = await _service().get(hook_id)
     if existing is None or existing["gateway_name"] != gw or existing["sandbox_name"] != name:
         raise HTTPException(404, "Boot hook not found")
-    _service().delete(hook_id)
+    await _service().delete(hook_id)
     await audit_log(
         request,
         "boot_hook.deleted",
@@ -343,7 +343,7 @@ async def reorder_hooks(
         HTTPException: ``400`` if the id set does not match.
     """
     try:
-        items = _service().reorder(gw, name, body.phase, body.hook_ids)
+        items = await _service().reorder(gw, name, body.phase, body.hook_ids)
     except ValidationError as exc:
         raise HTTPException(400, str(exc)) from exc
     await audit_log(
@@ -386,7 +386,7 @@ async def run_hook(
     Raises:
         HTTPException: ``404`` if missing.
     """
-    existing = _service().get(hook_id)
+    existing = await _service().get(hook_id)
     if existing is None or existing["gateway_name"] != gw or existing["sandbox_name"] != name:
         raise HTTPException(404, "Boot hook not found")
     result = await _service().run_one(hook_id)

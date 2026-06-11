@@ -24,8 +24,7 @@ from sqlalchemy import delete, select
 from shoreguard.models import PolicyApplyProposal
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
-    from sqlalchemy.orm import sessionmaker as SessionMaker
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +43,10 @@ class PolicyApplyProposalService:
             short-lived sessions for each call.
     """
 
-    def __init__(self, session_factory: SessionMaker) -> None:  # noqa: D107
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:  # noqa: D107
         self._session_factory = session_factory
 
-    def upsert(
+    async def upsert(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -74,16 +73,16 @@ class PolicyApplyProposalService:
         Returns:
             dict[str, Any]: The stored proposal.
         """
-        with self._session_factory() as session:
-            existing = self._get_row(session, gateway_name, sandbox_name, chunk_id)
+        async with self._session_factory() as session:
+            existing = await self._get_row(session, gateway_name, sandbox_name, chunk_id)
             now = datetime.datetime.now(datetime.UTC)
             if existing is not None:
                 existing.yaml_text = yaml_text
                 existing.expected_hash = expected_hash
                 existing.proposed_by = proposed_by
                 existing.proposed_at = now
-                session.commit()
-                session.refresh(existing)
+                await session.commit()
+                await session.refresh(existing)
                 return self._to_dict(existing)
             row = PolicyApplyProposal(
                 gateway_name=gateway_name,
@@ -95,11 +94,13 @@ class PolicyApplyProposalService:
                 proposed_at=now,
             )
             session.add(row)
-            session.commit()
-            session.refresh(row)
+            await session.commit()
+            await session.refresh(row)
             return self._to_dict(row)
 
-    def get(self, gateway_name: str, sandbox_name: str, chunk_id: str) -> dict[str, Any] | None:
+    async def get(
+        self, gateway_name: str, sandbox_name: str, chunk_id: str
+    ) -> dict[str, Any] | None:
         """Return a proposal by composite key, or None.
 
         Args:
@@ -110,11 +111,11 @@ class PolicyApplyProposalService:
         Returns:
             dict[str, Any] | None: Proposal row as dict, or None.
         """
-        with self._session_factory() as session:
-            row = self._get_row(session, gateway_name, sandbox_name, chunk_id)
+        async with self._session_factory() as session:
+            row = await self._get_row(session, gateway_name, sandbox_name, chunk_id)
             return self._to_dict(row) if row else None
 
-    def delete(self, gateway_name: str, sandbox_name: str, chunk_id: str) -> bool:
+    async def delete(self, gateway_name: str, sandbox_name: str, chunk_id: str) -> bool:
         """Delete a proposal.
 
         Args:
@@ -125,18 +126,18 @@ class PolicyApplyProposalService:
         Returns:
             bool: True if a row was removed, False otherwise.
         """
-        with self._session_factory() as session:
-            result = session.execute(
+        async with self._session_factory() as session:
+            result = await session.execute(
                 delete(PolicyApplyProposal).where(
                     PolicyApplyProposal.gateway_name == gateway_name,
                     PolicyApplyProposal.sandbox_name == sandbox_name,
                     PolicyApplyProposal.chunk_id == chunk_id,
                 )
             )
-            session.commit()
+            await session.commit()
             return result.rowcount > 0  # type: ignore[union-attr]
 
-    def list_for_sandbox(self, gateway_name: str, sandbox_name: str) -> list[dict[str, Any]]:
+    async def list_for_sandbox(self, gateway_name: str, sandbox_name: str) -> list[dict[str, Any]]:
         """List all open proposals for a sandbox (most recent first).
 
         Args:
@@ -146,30 +147,29 @@ class PolicyApplyProposalService:
         Returns:
             list[dict[str, Any]]: Proposal rows as dicts.
         """
-        with self._session_factory() as session:
-            rows = (
-                session.execute(
-                    select(PolicyApplyProposal)
-                    .where(
-                        PolicyApplyProposal.gateway_name == gateway_name,
-                        PolicyApplyProposal.sandbox_name == sandbox_name,
-                    )
-                    .order_by(PolicyApplyProposal.proposed_at.desc())
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(PolicyApplyProposal)
+                .where(
+                    PolicyApplyProposal.gateway_name == gateway_name,
+                    PolicyApplyProposal.sandbox_name == sandbox_name,
                 )
-                .scalars()
-                .all()
+                .order_by(PolicyApplyProposal.proposed_at.desc())
             )
+            rows = result.scalars().all()
             return [self._to_dict(r) for r in rows]
 
     @staticmethod
-    def _get_row(
-        session: Session, gateway_name: str, sandbox_name: str, chunk_id: str
+    async def _get_row(
+        session: AsyncSession, gateway_name: str, sandbox_name: str, chunk_id: str
     ) -> PolicyApplyProposal | None:
-        return session.execute(
-            select(PolicyApplyProposal).where(
-                PolicyApplyProposal.gateway_name == gateway_name,
-                PolicyApplyProposal.sandbox_name == sandbox_name,
-                PolicyApplyProposal.chunk_id == chunk_id,
+        return (
+            await session.execute(
+                select(PolicyApplyProposal).where(
+                    PolicyApplyProposal.gateway_name == gateway_name,
+                    PolicyApplyProposal.sandbox_name == sandbox_name,
+                    PolicyApplyProposal.chunk_id == chunk_id,
+                )
             )
         ).scalar_one_or_none()
 

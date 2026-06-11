@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Annotated
 
@@ -527,8 +528,6 @@ def import_gateways() -> None:
     Raises:
         typer.Exit: If database initialisation fails.
     """
-    from sqlalchemy.orm import sessionmaker as sa_sessionmaker
-
     from shoreguard.db import init_db
     from shoreguard.services.registry import GatewayRegistry
 
@@ -541,9 +540,11 @@ def import_gateways() -> None:
         raise typer.Exit(1) from e
 
     try:
-        factory = sa_sessionmaker(bind=engine)
-        registry = GatewayRegistry(factory)
-        imported, skipped = import_filesystem_gateways(registry, log_fn=typer.echo)
+        from shoreguard.db import get_async_session_factory, init_async_db
+
+        init_async_db(str(engine.url))
+        registry = GatewayRegistry(get_async_session_factory())
+        imported, skipped = asyncio.run(import_filesystem_gateways(registry, log_fn=typer.echo))
         typer.echo(f"\nDone: {imported} imported, {skipped} skipped.")
     finally:
         engine.dispose()

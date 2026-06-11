@@ -97,7 +97,7 @@ class SandboxService:
         """
         sandboxes = await self._client.sandboxes.list(limit=limit, offset=offset)
         if self._meta and gateway_name:
-            all_meta = await asyncio.to_thread(self._meta.list_for_gateway, gateway_name)
+            all_meta = await self._meta.list_for_gateway(gateway_name)
             for sb in sandboxes:
                 name = sb.get("name", "")
                 meta = all_meta.get(name)
@@ -123,7 +123,7 @@ class SandboxService:
         """
         sb = await self._client.sandboxes.get(name)
         if self._meta and gateway_name:
-            meta = await asyncio.to_thread(self._meta.get, gateway_name, name)
+            meta = await self._meta.get(gateway_name, name)
             sb["description"] = meta["description"] if meta else None
             sb["labels"] = meta["labels"] if meta else {}
         return sb
@@ -140,9 +140,9 @@ class SandboxService:
         """
         deleted = await self._client.sandboxes.delete(name)
         if deleted and self._meta and gateway_name:
-            await asyncio.to_thread(self._meta.delete, gateway_name, name)
+            await self._meta.delete(gateway_name, name)
         if deleted and self._boot_hooks and gateway_name:
-            await asyncio.to_thread(self._boot_hooks.delete_for_sandbox, gateway_name, name)
+            await self._boot_hooks.delete_for_sandbox(gateway_name, name)
         return deleted
 
     async def exec(
@@ -339,10 +339,8 @@ class SandboxService:
             raise RuntimeError("Metadata store not configured")
         # Verify sandbox exists on gateway
         sb = await self._client.sandboxes.get(name)
-        await asyncio.to_thread(
-            self._meta.upsert, gateway_name, name, description=description, labels=labels
-        )
-        meta = await asyncio.to_thread(self._meta.get, gateway_name, name)
+        await self._meta.upsert(gateway_name, name, description=description, labels=labels)
+        meta = await self._meta.get(gateway_name, name)
         sb["description"] = meta["description"] if meta else None
         sb["labels"] = meta["labels"] if meta else {}
         return sb
@@ -426,15 +424,13 @@ class SandboxService:
         # Store metadata if provided
         meta_store = self._meta
         if meta_store and gateway_name and (description is not None or labels is not None):
-            await asyncio.to_thread(
-                lambda: meta_store.upsert(
-                    gateway_name,
-                    sandbox_name,
-                    description=description if description is not None else _UNSET,
-                    labels=labels if labels is not None else _UNSET,
-                )
+            await meta_store.upsert(
+                gateway_name,
+                sandbox_name,
+                description=description if description is not None else _UNSET,
+                labels=labels if labels is not None else _UNSET,
             )
-            meta = await asyncio.to_thread(meta_store.get, gateway_name, sandbox_name)
+            meta = await meta_store.get(gateway_name, sandbox_name)
             result["description"] = meta["description"] if meta else None
             result["labels"] = meta["labels"] if meta else {}
 

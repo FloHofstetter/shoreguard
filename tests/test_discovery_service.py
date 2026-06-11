@@ -8,8 +8,7 @@ from unittest.mock import patch
 import dns.exception
 import dns.resolver
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from shoreguard.models import Base
@@ -36,19 +35,20 @@ def _settings(**overrides) -> DiscoverySettings:
 
 
 @pytest.fixture
-def discovery_setup():
-    engine = create_engine(
-        "sqlite:///:memory:",
+async def discovery_setup():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
     registry = GatewayRegistry(factory)
     gw_svc = GatewayService(registry)
     svc = DiscoveryService(registry, gw_svc, _settings())
     yield svc, registry, gw_svc
-    engine.dispose()
+    await engine.dispose()
 
 
 class _FakeTarget:
@@ -159,7 +159,7 @@ class TestAutoRegister:
         result = await svc.auto_register([ep])
         assert len(result["registered"]) == 1
         assert result["registered"][0]["name"]
-        assert len(registry.list_all()) == 1
+        assert len(await registry.list_all()) == 1
 
     async def test_skips_already_registered(self, discovery_setup):
         svc, registry, gw_svc = discovery_setup
@@ -182,7 +182,7 @@ class TestAutoRegister:
         ep = DiscoveredEndpoint("openshell.default.svc.cluster.local", 30051, 10, 5, "internal")
         result = await svc.auto_register([ep])
         assert len(result["registered"]) == 1
-        assert len(registry.list_all()) == 1
+        assert len(await registry.list_all()) == 1
 
     async def test_dedupes_within_batch(self, discovery_setup):
         svc, registry, _ = discovery_setup
@@ -199,7 +199,7 @@ class TestRunOnce:
         with _patch_resolve([_srv("gw.example.com", 30051)]):
             result = await svc.run_once()
         assert len(result["registered"]) == 1
-        assert len(registry.list_all()) == 1
+        assert len(await registry.list_all()) == 1
         assert svc._last_run_at is not None
 
     async def test_run_once_auto_register_off(self, discovery_setup):
@@ -209,7 +209,7 @@ class TestRunOnce:
             result = await svc.run_once()
         assert result["registered"] == []
         assert len(result["skipped"]) == 1
-        assert registry.list_all() == []
+        assert await registry.list_all() == []
 
     async def test_run_once_explicit_domains(self, discovery_setup):
         svc, _, _ = discovery_setup

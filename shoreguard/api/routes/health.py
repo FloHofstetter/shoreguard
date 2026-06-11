@@ -86,7 +86,7 @@ async def readyz(request: Request, verbose: bool = False) -> JSONResponse:
         checks["gateway_service"] = "ok"
         try:
             gateways = await asyncio.wait_for(
-                asyncio.to_thread(container.registry.list_all),
+                container.registry.list_all(),
                 timeout=readyz_timeout,
             )
             total = len(gateways)

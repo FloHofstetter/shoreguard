@@ -189,10 +189,7 @@ class CertRotationService:
             RuntimeError: When the registry has no usable bytes credentials
                 for this gateway.
         """
-        creds = await asyncio.to_thread(
-            self._gateway_service._registry.get_credentials,  # noqa: SLF001
-            name,
-        )
+        creds = await self._gateway_service._registry.get_credentials(name)  # noqa: SLF001
         if creds is None:
             raise RuntimeError(f"gateway '{name}' has no credentials in the registry to rotate")
         ca_cert = creds.get("ca_cert")

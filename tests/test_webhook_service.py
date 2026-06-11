@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from shoreguard.models import Base, WebhookDelivery
@@ -21,22 +21,23 @@ from shoreguard.services.webhooks import RETRY_DELAYS, WebhookService, _Target
 
 
 @pytest.fixture
-def webhook_svc():
-    engine = create_engine(
-        "sqlite:///:memory:",
+async def webhook_svc():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
     svc = WebhookService(factory)
     yield svc
-    engine.dispose()
+    await engine.dispose()
 
 
 class TestCRUD:
-    def test_create_and_list(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_create_and_list(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["approval.approved", "sandbox.created"],
             created_by="admin@test.com",
@@ -48,32 +49,32 @@ class TestCRUD:
         assert wh["created_by"] == "admin@test.com"
         assert wh["channel_type"] == "generic"
 
-        all_hooks = webhook_svc.list()
+        all_hooks = await webhook_svc.list()
         assert len(all_hooks) == 1
         assert all_hooks[0]["id"] == wh["id"]
         assert "secret" not in all_hooks[0]
 
-    def test_get(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_get(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="admin@test.com",
         )
-        result = webhook_svc.get(wh["id"])
+        result = await webhook_svc.get(wh["id"])
         assert result is not None
         assert result["url"] == "https://example.com/hook"
         assert "secret" not in result
 
-    def test_get_not_found(self, webhook_svc):
-        assert webhook_svc.get(999) is None
+    async def test_get_not_found(self, webhook_svc):
+        assert await webhook_svc.get(999) is None
 
-    def test_update(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_update(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="admin@test.com",
         )
-        updated = webhook_svc.update(
+        updated = await webhook_svc.update(
             wh["id"],
             url="https://new.example.com/hook",
             event_types=["approval.approved"],
@@ -84,23 +85,23 @@ class TestCRUD:
         assert updated["event_types"] == ["approval.approved"]
         assert updated["is_active"] is False
 
-    def test_update_not_found(self, webhook_svc):
-        assert webhook_svc.update(999, url="https://x.com") is None
+    async def test_update_not_found(self, webhook_svc):
+        assert await webhook_svc.update(999, url="https://x.com") is None
 
-    def test_delete(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_delete(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="admin@test.com",
         )
-        assert webhook_svc.delete(wh["id"]) is True
-        assert webhook_svc.get(wh["id"]) is None
+        assert await webhook_svc.delete(wh["id"]) is True
+        assert await webhook_svc.get(wh["id"]) is None
 
-    def test_delete_not_found(self, webhook_svc):
-        assert webhook_svc.delete(999) is False
+    async def test_delete_not_found(self, webhook_svc):
+        assert await webhook_svc.delete(999) is False
 
-    def test_create_slack_channel(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_create_slack_channel(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://hooks.slack.com/services/T00/B00/xxx",
             event_types=["*"],
             created_by="admin@test.com",
@@ -109,8 +110,8 @@ class TestCRUD:
         assert wh["channel_type"] == "slack"
         assert wh["url"] == "https://hooks.slack.com/services/T00/B00/xxx"
 
-    def test_create_discord_channel(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_create_discord_channel(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://discord.com/api/webhooks/123/abc",
             event_types=["approval.pending"],
             created_by="admin@test.com",
@@ -118,10 +119,10 @@ class TestCRUD:
         )
         assert wh["channel_type"] == "discord"
 
-    def test_create_email_channel(self, webhook_svc):
+    async def test_create_email_channel(self, webhook_svc):
         import json
 
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="admin@example.com",
             event_types=["*"],
             created_by="admin@test.com",
@@ -138,8 +139,8 @@ class TestCRUD:
         assert "extra_config" in wh
         assert wh["extra_config"]["smtp_host"] == "smtp.example.com"
 
-    def test_to_dict_includes_channel_type(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_to_dict_includes_channel_type(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="admin@test.com",
@@ -149,7 +150,7 @@ class TestCRUD:
 
 class TestFire:
     async def test_fire_matches_event_type(self, webhook_svc):
-        webhook_svc.create(
+        await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["approval.approved"],
             created_by="admin@test.com",
@@ -163,12 +164,12 @@ class TestFire:
             mock_deliver.assert_called_once()
 
     async def test_fire_skips_inactive(self, webhook_svc):
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["approval.approved"],
             created_by="admin@test.com",
         )
-        webhook_svc.update(wh["id"], is_active=False)
+        await webhook_svc.update(wh["id"], is_active=False)
         with patch.object(WebhookService, "_deliver", new_callable=AsyncMock) as mock_deliver:
             await webhook_svc.fire("approval.approved", {"sandbox": "test"})
             import asyncio
@@ -177,7 +178,7 @@ class TestFire:
             mock_deliver.assert_not_called()
 
     async def test_fire_wildcard(self, webhook_svc):
-        webhook_svc.create(
+        await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="admin@test.com",
@@ -190,7 +191,7 @@ class TestFire:
             mock_deliver.assert_called_once()
 
     async def test_fire_no_match(self, webhook_svc):
-        webhook_svc.create(
+        await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["sandbox.created"],
             created_by="admin@test.com",
@@ -203,7 +204,7 @@ class TestFire:
             mock_deliver.assert_not_called()
 
     async def test_fire_slack_no_hmac(self, webhook_svc):
-        webhook_svc.create(
+        await webhook_svc.create(
             url="https://hooks.slack.com/services/T00/B00/xxx",
             event_types=["*"],
             created_by="admin@test.com",
@@ -248,7 +249,7 @@ class TestDeliveryRetry:
 
     @pytest.fixture(autouse=True)
     def _patch_update(self, webhook_svc):
-        webhook_svc._update_delivery = MagicMock()
+        webhook_svc._update_delivery = AsyncMock()
         webhook_svc._inc_delivery_counter = MagicMock()
         self._svc = webhook_svc
 
@@ -407,94 +408,96 @@ class TestDeliveryRetry:
 class TestDeliveryRecords:
     """Tests for delivery record creation, listing, and cleanup."""
 
-    def test_cleanup_old_deliveries(self, webhook_svc):
+    async def test_cleanup_old_deliveries(self, webhook_svc):
         """cleanup_old_deliveries removes records older than max_age_days."""
         import datetime
 
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="admin@test.com",
         )
         # Create a delivery and manually backdate it
-        delivery_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
-        with webhook_svc._session_factory() as session:
+        delivery_id = await webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        async with webhook_svc._session_factory() as session:
             from shoreguard.models import WebhookDelivery
 
-            row = session.get(WebhookDelivery, delivery_id)
+            row = await session.get(WebhookDelivery, delivery_id)
             row.created_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=30)
-            session.commit()
+            await session.commit()
 
-        purged = webhook_svc.cleanup_old_deliveries(max_age_days=7)
+        purged = await webhook_svc.cleanup_old_deliveries(max_age_days=7)
         assert purged == 1
 
         # Second call should find nothing to purge
-        assert webhook_svc.cleanup_old_deliveries(max_age_days=7) == 0
+        assert await webhook_svc.cleanup_old_deliveries(max_age_days=7) == 0
 
-    def test_cleanup_keeps_recent_deliveries(self, webhook_svc):
+    async def test_cleanup_keeps_recent_deliveries(self, webhook_svc):
         """cleanup_old_deliveries keeps records newer than max_age_days."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="admin@test.com",
         )
-        webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
-        purged = webhook_svc.cleanup_old_deliveries(max_age_days=7)
+        await webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        purged = await webhook_svc.cleanup_old_deliveries(max_age_days=7)
         assert purged == 0
 
-    def test_list_deliveries(self, webhook_svc):
+    async def test_list_deliveries(self, webhook_svc):
         """list_deliveries returns delivery records for a webhook."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="admin@test.com",
         )
-        webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
-        webhook_svc._create_delivery(wh["id"], "sandbox.deleted", '{"b":2}')
+        await webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        await webhook_svc._create_delivery(wh["id"], "sandbox.deleted", '{"b":2}')
 
-        deliveries = webhook_svc.list_deliveries(wh["id"])
+        deliveries = await webhook_svc.list_deliveries(wh["id"])
         assert len(deliveries) == 2
         assert all(d["webhook_id"] == wh["id"] for d in deliveries)
         assert all(d["status"] == "pending" for d in deliveries)
 
-    def test_list_deliveries_empty(self, webhook_svc):
+    async def test_list_deliveries_empty(self, webhook_svc):
         """list_deliveries returns empty list for webhook with no deliveries."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="admin@test.com",
         )
-        assert webhook_svc.list_deliveries(wh["id"]) == []
+        assert await webhook_svc.list_deliveries(wh["id"]) == []
 
-    def test_update_delivery_success(self, webhook_svc):
+    async def test_update_delivery_success(self, webhook_svc):
         """_update_delivery sets status, response_code, and delivered_at."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="admin@test.com",
         )
-        delivery_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
-        webhook_svc._update_delivery(delivery_id, status="success", response_code=200, attempt=1)
+        delivery_id = await webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        await webhook_svc._update_delivery(
+            delivery_id, status="success", response_code=200, attempt=1
+        )
 
-        deliveries = webhook_svc.list_deliveries(wh["id"])
+        deliveries = await webhook_svc.list_deliveries(wh["id"])
         assert len(deliveries) == 1
         assert deliveries[0]["status"] == "success"
         assert deliveries[0]["response_code"] == 200
         assert deliveries[0]["delivered_at"] is not None
 
-    def test_update_delivery_failed(self, webhook_svc):
+    async def test_update_delivery_failed(self, webhook_svc):
         """_update_delivery records failure with error message."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="admin@test.com",
         )
-        delivery_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
-        webhook_svc._update_delivery(
+        delivery_id = await webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        await webhook_svc._update_delivery(
             delivery_id, status="failed", error_message="HTTP 502", attempt=4
         )
 
-        deliveries = webhook_svc.list_deliveries(wh["id"])
+        deliveries = await webhook_svc.list_deliveries(wh["id"])
         assert deliveries[0]["status"] == "failed"
         assert deliveries[0]["error_message"] == "HTTP 502"
         assert deliveries[0]["attempt"] == 4
@@ -511,7 +514,7 @@ class TestEmailDelivery:
         """Email delivery calls aiosmtplib.send with correct parameters."""
         import json
 
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="admin@example.com",
             event_types=["*"],
             created_by="admin@test.com",
@@ -524,7 +527,7 @@ class TestEmailDelivery:
                 }
             ),
         )
-        delivery_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        delivery_id = await webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
         target = _make_target(
             webhook_id=wh["id"],
             url="admin@example.com",
@@ -538,14 +541,14 @@ class TestEmailDelivery:
             await webhook_svc._deliver_email(target, "Subject line\nBody text", delivery_id)
             mock_smtp_mod.send.assert_called_once()
 
-        deliveries = webhook_svc.list_deliveries(wh["id"])
+        deliveries = await webhook_svc.list_deliveries(wh["id"])
         assert any(d["status"] == "success" for d in deliveries)
 
     async def test_email_delivery_failure(self, webhook_svc):
         """Email delivery failure records error in delivery."""
         import json
 
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="admin@example.com",
             event_types=["*"],
             created_by="admin@test.com",
@@ -554,7 +557,7 @@ class TestEmailDelivery:
                 {"smtp_host": "smtp.example.com", "to_addrs": ["admin@example.com"]}
             ),
         )
-        delivery_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
+        delivery_id = await webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"a":1}')
         target = _make_target(
             webhook_id=wh["id"],
             url="admin@example.com",
@@ -567,7 +570,7 @@ class TestEmailDelivery:
         with patch.dict("sys.modules", {"aiosmtplib": mock_smtp_mod}):
             await webhook_svc._deliver_email(target, "Subject\nBody", delivery_id)
 
-        deliveries = webhook_svc.list_deliveries(wh["id"])
+        deliveries = await webhook_svc.list_deliveries(wh["id"])
         assert any(d["status"] == "failed" for d in deliveries)
 
 
@@ -830,14 +833,14 @@ class TestEmailDeliveryComprehensive:
 
     async def test_email_success_updates_delivery_status(self):
         """Successful email sets delivery status=success, attempt=1."""
-        wh = self._svc.create(
+        wh = await self._svc.create(
             url="admin@example.com",
             event_types=["*"],
             created_by="test",
             channel_type="email",
             extra_config=json.dumps({"smtp_host": "smtp.test.com"}),
         )
-        delivery_id = self._svc._create_delivery(wh["id"], "test.event", "{}")
+        delivery_id = await self._svc._create_delivery(wh["id"], "test.event", "{}")
         target = self._email_target()
         mock_smtp = MagicMock()
         mock_smtp.send = AsyncMock()
@@ -849,7 +852,7 @@ class TestEmailDeliveryComprehensive:
             ),
         ):
             await self._svc._deliver_email(target, "Subject\nBody", delivery_id)
-        deliveries = self._svc.list_deliveries(wh["id"])
+        deliveries = await self._svc.list_deliveries(wh["id"])
         d = [x for x in deliveries if x["id"] == delivery_id][0]
         assert d["status"] == "success"
         assert d["attempt"] == 1
@@ -872,14 +875,14 @@ class TestEmailDeliveryComprehensive:
 
     async def test_email_failure_records_error_message(self):
         """Failed email records str(exception) as error_message."""
-        wh = self._svc.create(
+        wh = await self._svc.create(
             url="admin@example.com",
             event_types=["*"],
             created_by="test",
             channel_type="email",
             extra_config=json.dumps({"smtp_host": "smtp.test.com"}),
         )
-        delivery_id = self._svc._create_delivery(wh["id"], "test.event", "{}")
+        delivery_id = await self._svc._create_delivery(wh["id"], "test.event", "{}")
         target = self._email_target()
         mock_smtp = MagicMock()
         mock_smtp.send = AsyncMock(side_effect=OSError("Connection refused"))
@@ -891,7 +894,7 @@ class TestEmailDeliveryComprehensive:
             ),
         ):
             await self._svc._deliver_email(target, "Subject\nBody", delivery_id)
-        deliveries = self._svc.list_deliveries(wh["id"])
+        deliveries = await self._svc.list_deliveries(wh["id"])
         d = [x for x in deliveries if x["id"] == delivery_id][0]
         assert d["status"] == "failed"
         assert d["error_message"] == "Connection refused"
@@ -917,7 +920,7 @@ class TestEmailDeliveryComprehensive:
         """SSRF: private SMTP host blocked, delivery marked failed."""
         config = json.dumps({"smtp_host": "127.0.0.1", "smtp_port": 25})
         target = self._email_target(extra_config=config)
-        self._svc._update_delivery = MagicMock()
+        self._svc._update_delivery = AsyncMock()
         self._svc._inc_delivery_counter = MagicMock()
         with patch("shoreguard.services.webhooks.is_private_ip", return_value=True):
             await self._svc._deliver_email(target, "Subject\nBody", 99)
@@ -934,7 +937,7 @@ class TestEmailDeliveryComprehensive:
         """SSRF blocked email does not call aiosmtplib.send."""
         config = json.dumps({"smtp_host": "10.0.0.1", "smtp_port": 25})
         target = self._email_target(extra_config=config)
-        self._svc._update_delivery = MagicMock()
+        self._svc._update_delivery = AsyncMock()
         self._svc._inc_delivery_counter = MagicMock()
         mock_smtp = MagicMock()
         mock_smtp.send = AsyncMock()
@@ -949,7 +952,7 @@ class TestEmailDeliveryComprehensive:
         """SSRF blocked delivery has attempt=1."""
         config = json.dumps({"smtp_host": "192.168.1.1"})
         target = self._email_target(extra_config=config)
-        self._svc._update_delivery = MagicMock()
+        self._svc._update_delivery = AsyncMock()
         self._svc._inc_delivery_counter = MagicMock()
         with patch("shoreguard.services.webhooks.is_private_ip", return_value=True):
             await self._svc._deliver_email(target, "Subject\nBody", 99)
@@ -1035,7 +1038,7 @@ class TestHTTPDeliveryComprehensive:
 
     @pytest.fixture(autouse=True)
     def _setup(self, webhook_svc):
-        webhook_svc._update_delivery = MagicMock()
+        webhook_svc._update_delivery = AsyncMock()
         webhook_svc._inc_delivery_counter = MagicMock()
         self._svc = webhook_svc
 
@@ -1289,7 +1292,7 @@ class TestHTTPDeliveryComprehensive:
     async def test_ssrf_blocks_private_url(self):
         """SSRF: private URL blocked, delivery marked failed, no HTTP call."""
         target = _make_target(url="http://192.168.1.1/hook")
-        self._svc._update_delivery = MagicMock()
+        self._svc._update_delivery = AsyncMock()
         self._svc._inc_delivery_counter = MagicMock()
         mock_cls, mock_client = self._make_client_mock(httpx.Response(200))
         with (
@@ -1448,7 +1451,7 @@ class TestFireComprehensive:
 
     async def test_fire_creates_delivery_record(self, webhook_svc):
         """fire() creates a delivery record in the DB."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["test.event"],
             created_by="test",
@@ -1456,14 +1459,14 @@ class TestFireComprehensive:
         with patch.object(WebhookService, "_deliver", new_callable=AsyncMock):
             await webhook_svc.fire("test.event", {"sandbox": "s1"})
             await asyncio.sleep(0.05)
-        deliveries = webhook_svc.list_deliveries(wh["id"])
+        deliveries = await webhook_svc.list_deliveries(wh["id"])
         assert len(deliveries) == 1
         assert deliveries[0]["event_type"] == "test.event"
         assert deliveries[0]["status"] == "pending"
 
     async def test_fire_delivery_payload_json(self, webhook_svc):
         """fire() stores the payload as JSON in the delivery record."""
-        webhook_svc.create(
+        await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["test.event"],
             created_by="test",
@@ -1471,15 +1474,15 @@ class TestFireComprehensive:
         with patch.object(WebhookService, "_deliver", new_callable=AsyncMock):
             await webhook_svc.fire("test.event", {"key": "value"})
             await asyncio.sleep(0.05)
-        with webhook_svc._session_factory() as session:
-            rows = session.query(WebhookDelivery).all()
+        async with webhook_svc._session_factory() as session:
+            rows = (await session.execute(select(WebhookDelivery))).scalars().all()
             assert len(rows) == 1
             payload = json.loads(rows[0].payload_json)
             assert payload == {"key": "value"}
 
     async def test_fire_uses_correct_formatter(self, webhook_svc):
         """fire() passes formatter output as body to _deliver."""
-        webhook_svc.create(
+        await webhook_svc.create(
             url="https://hooks.slack.com/T/B/x",
             event_types=["*"],
             created_by="test",
@@ -1497,7 +1500,7 @@ class TestFireComprehensive:
 
     async def test_fire_passes_delivery_id(self, webhook_svc):
         """fire() passes delivery_id to _deliver."""
-        webhook_svc.create(
+        await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
@@ -1518,12 +1521,12 @@ class TestFireComprehensive:
 
     async def test_fire_multiple_targets(self, webhook_svc):
         """fire() delivers to all matching targets."""
-        webhook_svc.create(
+        await webhook_svc.create(
             url="https://a.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        webhook_svc.create(
+        await webhook_svc.create(
             url="https://b.com/hook",
             event_types=["*"],
             created_by="test",
@@ -1535,7 +1538,7 @@ class TestFireComprehensive:
 
     async def test_fire_email_channel_routes_to_email_deliver(self, webhook_svc):
         """fire() routes email channel through _deliver -> _deliver_email."""
-        webhook_svc.create(
+        await webhook_svc.create(
             url="admin@test.com",
             event_types=["*"],
             created_by="test",
@@ -1554,7 +1557,7 @@ class TestFireComprehensive:
 
     async def test_fire_generic_channel_routes_to_http(self, webhook_svc):
         """fire() routes generic channel through _deliver -> _deliver_http_with_retry."""
-        webhook_svc.create(
+        await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
@@ -1572,14 +1575,14 @@ class TestFireComprehensive:
 class TestGetActiveForEvent:
     """Kill mutation survivors in _get_active_for_event."""
 
-    def test_returns_target_with_correct_fields(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_returns_target_with_correct_fields(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["test.event"],
             created_by="test",
             channel_type="generic",
         )
-        targets = webhook_svc._get_active_for_event("test.event")
+        targets = await webhook_svc._get_active_for_event("test.event")
         assert len(targets) == 1
         t = targets[0]
         assert t.webhook_id == wh["id"]
@@ -1588,75 +1591,75 @@ class TestGetActiveForEvent:
         assert t.secret == wh["secret"]
         assert t.extra_config is None
 
-    def test_wildcard_matches_any_event(self, webhook_svc):
-        webhook_svc.create(
+    async def test_wildcard_matches_any_event(self, webhook_svc):
+        await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        assert len(webhook_svc._get_active_for_event("anything.here")) == 1
-        assert len(webhook_svc._get_active_for_event("other.event")) == 1
+        assert len(await webhook_svc._get_active_for_event("anything.here")) == 1
+        assert len(await webhook_svc._get_active_for_event("other.event")) == 1
 
-    def test_specific_event_does_not_match_other(self, webhook_svc):
-        webhook_svc.create(
+    async def test_specific_event_does_not_match_other(self, webhook_svc):
+        await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["approval.approved"],
             created_by="test",
         )
-        assert len(webhook_svc._get_active_for_event("sandbox.created")) == 0
+        assert len(await webhook_svc._get_active_for_event("sandbox.created")) == 0
 
-    def test_inactive_webhooks_excluded(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_inactive_webhooks_excluded(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        webhook_svc.update(wh["id"], is_active=False)
-        assert len(webhook_svc._get_active_for_event("test.event")) == 0
+        await webhook_svc.update(wh["id"], is_active=False)
+        assert len(await webhook_svc._get_active_for_event("test.event")) == 0
 
-    def test_multiple_event_types(self, webhook_svc):
-        webhook_svc.create(
+    async def test_multiple_event_types(self, webhook_svc):
+        await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["approval.approved", "sandbox.created"],
             created_by="test",
         )
-        assert len(webhook_svc._get_active_for_event("approval.approved")) == 1
-        assert len(webhook_svc._get_active_for_event("sandbox.created")) == 1
-        assert len(webhook_svc._get_active_for_event("sandbox.deleted")) == 0
+        assert len(await webhook_svc._get_active_for_event("approval.approved")) == 1
+        assert len(await webhook_svc._get_active_for_event("sandbox.created")) == 1
+        assert len(await webhook_svc._get_active_for_event("sandbox.deleted")) == 0
 
-    def test_extra_config_preserved(self, webhook_svc):
+    async def test_extra_config_preserved(self, webhook_svc):
         cfg = json.dumps({"smtp_host": "smtp.test.com"})
-        webhook_svc.create(
+        await webhook_svc.create(
             url="admin@test.com",
             event_types=["*"],
             created_by="test",
             channel_type="email",
             extra_config=cfg,
         )
-        targets = webhook_svc._get_active_for_event("test.event")
+        targets = await webhook_svc._get_active_for_event("test.event")
         assert targets[0].extra_config == cfg
 
-    def test_db_error_returns_empty(self, webhook_svc):
+    async def test_db_error_returns_empty(self, webhook_svc):
         """SQLAlchemyError returns empty list."""
         from sqlalchemy.exc import SQLAlchemyError
 
         with patch.object(webhook_svc, "_session_factory", side_effect=SQLAlchemyError("db err")):
-            result = webhook_svc._get_active_for_event("test.event")
+            result = await webhook_svc._get_active_for_event("test.event")
             assert result == []
 
 
 class TestListDeliveriesComprehensive:
     """Kill mutation survivors in list_deliveries."""
 
-    def test_delivery_dict_keys(self, webhook_svc):
+    async def test_delivery_dict_keys(self, webhook_svc):
         """All expected keys present in delivery dict."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        webhook_svc._create_delivery(wh["id"], "test.event", '{"a":1}')
-        deliveries = webhook_svc.list_deliveries(wh["id"])
+        await webhook_svc._create_delivery(wh["id"], "test.event", '{"a":1}')
+        deliveries = await webhook_svc.list_deliveries(wh["id"])
         assert len(deliveries) == 1
         d = deliveries[0]
         expected_keys = {
@@ -1672,15 +1675,15 @@ class TestListDeliveriesComprehensive:
         }
         assert set(d.keys()) == expected_keys
 
-    def test_delivery_field_values(self, webhook_svc):
+    async def test_delivery_field_values(self, webhook_svc):
         """Delivery dict has correct initial values."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"x":1}')
-        d = webhook_svc.list_deliveries(wh["id"])[0]
+        await webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"x":1}')
+        d = (await webhook_svc.list_deliveries(wh["id"]))[0]
         assert d["webhook_id"] == wh["id"]
         assert d["event_type"] == "sandbox.created"
         assert d["status"] == "pending"
@@ -1690,240 +1693,242 @@ class TestListDeliveriesComprehensive:
         assert d["created_at"] is not None
         assert d["delivered_at"] is None
 
-    def test_limit_parameter(self, webhook_svc):
+    async def test_limit_parameter(self, webhook_svc):
         """list_deliveries respects the limit parameter."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
         for i in range(5):
-            webhook_svc._create_delivery(wh["id"], f"event.{i}", "{}")
-        assert len(webhook_svc.list_deliveries(wh["id"], limit=3)) == 3
-        assert len(webhook_svc.list_deliveries(wh["id"], limit=50)) == 5
+            await webhook_svc._create_delivery(wh["id"], f"event.{i}", "{}")
+        assert len(await webhook_svc.list_deliveries(wh["id"], limit=3)) == 3
+        assert len(await webhook_svc.list_deliveries(wh["id"], limit=50)) == 5
 
-    def test_order_newest_first(self, webhook_svc):
+    async def test_order_newest_first(self, webhook_svc):
         """Deliveries are ordered newest first (desc by created_at)."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        webhook_svc._create_delivery(wh["id"], "event.first", "{}")
-        webhook_svc._create_delivery(wh["id"], "event.second", "{}")
-        deliveries = webhook_svc.list_deliveries(wh["id"])
+        await webhook_svc._create_delivery(wh["id"], "event.first", "{}")
+        await webhook_svc._create_delivery(wh["id"], "event.second", "{}")
+        deliveries = await webhook_svc.list_deliveries(wh["id"])
         assert deliveries[0]["id"] > deliveries[1]["id"]
 
-    def test_only_returns_for_specified_webhook(self, webhook_svc):
+    async def test_only_returns_for_specified_webhook(self, webhook_svc):
         """list_deliveries filters by webhook_id."""
-        wh1 = webhook_svc.create(
+        wh1 = await webhook_svc.create(
             url="https://a.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        wh2 = webhook_svc.create(
+        wh2 = await webhook_svc.create(
             url="https://b.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        webhook_svc._create_delivery(wh1["id"], "event.a", "{}")
-        webhook_svc._create_delivery(wh2["id"], "event.b", "{}")
-        deliveries = webhook_svc.list_deliveries(wh1["id"])
+        await webhook_svc._create_delivery(wh1["id"], "event.a", "{}")
+        await webhook_svc._create_delivery(wh2["id"], "event.b", "{}")
+        deliveries = await webhook_svc.list_deliveries(wh1["id"])
         assert len(deliveries) == 1
         assert deliveries[0]["webhook_id"] == wh1["id"]
 
-    def test_db_error_returns_empty(self, webhook_svc):
+    async def test_db_error_returns_empty(self, webhook_svc):
         from sqlalchemy.exc import SQLAlchemyError
 
         with patch.object(webhook_svc, "_session_factory", side_effect=SQLAlchemyError("err")):
-            assert webhook_svc.list_deliveries(1) == []
+            assert await webhook_svc.list_deliveries(1) == []
 
 
 class TestCleanupComprehensive:
     """Kill mutation survivors in cleanup_old_deliveries."""
 
-    def test_returns_exact_count_deleted(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_returns_exact_count_deleted(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
         for _ in range(3):
-            d_id = webhook_svc._create_delivery(wh["id"], "test", "{}")
-            with webhook_svc._session_factory() as session:
-                row = session.get(WebhookDelivery, d_id)
+            d_id = await webhook_svc._create_delivery(wh["id"], "test", "{}")
+            async with webhook_svc._session_factory() as session:
+                row = await session.get(WebhookDelivery, d_id)
                 row.created_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=30)
-                session.commit()
-        assert webhook_svc.cleanup_old_deliveries(max_age_days=7) == 3
+                await session.commit()
+        assert await webhook_svc.cleanup_old_deliveries(max_age_days=7) == 3
 
-    def test_keeps_recent_records(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_keeps_recent_records(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        webhook_svc._create_delivery(wh["id"], "test", "{}")
-        assert webhook_svc.cleanup_old_deliveries(max_age_days=7) == 0
-        assert len(webhook_svc.list_deliveries(wh["id"])) == 1
+        await webhook_svc._create_delivery(wh["id"], "test", "{}")
+        assert await webhook_svc.cleanup_old_deliveries(max_age_days=7) == 0
+        assert len(await webhook_svc.list_deliveries(wh["id"])) == 1
 
-    def test_mixed_old_and_new(self, webhook_svc):
+    async def test_mixed_old_and_new(self, webhook_svc):
         """Only old records deleted, new ones kept."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
         # Old record
-        old_id = webhook_svc._create_delivery(wh["id"], "old", "{}")
-        with webhook_svc._session_factory() as session:
-            row = session.get(WebhookDelivery, old_id)
+        old_id = await webhook_svc._create_delivery(wh["id"], "old", "{}")
+        async with webhook_svc._session_factory() as session:
+            row = await session.get(WebhookDelivery, old_id)
             row.created_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=30)
-            session.commit()
+            await session.commit()
         # New record
-        webhook_svc._create_delivery(wh["id"], "new", "{}")
+        await webhook_svc._create_delivery(wh["id"], "new", "{}")
 
-        purged = webhook_svc.cleanup_old_deliveries(max_age_days=7)
+        purged = await webhook_svc.cleanup_old_deliveries(max_age_days=7)
         assert purged == 1
-        remaining = webhook_svc.list_deliveries(wh["id"])
+        remaining = await webhook_svc.list_deliveries(wh["id"])
         assert len(remaining) == 1
         assert remaining[0]["event_type"] == "new"
 
-    def test_uses_default_max_age_from_settings(self, webhook_svc):
+    async def test_uses_default_max_age_from_settings(self, webhook_svc):
         """When max_age_days=None, uses settings value."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        d_id = webhook_svc._create_delivery(wh["id"], "test", "{}")
-        with webhook_svc._session_factory() as session:
-            row = session.get(WebhookDelivery, d_id)
+        d_id = await webhook_svc._create_delivery(wh["id"], "test", "{}")
+        async with webhook_svc._session_factory() as session:
+            row = await session.get(WebhookDelivery, d_id)
             row.created_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=10)
-            session.commit()
+            await session.commit()
         with patch(
             "shoreguard.services.webhooks._webhook_settings",
             return_value=_mock_webhook_settings(delivery_max_age_days=7),
         ):
-            assert webhook_svc.cleanup_old_deliveries() == 1
+            assert await webhook_svc.cleanup_old_deliveries() == 1
 
-    def test_db_error_returns_zero(self, webhook_svc):
+    async def test_db_error_returns_zero(self, webhook_svc):
         from sqlalchemy.exc import SQLAlchemyError
 
         with patch.object(webhook_svc, "_session_factory", side_effect=SQLAlchemyError("err")):
-            assert webhook_svc.cleanup_old_deliveries(max_age_days=7) == 0
+            assert await webhook_svc.cleanup_old_deliveries(max_age_days=7) == 0
 
-    def test_boundary_exact_age(self, webhook_svc):
+    async def test_boundary_exact_age(self, webhook_svc):
         """Record exactly at cutoff boundary (< cutoff) should be deleted."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        d_id = webhook_svc._create_delivery(wh["id"], "test", "{}")
-        with webhook_svc._session_factory() as session:
-            row = session.get(WebhookDelivery, d_id)
+        d_id = await webhook_svc._create_delivery(wh["id"], "test", "{}")
+        async with webhook_svc._session_factory() as session:
+            row = await session.get(WebhookDelivery, d_id)
             # Exactly 7 days + 1 second ago
             row.created_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
                 days=7, seconds=1
             )
-            session.commit()
-        assert webhook_svc.cleanup_old_deliveries(max_age_days=7) == 1
+            await session.commit()
+        assert await webhook_svc.cleanup_old_deliveries(max_age_days=7) == 1
 
 
 class TestUpdateDeliveryComprehensive:
     """Kill mutation survivors in _update_delivery."""
 
-    def test_success_sets_delivered_at(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_success_sets_delivered_at(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        d_id = webhook_svc._create_delivery(wh["id"], "test", "{}")
-        webhook_svc._update_delivery(d_id, status="success", response_code=200, attempt=1)
-        d = webhook_svc.list_deliveries(wh["id"])[0]
+        d_id = await webhook_svc._create_delivery(wh["id"], "test", "{}")
+        await webhook_svc._update_delivery(d_id, status="success", response_code=200, attempt=1)
+        d = (await webhook_svc.list_deliveries(wh["id"]))[0]
         assert d["delivered_at"] is not None
 
-    def test_failed_does_not_set_delivered_at(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_failed_does_not_set_delivered_at(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        d_id = webhook_svc._create_delivery(wh["id"], "test", "{}")
-        webhook_svc._update_delivery(d_id, status="failed", error_message="err", attempt=3)
-        d = webhook_svc.list_deliveries(wh["id"])[0]
+        d_id = await webhook_svc._create_delivery(wh["id"], "test", "{}")
+        await webhook_svc._update_delivery(d_id, status="failed", error_message="err", attempt=3)
+        d = (await webhook_svc.list_deliveries(wh["id"]))[0]
         assert d["delivered_at"] is None
         assert d["status"] == "failed"
         assert d["error_message"] == "err"
         assert d["attempt"] == 3
 
-    def test_nonexistent_delivery_no_crash(self, webhook_svc):
+    async def test_nonexistent_delivery_no_crash(self, webhook_svc):
         """Updating a nonexistent delivery doesn't raise."""
-        webhook_svc._update_delivery(99999, status="success")
+        await webhook_svc._update_delivery(99999, status="success")
 
-    def test_response_code_none_for_network_error(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_response_code_none_for_network_error(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        d_id = webhook_svc._create_delivery(wh["id"], "test", "{}")
-        webhook_svc._update_delivery(d_id, status="failed", error_message="timeout", attempt=4)
-        d = webhook_svc.list_deliveries(wh["id"])[0]
+        d_id = await webhook_svc._create_delivery(wh["id"], "test", "{}")
+        await webhook_svc._update_delivery(
+            d_id, status="failed", error_message="timeout", attempt=4
+        )
+        d = (await webhook_svc.list_deliveries(wh["id"]))[0]
         assert d["response_code"] is None
 
-    def test_all_fields_updated(self, webhook_svc):
+    async def test_all_fields_updated(self, webhook_svc):
         """All fields (status, response_code, error_message, attempt) are set."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        d_id = webhook_svc._create_delivery(wh["id"], "test", "{}")
-        webhook_svc._update_delivery(
+        d_id = await webhook_svc._create_delivery(wh["id"], "test", "{}")
+        await webhook_svc._update_delivery(
             d_id,
             status="failed",
             response_code=502,
             error_message="HTTP 502",
             attempt=3,
         )
-        d = webhook_svc.list_deliveries(wh["id"])[0]
+        d = (await webhook_svc.list_deliveries(wh["id"]))[0]
         assert d["status"] == "failed"
         assert d["response_code"] == 502
         assert d["error_message"] == "HTTP 502"
         assert d["attempt"] == 3
 
-    def test_db_error_handled_gracefully(self, webhook_svc):
+    async def test_db_error_handled_gracefully(self, webhook_svc):
         from sqlalchemy.exc import SQLAlchemyError
 
         with patch.object(webhook_svc, "_session_factory", side_effect=SQLAlchemyError("err")):
             # Should not raise
-            webhook_svc._update_delivery(1, status="success")
+            await webhook_svc._update_delivery(1, status="success")
 
 
 class TestCreateDelivery:
     """Kill mutation survivors in _create_delivery."""
 
-    def test_creates_pending_delivery(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_creates_pending_delivery(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        d_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"x":1}')
+        d_id = await webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"x":1}')
         assert isinstance(d_id, int)
         assert d_id > 0
 
-    def test_delivery_initial_fields(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_delivery_initial_fields(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        d_id = webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"x":1}')
-        with webhook_svc._session_factory() as session:
-            row = session.get(WebhookDelivery, d_id)
+        d_id = await webhook_svc._create_delivery(wh["id"], "sandbox.created", '{"x":1}')
+        async with webhook_svc._session_factory() as session:
+            row = await session.get(WebhookDelivery, d_id)
             assert row.webhook_id == wh["id"]
             assert row.event_type == "sandbox.created"
             assert row.payload_json == '{"x":1}'
@@ -1935,63 +1940,63 @@ class TestCreateDelivery:
 class TestCRUDComprehensive:
     """Kill mutation survivors in CRUD methods."""
 
-    def test_list_db_error_returns_empty(self, webhook_svc):
+    async def test_list_db_error_returns_empty(self, webhook_svc):
         from sqlalchemy.exc import SQLAlchemyError
 
         with patch.object(webhook_svc, "_session_factory", side_effect=SQLAlchemyError("err")):
-            assert webhook_svc.list() == []
+            assert await webhook_svc.list() == []
 
-    def test_get_db_error_returns_none(self, webhook_svc):
+    async def test_get_db_error_returns_none(self, webhook_svc):
         from sqlalchemy.exc import SQLAlchemyError
 
         with patch.object(webhook_svc, "_session_factory", side_effect=SQLAlchemyError("err")):
-            assert webhook_svc.get(1) is None
+            assert await webhook_svc.get(1) is None
 
-    def test_update_db_error_returns_none(self, webhook_svc):
+    async def test_update_db_error_returns_none(self, webhook_svc):
         from sqlalchemy.exc import SQLAlchemyError
 
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
         with patch.object(webhook_svc, "_session_factory", side_effect=SQLAlchemyError("err")):
-            assert webhook_svc.update(wh["id"], url="https://new.com") is None
+            assert await webhook_svc.update(wh["id"], url="https://new.com") is None
 
-    def test_delete_db_error_returns_false(self, webhook_svc):
+    async def test_delete_db_error_returns_false(self, webhook_svc):
         from sqlalchemy.exc import SQLAlchemyError
 
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
         with patch.object(webhook_svc, "_session_factory", side_effect=SQLAlchemyError("err")):
-            assert webhook_svc.delete(wh["id"]) is False
+            assert await webhook_svc.delete(wh["id"]) is False
 
-    def test_create_sets_is_active_true(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_create_sets_is_active_true(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
         assert wh["is_active"] is True
 
-    def test_create_sets_created_at(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_create_sets_created_at(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
         assert wh["created_at"] is not None
 
-    def test_to_dict_keys(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_to_dict_keys(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["test"],
             created_by="admin",
         )
-        fetched = webhook_svc.get(wh["id"])
+        fetched = await webhook_svc.get(wh["id"])
         expected_keys = {
             "id",
             "url",
@@ -2003,8 +2008,8 @@ class TestCRUDComprehensive:
         }
         assert set(fetched.keys()) == expected_keys
 
-    def test_to_dict_with_secret_keys(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_to_dict_with_secret_keys(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["test"],
             created_by="admin",
@@ -2021,75 +2026,75 @@ class TestCRUDComprehensive:
         }
         assert set(wh.keys()) == expected_keys
 
-    def test_to_dict_extra_config_json(self, webhook_svc):
+    async def test_to_dict_extra_config_json(self, webhook_svc):
         """extra_config is parsed as JSON when present."""
         cfg = json.dumps({"smtp_host": "mail.test.com"})
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="admin@test.com",
             event_types=["*"],
             created_by="test",
             channel_type="email",
             extra_config=cfg,
         )
-        fetched = webhook_svc.get(wh["id"])
+        fetched = await webhook_svc.get(wh["id"])
         assert fetched["extra_config"] == {"smtp_host": "mail.test.com"}
 
-    def test_update_channel_type(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_update_channel_type(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        updated = webhook_svc.update(wh["id"], channel_type="slack")
+        updated = await webhook_svc.update(wh["id"], channel_type="slack")
         assert updated["channel_type"] == "slack"
 
-    def test_update_extra_config(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_update_extra_config(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
         cfg = json.dumps({"key": "val"})
-        updated = webhook_svc.update(wh["id"], extra_config=cfg)
+        updated = await webhook_svc.update(wh["id"], extra_config=cfg)
         assert updated is not None
-        fetched = webhook_svc.get(wh["id"])
+        fetched = await webhook_svc.get(wh["id"])
         assert fetched["extra_config"] == {"key": "val"}
 
-    def test_update_partial_only_changes_specified(self, webhook_svc):
+    async def test_update_partial_only_changes_specified(self, webhook_svc):
         """Updating only url doesn't change other fields."""
-        wh = webhook_svc.create(
+        wh = await webhook_svc.create(
             url="https://old.com/hook",
             event_types=["a", "b"],
             created_by="test",
         )
-        updated = webhook_svc.update(wh["id"], url="https://new.com/hook")
+        updated = await webhook_svc.update(wh["id"], url="https://new.com/hook")
         assert updated["url"] == "https://new.com/hook"
         assert updated["event_types"] == ["a", "b"]
         assert updated["is_active"] is True
 
-    def test_list_returns_newest_first(self, webhook_svc):
-        wh1 = webhook_svc.create(
+    async def test_list_returns_newest_first(self, webhook_svc):
+        wh1 = await webhook_svc.create(
             url="https://a.com",
             event_types=["*"],
             created_by="test",
         )
-        wh2 = webhook_svc.create(
+        wh2 = await webhook_svc.create(
             url="https://b.com",
             event_types=["*"],
             created_by="test",
         )
-        all_wh = webhook_svc.list()
+        all_wh = await webhook_svc.list()
         assert all_wh[0]["id"] == wh2["id"]
         assert all_wh[1]["id"] == wh1["id"]
 
-    def test_delete_returns_true_only_once(self, webhook_svc):
-        wh = webhook_svc.create(
+    async def test_delete_returns_true_only_once(self, webhook_svc):
+        wh = await webhook_svc.create(
             url="https://example.com/hook",
             event_types=["*"],
             created_by="test",
         )
-        assert webhook_svc.delete(wh["id"]) is True
-        assert webhook_svc.delete(wh["id"]) is False
+        assert await webhook_svc.delete(wh["id"]) is True
+        assert await webhook_svc.delete(wh["id"]) is False
 
 
 class TestShutdown:

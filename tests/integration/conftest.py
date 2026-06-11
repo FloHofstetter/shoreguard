@@ -282,15 +282,22 @@ def policy_service(sg_client: ShoreGuardClient):
 
 
 @pytest.fixture
-def gateway_service(sg_client: ShoreGuardClient):
-    from sqlalchemy.orm import sessionmaker as sa_sessionmaker
+async def gateway_service(sg_client: ShoreGuardClient):
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import StaticPool
 
-    from shoreguard.db import init_db
+    from shoreguard.models import Base
     from shoreguard.services.registry import GatewayRegistry
 
-    engine = init_db("sqlite:///:memory:")
-    session_factory = sa_sessionmaker(bind=engine)
-    registry = GatewayRegistry(session_factory)
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    registry = GatewayRegistry(async_sessionmaker(engine, expire_on_commit=False))
     svc = GatewayService(registry)
     svc.set_client(sg_client, name="integration-test")
-    return svc
+    yield svc
+    await engine.dispose()

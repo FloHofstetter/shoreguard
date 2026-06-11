@@ -17,7 +17,6 @@ is configured, the admin-only override on ``approve-all``.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -50,7 +49,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _check_policy_pin(request: Request, sandbox_name: str) -> None:
+async def _check_policy_pin(request: Request, sandbox_name: str) -> None:
     """Raise HTTP 423 if the sandbox's policy is pinned.
 
     Args:
@@ -61,7 +60,7 @@ def _check_policy_pin(request: Request, sandbox_name: str) -> None:
         HTTPException: 423 Locked if an active pin exists.
     """
     try:
-        get_services().policy_pin.check_pin(get_gateway_name(request), sandbox_name)
+        await get_services().policy_pin.check_pin(get_gateway_name(request), sandbox_name)
     except PolicyLockedError as exc:
         raise HTTPException(status_code=423, detail=str(exc)) from exc
 
@@ -245,23 +244,17 @@ async def approve_chunk(
             workflow rejects the vote, 423 if the policy is pinned, or 504
             if ``wait_loaded`` times out.
     """
-    _check_policy_pin(request, name)
+    await _check_policy_pin(request, name)
     actor = get_actor(request)
     role = _get_actor_role(request)
     gateway = get_gateway_name(request)
 
     wf_svc = get_services().approval_workflow
-    workflow = wf_svc.get_workflow(gateway, name)
+    workflow = await wf_svc.get_workflow(gateway, name)
     if workflow is not None:
         try:
-            vote = await asyncio.to_thread(
-                wf_svc.record_decision,
-                gateway,
-                name,
-                chunk_id,
-                actor=actor,
-                role=role,
-                decision="approve",
+            vote = await wf_svc.record_decision(
+                gateway, name, chunk_id, actor=actor, role=role, decision="approve"
             )
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -369,11 +362,10 @@ async def reject_chunk(
     gateway = get_gateway_name(request)
 
     wf_svc = get_services().approval_workflow
-    workflow = wf_svc.get_workflow(gateway, name)
+    workflow = await wf_svc.get_workflow(gateway, name)
     if workflow is not None:
         try:
-            await asyncio.to_thread(
-                wf_svc.record_decision,
+            await wf_svc.record_decision(
                 gateway,
                 name,
                 chunk_id,
@@ -442,12 +434,12 @@ async def approve_all(
             actor is not admin, 423 if the policy is pinned, or 504 if
             ``wait_loaded`` times out.
     """
-    _check_policy_pin(request, name)
+    await _check_policy_pin(request, name)
     actor = get_actor(request)
     role = _get_actor_role(request)
     gateway = get_gateway_name(request)
 
-    workflow = get_services().approval_workflow.get_workflow(gateway, name)
+    workflow = await get_services().approval_workflow.get_workflow(gateway, name)
     if workflow is not None and role != "admin":
         raise HTTPException(
             status_code=409,
@@ -615,7 +607,7 @@ async def get_approval_workflow(request: Request, name: str) -> dict[str, Any]:
     Returns:
         dict[str, Any]: Workflow config, or ``{}`` if unconfigured.
     """
-    workflow = get_services().approval_workflow.get_workflow(get_gateway_name(request), name)
+    workflow = await get_services().approval_workflow.get_workflow(get_gateway_name(request), name)
     return workflow or {}
 
 
@@ -646,8 +638,7 @@ async def upsert_approval_workflow(
     gateway = get_gateway_name(request)
     actor = get_actor(request)
     try:
-        workflow = await asyncio.to_thread(
-            wf_svc.upsert_workflow,
+        workflow = await wf_svc.upsert_workflow(
             gateway,
             name,
             required_approvals=body.required_approvals,
@@ -689,7 +680,7 @@ async def delete_approval_workflow(request: Request, name: str) -> dict[str, str
     """
     wf_svc = get_services().approval_workflow
     gateway = get_gateway_name(request)
-    removed = await asyncio.to_thread(wf_svc.delete_workflow, gateway, name)
+    removed = await wf_svc.delete_workflow(gateway, name)
     if not removed:
         raise HTTPException(status_code=404, detail="No workflow configured")
     await audit_log(
@@ -719,10 +710,10 @@ async def get_chunk_decisions(request: Request, name: str, chunk_id: str) -> dic
     """
     wf_svc = get_services().approval_workflow
     gateway = get_gateway_name(request)
-    workflow = wf_svc.get_workflow(gateway, name)
+    workflow = await wf_svc.get_workflow(gateway, name)
     if workflow is None:
         return {"status": "no_workflow", "votes": 0, "needed": 0, "decisions": []}
-    decisions = wf_svc.list_decisions(gateway, name, chunk_id)
+    decisions = await wf_svc.list_decisions(gateway, name, chunk_id)
     approve_votes = sum(1 for d in decisions if d["decision"] == "approve")
     return {
         "status": "pending",

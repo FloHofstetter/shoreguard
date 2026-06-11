@@ -144,7 +144,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         # Auto-import filesystem gateways so locally managed gateways
         # appear in the DB without a manual import-gateways step.
-        imported, _skipped = import_filesystem_gateways(container.registry)
+        imported, _skipped = await import_filesystem_gateways(container.registry)
         if imported:
             logger.info("Auto-imported %d gateway(s) from filesystem", imported)
 

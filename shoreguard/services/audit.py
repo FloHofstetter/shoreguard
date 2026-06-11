@@ -15,7 +15,6 @@ no built-in prune.
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import csv
 import datetime
@@ -27,11 +26,11 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
-from sqlalchemy import event
+from sqlalchemy import event, func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import sessionmaker as SessionMaker
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from shoreguard.services.audit_export import AuditExporter
 
@@ -122,13 +121,13 @@ class AuditService:
 
     def __init__(  # noqa: D107
         self,
-        session_factory: SessionMaker,
+        session_factory: async_sessionmaker[AsyncSession],
         exporter: AuditExporter | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._exporter = exporter
 
-    def log(
+    async def log(
         self,
         *,
         actor: str,
@@ -153,10 +152,12 @@ class AuditService:
             client_ip: IP address of the client.
         """
         try:
-            with self._session_factory() as session:
+            async with self._session_factory() as session:
                 gateway_id = None
                 if gateway:
-                    gw = session.query(Gateway).filter(Gateway.name == gateway).first()
+                    gw = (
+                        await session.execute(select(Gateway).where(Gateway.name == gateway))
+                    ).scalar_one_or_none()
                     if gw:
                         gateway_id = gw.id
                 entry = AuditEntry(
@@ -172,7 +173,7 @@ class AuditService:
                     client_ip=client_ip,
                 )
                 session.add(entry)
-                session.commit()
+                await session.commit()
                 if self._exporter is not None and self._exporter.enabled:
                     try:
                         self._exporter.dispatch(self._to_dict(entry))
@@ -184,7 +185,7 @@ class AuditService:
         except SQLAlchemyError:
             logger.warning("Failed to write audit entry (action=%s)", action, exc_info=True)
 
-    def list(
+    async def list(
         self,
         *,
         limit: int = 100,
@@ -212,30 +213,30 @@ class AuditService:
             list[dict[str, Any]]: Matching audit entries.
         """
         try:
-            with self._session_factory() as session:
-                q = session.query(AuditEntry)
+            async with self._session_factory() as session:
+                stmt = select(AuditEntry)
                 if actor:
-                    q = q.filter(AuditEntry.actor == actor)
+                    stmt = stmt.where(AuditEntry.actor == actor)
                 if action:
-                    q = q.filter(AuditEntry.action == action)
+                    stmt = stmt.where(AuditEntry.action == action)
                 if resource_type:
-                    q = q.filter(AuditEntry.resource_type == resource_type)
+                    stmt = stmt.where(AuditEntry.resource_type == resource_type)
                 if gateway:
-                    q = q.filter(AuditEntry.gateway_name == gateway)
+                    stmt = stmt.where(AuditEntry.gateway_name == gateway)
                 if since:
                     since_dt = datetime.datetime.fromisoformat(since)
-                    q = q.filter(AuditEntry.timestamp >= since_dt)
+                    stmt = stmt.where(AuditEntry.timestamp >= since_dt)
                 if until:
                     until_dt = datetime.datetime.fromisoformat(until)
-                    q = q.filter(AuditEntry.timestamp <= until_dt)
-                q = q.order_by(AuditEntry.timestamp.desc())
-                rows = q.offset(offset).limit(limit).all()
+                    stmt = stmt.where(AuditEntry.timestamp <= until_dt)
+                stmt = stmt.order_by(AuditEntry.timestamp.desc()).offset(offset).limit(limit)
+                rows = (await session.execute(stmt)).scalars().all()
                 return [self._to_dict(r) for r in rows]
         except SQLAlchemyError:
             logger.exception("Failed to list audit entries")
             return []
 
-    def list_with_count(
+    async def list_with_count(
         self,
         *,
         limit: int = 100,
@@ -262,34 +263,40 @@ class AuditService:
         Returns:
             tuple[list[dict[str, Any]], int]: Entries and total matching count.
         """
-        from sqlalchemy import func
-
         try:
-            with self._session_factory() as session:
-                q = session.query(AuditEntry)
+            async with self._session_factory() as session:
+                conds = []
                 if actor:
-                    q = q.filter(AuditEntry.actor == actor)
+                    conds.append(AuditEntry.actor == actor)
                 if action:
-                    q = q.filter(AuditEntry.action == action)
+                    conds.append(AuditEntry.action == action)
                 if resource_type:
-                    q = q.filter(AuditEntry.resource_type == resource_type)
+                    conds.append(AuditEntry.resource_type == resource_type)
                 if gateway:
-                    q = q.filter(AuditEntry.gateway_name == gateway)
+                    conds.append(AuditEntry.gateway_name == gateway)
                 if since:
                     since_dt = datetime.datetime.fromisoformat(since)
-                    q = q.filter(AuditEntry.timestamp >= since_dt)
+                    conds.append(AuditEntry.timestamp >= since_dt)
                 if until:
                     until_dt = datetime.datetime.fromisoformat(until)
-                    q = q.filter(AuditEntry.timestamp <= until_dt)
-                total = q.with_entities(func.count(AuditEntry.id)).scalar() or 0
-                q = q.order_by(AuditEntry.timestamp.desc())
-                rows = q.offset(offset).limit(limit).all()
+                    conds.append(AuditEntry.timestamp <= until_dt)
+                total = (
+                    await session.execute(select(func.count(AuditEntry.id)).where(*conds))
+                ).scalar() or 0
+                stmt = (
+                    select(AuditEntry)
+                    .where(*conds)
+                    .order_by(AuditEntry.timestamp.desc())
+                    .offset(offset)
+                    .limit(limit)
+                )
+                rows = (await session.execute(stmt)).scalars().all()
                 return [self._to_dict(r) for r in rows], total
         except SQLAlchemyError:
             logger.exception("Failed to list audit entries")
             return [], 0
 
-    def export_csv(
+    async def export_csv(
         self,
         *,
         actor: str | None = None,
@@ -314,7 +321,7 @@ class AuditService:
         """
         from shoreguard.settings import get_settings
 
-        entries = self.list(
+        entries = await self.list(
             limit=get_settings().audit.export_limit,
             actor=actor,
             action=action,
@@ -343,7 +350,7 @@ class AuditService:
         writer.writerows(entries)
         return output.getvalue()
 
-    def cleanup(self, older_than_days: int | None = None) -> int:
+    async def cleanup(self, older_than_days: int | None = None) -> int:
         """Delete audit entries older than the given number of days.
 
         Uses row-by-row deletion (not ``Query.delete()``) so that the
@@ -363,12 +370,21 @@ class AuditService:
             older_than_days = get_settings().audit.retention_days
         cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=older_than_days)
         try:
-            with self._session_factory() as session, _allow_audit_mutation():
-                stale = session.query(AuditEntry).filter(AuditEntry.timestamp < cutoff).all()
-                count = len(stale)
-                for entry in stale:
-                    session.delete(entry)
-                session.commit()
+            async with self._session_factory() as session:
+                with _allow_audit_mutation():
+                    stale = (
+                        (
+                            await session.execute(
+                                select(AuditEntry).where(AuditEntry.timestamp < cutoff)
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    count = len(stale)
+                    for entry in stale:
+                        await session.delete(entry)
+                    await session.commit()
                 if count:
                     logger.info(
                         "Audit cleanup: removed %d entries older than %d days",
@@ -380,7 +396,7 @@ class AuditService:
             logger.warning("Audit cleanup failed", exc_info=True)
             return 0
 
-    def export_json(
+    async def export_json(
         self,
         *,
         actor: str | None = None,
@@ -405,7 +421,7 @@ class AuditService:
         """
         from shoreguard.settings import get_settings
 
-        entries = self.list(
+        entries = await self.list(
             limit=get_settings().audit.export_limit,
             actor=actor,
             action=action,
@@ -474,8 +490,7 @@ async def audit_log(
     actor = getattr(request.state, "user_id", "unknown")
     actor_role = getattr(request.state, "role", "unknown")
     client_ip = request.client.host if request.client else None
-    await asyncio.to_thread(
-        container.audit.log,
+    await container.audit.log(
         actor=str(actor),
         actor_role=str(actor_role),
         action=action,

@@ -38,8 +38,7 @@ from shoreguard.exceptions import BootHookError, ValidationError, friendly_grpc_
 from shoreguard.models import SandboxBootHook
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
-    from sqlalchemy.orm import sessionmaker as SessionMaker
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from shoreguard.services.sandbox import SandboxService
 
@@ -103,7 +102,7 @@ class BootHookService:
 
     def __init__(  # noqa: D107
         self,
-        session_factory: SessionMaker,
+        session_factory: async_sessionmaker[AsyncSession],
         *,
         sandbox_service_provider: Any | None = None,
     ) -> None:
@@ -112,7 +111,7 @@ class BootHookService:
 
     # ------------------------------------------------------------------ CRUD
 
-    def list(
+    async def list(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -129,7 +128,7 @@ class BootHookService:
         Returns:
             list[dict[str, Any]]: Hooks ordered by phase, order, id.
         """
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             stmt = select(SandboxBootHook).where(
                 SandboxBootHook.gateway_name == gateway_name,
                 SandboxBootHook.sandbox_name == sandbox_name,
@@ -142,9 +141,9 @@ class BootHookService:
                 SandboxBootHook.order,
                 SandboxBootHook.id,
             )
-            return [self._to_dict(row) for row in session.execute(stmt).scalars()]
+            return [self._to_dict(row) for row in (await session.execute(stmt)).scalars()]
 
-    def get(self, hook_id: int) -> dict[str, Any] | None:
+    async def get(self, hook_id: int) -> dict[str, Any] | None:
         """Fetch a single hook by id.
 
         Args:
@@ -153,11 +152,11 @@ class BootHookService:
         Returns:
             dict[str, Any] | None: Hook data or None if missing.
         """
-        with self._session_factory() as session:
-            row = session.get(SandboxBootHook, hook_id)
+        async with self._session_factory() as session:
+            row = await session.get(SandboxBootHook, hook_id)
             return self._to_dict(row) if row is not None else None
 
-    def create(
+    async def create(
         self,
         *,
         gateway_name: str,
@@ -194,9 +193,9 @@ class BootHookService:
             dict[str, Any]: The created hook as a dict.
         """
         self._validate_inputs(name=name, phase=phase, command=command, timeout=timeout_seconds)
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             if order is None:
-                order = self._next_order(session, gateway_name, sandbox_name, phase)
+                order = await self._next_order(session, gateway_name, sandbox_name, phase)
             now = datetime.datetime.now(datetime.UTC)
             hook = SandboxBootHook(
                 gateway_name=gateway_name,
@@ -215,11 +214,11 @@ class BootHookService:
                 updated_at=now,
             )
             session.add(hook)
-            session.commit()
-            session.refresh(hook)
+            await session.commit()
+            await session.refresh(hook)
             return self._to_dict(hook)
 
-    def update(
+    async def update(
         self,
         hook_id: int,
         *,
@@ -249,8 +248,8 @@ class BootHookService:
         Raises:
             ValidationError: If new field values fail validation.
         """
-        with self._session_factory() as session:
-            hook = session.get(SandboxBootHook, hook_id)
+        async with self._session_factory() as session:
+            hook = await session.get(SandboxBootHook, hook_id)
             if hook is None:
                 return None
             if command is not None:
@@ -271,11 +270,11 @@ class BootHookService:
             if continue_on_failure is not None:
                 hook.continue_on_failure = bool(continue_on_failure)
             hook.updated_at = datetime.datetime.now(datetime.UTC)
-            session.commit()
-            session.refresh(hook)
+            await session.commit()
+            await session.refresh(hook)
             return self._to_dict(hook)
 
-    def delete(self, hook_id: int) -> bool:
+    async def delete(self, hook_id: int) -> bool:
         """Delete a hook.
 
         Args:
@@ -284,12 +283,14 @@ class BootHookService:
         Returns:
             bool: True if a row was removed.
         """
-        with self._session_factory() as session:
-            result = session.execute(delete(SandboxBootHook).where(SandboxBootHook.id == hook_id))
-            session.commit()
+        async with self._session_factory() as session:
+            result = await session.execute(
+                delete(SandboxBootHook).where(SandboxBootHook.id == hook_id)
+            )
+            await session.commit()
             return result.rowcount > 0  # type: ignore[union-attr]
 
-    def delete_for_sandbox(self, gateway_name: str, sandbox_name: str) -> int:
+    async def delete_for_sandbox(self, gateway_name: str, sandbox_name: str) -> int:
         """Delete all hooks for a sandbox (called when sandbox is deleted).
 
         Args:
@@ -299,17 +300,17 @@ class BootHookService:
         Returns:
             int: Number of hooks removed.
         """
-        with self._session_factory() as session:
-            result = session.execute(
+        async with self._session_factory() as session:
+            result = await session.execute(
                 delete(SandboxBootHook).where(
                     SandboxBootHook.gateway_name == gateway_name,
                     SandboxBootHook.sandbox_name == sandbox_name,
                 )
             )
-            session.commit()
-            return int(result.rowcount or 0)
+            await session.commit()
+            return int(result.rowcount or 0)  # type: ignore[attr-defined]
 
-    def reorder(
+    async def reorder(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -331,13 +332,13 @@ class BootHookService:
             ValidationError: If the id set does not match the stored hooks.
         """
         self._validate_phase(phase)
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             stmt = select(SandboxBootHook).where(
                 SandboxBootHook.gateway_name == gateway_name,
                 SandboxBootHook.sandbox_name == sandbox_name,
                 SandboxBootHook.phase == phase,
             )
-            existing = list(session.execute(stmt).scalars())
+            existing = list((await session.execute(stmt)).scalars())
             existing_ids = {row.id for row in existing}
             if set(hook_ids) != existing_ids:
                 raise ValidationError(
@@ -349,7 +350,7 @@ class BootHookService:
                 row = id_to_row[hook_id]
                 row.order = index
                 row.updated_at = now
-            session.commit()
+            await session.commit()
             return [self._to_dict(id_to_row[hook_id]) for hook_id in hook_ids]
 
     # -------------------------------------------------------------- Execution
@@ -378,9 +379,9 @@ class BootHookService:
             BootHookError: If any hook fails.
         """
         results: list[dict[str, Any]] = []
-        hooks = await asyncio.to_thread(self._enabled_for, gateway_name, sandbox_name, PHASE_PRE)
+        hooks = await self._enabled_for(gateway_name, sandbox_name, PHASE_PRE)
         for hook in hooks:
-            result = await asyncio.to_thread(self._run_local, hook, spec)
+            result = await self._run_local(hook, spec)
             results.append(result)
             if result["status"] == "failure":
                 raise BootHookError(
@@ -424,7 +425,7 @@ class BootHookService:
         if sandbox_service is None:
             return results
 
-        hooks = await asyncio.to_thread(self._enabled_for, gateway_name, sandbox_name, PHASE_POST)
+        hooks = await self._enabled_for(gateway_name, sandbox_name, PHASE_POST)
         for hook in hooks:
             result = await self._run_in_sandbox(hook, sandbox_service)
             results.append(result)
@@ -457,11 +458,11 @@ class BootHookService:
         Returns:
             dict[str, Any] | None: Hook execution result or None if missing.
         """
-        hook = await asyncio.to_thread(self.get, hook_id)
+        hook = await self.get(hook_id)
         if hook is None:
             return None
         if hook["phase"] == PHASE_PRE:
-            return await asyncio.to_thread(self._run_local, hook, spec or {})
+            return await self._run_local(hook, spec or {})
         sandbox_service: SandboxService | None = None
         if self._sandbox_provider is not None:
             try:
@@ -477,13 +478,13 @@ class BootHookService:
                 "no SandboxService available",
                 "",
             )
-            await asyncio.to_thread(self._persist_run, hook["id"], failure)
+            await self._persist_run(hook["id"], failure)
             return failure
         return await self._run_in_sandbox(hook, sandbox_service)
 
     # ----------------------------------------------------------------- Internals
 
-    def _enabled_for(
+    async def _enabled_for(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -499,9 +500,10 @@ class BootHookService:
         Returns:
             list[dict[str, Any]]: Enabled hooks for that phase, in order.
         """
-        return [row for row in self.list(gateway_name, sandbox_name, phase=phase) if row["enabled"]]
+        rows = await self.list(gateway_name, sandbox_name, phase=phase)
+        return [row for row in rows if row["enabled"]]
 
-    def _run_local(
+    async def _run_local(
         self,
         hook: dict[str, Any],
         spec: dict[str, Any],
@@ -516,7 +518,8 @@ class BootHookService:
             dict[str, Any]: ``HookResult`` capturing status + output.
         """
         start = time.monotonic()
-        result = self._run_local_impl(hook, spec)
+        result = await asyncio.to_thread(self._run_local_impl, hook, spec)
+        await self._persist_run(hook["id"], result)
         _record_hook_metric(
             hook,
             status=("success" if result.get("status") == "success" else "failure"),
@@ -546,12 +549,9 @@ class BootHookService:
                 f"invalid command syntax: {exc}",
                 "",
             )
-            self._persist_run(hook["id"], failure)
             return failure
         if not argv:
-            failure = self._failure_dict(hook, "command is empty", "")
-            self._persist_run(hook["id"], failure)
-            return failure
+            return self._failure_dict(hook, "command is empty", "")
 
         env = {
             "PATH": "/usr/local/bin:/usr/bin:/bin",
@@ -587,29 +587,22 @@ class BootHookService:
                 f"timeout after {hook['timeout_seconds']}s",
                 output,
             )
-            self._persist_run(hook["id"], failure)
             return failure
         except FileNotFoundError as exc:
             failure = self._failure_dict(hook, f"command not found: {exc}", "")
-            self._persist_run(hook["id"], failure)
             return failure
         except OSError as exc:
             failure = self._failure_dict(hook, f"OS error: {exc}", "")
-            self._persist_run(hook["id"], failure)
             return failure
 
         output = (completed.stdout or "") + (completed.stderr or "")
         if completed.returncode == 0:
-            success = self._success_dict(hook, "ok", output)
-            self._persist_run(hook["id"], success)
-            return success
-        failure = self._failure_dict(
+            return self._success_dict(hook, "ok", output)
+        return self._failure_dict(
             hook,
             f"exit {completed.returncode}",
             output,
         )
-        self._persist_run(hook["id"], failure)
-        return failure
 
     async def _run_in_sandbox(
         self,
@@ -658,11 +651,9 @@ class BootHookService:
             )
         except ValidationError as exc:
             failure = self._failure_dict(hook, str(exc), "")
-            self._persist_run(hook["id"], failure)
             return failure
         except Exception as exc:  # noqa: BLE001 - normalised below
             failure = self._failure_dict(hook, friendly_grpc_error(exc), "")
-            self._persist_run(hook["id"], failure)
             return failure
 
         stdout = str(exec_result.get("stdout", "") or "")
@@ -671,27 +662,27 @@ class BootHookService:
         output = stdout + (("\n" + stderr) if stderr else "")
         if exit_code == 0:
             success = self._success_dict(hook, "ok", output)
-            self._persist_run(hook["id"], success)
+            await self._persist_run(hook["id"], success)
             return success
         failure = self._failure_dict(hook, f"exit {exit_code}", output)
-        self._persist_run(hook["id"], failure)
+        await self._persist_run(hook["id"], failure)
         return failure
 
-    def _persist_run(self, hook_id: int, result: dict[str, Any]) -> None:
+    async def _persist_run(self, hook_id: int, result: dict[str, Any]) -> None:
         """Write last_run_at/status/output back to the hook row.
 
         Args:
             hook_id: Hook primary key.
             result: ``HookResult`` dict to persist (status + output).
         """
-        with self._session_factory() as session:
-            hook = session.get(SandboxBootHook, hook_id)
+        async with self._session_factory() as session:
+            hook = await session.get(SandboxBootHook, hook_id)
             if hook is None:
                 return
             hook.last_run_at = datetime.datetime.now(datetime.UTC)
             hook.last_status = result["status"]
             hook.last_output = _truncate(result.get("output", "") or "")
-            session.commit()
+            await session.commit()
 
     def _success_dict(
         self,
@@ -744,8 +735,8 @@ class BootHookService:
         }
 
     @staticmethod
-    def _next_order(
-        session: Session,
+    async def _next_order(
+        session: AsyncSession,
         gateway_name: str,
         sandbox_name: str,
         phase: str,
@@ -761,11 +752,13 @@ class BootHookService:
         Returns:
             int: One above the current max order, or 0 if empty.
         """
-        rows = session.execute(
-            select(SandboxBootHook.order).where(
-                SandboxBootHook.gateway_name == gateway_name,
-                SandboxBootHook.sandbox_name == sandbox_name,
-                SandboxBootHook.phase == phase,
+        rows = (
+            await session.execute(
+                select(SandboxBootHook.order).where(
+                    SandboxBootHook.gateway_name == gateway_name,
+                    SandboxBootHook.sandbox_name == sandbox_name,
+                    SandboxBootHook.phase == phase,
+                )
             )
         ).scalars()
         existing = list(rows)

@@ -35,7 +35,7 @@ def _gateway_service(
     svc.list_all = AsyncMock(return_value=gateways)
     # Back-door registry access mirrors what cert_rotation uses.
     registry = MagicMock()
-    registry.get_credentials = MagicMock(side_effect=lambda name: (creds or {}).get(name))
+    registry.get_credentials = AsyncMock(side_effect=lambda name: (creds or {}).get(name))
     svc._registry = registry  # noqa: SLF001
     return svc
 

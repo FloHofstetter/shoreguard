@@ -6,8 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import grpc
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 import shoreguard.services.gateway as gw_module
@@ -20,17 +19,18 @@ GW = "test-gw"
 
 
 @pytest.fixture
-def registry():
-    engine = create_engine(
-        "sqlite:///:memory:",
+async def registry():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
     reg = GatewayRegistry(factory)
     yield reg
-    engine.dispose()
+    await engine.dispose()
 
 
 @pytest.fixture
@@ -176,7 +176,9 @@ async def test_reset_backoff_nonexistent_is_noop(svc):
 
 async def test_try_connect_from_registry(svc, registry):
     """_try_connect uses from_credentials when gateway is in registry."""
-    registry.register(GW, "10.0.0.1:8443", ca_cert=b"ca", client_cert=b"cert", client_key=b"key")
+    await registry.register(
+        GW, "10.0.0.1:8443", ca_cert=b"ca", client_cert=b"cert", client_key=b"key"
+    )
 
     mock_client = AsyncMock()
     mock_client.health.return_value = {"status": "healthy"}
@@ -213,7 +215,7 @@ async def test_try_connect_fallback_to_config(svc, monkeypatch):
 
 async def test_try_connect_registry_failure(svc, registry):
     """_try_connect returns None when registry connection fails."""
-    registry.register(GW, "10.0.0.1:8443")
+    await registry.register(GW, "10.0.0.1:8443")
     with (
         patch("shoreguard.services.gateway.is_private_ip", return_value=False),
         patch(
@@ -227,7 +229,7 @@ async def test_try_connect_registry_failure(svc, registry):
 
 async def test_try_connect_registry_health_fail(svc, registry):
     """_try_connect returns None when health check fails after connect."""
-    registry.register(GW, "10.0.0.1:8443")
+    await registry.register(GW, "10.0.0.1:8443")
     mock_client = AsyncMock()
     mock_client.health.side_effect = grpc.RpcError()
     with (
@@ -272,12 +274,12 @@ async def test_register_with_certs(svc):
         client_cert=b"cert-data",
         client_key=b"key-data",
     )
-    record = svc._registry.get(GW)
+    record = await svc._registry.get(GW)
     assert record["has_ca_cert"] is True
     assert record["has_client_cert"] is True
     assert record["has_client_key"] is True
     # Verify raw bytes via get_credentials
-    creds = svc._registry.get_credentials(GW)
+    creds = await svc._registry.get_credentials(GW)
     assert creds["ca_cert"] == b"ca-data"
     assert creds["client_cert"] == b"cert-data"
     assert creds["client_key"] == b"key-data"
@@ -287,7 +289,7 @@ async def test_unregister_removes_gateway(svc):
     """Unregister removes gateway from registry."""
     await svc.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     assert await svc.unregister(GW) is True
-    assert svc._registry.get(GW) is None
+    assert await svc._registry.get(GW) is None
 
 
 async def test_unregister_nonexistent(svc):
@@ -317,7 +319,7 @@ async def test_test_connection_not_registered(svc):
 
 async def test_test_connection_success(svc, registry):
     """test_connection returns health info when connected."""
-    registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+    await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     mock_client = AsyncMock()
     mock_client.health.return_value = {"status": "healthy", "version": "1.0"}
     svc.set_client(mock_client, name=GW)
@@ -330,7 +332,7 @@ async def test_test_connection_success(svc, registry):
 
 async def test_test_connection_failure(svc, registry):
     """test_connection returns error when connection fails."""
-    registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+    await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     with patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("fail")):
         result = await svc.test_connection(GW)
     assert result["success"] is False
@@ -347,8 +349,8 @@ async def test_list_all_empty(svc):
 
 async def test_list_all_with_gateways(svc, registry):
     """list_all returns all registered gateways with enriched status."""
-    registry.register("alpha", "10.0.0.1:8443", auth_mode="insecure")
-    registry.register("beta", "10.0.0.2:8443", auth_mode="insecure")
+    await registry.register("alpha", "10.0.0.1:8443", auth_mode="insecure")
+    await registry.register("beta", "10.0.0.2:8443", auth_mode="insecure")
 
     result = await svc.list_all()
     names = [gw["name"] for gw in result]
@@ -360,7 +362,7 @@ async def test_list_all_with_gateways(svc, registry):
 
 async def test_list_all_connected_gateway(svc, registry):
     """list_all reports connected status for gateways with cached client."""
-    registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+    await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     mock_client = AsyncMock()
     svc.set_client(mock_client, name=GW)
 
@@ -372,7 +374,7 @@ async def test_list_all_connected_gateway(svc, registry):
 
 async def test_list_all_no_cached_client(svc, registry):
     """list_all reports disconnected when no client is cached."""
-    registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+    await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
 
     result = await svc.list_all()
     assert result[0]["connected"] is False
@@ -380,7 +382,7 @@ async def test_list_all_no_cached_client(svc, registry):
 
 async def test_get_info_with_name(svc, registry):
     """get_info returns gateway record with live status."""
-    registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+    await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     result = await svc.get_info(GW)
     assert result["configured"] is True
     assert result["name"] == GW
@@ -396,7 +398,7 @@ async def test_get_info_not_registered(svc):
 
 async def test_get_info_connected(svc, registry):
     """get_info shows connected state when client is cached."""
-    registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+    await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     mock_client = AsyncMock()
     mock_client.health.return_value = {"status": "healthy", "version": "2.0"}
     svc.set_client(mock_client, name=GW)
@@ -426,13 +428,13 @@ async def test_get_config_delegates_to_client(svc):
 
 async def test_check_all_health_updates_registry(svc, registry):
     """check_all_health probes gateways and updates health in registry."""
-    registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
-    registry.register("gw2", "10.0.0.2:8443", auth_mode="insecure")
+    await registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
+    await registry.register("gw2", "10.0.0.2:8443", auth_mode="insecure")
 
     mock_client = AsyncMock()
     mock_client.health.return_value = {"status": "healthy"}
 
-    def fake_get_client(name):
+    async def fake_get_client(name):
         if name == "gw1":
             return mock_client
         raise GatewayNotConnectedError("fail")
@@ -440,8 +442,8 @@ async def test_check_all_health_updates_registry(svc, registry):
     with patch.object(svc, "get_client", side_effect=fake_get_client):
         await svc.check_all_health()
 
-    gw1 = registry.get("gw1")
-    gw2 = registry.get("gw2")
+    gw1 = await registry.get("gw1")
+    gw2 = await registry.get("gw2")
     assert gw1["last_status"] == "healthy"
     assert gw1["last_seen"] is not None
     assert gw2["last_status"] == "unreachable"
@@ -453,8 +455,8 @@ async def test_check_all_health_updates_registry(svc, registry):
 async def test_try_connect_from_registry_blocks_private_ip(svc, registry, monkeypatch):
     """Connection is blocked when endpoint resolves to private IP (non-local mode)."""
     monkeypatch.delenv("SHOREGUARD_LOCAL_MODE", raising=False)
-    registry.register("private-gw", "10.0.0.1:8443", auth_mode="insecure")
-    creds = registry.get_credentials("private-gw")
+    await registry.register("private-gw", "10.0.0.1:8443", auth_mode="insecure")
+    creds = await registry.get_credentials("private-gw")
     with patch("shoreguard.services.gateway.is_private_ip", return_value=True):
         result = await svc._try_connect_from_registry("private-gw", creds)
     assert result is None
@@ -465,8 +467,8 @@ async def test_try_connect_from_registry_allows_private_ip_in_local_mode(
 ):
     """Connection to private IP is allowed in local mode."""
     monkeypatch.setenv("SHOREGUARD_LOCAL_MODE", "1")
-    registry.register("local-gw", "127.0.0.1:8080", auth_mode="insecure")
-    creds = registry.get_credentials("local-gw")
+    await registry.register("local-gw", "127.0.0.1:8080", auth_mode="insecure")
+    creds = await registry.get_credentials("local-gw")
     mock_client = AsyncMock()
     mock_client.health.return_value = {"status": "healthy"}
     with patch(
@@ -482,8 +484,8 @@ async def test_try_connect_from_registry_relaxes_mtls_for_local_plaintext(
 ):
     """Local mode: a plaintext private gateway with no cert bundle connects with mTLS relaxed."""
     monkeypatch.setenv("SHOREGUARD_LOCAL_MODE", "1")
-    registry.register("local-plain", "127.0.0.1:8080", auth_mode="insecure")
-    creds = registry.get_credentials("local-plain")
+    await registry.register("local-plain", "127.0.0.1:8080", auth_mode="insecure")
+    creds = await registry.get_credentials("local-plain")
     mock_client = AsyncMock()
     mock_client.health.return_value = {"status": "healthy"}
     with patch(
@@ -500,8 +502,8 @@ async def test_try_connect_from_registry_keeps_mtls_default_without_local_mode(
 ):
     """Outside local mode require_mtls is left at its default (None) — no silent relax."""
     monkeypatch.delenv("SHOREGUARD_LOCAL_MODE", raising=False)
-    registry.register("remote-plain", "203.0.113.5:8443", auth_mode="insecure")
-    creds = registry.get_credentials("remote-plain")
+    await registry.register("remote-plain", "203.0.113.5:8443", auth_mode="insecure")
+    creds = await registry.get_credentials("remote-plain")
     mock_client = AsyncMock()
     mock_client.health.return_value = {"status": "healthy"}
     with (
@@ -518,8 +520,8 @@ async def test_try_connect_from_registry_keeps_mtls_default_without_local_mode(
 
 async def test_try_connect_from_registry_allows_public_ip(svc, registry):
     """Connection is allowed when endpoint resolves to public IP."""
-    registry.register("public-gw", "203.0.113.1:8443", auth_mode="insecure")
-    creds = registry.get_credentials("public-gw")
+    await registry.register("public-gw", "203.0.113.1:8443", auth_mode="insecure")
+    creds = await registry.get_credentials("public-gw")
     mock_client = AsyncMock()
     mock_client.health.return_value = {"status": "healthy"}
     with (
@@ -540,14 +542,14 @@ async def test_check_all_health_empty_registry(svc, registry):
 
 async def test_check_all_health_consecutive_failures(svc, registry):
     """check_all_health handles multiple failing gateways."""
-    registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
-    registry.register("gw2", "10.0.0.2:8443", auth_mode="insecure")
+    await registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
+    await registry.register("gw2", "10.0.0.2:8443", auth_mode="insecure")
 
     with patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("fail")):
         await svc.check_all_health()
 
-    gw1 = registry.get("gw1")
-    gw2 = registry.get("gw2")
+    gw1 = await registry.get("gw1")
+    gw2 = await registry.get("gw2")
     assert gw1["last_status"] == "unreachable"
     assert gw2["last_status"] == "unreachable"
 
@@ -556,13 +558,13 @@ async def test_check_all_health_db_error_does_not_stop_loop(svc, registry):
     """update_health DB failure for one gateway does not skip the rest."""
     from sqlalchemy.exc import OperationalError
 
-    registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
-    registry.register("gw2", "10.0.0.2:8443", auth_mode="insecure")
+    await registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
+    await registry.register("gw2", "10.0.0.2:8443", auth_mode="insecure")
 
     call_count = 0
     original_update_health = registry.update_health
 
-    def failing_update(name, status, ts):
+    async def failing_update(name, status, ts):
         nonlocal call_count
         call_count += 1
         if name == "gw1":
@@ -581,7 +583,7 @@ async def test_check_all_health_db_error_does_not_stop_loop(svc, registry):
 
 async def test_get_info_disconnects_stale_client(svc, registry):
     """get_info clears client when health check fails."""
-    registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+    await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
     mock_client = AsyncMock()
     mock_client.health.side_effect = grpc.RpcError()
     svc.set_client(mock_client, name=GW)
@@ -784,8 +786,8 @@ class TestTryConnectFromRegistry:
 
     async def test_endpoint_parsing_with_port(self, svc, registry):
         """Host is extracted by splitting on last colon."""
-        registry.register("gw", "203.0.113.5:9443", auth_mode="insecure")
-        creds = registry.get_credentials("gw")
+        await registry.register("gw", "203.0.113.5:9443", auth_mode="insecure")
+        creds = await registry.get_credentials("gw")
         mock_client = AsyncMock()
         mock_client.health.return_value = {"status": "healthy"}
         with (
@@ -980,7 +982,7 @@ class TestCheckAllHealth:
 
     async def test_healthy_status_extracted_from_health_dict(self, svc, registry):
         """The status key from health() dict is used for update_health."""
-        registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
         mock_client = AsyncMock()
         mock_client.health.return_value = {"status": "degraded"}
 
@@ -997,7 +999,7 @@ class TestCheckAllHealth:
 
     async def test_missing_status_key_defaults_to_unknown(self, svc, registry):
         """If health() returns dict without 'status', default to 'unknown'."""
-        registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
         mock_client = AsyncMock()
         mock_client.health.return_value = {}
 
@@ -1010,7 +1012,7 @@ class TestCheckAllHealth:
         assert mock_uh.call_args[0][1] == "unknown"
 
     async def test_grpc_error_sets_unreachable(self, svc, registry):
-        registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
 
         with (
             patch.object(svc, "get_client", side_effect=grpc.RpcError()),
@@ -1021,7 +1023,7 @@ class TestCheckAllHealth:
         assert mock_uh.call_args[0][1] == "unreachable"
 
     async def test_gateway_not_connected_sets_unreachable(self, svc, registry):
-        registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
 
         with (
             patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("fail")),
@@ -1034,7 +1036,7 @@ class TestCheckAllHealth:
     async def test_update_health_called_with_datetime(self, svc, registry):
         from datetime import datetime
 
-        registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
 
         with (
             patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("fail")),
@@ -1048,9 +1050,9 @@ class TestCheckAllHealth:
 
     async def test_all_gateways_are_probed(self, svc, registry):
         """Every registered gateway is probed, not just the first."""
-        registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
-        registry.register("gw2", "10.0.0.2:8443", auth_mode="insecure")
-        registry.register("gw3", "10.0.0.3:8443", auth_mode="insecure")
+        await registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register("gw2", "10.0.0.2:8443", auth_mode="insecure")
+        await registry.register("gw3", "10.0.0.3:8443", auth_mode="insecure")
 
         probed = []
 
@@ -1065,7 +1067,7 @@ class TestCheckAllHealth:
 
     async def test_name_extracted_from_gateway_dict(self, svc, registry):
         """The 'name' key from each gateway dict is used for get_client."""
-        registry.register("my-gw", "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register("my-gw", "10.0.0.1:8443", auth_mode="insecure")
 
         with (
             patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("f")) as mock_gc,
@@ -1198,7 +1200,7 @@ class TestTestConnection:
             await svc.test_connection("unknown")
 
     async def test_success_returns_exact_keys(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         mock_client = AsyncMock()
         mock_client.health.return_value = {"status": "healthy", "version": "1.2.3"}
         svc.set_client(mock_client, name=GW)
@@ -1212,7 +1214,7 @@ class TestTestConnection:
         }
 
     async def test_success_with_missing_version(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         mock_client = AsyncMock()
         mock_client.health.return_value = {"status": "ok"}
         svc.set_client(mock_client, name=GW)
@@ -1223,7 +1225,7 @@ class TestTestConnection:
         assert result["health_status"] == "ok"
 
     async def test_success_with_missing_status(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         mock_client = AsyncMock()
         mock_client.health.return_value = {"version": "2.0"}
         svc.set_client(mock_client, name=GW)
@@ -1233,7 +1235,7 @@ class TestTestConnection:
         assert result["health_status"] is None
 
     async def test_failure_returns_exact_keys(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         with patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("test error")):
             result = await svc.test_connection(GW)
         assert result == {
@@ -1243,7 +1245,7 @@ class TestTestConnection:
         }
 
     async def test_failure_grpc_error(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         with patch.object(svc, "get_client", side_effect=grpc.RpcError()):
             result = await svc.test_connection(GW)
         assert result["success"] is False
@@ -1252,7 +1254,7 @@ class TestTestConnection:
 
     async def test_calls_reset_backoff(self, svc, registry):
         """test_connection resets backoff before trying to connect."""
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         with (
             patch.object(svc, "reset_backoff") as mock_rb,
             patch.object(svc, "get_client", side_effect=GatewayNotConnectedError("f")),
@@ -1272,14 +1274,14 @@ class TestGetInfo:
         assert result == {"configured": False, "error": "Gateway 'nope' not registered"}
 
     async def test_registered_no_client_returns_configured(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         result = await svc.get_info(GW)
         assert result["configured"] is True
         assert result["connected"] is False
         assert "version" not in result
 
     async def test_registered_with_healthy_client(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         mock_client = AsyncMock()
         mock_client.health.return_value = {"status": "healthy", "version": "3.0"}
         svc.set_client(mock_client, name=GW)
@@ -1292,7 +1294,7 @@ class TestGetInfo:
 
     async def test_version_not_set_when_none(self, svc, registry):
         """If version is falsy (None), it should NOT be in the result."""
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         mock_client = AsyncMock()
         mock_client.health.return_value = {"status": "ok"}
         svc.set_client(mock_client, name=GW)
@@ -1303,7 +1305,7 @@ class TestGetInfo:
 
     async def test_version_not_set_when_empty_string(self, svc, registry):
         """Empty string version is falsy, should NOT appear."""
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         mock_client = AsyncMock()
         mock_client.health.return_value = {"status": "ok", "version": ""}
         svc.set_client(mock_client, name=GW)
@@ -1312,7 +1314,7 @@ class TestGetInfo:
         assert "version" not in result
 
     async def test_stale_client_clears_and_returns_disconnected(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         mock_client = AsyncMock()
         mock_client.health.side_effect = grpc.RpcError()
         svc.set_client(mock_client, name=GW)
@@ -1323,18 +1325,18 @@ class TestGetInfo:
 
     async def test_status_uses_derive_status(self, svc, registry):
         """Status is derived from connected + last_status."""
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         # Update health to "healthy" then check disconnected -> unreachable
         from datetime import UTC, datetime
 
-        registry.update_health(GW, "healthy", datetime.now(UTC))
+        await registry.update_health(GW, "healthy", datetime.now(UTC))
 
         result = await svc.get_info(GW)
         assert result["connected"] is False
         assert result["status"] == "unreachable"
 
     async def test_status_offline_when_no_last_status(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         result = await svc.get_info(GW)
         assert result["status"] == "offline"
 
@@ -1351,14 +1353,14 @@ class TestListAll:
         assert isinstance(result, list)
 
     async def test_connected_gateway_status(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         svc.set_client(AsyncMock(), name=GW)
         result = await svc.list_all()
         assert result[0]["connected"] is True
         assert result[0]["status"] == "connected"
 
     async def test_disconnected_gateway_no_last_status(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         result = await svc.list_all()
         assert result[0]["connected"] is False
         assert result[0]["status"] == "offline"
@@ -1366,22 +1368,24 @@ class TestListAll:
     async def test_disconnected_gateway_with_healthy_last_status(self, svc, registry):
         from datetime import UTC, datetime
 
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
-        registry.update_health(GW, "healthy", datetime.now(UTC))
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.update_health(GW, "healthy", datetime.now(UTC))
         result = await svc.list_all()
         assert result[0]["connected"] is False
         assert result[0]["status"] == "unreachable"
 
     async def test_labels_filter_passed_through(self, svc, registry):
-        registry.register("gw1", "10.0.0.1:8443", auth_mode="insecure", labels={"env": "prod"})
-        registry.register("gw2", "10.0.0.2:8443", auth_mode="insecure", labels={"env": "dev"})
+        await registry.register(
+            "gw1", "10.0.0.1:8443", auth_mode="insecure", labels={"env": "prod"}
+        )
+        await registry.register("gw2", "10.0.0.2:8443", auth_mode="insecure", labels={"env": "dev"})
         result = await svc.list_all(labels_filter={"env": "prod"})
         assert len(result) == 1
         assert result[0]["name"] == "gw1"
 
     async def test_each_gateway_gets_connected_and_status(self, svc, registry):
-        registry.register("a", "10.0.0.1:8443", auth_mode="insecure")
-        registry.register("b", "10.0.0.2:8443", auth_mode="insecure")
+        await registry.register("a", "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register("b", "10.0.0.2:8443", auth_mode="insecure")
         svc.set_client(AsyncMock(), name="a")
 
         result = await svc.list_all()
@@ -1547,7 +1551,7 @@ class TestUnregister:
     """Kill mutations in unregister."""
 
     async def test_unregister_clears_client_first(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         mock = AsyncMock()
         svc.set_client(mock, name=GW)
         assert GW in svc._clients
@@ -1555,17 +1559,17 @@ class TestUnregister:
         result = await svc.unregister(GW)
         assert result is True
         assert GW not in svc._clients
-        assert registry.get(GW) is None
+        assert await registry.get(GW) is None
 
     async def test_unregister_returns_false_for_missing(self, svc):
         assert await svc.unregister("nope") is False
 
     async def test_unregister_returns_true_for_existing(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         assert await svc.unregister(GW) is True
 
     async def test_unregister_delegates_to_registry(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         with patch.object(registry, "unregister", return_value=True) as mock_unreg:
             result = await svc.unregister(GW)
         assert result is True
@@ -1585,18 +1589,18 @@ class TestUpdateGatewayMetadata:
             await svc.update_gateway_metadata("nope", description="x")
 
     async def test_update_description(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         result = await svc.update_gateway_metadata(GW, description="new desc")
         assert result["description"] == "new desc"
 
     async def test_update_labels(self, svc, registry):
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure")
         result = await svc.update_gateway_metadata(GW, labels={"env": "prod"})
         assert result["labels"] == {"env": "prod"}
 
     async def test_unset_skips_fields(self, svc, registry):
         """When using default _UNSET, fields are not passed to registry."""
-        registry.register(GW, "10.0.0.1:8443", auth_mode="insecure", description="orig")
+        await registry.register(GW, "10.0.0.1:8443", auth_mode="insecure", description="orig")
         result = await svc.update_gateway_metadata(GW)
         assert result["description"] == "orig"
 

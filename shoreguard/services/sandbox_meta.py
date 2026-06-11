@@ -19,7 +19,8 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from shoreguard.models import SandboxMeta
 
@@ -35,10 +36,10 @@ class SandboxMetaStore:
         session_factory: SQLAlchemy session factory for database access.
     """
 
-    def __init__(self, session_factory: sessionmaker[Session]) -> None:  # noqa: D107
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:  # noqa: D107
         self._session_factory = session_factory
 
-    def upsert(
+    async def upsert(
         self,
         gateway_name: str,
         sandbox_name: str,
@@ -57,15 +58,15 @@ class SandboxMetaStore:
         Returns:
             dict[str, Any]: The stored metadata.
         """
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             meta = (
-                session.query(SandboxMeta)
-                .filter(
-                    SandboxMeta.gateway_name == gateway_name,
-                    SandboxMeta.sandbox_name == sandbox_name,
+                await session.execute(
+                    select(SandboxMeta).where(
+                        SandboxMeta.gateway_name == gateway_name,
+                        SandboxMeta.sandbox_name == sandbox_name,
+                    )
                 )
-                .first()
-            )
+            ).scalar_one_or_none()
             now = datetime.now(UTC)
             if meta is None:
                 meta = SandboxMeta(
@@ -82,10 +83,10 @@ class SandboxMetaStore:
                 if labels is not _UNSET:
                     meta.labels_json = json.dumps(labels) if labels else None
                 meta.updated_at = now
-            session.commit()
+            await session.commit()
             return self._to_dict(meta)
 
-    def get(self, gateway_name: str, sandbox_name: str) -> dict[str, Any] | None:
+    async def get(self, gateway_name: str, sandbox_name: str) -> dict[str, Any] | None:
         """Return metadata for a sandbox, or None if not stored.
 
         Args:
@@ -95,20 +96,20 @@ class SandboxMetaStore:
         Returns:
             dict[str, Any] | None: Metadata dict or None.
         """
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             meta = (
-                session.query(SandboxMeta)
-                .filter(
-                    SandboxMeta.gateway_name == gateway_name,
-                    SandboxMeta.sandbox_name == sandbox_name,
+                await session.execute(
+                    select(SandboxMeta).where(
+                        SandboxMeta.gateway_name == gateway_name,
+                        SandboxMeta.sandbox_name == sandbox_name,
+                    )
                 )
-                .first()
-            )
+            ).scalar_one_or_none()
             if meta is None:
                 return None
             return self._to_dict(meta)
 
-    def delete(self, gateway_name: str, sandbox_name: str) -> bool:
+    async def delete(self, gateway_name: str, sandbox_name: str) -> bool:
         """Delete metadata for a sandbox.
 
         Args:
@@ -118,19 +119,19 @@ class SandboxMetaStore:
         Returns:
             bool: True if a row was deleted.
         """
-        with self._session_factory() as session:
+        async with self._session_factory() as session:
             count = (
-                session.query(SandboxMeta)
-                .filter(
-                    SandboxMeta.gateway_name == gateway_name,
-                    SandboxMeta.sandbox_name == sandbox_name,
+                await session.execute(
+                    delete(SandboxMeta).where(
+                        SandboxMeta.gateway_name == gateway_name,
+                        SandboxMeta.sandbox_name == sandbox_name,
+                    )
                 )
-                .delete()
-            )
-            session.commit()
+            ).rowcount  # type: ignore[attr-defined]
+            await session.commit()
             return count > 0
 
-    def list_for_gateway(self, gateway_name: str) -> dict[str, dict[str, Any]]:
+    async def list_for_gateway(self, gateway_name: str) -> dict[str, dict[str, Any]]:
         """Return all metadata for sandboxes on a gateway.
 
         Args:
@@ -139,8 +140,16 @@ class SandboxMetaStore:
         Returns:
             dict[str, dict[str, Any]]: Mapping of sandbox_name to metadata.
         """
-        with self._session_factory() as session:
-            rows = session.query(SandboxMeta).filter(SandboxMeta.gateway_name == gateway_name).all()
+        async with self._session_factory() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(SandboxMeta).where(SandboxMeta.gateway_name == gateway_name)
+                    )
+                )
+                .scalars()
+                .all()
+            )
             return {row.sandbox_name: self._to_dict(row) for row in rows}
 
     @staticmethod

@@ -211,7 +211,7 @@ class GatewayService:
         Returns:
             ShoreGuardClient | None: Connected client, or None on failure.
         """
-        creds = await asyncio.to_thread(self._registry.get_credentials, name)
+        creds = await self._registry.get_credentials(name)
         if creds is not None:
             return await self._try_connect_from_registry(name, creds)
         return await self._try_connect_from_config(name)
@@ -365,19 +365,17 @@ class GatewayService:
             dict[str, Any]: Gateway record with connection status.
         """
         logger.info("Registering gateway '%s' (endpoint=%s)", name, endpoint)
-        record = await asyncio.to_thread(
-            lambda: self._registry.register(
-                name,
-                endpoint,
-                scheme,
-                auth_mode,
-                ca_cert=ca_cert,
-                client_cert=client_cert,
-                client_key=client_key,
-                metadata=metadata,
-                description=description,
-                labels=labels,
-            )
+        record = await self._registry.register(
+            name,
+            endpoint,
+            scheme,
+            auth_mode,
+            ca_cert=ca_cert,
+            client_cert=client_cert,
+            client_key=client_key,
+            metadata=metadata,
+            description=description,
+            labels=labels,
         )
 
         # Attempt connection to validate
@@ -404,7 +402,7 @@ class GatewayService:
         """
         logger.info("Unregistering gateway '%s'", name)
         self.set_client(None, name=name)
-        return await asyncio.to_thread(self._registry.unregister, name)
+        return await self._registry.unregister(name)
 
     async def test_connection(self, name: str) -> dict[str, Any]:
         """Explicitly test connectivity to a registered gateway.
@@ -418,7 +416,7 @@ class GatewayService:
         Raises:
             NotFoundError: If the gateway is not registered.
         """
-        record = await asyncio.to_thread(self._registry.get, name)
+        record = await self._registry.get(name)
         if record is None:
             raise NotFoundError(f"Gateway '{name}' not registered")
 
@@ -462,9 +460,7 @@ class GatewayService:
             kwargs["description"] = description
         if labels is not _UNSET:
             kwargs["labels"] = labels
-        result = await asyncio.to_thread(
-            lambda: self._registry.update_gateway_metadata(name, **kwargs)
-        )
+        result = await self._registry.update_gateway_metadata(name, **kwargs)
         if result is None:
             raise NotFoundError(f"Gateway '{name}' not found")
         return result
@@ -485,9 +481,7 @@ class GatewayService:
         Returns:
             list[dict[str, Any]]: Gateway records with connection status.
         """
-        gateways = await asyncio.to_thread(
-            lambda: self._registry.list_all(labels_filter=labels_filter)
-        )
+        gateways = await self._registry.list_all(labels_filter=labels_filter)
 
         for gw in gateways:
             cached = self._clients.get(gw["name"])
@@ -506,7 +500,7 @@ class GatewayService:
         Returns:
             dict[str, Any]: Detailed gateway information.
         """
-        record = await asyncio.to_thread(self._registry.get, name)
+        record = await self._registry.get(name)
         if record is None:
             return {"configured": False, "error": f"Gateway '{name}' not registered"}
 
@@ -570,7 +564,7 @@ class GatewayService:
         """Probe all registered gateways concurrently and persist their health."""
         from datetime import UTC, datetime
 
-        gateways = await asyncio.to_thread(self._registry.list_all)
+        gateways = await self._registry.list_all()
         if not gateways:
             return
         logger.debug("Starting health check for %d gateway(s)", len(gateways))
@@ -584,9 +578,7 @@ class GatewayService:
                 logger.debug("Health probe failed for '%s': %s", name, e)
                 status = "unreachable"
             try:
-                await asyncio.to_thread(
-                    self._registry.update_health, name, status, datetime.now(UTC)
-                )
+                await self._registry.update_health(name, status, datetime.now(UTC))
             except Exception:
                 logger.warning("Failed to update health for '%s'", name, exc_info=True)
 

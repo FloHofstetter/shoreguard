@@ -83,9 +83,9 @@ def audit_export(
         typer.Exit: If ``fmt`` is not one of the supported formats.
     """
     # Lazy imports so `shoreguard audit --help` doesn't boot the DB.
-    from sqlalchemy.orm import sessionmaker
+    import asyncio
 
-    from shoreguard.db import get_engine, init_db
+    from shoreguard.db import get_async_session_factory, get_engine, init_async_db, init_db
     from shoreguard.services.audit import AuditService
 
     if fmt not in {"json", "csv"}:
@@ -97,23 +97,25 @@ def audit_export(
     except RuntimeError:
         engine = init_db()
 
-    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
-    svc = AuditService(session_factory)
+    init_async_db(str(engine.url))
+    svc = AuditService(get_async_session_factory())
 
-    if fmt == "json":
-        data = svc.export_json(
+    async def _export() -> str:
+        if fmt == "json":
+            return await svc.export_json(
+                actor=actor,
+                action=action,
+                since=since,
+                until=until,
+            )
+        return await svc.export_csv(
             actor=actor,
             action=action,
             since=since,
             until=until,
         )
-    else:
-        data = svc.export_csv(
-            actor=actor,
-            action=action,
-            since=since,
-            until=until,
-        )
+
+    data = asyncio.run(_export())
 
     out = out.expanduser().resolve()
     out.parent.mkdir(parents=True, exist_ok=True)

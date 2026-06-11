@@ -5,8 +5,8 @@ from __future__ import annotations
 import datetime
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from shoreguard.models import Base
@@ -23,17 +23,18 @@ DECISIONS_URL = f"/api/gateways/{GW}/sandboxes/{SB}/approvals/{CHUNK}/decisions"
 
 
 @pytest.fixture
-def wf_svc():
-    engine = create_engine(
-        "sqlite:///:memory:",
+async def wf_svc():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
     svc = ApprovalWorkflowService(factory)
     yield svc
-    engine.dispose()
+    await engine.dispose()
 
 
 def _mock_approve(mock_client):
@@ -52,8 +53,8 @@ def _mock_reject(mock_client):
 
 
 class TestWorkflowCRUD:
-    def test_upsert_creates(self, wf_svc):
-        wf = wf_svc.upsert_workflow(
+    async def test_upsert_creates(self, wf_svc):
+        wf = await wf_svc.upsert_workflow(
             GW,
             SB,
             required_approvals=2,
@@ -66,8 +67,8 @@ class TestWorkflowCRUD:
         assert wf["distinct_actors"] is True
         assert wf["required_roles"] == []
 
-    def test_upsert_replaces(self, wf_svc):
-        wf_svc.upsert_workflow(
+    async def test_upsert_replaces(self, wf_svc):
+        await wf_svc.upsert_workflow(
             GW,
             SB,
             required_approvals=2,
@@ -76,7 +77,7 @@ class TestWorkflowCRUD:
             escalation_timeout_minutes=None,
             actor="admin",
         )
-        wf = wf_svc.upsert_workflow(
+        wf = await wf_svc.upsert_workflow(
             GW,
             SB,
             required_approvals=3,
@@ -90,9 +91,9 @@ class TestWorkflowCRUD:
         assert wf["distinct_actors"] is False
         assert wf["escalation_timeout_minutes"] == 15
 
-    def test_upsert_rejects_zero(self, wf_svc):
+    async def test_upsert_rejects_zero(self, wf_svc):
         with pytest.raises(ValueError):
-            wf_svc.upsert_workflow(
+            await wf_svc.upsert_workflow(
                 GW,
                 SB,
                 required_approvals=0,
@@ -102,11 +103,11 @@ class TestWorkflowCRUD:
                 actor="admin",
             )
 
-    def test_get_none(self, wf_svc):
-        assert wf_svc.get_workflow(GW, SB) is None
+    async def test_get_none(self, wf_svc):
+        assert await wf_svc.get_workflow(GW, SB) is None
 
-    def test_delete_existing(self, wf_svc):
-        wf_svc.upsert_workflow(
+    async def test_delete_existing(self, wf_svc):
+        await wf_svc.upsert_workflow(
             GW,
             SB,
             required_approvals=2,
@@ -115,24 +116,24 @@ class TestWorkflowCRUD:
             escalation_timeout_minutes=None,
             actor="admin",
         )
-        assert wf_svc.delete_workflow(GW, SB) is True
-        assert wf_svc.get_workflow(GW, SB) is None
+        assert await wf_svc.delete_workflow(GW, SB) is True
+        assert await wf_svc.get_workflow(GW, SB) is None
 
-    def test_delete_nonexistent(self, wf_svc):
-        assert wf_svc.delete_workflow(GW, SB) is False
+    async def test_delete_nonexistent(self, wf_svc):
+        assert await wf_svc.delete_workflow(GW, SB) is False
 
 
 # ─── Service: Voting ────────────────────────────────────────────────
 
 
-def _make_workflow(
+async def _make_workflow(
     svc: ApprovalWorkflowService,
     required: int = 2,
     roles: list[str] | None = None,
     distinct: bool = True,
     escalate: int | None = None,
 ) -> None:
-    svc.upsert_workflow(
+    await svc.upsert_workflow(
         GW,
         SB,
         required_approvals=required,
@@ -144,9 +145,9 @@ def _make_workflow(
 
 
 class TestRecordDecision:
-    def test_first_vote_pending(self, wf_svc):
-        _make_workflow(wf_svc, required=2)
-        result = wf_svc.record_decision(
+    async def test_first_vote_pending(self, wf_svc):
+        await _make_workflow(wf_svc, required=2)
+        result = await wf_svc.record_decision(
             GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
         )
         assert result.quorum_met is False
@@ -154,96 +155,114 @@ class TestRecordDecision:
         assert len(result.decisions) == 1
         assert result.votes_needed == 2
 
-    def test_second_vote_meets_quorum(self, wf_svc):
-        _make_workflow(wf_svc, required=2)
-        wf_svc.record_decision(GW, SB, CHUNK, actor="alice", role="operator", decision="approve")
-        result = wf_svc.record_decision(
+    async def test_second_vote_meets_quorum(self, wf_svc):
+        await _make_workflow(wf_svc, required=2)
+        await wf_svc.record_decision(
+            GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
+        )
+        result = await wf_svc.record_decision(
             GW, SB, CHUNK, actor="bob", role="operator", decision="approve"
         )
         assert result.quorum_met is True
         assert result.reject_seen is False
         # Rows cleared after terminal state
-        assert wf_svc.list_decisions(GW, SB, CHUNK) == []
+        assert await wf_svc.list_decisions(GW, SB, CHUNK) == []
 
-    def test_single_reject_kills(self, wf_svc):
-        _make_workflow(wf_svc, required=3)
-        wf_svc.record_decision(GW, SB, CHUNK, actor="alice", role="operator", decision="approve")
-        result = wf_svc.record_decision(
+    async def test_single_reject_kills(self, wf_svc):
+        await _make_workflow(wf_svc, required=3)
+        await wf_svc.record_decision(
+            GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
+        )
+        result = await wf_svc.record_decision(
             GW, SB, CHUNK, actor="bob", role="operator", decision="reject"
         )
         assert result.reject_seen is True
         assert result.quorum_met is False
-        assert wf_svc.list_decisions(GW, SB, CHUNK) == []
+        assert await wf_svc.list_decisions(GW, SB, CHUNK) == []
 
-    def test_distinct_actors_rejects_duplicate(self, wf_svc):
-        _make_workflow(wf_svc, required=2, distinct=True)
-        wf_svc.record_decision(GW, SB, CHUNK, actor="alice", role="operator", decision="approve")
+    async def test_distinct_actors_rejects_duplicate(self, wf_svc):
+        await _make_workflow(wf_svc, required=2, distinct=True)
+        await wf_svc.record_decision(
+            GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
+        )
         with pytest.raises(ValueError, match="already voted"):
-            wf_svc.record_decision(
+            await wf_svc.record_decision(
                 GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
             )
 
-    def test_non_distinct_allows_same_actor(self, wf_svc):
-        _make_workflow(wf_svc, required=2, distinct=False)
-        wf_svc.record_decision(GW, SB, CHUNK, actor="alice", role="operator", decision="approve")
-        result = wf_svc.record_decision(
+    async def test_non_distinct_allows_same_actor(self, wf_svc):
+        await _make_workflow(wf_svc, required=2, distinct=False)
+        await wf_svc.record_decision(
+            GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
+        )
+        result = await wf_svc.record_decision(
             GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
         )
         assert result.quorum_met is True
 
-    def test_role_whitelist_enforced(self, wf_svc):
-        _make_workflow(wf_svc, required=2, roles=["admin"])
+    async def test_role_whitelist_enforced(self, wf_svc):
+        await _make_workflow(wf_svc, required=2, roles=["admin"])
         with pytest.raises(PermissionError):
-            wf_svc.record_decision(
+            await wf_svc.record_decision(
                 GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
             )
 
-    def test_role_whitelist_allows_listed(self, wf_svc):
-        _make_workflow(wf_svc, required=1, roles=["admin"])
-        result = wf_svc.record_decision(
+    async def test_role_whitelist_allows_listed(self, wf_svc):
+        await _make_workflow(wf_svc, required=1, roles=["admin"])
+        result = await wf_svc.record_decision(
             GW, SB, CHUNK, actor="alice", role="admin", decision="approve"
         )
         assert result.quorum_met is True
 
-    def test_invalid_decision_rejected(self, wf_svc):
-        _make_workflow(wf_svc, required=2)
+    async def test_invalid_decision_rejected(self, wf_svc):
+        await _make_workflow(wf_svc, required=2)
         with pytest.raises(ValueError):
-            wf_svc.record_decision(GW, SB, CHUNK, actor="alice", role="operator", decision="maybe")
+            await wf_svc.record_decision(
+                GW, SB, CHUNK, actor="alice", role="operator", decision="maybe"
+            )
 
-    def test_record_without_workflow_fails(self, wf_svc):
+    async def test_record_without_workflow_fails(self, wf_svc):
         with pytest.raises(LookupError):
-            wf_svc.record_decision(
+            await wf_svc.record_decision(
                 GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
             )
 
-    def test_list_decisions_empty(self, wf_svc):
-        _make_workflow(wf_svc, required=2)
-        assert wf_svc.list_decisions(GW, SB, CHUNK) == []
+    async def test_list_decisions_empty(self, wf_svc):
+        await _make_workflow(wf_svc, required=2)
+        assert await wf_svc.list_decisions(GW, SB, CHUNK) == []
 
-    def test_list_decisions_sorted(self, wf_svc):
-        _make_workflow(wf_svc, required=5)
-        wf_svc.record_decision(GW, SB, CHUNK, actor="alice", role="operator", decision="approve")
-        wf_svc.record_decision(GW, SB, CHUNK, actor="bob", role="operator", decision="approve")
-        listed = wf_svc.list_decisions(GW, SB, CHUNK)
+    async def test_list_decisions_sorted(self, wf_svc):
+        await _make_workflow(wf_svc, required=5)
+        await wf_svc.record_decision(
+            GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
+        )
+        await wf_svc.record_decision(
+            GW, SB, CHUNK, actor="bob", role="operator", decision="approve"
+        )
+        listed = await wf_svc.list_decisions(GW, SB, CHUNK)
         assert [d["actor"] for d in listed] == ["alice", "bob"]
 
-    def test_has_pending_false_after_clear(self, wf_svc):
-        _make_workflow(wf_svc, required=1)
-        wf_svc.record_decision(GW, SB, CHUNK, actor="alice", role="operator", decision="approve")
+    async def test_has_pending_false_after_clear(self, wf_svc):
+        await _make_workflow(wf_svc, required=1)
+        await wf_svc.record_decision(
+            GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
+        )
         # quorum met → rows cleared
-        assert wf_svc.has_pending(GW, SB) is False
+        assert await wf_svc.has_pending(GW, SB) is False
 
-    def test_has_pending_true_mid_flight(self, wf_svc):
-        _make_workflow(wf_svc, required=3)
-        wf_svc.record_decision(GW, SB, CHUNK, actor="alice", role="operator", decision="approve")
-        assert wf_svc.has_pending(GW, SB) is True
+    async def test_has_pending_true_mid_flight(self, wf_svc):
+        await _make_workflow(wf_svc, required=3)
+        await wf_svc.record_decision(
+            GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
+        )
+        assert await wf_svc.has_pending(GW, SB) is True
 
 
 class TestCheckQuorum:
-    def test_no_decisions(self):
+    async def test_no_decisions(self):
         assert ApprovalWorkflowService.check_quorum({"required_approvals": 2}, []) is False
 
-    def test_exact(self):
+    async def test_exact(self):
         assert (
             ApprovalWorkflowService.check_quorum(
                 {"required_approvals": 2},
@@ -255,7 +274,7 @@ class TestCheckQuorum:
             is True
         )
 
-    def test_reject_blocks(self):
+    async def test_reject_blocks(self):
         assert (
             ApprovalWorkflowService.check_quorum(
                 {"required_approvals": 1},
@@ -264,7 +283,7 @@ class TestCheckQuorum:
             is False
         )
 
-    def test_more_than_enough(self):
+    async def test_more_than_enough(self):
         assert (
             ApprovalWorkflowService.check_quorum(
                 {"required_approvals": 2},
@@ -279,26 +298,32 @@ class TestCheckQuorum:
 
 
 class TestEscalation:
-    def test_escalation_triggers_after_timeout(self, wf_svc):
-        _make_workflow(wf_svc, required=3, escalate=1)
-        wf_svc.record_decision(GW, SB, CHUNK, actor="alice", role="operator", decision="approve")
+    async def test_escalation_triggers_after_timeout(self, wf_svc):
+        await _make_workflow(wf_svc, required=3, escalate=1)
+        await wf_svc.record_decision(
+            GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
+        )
 
         # Backdate the first decision by 2 minutes
         from shoreguard.models import ApprovalDecision
 
-        with wf_svc._session_factory() as session:
-            row = session.query(ApprovalDecision).filter_by(chunk_id=CHUNK, actor="alice").one()
+        async with wf_svc._session_factory() as session:
+            row = (
+                await session.execute(
+                    select(ApprovalDecision).filter_by(chunk_id=CHUNK, actor="alice")
+                )
+            ).scalar_one()
             row.created_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=2)
-            session.commit()
+            await session.commit()
 
-        result = wf_svc.record_decision(
+        result = await wf_svc.record_decision(
             GW, SB, CHUNK, actor="bob", role="operator", decision="approve"
         )
         assert result.escalated is True
 
-    def test_no_escalation_without_timeout(self, wf_svc):
-        _make_workflow(wf_svc, required=3, escalate=None)
-        result = wf_svc.record_decision(
+    async def test_no_escalation_without_timeout(self, wf_svc):
+        await _make_workflow(wf_svc, required=3, escalate=None)
+        result = await wf_svc.record_decision(
             GW, SB, CHUNK, actor="alice", role="operator", decision="approve"
         )
         assert result.escalated is False
