@@ -96,4 +96,16 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
                 run=_cert_rotation,
             )
         )
+    if settings.digest.enabled:
+
+        async def _daily_digest() -> None:
+            await container.digest.dispatch_if_due(hour=settings.digest.hour, audit=container.audit)
+
+        tasks.append(
+            PeriodicTask(
+                name="daily_digest",
+                interval=settings.digest.check_interval,
+                run=_daily_digest,
+            )
+        )
     return tasks

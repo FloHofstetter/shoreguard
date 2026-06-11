@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from shoreguard.services.bypass import BypassService
     from shoreguard.services.cert_rotation import CertRotationService
     from shoreguard.services.denial_context import DenialContextService
+    from shoreguard.services.digest import DigestService
     from shoreguard.services.discovery import DiscoveryService
     from shoreguard.services.drift_detection import DriftDetectionService
     from shoreguard.services.gateway import GatewayService
@@ -65,6 +66,7 @@ class ServiceContainer:
         drift_detection: Policy drift detection.
         cert_rotation: Proactive client-cert rotation.
         kill_switch: Reversible per-gateway provider kill switch.
+        digest: Daily activity digest builder/dispatcher.
         denial_context: Denial context cache.
         local_gateway: Local gateway manager, or ``None`` outside local mode.
     """
@@ -87,6 +89,7 @@ class ServiceContainer:
     drift_detection: DriftDetectionService
     cert_rotation: CertRotationService
     kill_switch: KillSwitchService
+    digest: DigestService
     denial_context: DenialContextService
     local_gateway: LocalGatewayManager | None = None
 
@@ -115,6 +118,7 @@ def build_container(
     from shoreguard.services.bypass import BypassService
     from shoreguard.services.cert_rotation import CertRotationService
     from shoreguard.services.denial_context import DenialContextService
+    from shoreguard.services.digest import DigestService
     from shoreguard.services.discovery import DiscoveryService
     from shoreguard.services.drift_detection import DriftDetectionService
     from shoreguard.services.gateway import GatewayService
@@ -173,6 +177,7 @@ def build_container(
             max_retries=settings.cert_rotation.max_retries,
         ),
         kill_switch=KillSwitchService(async_session_factory, gateway),
+        digest=DigestService(async_session_factory, registry),
         denial_context=DenialContextService(),
         local_gateway=(LocalGatewayManager(gateway) if settings.server.local_mode else None),
     )

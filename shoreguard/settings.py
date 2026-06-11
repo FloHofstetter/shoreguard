@@ -707,6 +707,37 @@ class BackgroundSettings(BaseSettings):
     )
 
 
+class DigestSettings(BaseSettings):
+    """Daily activity digest ("what did my agents do while I slept?").
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Dispatch a daily ``digest.daily`` webhook event.
+        hour (int): Local hour of day (0-23) after which the digest is sent.
+        check_interval (int): Seconds between is-it-due checks by the
+            background task.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_DIGEST_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Dispatch a daily digest.daily webhook event summarising "
+        "the last 24h (audit activity, sandbox churn, approvals, gateway "
+        "health, webhook failures)",
+    )
+    hour: int = Field(
+        default=7,
+        ge=0,
+        le=23,
+        description="Local hour of day after which the daily digest is sent",
+    )
+    check_interval: int = Field(
+        default=600,
+        description="Seconds between digest due-checks by the background task",
+    )
+
+
 class CertRotationSettings(BaseSettings):
     """Proactive mTLS client-cert rotation settings.
 
@@ -1097,6 +1128,7 @@ class Settings(BaseSettings):
         drift_detection (DriftDetectionSettings): Background policy drift detection.
         tracing (TracingSettings): OpenTelemetry trace context propagation.
         cert_rotation (CertRotationSettings): Proactive mTLS cert rotation.
+        digest (DigestSettings): Daily activity digest dispatch.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -1118,6 +1150,7 @@ class Settings(BaseSettings):
     drift_detection: DriftDetectionSettings = Field(default_factory=DriftDetectionSettings)
     tracing: TracingSettings = Field(default_factory=TracingSettings)
     cert_rotation: CertRotationSettings = Field(default_factory=CertRotationSettings)
+    digest: DigestSettings = Field(default_factory=DigestSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

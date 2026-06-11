@@ -235,6 +235,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         audit,
         boot_hooks,
         bypass,
+        digest,
         gateway,
         health,
         inference,
@@ -358,6 +359,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         prefix="/api/security",
         tags=["security"],
         dependencies=[Depends(require_auth), Depends(require_role("admin"))],
+    )
+    app.include_router(
+        digest.router,
+        prefix="/api/digest",
+        tags=["digest"],
+        dependencies=[Depends(require_auth)],
     )
     app.include_router(
         templates.router,

@@ -149,6 +149,7 @@ Subscribe to specific events or use `*` for all:
 | `approval.pending` | A new approval request arrived |
 | `approval.approved` | An approval was accepted |
 | `approval.rejected` | An approval was rejected |
+| `digest.daily` | Daily activity digest (when `SHOREGUARD_DIGEST_ENABLED=true`) |
 | `webhook.test` | Manual test event |
 
 ---

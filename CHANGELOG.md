@@ -12,6 +12,14 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Daily digest** ("what did my agents do while I slept?") — `GET
+  /api/digest` aggregates the trailing window (audit activity by action,
+  sandbox churn, approvals, gateway health, webhook failures, engaged
+  kill switches) and renders as a dashboard card; with
+  `SHOREGUARD_DIGEST_ENABLED=true` a `digest.daily` webhook event is
+  pushed once a day after `SHOREGUARD_DIGEST_HOUR` (local time) — the
+  morning report on your phone, sized for always-on overnight agent
+  boxes.
 - **Gateway kill switch** — reversible "big red button"
   (`POST`/`DELETE /api/gateway/{name}/kill-switch`, card on the gateway
   detail page): detaches every sandbox's providers so agents instantly

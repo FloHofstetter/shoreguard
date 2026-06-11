@@ -22,6 +22,86 @@ interface AuditEntry {
   timestamp?: string;
 }
 
+interface Digest {
+  window_hours: number;
+  message: string;
+  audit: { total: number; by_action: Record<string, number>; forbidden: number };
+  sandboxes: { created: number; deleted: number };
+  approvals: { approved: number; rejected: number; votes: number };
+  gateways: { total: number; unreachable: string[] };
+  webhook_failures: number;
+  kill_switch_engaged: string[];
+}
+
+function DigestCard() {
+  const [digest, setDigest] = useState<Digest | null>(null);
+
+  useEffect(() => {
+    apiFetch<Digest>(`/api/digest`)
+      .then(setDigest)
+      .catch(() => setDigest(null));
+  }, []);
+
+  if (!digest) return null;
+  const hasWarnings =
+    digest.gateways.unreachable.length > 0 ||
+    digest.kill_switch_engaged.length > 0 ||
+    digest.webhook_failures > 0 ||
+    digest.audit.forbidden > 0;
+
+  return (
+    <div class={`card sg-card-themed mb-4 ${hasWarnings ? "border-warning" : ""}`}>
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="mb-0">
+            <i class="bi bi-sunrise me-2" />
+            Last {digest.window_hours}h
+          </h6>
+          {hasWarnings && (
+            <span class="badge text-bg-warning">
+              <i class="bi bi-exclamation-triangle me-1" />
+              needs attention
+            </span>
+          )}
+        </div>
+        <div class="mb-2">{digest.message}</div>
+        <div class="d-flex flex-wrap gap-3 small text-muted">
+          <span>
+            <i class="bi bi-journal-text me-1" />
+            {digest.audit.total} audit events
+          </span>
+          <span>
+            <i class="bi bi-grid me-1" />+{digest.sandboxes.created}/−{digest.sandboxes.deleted}{" "}
+            sandboxes
+          </span>
+          <span>
+            <i class="bi bi-check-circle me-1" />
+            {digest.approvals.approved} approved, {digest.approvals.rejected} rejected
+          </span>
+          {digest.webhook_failures > 0 && (
+            <span class="text-warning">
+              <i class="bi bi-broadcast me-1" />
+              {digest.webhook_failures} webhook failures
+            </span>
+          )}
+          {digest.gateways.unreachable.map((name) => (
+            <a key={name} href={`/gateways/${name}`} class="text-danger text-decoration-none">
+              <i class="bi bi-exclamation-octagon me-1" />
+              {name} unreachable
+            </a>
+          ))}
+          {digest.kill_switch_engaged.map((name) => (
+            <a key={name} href={`/gateways/${name}`} class="text-danger text-decoration-none">
+              <i class="bi bi-sign-stop me-1" />
+              kill switch on {name}
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -137,6 +217,8 @@ export default function DashboardPage() {
           </a>
         </div>
       </div>
+
+      <DigestCard />
 
       <div class="row g-3 mb-4">
         {isAdmin && (

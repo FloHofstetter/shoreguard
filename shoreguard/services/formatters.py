@@ -33,6 +33,7 @@ _EVENT_LABELS: dict[str, str] = {
     "kill_switch.released": "Kill Switch Released",
     "inference.updated": "Inference Updated",
     "policy.updated": "Policy Updated",
+    "digest.daily": "Daily Digest",
     "webhook.test": "Test Event",
 }
 
