@@ -12,6 +12,11 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Tailscale-first remote access** — new operations guide for
+  `tailscale serve` in front of a loopback bind; opt-in authentication via
+  Tailscale Serve identity headers (`SHOREGUARD_TAILSCALE_IDENTITY`,
+  loopback-only, login must match a user email); "Open on phone" QR button
+  in the topbar.
 - **Security Check page** (Admin → Security Check, `GET
   /api/security/posture`) — a deployment posture self-audit: auth mode vs.
   bind address, unsafe-LAN overrides, secret-key hygiene, open

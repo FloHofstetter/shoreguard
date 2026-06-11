@@ -249,6 +249,8 @@ class AuthSettings(BaseSettings):
         no_auth (bool): Disable authentication entirely (development only).
         single_user (bool): Single-user mode — one admin account synced from
             SHOREGUARD_ADMIN_PASSWORD on every startup.
+        tailscale_identity (bool): Trust Tailscale Serve identity headers from
+            a loopback proxy as authentication (login must match a user email).
         secret_key (str | None): HMAC secret for sessions and signed cookies. Unset falls back
             to on-disk .secret_key — set explicitly for multi-replica.
         allow_registration (bool): Allow unauthenticated self-signup via /register.
@@ -292,6 +294,14 @@ class AuthSettings(BaseSettings):
         description="Single-user mode: one admin account whose password is "
         "SHOREGUARD_ADMIN_PASSWORD, kept in sync on every startup. The "
         "homelab middle ground between --no-auth and full RBAC.",
+    )
+    tailscale_identity: bool = Field(
+        default=False,
+        description="Trust Tailscale Serve identity headers "
+        "(Tailscale-User-Login) from a loopback proxy as authentication. "
+        "The login must match an existing user's email. Only honoured for "
+        "connections from 127.0.0.1/::1 — i.e. `tailscale serve` in front "
+        "of a loopback-bound ShoreGuard.",
     )
     secret_key: str | None = Field(
         default=None,

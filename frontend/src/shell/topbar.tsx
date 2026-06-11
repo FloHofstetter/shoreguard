@@ -1,11 +1,13 @@
 /** Topbar widgets: gateway switcher dot/dropdown and the auth area. */
 
 import { useEffect, useRef, useState } from "preact/hooks";
+import { renderSVG } from "uqr";
 
 import { apiFetch } from "../lib/api";
 import { auth, logout } from "../lib/auth";
 import { GW } from "../lib/constants";
 import { health } from "../lib/health";
+import { Modal } from "../lib/Modal";
 
 interface GatewayItem {
   name: string;
@@ -108,6 +110,49 @@ export function GatewaySwitcher() {
   );
 }
 
+function PhoneAccessButton() {
+  const [open, setOpen] = useState(false);
+  const url = window.location.href;
+  return (
+    <>
+      <button
+        class="btn btn-sm btn-outline-secondary ms-2"
+        title="Open on phone"
+        aria-label="Open on phone"
+        onClick={() => setOpen(true)}
+      >
+        <i class="bi bi-qr-code" />
+      </button>
+      {open && (
+        <Modal
+          onClose={() => setOpen(false)}
+          title={
+            <span>
+              <i class="bi bi-phone me-2" />
+              Open on phone
+            </span>
+          }
+        >
+          <div class="text-center">
+            <div
+              class="bg-white d-inline-block p-2 rounded"
+              style={{ width: "220px" }}
+              // Self-generated SVG (uqr) from the current location — no
+              // external content reaches this sink.
+              dangerouslySetInnerHTML={{ __html: renderSVG(url) }}
+            />
+            <div class="small text-muted font-monospace mt-2">{url}</div>
+            <div class="small text-muted mt-2">
+              Your phone must reach this address — same network, or better: a
+              tailnet (<code>tailscale serve</code> in front of a loopback bind).
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 export function AuthArea() {
   const a = auth.value;
   if (!a.authenticated) return null;
@@ -115,6 +160,7 @@ export function AuthArea() {
     <span class="d-flex align-items-center">
       {a.email && <span class="text-muted small ms-2">{a.email}</span>}
       <span class="badge bg-secondary ms-2">{a.role}</span>
+      <PhoneAccessButton />
       <button
         class="btn btn-sm btn-outline-secondary ms-2"
         title="Log out"

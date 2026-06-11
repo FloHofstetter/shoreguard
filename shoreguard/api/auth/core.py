@@ -423,6 +423,32 @@ async def _lookup_user(user_id: int) -> dict | None:
         return {"id": user.id, "email": user.email, "role": user.role}
 
 
+async def _lookup_user_by_email(email: str) -> dict | None:
+    """Return ``{id, email, role}`` for an active user by email, else None.
+
+    Args:
+        email: User email address (matched case-insensitively).
+
+    Returns:
+        dict | None: User info dict or ``None``.
+    """
+    if state.session_factory is None:
+        return None
+    from sqlalchemy import select
+
+    from shoreguard.models import User
+
+    async with state.session_factory() as session:
+        user = (
+            (await session.execute(select(User).where(User.email == email.strip().lower())))
+            .scalars()
+            .first()
+        )
+        if user is None or not user.is_active:
+            return None
+        return {"id": user.id, "email": user.email, "role": user.role}
+
+
 async def _lookup_sp_identity(key: str) -> dict | None:
     """Look up a service principal by Bearer token. Returns ``{name, role}`` or None.
 
@@ -532,5 +558,26 @@ async def check_request_auth(request: Request) -> str | None:
                 )
                 return user_info["role"]
             logger.warning("Session for inactive/deleted user_id=%d", user_id)
+
+    # 3. Tailscale Serve identity header → user (opt-in). Only honoured for
+    # loopback connections: `tailscale serve` proxies via the local
+    # tailscaled, so a legitimate header can only arrive from 127.0.0.1 —
+    # from anywhere else it could be forged by a network peer.
+    if _get_auth_settings().tailscale_identity:
+        login = request.headers.get("tailscale-user-login")
+        client_host = request.client.host if request.client else ""
+        if login and client_host in ("127.0.0.1", "::1"):
+            user_info = await _lookup_user_by_email(login)
+            if user_info:
+                request.state.user_id = user_info["email"]
+                request.state.user_db_id = user_info["id"]
+                logger.debug(
+                    "Auth via Tailscale identity (path=%s, role=%s, user=%s)",
+                    request.url.path,
+                    user_info["role"],
+                    user_info["email"],
+                )
+                return user_info["role"]
+            logger.debug("Tailscale identity %r has no matching active user", login)
 
     return None

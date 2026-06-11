@@ -115,4 +115,6 @@ tailscale serve --bg 8888
 
 ShoreGuard stays bound to loopback; Tailscale terminates TLS and makes the
 UI reachable from every device in your tailnet (including your phone)
-under the machine's tailnet name.
+under the machine's tailnet name. See [Tailscale access](tailscale.md) for
+the full recipe, including automatic login via tailnet identity headers
+(`SHOREGUARD_TAILSCALE_IDENTITY`) and the topbar QR button for phones.
