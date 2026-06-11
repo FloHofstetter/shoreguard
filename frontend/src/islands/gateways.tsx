@@ -59,6 +59,7 @@ export default function GatewaysPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [filterLabel, setFilterLabel] = useState("");
   const [discoverResult, setDiscoverResult] = useState<DiscoverResult | null>(null);
+  const [importLog, setImportLog] = useState<string[] | null>(null);
   const table = useSortableTable<GatewayRow>("name");
   const debounceRef = useRef<number | undefined>(undefined);
 
@@ -113,6 +114,23 @@ export default function GatewaysPage() {
     }
   };
 
+  const importFilesystem = async () => {
+    try {
+      const result = await apiFetch<{ imported: number; skipped: number; log: string[] }>(
+        `/api/gateway/import-filesystem`,
+        { method: "POST" },
+      );
+      setImportLog(result.log.length ? result.log : ["Nothing found on this machine."]);
+      showToast(
+        `Scan: ${result.imported} imported, ${result.skipped} skipped`,
+        result.imported > 0 ? "success" : "info",
+      );
+      await load();
+    } catch (e) {
+      showToast(`Scan failed: ${(e as Error).message}`, "danger");
+    }
+  };
+
   const unregister = async (name: string) => {
     const confirmed = await showConfirm(
       `Unregister gateway "${name}"? This removes it from Shoreguard but does not affect the running gateway.`,
@@ -153,11 +171,21 @@ export default function GatewaysPage() {
           {isAdmin && (
             <button
               class="btn btn-outline-primary"
-              title="Run DNS-SRV discovery"
+              title="Run DNS-SRV / mDNS discovery"
               onClick={() => void discover()}
             >
               <i class="bi bi-broadcast me-1" />
               Discover
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              class="btn btn-outline-primary"
+              title="Scan this machine's OpenShell config (incl. NemoClaw gateways)"
+              onClick={() => void importFilesystem()}
+            >
+              <i class="bi bi-pc-display me-1" />
+              Scan this machine
             </button>
           )}
           {isAdmin && (
@@ -179,6 +207,15 @@ export default function GatewaysPage() {
         </div>
       )}
 
+      {importLog && (
+        <div class="alert alert-info py-2 small mb-2">
+          <button type="button" class="btn-close float-end" onClick={() => setImportLog(null)} />
+          <i class="bi bi-pc-display me-1" />
+          <strong>Machine scan</strong>
+          <pre class="mb-0 mt-1 small">{importLog.join("\n")}</pre>
+        </div>
+      )}
+
       {loading && <Spinner message="Loading gateways..." />}
       {error && <ErrorAlert message={error} />}
 
@@ -186,11 +223,21 @@ export default function GatewaysPage() {
         <div class="text-center text-muted py-5">
           <i class="bi bi-hdd-network fs-1 d-block mb-3" />
           <p>No gateways registered.</p>
+          <p class="small">
+            Running OpenShell or NemoClaw on this machine? "Scan this machine" adopts its
+            gateways automatically.
+          </p>
           {isAdmin && (
-            <a class="btn btn-success btn-sm" href="/gateways/new">
-              <i class="bi bi-plus me-1" />
-              Register Gateway
-            </a>
+            <div class="d-flex gap-2 justify-content-center">
+              <button class="btn btn-primary btn-sm" onClick={() => void importFilesystem()}>
+                <i class="bi bi-pc-display me-1" />
+                Scan this machine
+              </button>
+              <a class="btn btn-success btn-sm" href="/gateways/new">
+                <i class="bi bi-plus me-1" />
+                Register Gateway
+              </a>
+            </div>
           )}
         </div>
       )}

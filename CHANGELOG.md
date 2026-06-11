@@ -12,6 +12,14 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **mDNS gateway discovery + adopt flow** — discovery scans can now
+  browse the local network via mDNS/zeroconf
+  (`SHOREGUARD_DISCOVERY_MDNS_ENABLED`, service type `_openshell._tcp`,
+  avahi snippet in the docs); new **"Scan this machine"** button
+  (`POST /api/gateway/import-filesystem`) re-runs the filesystem import
+  on demand and shows the per-entry log including skip reasons — adopts
+  NemoClaw-provisioned gateways in one click. New **DGX Spark
+  quickstart** guide (NemoClaw OOBE → adopt → Tailscale → phone pushes).
 - **Daily digest** ("what did my agents do while I slept?") — `GET
   /api/digest` aggregates the trailing window (audit activity by action,
   sandbox churn, approvals, gateway health, webhook failures, engaged

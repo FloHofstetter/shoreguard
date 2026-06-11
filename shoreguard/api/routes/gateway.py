@@ -965,3 +965,36 @@ async def release_kill_switch(request: Request, name: str) -> dict[str, Any]:
         {"gateway": name, "actor": actor, "sandboxes": len(report["sandboxes"])},
     )
     return report
+
+
+# ─── Filesystem import (adopt local gateways) ────────────────────────────────
+
+
+@router.post("/import-filesystem", dependencies=[Depends(require_role("admin"))])
+async def import_filesystem(request: Request) -> dict[str, Any]:
+    """Scan this machine's OpenShell config for gateways and import them.
+
+    Re-runs the same import that local mode performs at startup
+    (``~/.config/openshell/gateways/*/metadata.json``, including
+    NemoClaw-provisioned gateways) — with the per-entry log lines so the
+    operator can see exactly why an entry was skipped.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        dict[str, Any]: ``{"imported", "skipped", "log"}`` report.
+    """
+    from shoreguard.services.gateway_import import import_filesystem_gateways
+
+    lines: list[str] = []
+    imported, skipped = await import_filesystem_gateways(
+        get_services().registry, log_fn=lambda msg: lines.append(msg.strip())
+    )
+    await audit_log(
+        request,
+        "gateway.import_filesystem",
+        "gateway",
+        detail={"imported": imported, "skipped": skipped},
+    )
+    return {"imported": imported, "skipped": skipped, "log": lines}

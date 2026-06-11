@@ -164,20 +164,79 @@ class DiscoveryService:
         results.sort(key=lambda r: (r.priority, -r.weight, r.host))
         return results
 
+    def discover_mdns(self) -> list[DiscoveredEndpoint]:
+        """Browse mDNS for ``_openshell._tcp.local.`` services.
+
+        Listens for ``mdns_timeout_seconds`` and returns every announced
+        gateway. Gateways that do not announce themselves can still be
+        found — the docs ship an avahi service snippet for the gateway box.
+
+        Returns:
+            list[DiscoveredEndpoint]: Announced gateways (empty when the
+                ``zeroconf`` package is unavailable or nothing answers).
+        """
+        try:
+            from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
+        except ImportError:  # pragma: no cover — zeroconf is a hard dep, belt+braces
+            logger.warning("discovery: zeroconf package not available; skipping mDNS")
+            return []
+        import time
+
+        found: list[DiscoveredEndpoint] = []
+        timeout_ms = int(self._settings.mdns_timeout_seconds * 1000)
+
+        class _Listener(ServiceListener):
+            def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:  # noqa: D102
+                info = zc.get_service_info(type_, name, timeout=timeout_ms)
+                if info is None or not info.port:
+                    return
+                for address in info.parsed_addresses():
+                    found.append(
+                        DiscoveredEndpoint(
+                            host=address,
+                            port=int(info.port),
+                            priority=int(info.priority or 0),
+                            weight=int(info.weight or 0),
+                            source_domain="local",
+                        )
+                    )
+
+            def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:  # noqa: D102
+                pass
+
+            def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:  # noqa: D102
+                pass
+
+        zc = Zeroconf()
+        try:
+            ServiceBrowser(zc, f"{_SRV_LABEL}.local.", _Listener())
+            time.sleep(self._settings.mdns_timeout_seconds)
+        except OSError:
+            logger.warning("discovery: mDNS browse failed", exc_info=True)
+        finally:
+            zc.close()
+        found.sort(key=lambda r: (r.priority, -r.weight, r.host))
+        logger.info("discovery: mDNS browse found %d endpoint(s)", len(found))
+        return found
+
     def discover_all(
         self, *, domains: list[str] | None = None
     ) -> dict[str, list[DiscoveredEndpoint]]:
-        """Run a discovery scan against every configured domain.
+        """Run a discovery scan against every configured domain (and mDNS).
 
         Args:
             domains: Optional explicit override; defaults to
                 ``settings.discovery.domains``.
 
         Returns:
-            dict[str, list[DiscoveredEndpoint]]: Per-domain results.
+            dict[str, list[DiscoveredEndpoint]]: Per-domain results; mDNS
+                results appear under the pseudo-domain ``"local"``.
         """
         targets = domains if domains is not None else list(self._settings.domains)
-        return {domain: self.discover_domain(domain) for domain in targets}
+        results = {domain: self.discover_domain(domain) for domain in targets}
+        if self._settings.mdns_enabled:
+            results["local"] = self.discover_mdns()
+        return results
 
     # --------------------------------------------------------------- registration
 

@@ -953,6 +953,8 @@ class DiscoverySettings(BaseSettings):
         default_scheme (str): Scheme assigned to auto-registered gateways.
         auto_register (bool): If false, discovery only lists endpoints.
         resolver_timeout_seconds (float): Per-query DNS timeout.
+        mdns_enabled (bool): Also browse mDNS/zeroconf on the local network.
+        mdns_timeout_seconds (float): mDNS browse window in seconds.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHOREGUARD_DISCOVERY_")
@@ -982,6 +984,17 @@ class DiscoverySettings(BaseSettings):
         default=5.0,
         ge=0.5,
         description="Per-query DNS resolver timeout in seconds",
+    )
+    mdns_enabled: bool = Field(
+        default=False,
+        description="Also browse mDNS/zeroconf (`_openshell._tcp.local.`) "
+        "during discovery scans — finds gateways on the local network "
+        "without any DNS server (homelab)",
+    )
+    mdns_timeout_seconds: float = Field(
+        default=3.0,
+        ge=0.5,
+        description="How long an mDNS browse listens for announcements",
     )
 
 
