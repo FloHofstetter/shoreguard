@@ -20,6 +20,13 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Per-sandbox activity timeline** — "what did this agent do last
+  night?" answered for one sandbox:
+  `GET /api/gateways/{gw}/sandboxes/{name}/timeline` merges audit
+  entries, approval decisions, kill-switch engagements, and metered
+  usage into one chronology (24h/3d/7d card on the sandbox page). Pure
+  DB reads — it answers even while the gateway is down, which is
+  exactly when you need it.
 - **Policy preset preview + agent-workflow presets** — applying a
   preset is no longer blind: **Preview**
   (`GET …/policy/presets/{p}/preview`) shows which network rules a

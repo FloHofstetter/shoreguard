@@ -38,6 +38,33 @@ class BudgetRequest(BaseModel):
     action: str = "notify"
 
 
+@router.get("/{name}/timeline")
+async def get_timeline(
+    request: Request,
+    name: str,
+    hours: int = Query(24, ge=1, le=720),
+    limit: int = Query(200, ge=1, le=1000),
+) -> dict[str, Any]:
+    """Return the merged activity timeline for one sandbox.
+
+    Stitches audit entries, approval decisions, kill-switch engagements,
+    and metered usage into one chronology — "what did this agent do last
+    night?". Pure DB reads, so it answers even while the gateway is down.
+
+    Args:
+        request: Incoming HTTP request.
+        name: Sandbox name.
+        hours: Look-back window in hours.
+        limit: Maximum number of entries.
+
+    Returns:
+        dict[str, Any]: ``{"items": [...], "hours": n}`` newest first.
+    """
+    gateway = get_gateway_name(request)
+    items = await get_services().timeline.for_sandbox(gateway, name, hours=hours, limit=limit)
+    return {"items": items, "hours": hours}
+
+
 @router.get("/{name}/budget")
 async def get_budget(request: Request, name: str) -> dict[str, Any]:
     """Return the budget configured for a sandbox (or null).

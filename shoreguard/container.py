@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from shoreguard.services.registry import GatewayRegistry
     from shoreguard.services.sandbox_meta import SandboxMetaStore
     from shoreguard.services.sbom import SBOMService
+    from shoreguard.services.timeline import TimelineService
     from shoreguard.services.update_check import UpdateCheckService
     from shoreguard.services.webhooks import WebhookService
     from shoreguard.settings import Settings
@@ -79,6 +80,7 @@ class ServiceContainer:
         node_alerts: Threshold alerts over the host node-stats sample.
         push: Web Push subscriptions and delivery (PWA notifications).
         update_check: Release update checks and gateway version skew.
+        timeline: Per-sandbox merged activity timeline.
         denial_context: Denial context cache.
         local_gateway: Local gateway manager, or ``None`` outside local mode.
     """
@@ -108,6 +110,7 @@ class ServiceContainer:
     node_alerts: NodeAlertService
     push: PushService
     update_check: UpdateCheckService
+    timeline: TimelineService
     denial_context: DenialContextService
     local_gateway: LocalGatewayManager | None = None
 
@@ -153,6 +156,7 @@ def build_container(
     from shoreguard.services.registry import GatewayRegistry
     from shoreguard.services.sandbox_meta import SandboxMetaStore
     from shoreguard.services.sbom import SBOMService
+    from shoreguard.services.timeline import TimelineService
     from shoreguard.services.update_check import UpdateCheckService
     from shoreguard.services.webhooks import WebhookService
 
@@ -210,6 +214,7 @@ def build_container(
         node_alerts=NodeAlertService(node_stats, settings.node_alert),
         push=PushService(async_session_factory, settings.push),
         update_check=UpdateCheckService(gateway, settings.updates),
+        timeline=TimelineService(async_session_factory),
         denial_context=DenialContextService(),
         local_gateway=(LocalGatewayManager(gateway) if settings.server.local_mode else None),
     )

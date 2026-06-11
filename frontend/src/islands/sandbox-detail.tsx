@@ -42,6 +42,74 @@ interface UsageInfo {
   window_used: number;
 }
 
+interface TimelineItem {
+  ts: string;
+  kind: string;
+  title: string;
+  detail: string;
+}
+
+const TIMELINE_ICONS: Record<string, string> = {
+  audit: "journal-text",
+  approval: "check2-square",
+  kill_switch: "sign-stop",
+  usage: "graph-up",
+};
+
+function TimelineCard({ name }: { name: string }) {
+  const [items, setItems] = useState<TimelineItem[] | null>(null);
+  const [hours, setHours] = useState(24);
+
+  useEffect(() => {
+    apiFetch<{ items: TimelineItem[] }>(`${API}/sandboxes/${name}/timeline?hours=${hours}`)
+      .then((r) => setItems(r.items))
+      .catch(() => setItems([]));
+  }, [name, hours]);
+
+  return (
+    <div class="card sg-card-themed mb-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="mb-0">
+            <i class="bi bi-clock-history me-2" />
+            Timeline
+          </h6>
+          <select
+            class="form-select form-select-sm w-auto"
+            value={String(hours)}
+            onChange={(e) => setHours(Number((e.target as HTMLSelectElement).value))}
+          >
+            <option value="24">Last 24h</option>
+            <option value="72">Last 3 days</option>
+            <option value="168">Last 7 days</option>
+          </select>
+        </div>
+        {items === null ? (
+          <div class="text-muted small">Loading…</div>
+        ) : items.length === 0 ? (
+          <div class="text-muted small">
+            Nothing recorded in this window — approvals, kill-switch events, metered
+            usage, and audit entries for this sandbox show up here.
+          </div>
+        ) : (
+          <ul class="list-unstyled mb-0 sg-fs-sm">
+            {items.map((item, i) => (
+              <li key={i} class="d-flex gap-2 py-1 border-bottom border-opacity-10">
+                <i class={`bi bi-${TIMELINE_ICONS[item.kind] ?? "dot"} text-muted`} />
+                <span class="text-muted text-nowrap">
+                  {new Date(item.ts).toLocaleString()}
+                </span>
+                <span class="fw-medium">{item.title}</span>
+                <span class="text-muted text-truncate">{item.detail}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function BudgetCard({ name }: { name: string }) {
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [meteringEnabled, setMeteringEnabled] = useState(true);
@@ -470,6 +538,8 @@ export default function SandboxDetailPage({ name }: { name: string }) {
       </div>
 
       <BudgetCard name={name} />
+
+      <TimelineCard name={name} />
 
       <fieldset class="sg-fieldset mb-4">
         <legend class="sg-legend">Metadata</legend>
