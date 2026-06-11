@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "preact/hooks";
 
+import { loginWithPasskey, passkeysSupported } from "../lib/webauthn";
+
 interface OidcProvider {
   name: string;
   display_name?: string;
@@ -123,6 +125,19 @@ export function LoginPage() {
     }
   };
 
+  const passkeyLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await loginWithPasskey();
+      window.location.href = nextUrl;
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div class="card sg-card-themed">
       <div class="card-body p-4">
@@ -163,6 +178,18 @@ export function LoginPage() {
             Log in
           </button>
         </form>
+
+        {passkeysSupported() && (
+          <button
+            type="button"
+            class="btn btn-outline-secondary w-100 mt-2 d-flex align-items-center justify-content-center gap-2"
+            disabled={loading}
+            onClick={() => void passkeyLogin()}
+          >
+            <i class="bi bi-fingerprint" />
+            <span>Sign in with a passkey</span>
+          </button>
+        )}
 
         {oidcError && (
           <div class="text-danger small mt-3">

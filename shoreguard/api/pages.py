@@ -587,6 +587,27 @@ async def one_tap_page(request: Request, token: str = "") -> TemplateResponse | 
     )
 
 
+@router.get("/profile", response_model=None)
+async def profile_page(request: Request) -> TemplateResponse | RedirectResponse:
+    """Personal settings: passkeys and push devices.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse: Rendered profile page, or a
+            redirect to login.
+    """
+    redirect = await _require_page_auth(request)
+    if redirect:
+        return redirect
+    return templates.TemplateResponse(
+        request,
+        "pages/profile.html",
+        {"active_page": "profile"},
+    )
+
+
 @router.get("/security", response_model=None)
 async def security_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
     """Security posture self-check page (admin only).

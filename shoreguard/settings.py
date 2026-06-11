@@ -259,6 +259,9 @@ class AuthSettings(BaseSettings):
             SHOREGUARD_ADMIN_PASSWORD on every startup.
         tailscale_identity (bool): Trust Tailscale Serve identity headers from
             a loopback proxy as authentication (login must match a user email).
+        passkeys_enabled (bool): Enable WebAuthn passkey registration/login.
+        passkey_rp_id (str | None): Override the WebAuthn relying-party ID
+            (defaults to the host of public_url, else the request host).
         secret_key (str | None): HMAC secret for sessions and signed cookies. Unset falls back
             to on-disk .secret_key — set explicitly for multi-replica.
         allow_registration (bool): Allow unauthenticated self-signup via /register.
@@ -310,6 +313,16 @@ class AuthSettings(BaseSettings):
         "The login must match an existing user's email. Only honoured for "
         "connections from 127.0.0.1/::1 — i.e. `tailscale serve` in front "
         "of a loopback-bound ShoreGuard.",
+    )
+    passkeys_enabled: bool = Field(
+        default=True,
+        description="Enable WebAuthn passkey registration and login "
+        "(requires HTTPS or localhost in the browser)",
+    )
+    passkey_rp_id: str | None = Field(
+        default=None,
+        description="Override the WebAuthn relying-party ID; defaults to "
+        "the host of SHOREGUARD_PUBLIC_URL, else the request host",
     )
     secret_key: str | None = Field(
         default=None,

@@ -20,6 +20,14 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Passkey login (WebAuthn)** — register a passkey on the new
+  `/profile` page and sign in with the phone's screen lock instead of a
+  password. Discoverable-credential login from the login page, per-user
+  passkey management (`/api/auth/passkeys/*`), new
+  `webauthn_credentials` table (migration `104_webauthn_credentials`),
+  enabled by default via `SHOREGUARD_PASSKEYS_ENABLED`
+  (`SHOREGUARD_PASSKEY_RP_ID` pins the relying-party ID). Requires
+  HTTPS or localhost in the browser. New dependency `webauthn`.
 - **Web Push — phone notifications without a third party** — the
   installed PWA now receives push notifications directly: a service
   worker (`/sw.js`), VAPID keys generated on first use (stored next to

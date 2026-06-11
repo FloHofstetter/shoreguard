@@ -228,7 +228,11 @@ export function AuthArea() {
   if (!a.authenticated) return null;
   return (
     <span class="d-flex align-items-center">
-      {a.email && <span class="text-muted small ms-2">{a.email}</span>}
+      {a.email && (
+        <a href="/profile" class="text-muted small ms-2 text-decoration-none" title="Profile">
+          {a.email}
+        </a>
+      )}
       <span class="badge bg-secondary ms-2">{a.role}</span>
       <PhoneAccessButton />
       <button

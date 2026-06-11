@@ -46,6 +46,36 @@ class User(Base):
     oidc_sub: Mapped[str | None] = mapped_column(String(255))
 
 
+class WebAuthnCredential(Base):
+    """A registered passkey (WebAuthn credential) for a user.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        user_id: FK to the owning user (cascade delete).
+        credential_id: WebAuthn credential ID (base64url, unique).
+        public_key: COSE public key (base64url).
+        sign_count: Authenticator signature counter (clone detection).
+        transports: JSON list of authenticator transports, or ``None``.
+        name: Operator-given device label (e.g. "Pixel 9").
+        created_at: When the passkey was registered.
+        last_used: When the passkey last signed in, or ``None``.
+    """
+
+    __tablename__ = "webauthn_credentials"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    credential_id: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
+    public_key: Mapped[str] = mapped_column(Text, nullable=False)
+    sign_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    transports: Mapped[str | None] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(100), nullable=False, default="passkey")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_used: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ServicePrincipal(Base):
     """A service principal (API key) for programmatic access.
 

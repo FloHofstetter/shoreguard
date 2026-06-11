@@ -22,6 +22,7 @@ const ISLANDS: Record<string, IslandLoader> = {
   "webhooks-page": () => import("./islands/webhooks"),
   "audit-page": () => import("./islands/audit"),
   "security-posture": () => import("./islands/security-posture"),
+  "profile-page": () => import("./islands/profile"),
   "one-tap-approval": () => import("./islands/one-tap"),
   "dashboard-page": () => import("./islands/dashboard"),
   "provider-profiles-page": () => import("./islands/provider-profiles"),

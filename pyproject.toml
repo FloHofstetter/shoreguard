@@ -51,6 +51,7 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.29",
     "paho-mqtt>=2.1.0",
     "pywebpush>=2.3.0",
+    "webauthn>=2.7.1",
 ]
 
 [dependency-groups]

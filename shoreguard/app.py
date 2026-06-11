@@ -260,6 +260,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         auth as auth_routes,
     )
     from shoreguard.api.routes import (
+        passkeys as passkey_routes,
+    )
+    from shoreguard.api.routes import (
         users as user_routes,
     )
     from shoreguard.api.security_headers import security_headers_middleware
@@ -398,6 +401,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ── Auth + user management APIs (self-guarded routes) ────────────────
     app.include_router(auth_routes.router)
     app.include_router(user_routes.router)
+    # Passkeys: management routes carry their own require_auth dependency;
+    # the login pair is anonymous by design (the assertion is the
+    # credential). Everything 404s unless passkeys are enabled.
+    app.include_router(passkey_routes.router, tags=["auth"])
     # One-tap approval votes: the signed token IS the credential, so the
     # route mounts without the session-auth dependency (and 404s unless
     # the feature is explicitly enabled).

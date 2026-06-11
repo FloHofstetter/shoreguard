@@ -118,3 +118,18 @@ UI reachable from every device in your tailnet (including your phone)
 under the machine's tailnet name. See [Tailscale access](tailscale.md) for
 the full recipe, including automatic login via tailnet identity headers
 (`SHOREGUARD_TAILSCALE_IDENTITY`) and the topbar QR button for phones.
+
+## Passkeys & push on the phone
+
+Once the UI is reachable over HTTPS (Tailscale gives you that for free),
+two things make the phone experience first-class:
+
+- **Passkeys** — on `/profile`, register a passkey; from then on the
+  login page offers "Sign in with a passkey" and the phone's screen lock
+  signs you in. No password manager gymnastics on mobile. Enabled by
+  default (`SHOREGUARD_PASSKEYS_ENABLED`); pin the relying-party ID with
+  `SHOREGUARD_PASSKEY_RP_ID` if you serve under multiple names.
+- **Web Push** — enable notifications via the QR/phone dialog in the
+  top bar, then create a `webpush` webhook choosing which events reach
+  the device. No ntfy/Telegram account needed; payloads are end-to-end
+  encrypted. See the [webhooks guide](../guides/webhooks.md).
