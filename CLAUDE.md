@@ -103,8 +103,8 @@ mode, 0600 perms); PostgreSQL for production and the integration/postgres suites
 pre-v0.38 17-step chain is squashed into a single `v2_baseline` revision generated from
 the models; v0.37 databases are stamped automatically, older ones must pass through
 v0.37 first. The **async engine**
-(`init_async_db()` + `get_async_session_factory()`) backs all data services with
-`AsyncSession`; the sync engine remains only for the **auth subsystem** and Alembic.
+(`init_async_db()` + `get_async_session_factory()`) backs every service — including
+auth — with `AsyncSession`; a sync engine exists only to run Alembic at startup.
 The ShoreGuard DB only holds management-plane state (gateway registry, audit log,
 operations/LROs, approval workflows, policy pins, SBOM, boot hooks, sandbox metadata,
 users); the sandboxes and policies themselves live on the OpenShell gateways. Models are
@@ -123,7 +123,8 @@ do this so `monkeypatch.setenv` takes effect). `enforce_production_safety()` run
 **Auth** ([api/auth/](shoreguard/api/auth/), [api/oidc.py](shoreguard/api/oidc.py)): a
 package — `core` (passwords, sessions, lockout, shared `AuthState`), `rbac` (FastAPI
 dependencies), `users`, `service_principals`, `gateway_roles`, `groups`; everything
-public re-exported from the package `__init__`. Session + JWT, RBAC roles
+public re-exported from the package `__init__`. All DB-touching auth functions are
+**async** (the CLI wraps them in `asyncio.run`). Session + JWT, RBAC roles
 Admin/Operator/Viewer with gateway-scoped overrides, optional OIDC. Routes guard with
 `require_auth` / `require_role`. `--no-auth` (or `set_no_auth(True)` in tests) enables
 the dev bypass. The auth REST endpoints live in

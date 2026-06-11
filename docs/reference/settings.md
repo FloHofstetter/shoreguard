@@ -60,7 +60,7 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_HSTS_ENABLED` | `false` | Emit Strict-Transport-Security header (enable behind HTTPS proxy) |
 | `SHOREGUARD_HSTS_MAX_AGE` | `63072000` | HSTS max-age in seconds (default: 2 years) |
 | `SHOREGUARD_CSP_POLICY` | `default-src 'self'; script-src 'self'...` | Content-Security-Policy header value (used when csp_strict=False) |
-| `SHOREGUARD_CSP_STRICT` | `true` | Enforce strict CSP with per-request nonce, no 'unsafe-inline', and frame-ancestors 'none'. Default as of v0.27.0 — blocks inline scripts, inline event handlers, and inline styles (M1–M3 + M2.1). 'unsafe-eval' is retained in script-src because Alpine.js uses the Function() constructor; the regular Alpine build is used in both modes. Set SHOREGUARD_CSP_STRICT=false to fall back to the legacy 'unsafe-inline' policy in `csp_policy`. |
+| `SHOREGUARD_CSP_STRICT` | `true` | Enforce strict CSP with per-request nonce, no 'unsafe-inline', and frame-ancestors 'none'. Default as of v0.27.0 — blocks inline scripts, inline event handlers, and inline styles. Since the Preact islands rewrite removed Alpine.js, 'unsafe-eval' is no longer needed. Set SHOREGUARD_CSP_STRICT=false to fall back to the legacy 'unsafe-inline' policy in `csp_policy`. |
 | `SHOREGUARD_CSP_POLICY_STRICT` | `default-src 'self'; script-src 'self'...` | CSP template used when csp_strict=True. Must contain a '{nonce}' placeholder that is replaced per-request. |
 ## `gateway`
 

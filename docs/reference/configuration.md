@@ -72,28 +72,24 @@ environment variables, which override built-in defaults.
 Default CSP policy (strict, since v0.27.0):
 
 ```
-default-src 'self'; script-src 'self' 'nonce-<per-request>' 'unsafe-eval' https://cdn.jsdelivr.net;
+default-src 'self'; script-src 'self' 'nonce-<per-request>' https://cdn.jsdelivr.net;
 style-src 'self' https://cdn.jsdelivr.net;
 font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' wss:;
 frame-ancestors 'none'; base-uri 'self'; form-action 'self'
 ```
 
 Every response carries a fresh cryptographic nonce; all inline `<script>` tags
-rendered by ShoreGuard templates carry that nonce. No `'unsafe-inline'`, and
-`frame-ancestors 'none'` blocks clickjacking. `'unsafe-eval'` is retained
-because Alpine.js uses the `Function()` constructor internally; the
-`@alpinejs/csp` build was evaluated during v0.27.0 development but its
-expression parser is too restrictive for this UI (plain property chains only,
-no operators, literals, or method-call arguments). Unlike `'unsafe-inline'`,
-`'unsafe-eval'` does not permit DOM-injected script execution, so the XSS
-surface remains dramatically smaller than the legacy policy.
+rendered by ShoreGuard templates carry that nonce. No `'unsafe-inline'`, no
+`'unsafe-eval'` (the Preact islands rewrite removed Alpine.js, which needed
+the `Function()` constructor), and `frame-ancestors 'none'` blocks
+clickjacking.
 
 **Legacy opt-out.** If you ship custom templates with unverified inline
 scripts or third-party embeds, set `SHOREGUARD_CSP_STRICT=false` to fall back
 to the pre-v0.27.0 policy:
 
 ```
-default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net;
+default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
 style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
 font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' wss:
 ```

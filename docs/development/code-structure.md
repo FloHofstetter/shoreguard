@@ -58,12 +58,14 @@ shoreguard/
 │   ├── _converters.py         # Protobuf ↔ domain model converters
 │   └── _proto/                # Generated protobuf stubs
 ├── alembic/                   # Database migrations
-│   └── versions/              # Migration scripts (001–012)
+│   └── versions/              # v2_baseline (squashed from the models)
 ├── presets/                   # Policy preset YAML files
 ├── settings.py                # Centralized Pydantic settings (12 sub-models)
 ├── config.py                  # Configuration and validation
-├── db.py                      # SQLAlchemy engine and init
-├── models.py                  # ORM models (Gateway, User, Group, ServicePrincipal, AuditEntry, Webhook, ...)
+├── app.py                     # create_app() factory + lifespan
+├── container.py               # ServiceContainer composition root
+├── db/                        # Async engine init + per-domain ORM models
+├── models.py                  # Compatibility re-export of db/models
 ├── exceptions.py              # Custom exception hierarchy
 ├── presets.py                 # Preset loader
 └── sandbox_templates.py       # Sandbox template definitions
@@ -73,10 +75,11 @@ shoreguard/
 
 The frontend lives in `frontend/` and is built with:
 
-- **Vanilla JavaScript** — no framework, small footprint
+- **Preact + TypeScript** — typed islands in `frontend/src/`, one per page
+- **Vite** — code-split bundles into `frontend/dist` (`just frontend-build`)
 - **Bootstrap 5** — responsive CSS
-- **Alpine.js** — lightweight reactivity for interactive components
-- **Jinja2 templates** — server-side rendered HTML pages
+- **Jinja2 templates** — server-rendered shells that mount islands via
+  `<div data-island="…">`
 
-During the build step the frontend is bundled into the Python wheel and served
-from `shoreguard/_frontend` at runtime.
+`frontend/dist` plus the static assets are bundled into the Python wheel and
+served from `shoreguard/_frontend` at runtime.

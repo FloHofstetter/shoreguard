@@ -13,7 +13,7 @@ Three layers:
 | --- | --- | --- |
 | **Wire** | gRPC method on `OpenShellStub` | `shoreguard/client/_proto/openshell_pb2_grpc.py` |
 | **REST** | FastAPI route on `shoreguard.api.main.app` | `shoreguard/api/routes/*.py` |
-| **UI** | `apiFetch(...)` call in a JS module | `frontend/js/*.js` |
+| **UI** | `apiFetch(`…`)` call in a TypeScript island | `frontend/src/**/*.{ts,tsx}` |
 
 A functional feature is "covered" when an upstream RPC has a client
 method (`self._stub.<Rpc>(...)`), and that client method is reachable

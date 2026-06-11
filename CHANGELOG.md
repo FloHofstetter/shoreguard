@@ -25,10 +25,10 @@ REST API paths/responses and CLI commands are unchanged; internals are not.
   all submanagers run on `grpc.aio`; every RPC is a coroutine, streams are
   async iterators, and ~150 `asyncio.to_thread` call sites collapsed to
   direct awaits. The WebSocket thread bridge (`api/ws_bridge.py`) is gone.
-- **Async data layer** *(breaking for embedders)* — the nine DB-backed
-  services use `AsyncSession` on the async engine; legacy `session.query`
-  call sites were rewritten to `select()`. The sync engine remains only for
-  the auth subsystem and Alembic migrations.
+- **Async data layer** *(breaking for embedders)* — every DB-backed
+  service **and the auth subsystem** use `AsyncSession` on the async
+  engine; legacy `session.query` call sites were rewritten to `select()`.
+  A sync engine exists solely to run Alembic migrations at startup.
 - **Module layout** *(breaking for importers)* — the CLI moved to
   `shoreguard/cli/` (console script target is now `shoreguard.cli:cli`);
   `api/pages.py` split into auth/user routes + HTML pages; `api/auth.py`

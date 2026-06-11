@@ -47,19 +47,22 @@ A gRPC client with mTLS support and protobuf stubs generated from the
 OpenShell `.proto` definitions. The client layer translates between
 ShoreGuard's domain model and the protobuf wire format.
 
-### Persistence — `shoreguard/db.py`, `shoreguard/models.py`
+### Persistence — `shoreguard/db/`, `shoreguard/db/models/`
 
-SQLAlchemy ORM models and async session management. Database migrations are
-handled by Alembic and applied automatically on startup. Supports both SQLite
-(default, single-node) and PostgreSQL (multi-instance). See
+SQLAlchemy ORM models (split per domain, re-exported via `shoreguard.models`)
+on a fully async engine — every data service and the auth subsystem use
+`AsyncSession`. Database migrations are handled by Alembic and applied
+automatically on startup. Supports both SQLite (default, single-node) and
+PostgreSQL (multi-instance). See
 [Configuration](../reference/configuration.md#database) for setup.
 
 ### Frontend — `frontend/`
 
-Vanilla JavaScript with Bootstrap 5 and Jinja2 templates. No build step — the
-frontend is served directly by FastAPI. WebSocket connections power real-time
-features like log streaming, approval notifications, and gateway health
-updates.
+Preact + TypeScript islands built with Vite, mounted into server-rendered
+Jinja2 shells (Bootstrap 5 styling). Each page declares
+`<div data-island="…">` and loads a code-split component; WebSocket
+connections power real-time features like log streaming, approval
+notifications, and the interactive terminal.
 
 ## OpenShell metadata
 

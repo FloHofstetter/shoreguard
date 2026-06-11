@@ -6,7 +6,7 @@ stored on the gateway (not ShoreGuard env vars — see
 [Settings Reference](settings.md) for those).
 
 The list is the upstream registry — ShoreGuard does not maintain its own
-allow-list. The Wizard UI in `frontend/js/gateway.js` reads the keys
+allow-list. The Wizard UI in `frontend/src/islands/gateway-detail.tsx` reads the keys
 generically, so any new entry the gateway adds appears automatically.
 
 **Source of truth:**
