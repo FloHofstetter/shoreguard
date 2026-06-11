@@ -820,6 +820,41 @@ class SmtpSettings(BaseSettings):
     )
 
 
+class BackupSettings(BaseSettings):
+    """Periodic backup snapshots (SQLite deployments).
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Write a periodic backup archive.
+        interval_hours (int): Hours between snapshots.
+        dir (str | None): Target directory (default:
+            ``<config-dir>/backups``).
+        keep (int): Newest archives to retain; older ones are deleted.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_BACKUP_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Periodically snapshot the SQLite DB + key material "
+        "into a tar.gz archive (SHOREGUARD_BACKUP_DIR)",
+    )
+    interval_hours: int = Field(
+        default=24,
+        ge=1,
+        description="Hours between periodic backup snapshots",
+    )
+    dir: str | None = Field(
+        default=None,
+        description="Backup target directory (default: <config-dir>/backups)",
+    )
+    keep: int = Field(
+        default=7,
+        ge=1,
+        description="Newest backup archives to retain during rotation",
+    )
+
+
 class CurfewSettings(BaseSettings):
     """Agent curfew (quiet hours) evaluation.
 
@@ -1316,6 +1351,7 @@ class Settings(BaseSettings):
         node_alert (NodeAlertSettings): Host threshold alert evaluation.
         push (PushSettings): Web Push (PWA notification) configuration.
         curfew (CurfewSettings): Agent curfew (quiet hours) evaluation.
+        backup (BackupSettings): Periodic backup snapshots.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -1343,6 +1379,7 @@ class Settings(BaseSettings):
     node_alert: NodeAlertSettings = Field(default_factory=NodeAlertSettings)
     push: PushSettings = Field(default_factory=PushSettings)
     curfew: CurfewSettings = Field(default_factory=CurfewSettings)
+    backup: BackupSettings = Field(default_factory=BackupSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

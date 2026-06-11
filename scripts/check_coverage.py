@@ -163,6 +163,9 @@ def main() -> int:
     cli_or_internal_paths = {
         # Strict CLI / form / websocket-only:
         "/audit/export",
+        # Backup download is a browser navigation (window.open), not an
+        # apiFetch — the archive is a binary attachment.
+        "/system/backup",
         "/operations/*/stream",
         "/operations/*/cancel",
         "/health",

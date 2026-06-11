@@ -134,6 +134,25 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
                 run=_node_alerts,
             )
         )
+    if settings.backup.enabled:
+
+        async def _backup() -> None:
+            import asyncio
+            from pathlib import Path
+
+            from shoreguard.services.backup import create_backup, rotate_backups
+
+            out_dir = Path(settings.backup.dir) if settings.backup.dir else None
+            path = await asyncio.to_thread(create_backup, out_dir)
+            await asyncio.to_thread(rotate_backups, path.parent, settings.backup.keep)
+
+        tasks.append(
+            PeriodicTask(
+                name="backup",
+                interval=settings.backup.interval_hours * 3600,
+                run=_backup,
+            )
+        )
     if settings.curfew.enabled:
 
         async def _curfew() -> None:

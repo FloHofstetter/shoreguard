@@ -70,19 +70,29 @@ themselves live on the OpenShell gateway, not in ShoreGuard):
 | systemd | `/var/lib/shoreguard/shoreguard` |
 | pip / dev | `~/.config/shoreguard` |
 
-**Backup** (SQLite): either stop the service and copy the directory, or do a
-live, consistent snapshot:
+**Backup** (SQLite) is built in — one archive with a live, consistent DB
+snapshot, the `.secret_key`, and the VAPID key:
 
 ```bash
-sqlite3 ~/.config/shoreguard/shoreguard.db ".backup /backups/shoreguard-$(date +%F).db"
+shoreguard backup create                      # → <config-dir>/backups/
+shoreguard backup create -o /mnt/nas --keep 7 # custom dir + rotation
 ```
 
-Include the `.secret_key` file from the same directory — without it,
-existing sessions and signed tokens are invalidated after a restore.
+Admins can also click **Download backup** on the Security Check page
+(`GET /api/system/backup`), and `SHOREGUARD_BACKUP_ENABLED=true` turns on
+a periodic snapshot task (`SHOREGUARD_BACKUP_INTERVAL_HOURS`,
+`SHOREGUARD_BACKUP_DIR`, `SHOREGUARD_BACKUP_KEEP`). The archive contains
+the secret-key material — **store it like a credential**.
 
-**Restore:** stop ShoreGuard, put the files back, start it. Migrations run
-automatically on startup, so restoring an older backup into a newer
-ShoreGuard works.
+**Restore:** stop ShoreGuard, then:
+
+```bash
+shoreguard backup restore /mnt/nas/shoreguard-backup-20260611-070000.tar.gz
+```
+
+Replaced files are kept as `*.pre-restore`. Migrations run automatically
+on startup, so restoring an older backup into a newer ShoreGuard works.
+PostgreSQL deployments should use `pg_dump`/`pg_restore` instead.
 
 ## Health monitoring
 

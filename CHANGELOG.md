@@ -20,6 +20,14 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Built-in backup & restore** — `shoreguard backup create` bundles a
+  live, consistent SQLite snapshot (online backup API), the
+  `.secret_key`, and the VAPID key into one tar.gz; `shoreguard backup
+  restore` puts it back (server stopped, replaced files kept as
+  `*.pre-restore`). Admins get a **Download backup** button on the
+  Security Check page (`GET /api/system/backup`), and
+  `SHOREGUARD_BACKUP_*` enables periodic snapshots with rotation.
+  PostgreSQL deployments are pointed at `pg_dump`.
 - **Agent curfew (quiet hours)** — per-gateway schedule
   (`PUT /api/gateway/{name}/curfew`, card on the gateway page, new
   `gateway_curfews` table, migration `106_gateway_curfews`): inside the

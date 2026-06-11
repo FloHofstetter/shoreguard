@@ -109,10 +109,20 @@ export default function SecurityPosturePage() {
           <i class="bi bi-shield-check me-2" />
           Security Check
         </h5>
-        <button class="btn btn-sm btn-outline-secondary" onClick={load}>
-          <i class="bi bi-arrow-clockwise me-1" />
-          Re-run
-        </button>
+        <div class="d-flex gap-2">
+          <button
+            class="btn btn-sm btn-outline-secondary"
+            title="Download a backup archive (SQLite snapshot + key material — handle like a credential)"
+            onClick={() => window.open("/api/system/backup", "_blank")}
+          >
+            <i class="bi bi-download me-1" />
+            Download backup
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" onClick={load}>
+            <i class="bi bi-arrow-clockwise me-1" />
+            Re-run
+          </button>
+        </div>
       </div>
       <SummaryBanner report={report} />
       <div class="list-group">
