@@ -19,7 +19,13 @@ from shoreguard.db.models.policy import (
     PolicyApplyProposal,
     PolicyPin,
 )
-from shoreguard.db.models.sandbox import SandboxBootHook, SandboxMeta
+from shoreguard.db.models.sandbox import (
+    SandboxBootHook,
+    SandboxBudget,
+    SandboxMeta,
+    SandboxUsage,
+    UsageCursor,
+)
 from shoreguard.db.models.sbom import SBOMComponent, SBOMSnapshot
 from shoreguard.db.models.webhooks import Webhook, WebhookDelivery
 
@@ -40,8 +46,11 @@ __all__ = (
     "SBOMSnapshot",
     "SPGatewayRole",
     "SandboxBootHook",
+    "SandboxBudget",
     "SandboxMeta",
+    "SandboxUsage",
     "ServicePrincipal",
+    "UsageCursor",
     "User",
     "UserGatewayRole",
     "Webhook",

@@ -707,6 +707,42 @@ class BackgroundSettings(BaseSettings):
     )
 
 
+class BudgetSettings(BaseSettings):
+    """Inference spend metering and per-sandbox budgets (phase 1).
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        metering_enabled (bool): Enable the log-polling usage metering task.
+        interval_seconds (int): Metering poll interval.
+        inference_sources (list[str]): Log ``source`` substrings counted as
+            inference requests.
+        log_batch_lines (int): Max log lines fetched per sandbox per poll.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_BUDGET_")
+
+    metering_enabled: bool = Field(
+        default=False,
+        description="Meter per-sandbox inference usage by polling gateway "
+        "logs (phase 1 — replaced by the upstream metering RPC when it "
+        "lands). Required for budgets and the usage/spend views.",
+    )
+    interval_seconds: int = Field(
+        default=60,
+        ge=10,
+        description="Usage metering poll interval in seconds",
+    )
+    inference_sources: list[str] = Field(
+        default_factory=lambda: ["inference", "proxy"],
+        description="Log source substrings counted as inference requests",
+    )
+    log_batch_lines: int = Field(
+        default=2000,
+        ge=100,
+        description="Maximum log lines fetched per sandbox per metering poll",
+    )
+
+
 class DigestSettings(BaseSettings):
     """Daily activity digest ("what did my agents do while I slept?").
 
@@ -1142,6 +1178,7 @@ class Settings(BaseSettings):
         tracing (TracingSettings): OpenTelemetry trace context propagation.
         cert_rotation (CertRotationSettings): Proactive mTLS cert rotation.
         digest (DigestSettings): Daily activity digest dispatch.
+        budget (BudgetSettings): Inference usage metering and budgets.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -1164,6 +1201,7 @@ class Settings(BaseSettings):
     tracing: TracingSettings = Field(default_factory=TracingSettings)
     cert_rotation: CertRotationSettings = Field(default_factory=CertRotationSettings)
     digest: DigestSettings = Field(default_factory=DigestSettings)
+    budget: BudgetSettings = Field(default_factory=BudgetSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

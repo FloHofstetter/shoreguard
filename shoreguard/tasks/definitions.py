@@ -96,6 +96,20 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
                 run=_cert_rotation,
             )
         )
+    if settings.budget.metering_enabled:
+
+        async def _usage_metering() -> None:
+            result = await container.budget.poll_once()
+            if result["counted"]:
+                logger.debug("Usage metering: %s", result)
+
+        tasks.append(
+            PeriodicTask(
+                name="usage_metering",
+                interval=settings.budget.interval_seconds,
+                run=_usage_metering,
+            )
+        )
     if settings.digest.enabled:
 
         async def _daily_digest() -> None:

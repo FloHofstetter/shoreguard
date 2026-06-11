@@ -29,6 +29,154 @@ function formatTimestamp(ms: number | undefined): string {
   return ms ? new Date(ms).toLocaleString() : "";
 }
 
+interface BudgetInfo {
+  limit_requests: number;
+  window: string;
+  action: string;
+}
+
+interface UsageInfo {
+  days: { day: string; requests: number }[];
+  today: number;
+  budget: BudgetInfo | null;
+  window_used: number;
+}
+
+function BudgetCard({ name }: { name: string }) {
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
+  const [meteringEnabled, setMeteringEnabled] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [limit, setLimit] = useState(1000);
+  const [window_, setWindow] = useState("daily");
+  const [action, setAction] = useState("notify");
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    void apiFetch<UsageInfo>(`${API}/sandboxes/${name}/usage`)
+      .then(setUsage)
+      .catch(() => setUsage(null));
+    void apiFetch<{ metering_enabled: boolean }>(`${API}/sandboxes/${name}/budget`)
+      .then((r) => setMeteringEnabled(r.metering_enabled))
+      .catch(() => undefined);
+  };
+  useEffect(load, [name]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await apiFetch(`${API}/sandboxes/${name}/budget`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit_requests: limit, window: window_, action }),
+      });
+      showToast("Budget saved", "success");
+      setEditing(false);
+      load();
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await apiFetch(`${API}/sandboxes/${name}/budget`, { method: "DELETE" });
+      showToast("Budget removed", "success");
+      load();
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!usage) return null;
+  const budget = usage.budget;
+  const pct = budget ? Math.min(100, Math.round((usage.window_used / budget.limit_requests) * 100)) : 0;
+
+  return (
+    <fieldset class="sg-fieldset mb-4">
+      <legend class="sg-legend">Inference usage & budget</legend>
+      {!meteringEnabled && (
+        <div class="text-muted small mb-2">
+          <i class="bi bi-info-circle me-1" />
+          Metering is off — set <code>SHOREGUARD_BUDGET_METERING_ENABLED=true</code> to count
+          inference requests and enforce budgets.
+        </div>
+      )}
+      <div class="d-flex flex-wrap align-items-center gap-3">
+        <span class="small">
+          <i class="bi bi-activity me-1" />
+          Today: <strong>{usage.today}</strong> requests
+        </span>
+        {budget ? (
+          <>
+            <div class="flex-grow-1" style={{ minWidth: "160px", maxWidth: "320px" }}>
+              <div class="progress" style={{ height: "8px" }}>
+                <div
+                  class={`progress-bar ${pct >= 100 ? "bg-danger" : pct >= 80 ? "bg-warning" : "bg-success"}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <div class="small text-muted mt-1">
+                {usage.window_used} / {budget.limit_requests} ({budget.window}, on limit:{" "}
+                {budget.action})
+              </div>
+            </div>
+            <button class="btn btn-sm btn-outline-danger" disabled={busy} onClick={() => void remove()}>
+              Remove budget
+            </button>
+          </>
+        ) : editing ? (
+          <span class="d-flex align-items-center gap-2">
+            <input
+              type="number"
+              class="form-control form-control-sm"
+              style={{ width: "110px" }}
+              min={1}
+              value={limit}
+              onInput={(e) => setLimit(Number((e.target as HTMLInputElement).value))}
+            />
+            <select
+              class="form-select form-select-sm"
+              style={{ width: "auto" }}
+              value={window_}
+              onChange={(e) => setWindow((e.target as HTMLSelectElement).value)}
+            >
+              <option value="daily">per day</option>
+              <option value="weekly">per week</option>
+              <option value="monthly">per month</option>
+              <option value="total">total</option>
+            </select>
+            <select
+              class="form-select form-select-sm"
+              style={{ width: "auto" }}
+              value={action}
+              onChange={(e) => setAction((e.target as HTMLSelectElement).value)}
+            >
+              <option value="notify">notify only</option>
+              <option value="detach">cut providers</option>
+            </select>
+            <button class="btn btn-sm btn-success" disabled={busy} onClick={() => void save()}>
+              Save
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button class="btn btn-sm btn-outline-primary" onClick={() => setEditing(true)}>
+            <i class="bi bi-cash-coin me-1" />
+            Set budget
+          </button>
+        )}
+      </div>
+    </fieldset>
+  );
+}
+
 export default function SandboxDetailPage({ name }: { name: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -320,6 +468,8 @@ export default function SandboxDetailPage({ name }: { name: string }) {
           </a>
         </div>
       </div>
+
+      <BudgetCard name={name} />
 
       <fieldset class="sg-fieldset mb-4">
         <legend class="sg-legend">Metadata</legend>

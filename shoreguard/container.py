@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from shoreguard.services.audit import AuditService
     from shoreguard.services.audit_export import AuditExporter
     from shoreguard.services.boot_hooks import BootHookService
+    from shoreguard.services.budgets import BudgetService
     from shoreguard.services.bypass import BypassService
     from shoreguard.services.cert_rotation import CertRotationService
     from shoreguard.services.denial_context import DenialContextService
@@ -67,6 +68,7 @@ class ServiceContainer:
         cert_rotation: Proactive client-cert rotation.
         kill_switch: Reversible per-gateway provider kill switch.
         digest: Daily activity digest builder/dispatcher.
+        budget: Inference usage metering and per-sandbox budgets.
         denial_context: Denial context cache.
         local_gateway: Local gateway manager, or ``None`` outside local mode.
     """
@@ -90,6 +92,7 @@ class ServiceContainer:
     cert_rotation: CertRotationService
     kill_switch: KillSwitchService
     digest: DigestService
+    budget: BudgetService
     denial_context: DenialContextService
     local_gateway: LocalGatewayManager | None = None
 
@@ -115,6 +118,7 @@ def build_container(
     from shoreguard.services.approval_workflow import ApprovalWorkflowService
     from shoreguard.services.audit import AuditService
     from shoreguard.services.boot_hooks import BootHookService
+    from shoreguard.services.budgets import BudgetService
     from shoreguard.services.bypass import BypassService
     from shoreguard.services.cert_rotation import CertRotationService
     from shoreguard.services.denial_context import DenialContextService
@@ -178,6 +182,7 @@ def build_container(
         ),
         kill_switch=KillSwitchService(async_session_factory, gateway),
         digest=DigestService(async_session_factory, registry),
+        budget=BudgetService(async_session_factory, gateway, registry, settings.budget),
         denial_context=DenialContextService(),
         local_gateway=(LocalGatewayManager(gateway) if settings.server.local_mode else None),
     )

@@ -34,6 +34,7 @@ _EVENT_LABELS: dict[str, str] = {
     "inference.updated": "Inference Updated",
     "policy.updated": "Policy Updated",
     "digest.daily": "Daily Digest",
+    "budget.exceeded": "Budget EXCEEDED",
     "webhook.test": "Test Event",
 }
 
@@ -96,6 +97,11 @@ def _payload_fields(payload: dict[str, Any]) -> list[tuple[str, str]]:
         "model",
         "image",
         "endpoint",
+        "used",
+        "limit",
+        "window",
+        "action",
+        "status",
     ):
         if key in payload:
             fields.append((key.title(), str(payload[key])))
@@ -189,6 +195,7 @@ _NTFY_PRIORITIES: dict[str, int] = {
     "gateway.recovered": 3,
     "kill_switch.engaged": 5,
     "kill_switch.released": 4,
+    "budget.exceeded": 4,
 }
 
 # ntfy tags: leading entries that are emoji shortcodes render as emoji.
@@ -205,6 +212,7 @@ _NTFY_TAGS: dict[str, str] = {
     "gateway.recovered": "white_check_mark",
     "kill_switch.engaged": "octagonal_sign",
     "kill_switch.released": "arrow_forward",
+    "budget.exceeded": "money_with_wings",
     "policy.updated": "shield",
     "webhook.test": "bell",
 }

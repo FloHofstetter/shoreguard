@@ -111,6 +111,7 @@ nav:
       - Bypass Detection: guides/bypass-detection.md
       - SBOM: guides/sbom.md
       - Webhooks: guides/webhooks.md
+      - Usage & Budgets: guides/budgets.md
       - Monitoring & Logs: guides/monitoring.md
       - Audit Log: guides/audit.md
   - Administration:

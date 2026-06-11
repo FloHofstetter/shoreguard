@@ -234,6 +234,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         approvals,
         audit,
         boot_hooks,
+        budgets,
         bypass,
         digest,
         gateway,
@@ -311,6 +312,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     gw_api.include_router(prover.router, prefix="/sandboxes", tags=["prover"])
     gw_api.include_router(sbom.router, prefix="/sandboxes", tags=["sbom"])
     gw_api.include_router(boot_hooks.router, prefix="/sandboxes", tags=["boot_hooks"])
+    gw_api.include_router(budgets.router, prefix="/sandboxes", tags=["budgets"])
     gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
     gw_api.include_router(
         provider_profiles.router, prefix="/provider-profiles", tags=["provider-profiles"]
@@ -364,6 +366,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         digest.router,
         prefix="/api/digest",
         tags=["digest"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        budgets.summary_router,
+        prefix="/api/usage",
+        tags=["budgets"],
         dependencies=[Depends(require_auth)],
     )
     app.include_router(

@@ -12,6 +12,17 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Usage metering & budgets (phase 1)** — opt-in
+  `SHOREGUARD_BUDGET_METERING_ENABLED` meters per-sandbox inference
+  requests by polling gateway logs with persisted cursors (new
+  `sandbox_budgets` / `sandbox_usage` / `usage_cursors` tables,
+  migration `102_budgets`); per-sandbox budgets
+  (`PUT /api/gateways/{gw}/sandboxes/{name}/budget`) with
+  daily/weekly/monthly/total windows fire a `budget.exceeded` webhook
+  or reversibly **detach the sandbox's providers** at the limit (resume
+  via the kill-switch path); usage card on the sandbox detail page and
+  a global top-consumers endpoint (`GET /api/usage/summary`). The
+  upstream metering RPC replaces the log-derived counting when it lands.
 - **mDNS gateway discovery + adopt flow** — discovery scans can now
   browse the local network via mDNS/zeroconf
   (`SHOREGUARD_DISCOVERY_MDNS_ENABLED`, service type `_openshell._tcp`,

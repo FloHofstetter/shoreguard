@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Index,
@@ -117,3 +118,80 @@ class SandboxBootHook(Base):
     last_run_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
     last_status: Mapped[str | None] = mapped_column(String(16))
     last_output: Mapped[str | None] = mapped_column(Text)
+
+
+class SandboxBudget(Base):
+    """Inference-request budget for one sandbox.
+
+    Phase-1 spend guardrail: the metering task counts inference-proxy log
+    lines per sandbox; when the count in the configured window reaches the
+    limit, the budget's action fires (notify webhook, or detach the
+    sandbox's providers — reversible via the kill-switch resume path).
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name the sandbox lives on.
+        sandbox: Sandbox name (unique per gateway).
+        limit_requests: Inference request ceiling for the window.
+        window: Budget window — ``daily``, ``weekly``, ``monthly``, ``total``.
+        action: What happens at the limit — ``notify`` or ``detach``.
+        notified_key: Window key of the last notification (anti-spam).
+        created_at: When the budget was created.
+        updated_at: When the budget was last changed.
+    """
+
+    __tablename__ = "sandbox_budgets"
+    __table_args__ = (UniqueConstraint("gateway", "sandbox", name="uq_sandbox_budget"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
+    limit_requests: Mapped[int] = mapped_column(Integer, nullable=False)
+    window: Mapped[str] = mapped_column(String(16), nullable=False, default="daily")
+    action: Mapped[str] = mapped_column(String(16), nullable=False, default="notify")
+    notified_key: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SandboxUsage(Base):
+    """Per-day inference request counter for one sandbox.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name.
+        sandbox: Sandbox name.
+        day: UTC day in ``YYYY-MM-DD`` form.
+        requests: Inference requests counted on that day.
+    """
+
+    __tablename__ = "sandbox_usage"
+    __table_args__ = (
+        UniqueConstraint("gateway", "sandbox", "day", name="uq_sandbox_usage_day"),
+        Index("ix_sandbox_usage_day", "day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
+    day: Mapped[str] = mapped_column(String(10), nullable=False)
+    requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class UsageCursor(Base):
+    """Log-poll cursor per sandbox (last metered log timestamp).
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name.
+        sandbox: Sandbox name.
+        last_ms: Timestamp (ms) of the newest log line already counted.
+    """
+
+    __tablename__ = "usage_cursors"
+    __table_args__ = (UniqueConstraint("gateway", "sandbox", name="uq_usage_cursor"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
+    last_ms: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
