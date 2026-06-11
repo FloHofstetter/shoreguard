@@ -10,60 +10,14 @@
 {% endblock %}
 
 {% block content %}
-<div x-data='execTerminal({{ sandbox_name|tojson }})' data-sg-min-role="operator">
-    <div class="d-flex gap-2 mb-2 align-items-center">
-        <div class="input-group input-group-sm flex-grow-1">
-            <span class="input-group-text font-monospace sg-surface-card">cmd</span>
-            <input type="text" class="form-control font-monospace sg-surface-log"
-                   x-model="command" placeholder="/bin/bash" autocomplete="off"
-                   :disabled="connected">
-        </div>
-        <button class="btn btn-success btn-sm" @click="connect()" x-show="!connected">
-            <i class="bi bi-plug me-1"></i>Connect
-        </button>
-        <button class="btn btn-outline-danger btn-sm" @click="disconnect()" x-show="connected">
-            <i class="bi bi-x-circle me-1"></i>Disconnect
-        </button>
-        <button class="btn btn-outline-secondary btn-sm" @click="clear()" title="Clear">
-            <i class="bi bi-trash"></i>
-        </button>
-        <span class="badge"
-              :class="connected ? 'text-bg-success' : 'text-bg-secondary'"
-              x-text="status"></span>
+<div data-island="sandbox-terminal" data-props='{"name": {{ sandbox_name|tojson }}}'>
+    <div class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading...
     </div>
-    <div x-ref="terminal" class="sg-surface-log sg-min-h-300" style="padding:4px;"></div>
 </div>
-
-<details class="mt-3">
-    <summary class="text-muted small sg-cursor-pointer">Run a one-off command (non-interactive)</summary>
-    <div class="mt-2" x-data='terminalPage({{ sandbox_name|tojson }})'>
-        <div class="d-flex gap-2 mb-2">
-            <div class="input-group input-group-sm flex-grow-1">
-                <span class="input-group-text font-monospace sg-surface-card">$</span>
-                <input type="text" class="form-control font-monospace sg-surface-log" x-ref="termInput"
-                       placeholder="ls -la" autocomplete="off"
-                       x-model="commandInput"
-                       @keydown="handleKey($event)"
-                       :disabled="running">
-            </div>
-            <button class="btn btn-success btn-sm" @click="runCommand()" :disabled="running">
-                <i class="bi bi-play-fill me-1"></i>Run
-            </button>
-            <button class="btn btn-outline-secondary btn-sm" @click="clearOutput()" title="Clear">
-                <i class="bi bi-trash"></i>
-            </button>
-        </div>
-        <div class="log-output font-monospace sg-min-h-300" x-ref="termOutput">
-            <template x-for="(line, i) in outputLines" :key="i">
-                <div class="log-line" :class="line.cls || ''" :style="line.css || ''" x-text="line.text"></div>
-            </template>
-        </div>
-    </div>
-</details>
 {% endblock %}
 
 {% block sandbox_js %}
 <script src="/static/vendor/xterm/xterm.js"></script>
 <script src="/static/vendor/xterm/xterm-addon-fit.js"></script>
-<script src="/static/js/exec_terminal.js"></script>
 {% endblock %}

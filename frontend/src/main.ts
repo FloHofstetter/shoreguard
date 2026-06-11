@@ -8,7 +8,11 @@
 
 import { h, render } from "preact";
 
-type IslandLoader = () => Promise<{ default: (props: Record<string, unknown>) => unknown }>;
+// deno-lint-ignore-file
+// Props are validated by each island; the registry is intentionally loose.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type IslandComponent = (props: any) => unknown;
+type IslandLoader = () => Promise<{ default: IslandComponent }>;
 
 const ISLANDS: Record<string, IslandLoader> = {
   "users-page": () => import("./islands/users"),
@@ -24,6 +28,16 @@ const ISLANDS: Record<string, IslandLoader> = {
   "auth-invite": () => import("./islands/auth-pages").then((m) => ({ default: m.InvitePage })),
   "user-new-form": () => import("./islands/user-forms").then((m) => ({ default: m.UserNewForm })),
   "sp-new-form": () => import("./islands/user-forms").then((m) => ({ default: m.SpNewForm })),
+  "sandboxes-page": () => import("./islands/sandboxes"),
+  "sandbox-detail": () => import("./islands/sandbox-detail"),
+  "sandbox-nav-delete": () => import("./islands/sandbox-nav-delete"),
+  "sandbox-terminal": () => import("./islands/sandbox-terminal"),
+  "sandbox-logs": () => import("./islands/sandbox-logs"),
+  "sandbox-sbom": () => import("./islands/sandbox-sbom"),
+  "sandbox-bypass": () => import("./islands/sandbox-bypass"),
+  "sandbox-prover": () => import("./islands/sandbox-prover"),
+  "sandbox-hooks": () => import("./islands/sandbox-hooks"),
+  "sandbox-forward": () => import("./islands/sandbox-forward"),
 };
 
 async function mountIslands(): Promise<void> {

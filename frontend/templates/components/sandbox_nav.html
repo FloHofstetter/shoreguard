@@ -1,4 +1,4 @@
-<div class="subnav" x-data="sandboxNav" data-sandbox-name="{{ sandbox_name }}">
+<div class="subnav">
     <a class="nav-link {{ 'active' if active_tab == 'overview' }}" href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}"><i class="bi bi-grid me-1"></i>Overview</a>
     <a class="nav-link {{ 'active' if active_tab == 'policy' }}" href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/policy"><i class="bi bi-shield-lock me-1"></i>Policy</a>
     <a class="nav-link {{ 'active' if active_tab == 'approvals' }}" href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/approvals"><i class="bi bi-check-circle me-1"></i>Approvals</a>
@@ -10,7 +10,5 @@
     <a class="nav-link {{ 'active' if active_tab == 'terminal' }}" href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/terminal"><i class="bi bi-terminal me-1"></i>Terminal</a>
     <a class="nav-link {{ 'active' if active_tab == 'forward' }}" href="/gateways/{{ gateway_name }}/sandboxes/{{ sandbox_name }}/forward"><i class="bi bi-hdd-network me-1"></i>Forward</a>
     <span class="subnav-spacer"></span>
-    <button class="btn btn-sm text-muted" data-sg-min-role="operator" @click="del()" title="Delete sandbox">
-        <i class="bi bi-trash3"></i>
-    </button>
+    <span data-island="sandbox-nav-delete" data-props='{"name": {{ sandbox_name|tojson }}}'></span>
 </div>
