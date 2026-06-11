@@ -83,6 +83,43 @@ def validate_webhook_url(url: str) -> str:
     return url
 
 
+def validate_mqtt_url(url: str) -> str:
+    """Validate an MQTT broker URL for the mqtt webhook channel.
+
+    Unlike HTTP webhook targets, a private broker address is accepted in
+    local mode — homelab brokers (Home Assistant, Mosquitto) virtually
+    always live on the LAN. Publishing is write-only, so the SSRF read
+    primitive HTTP targets are guarded against does not apply; outside
+    local mode the standard allowlist escape hatch still governs.
+
+    Args:
+        url: The broker URL to validate.
+
+    Returns:
+        str: The cleaned (stripped) URL.
+
+    Raises:
+        DomainValidationError: If the URL is invalid or points to a private
+            address outside local mode.
+    """
+    url = url.strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in ("mqtt", "mqtts"):
+        raise DomainValidationError(f"URL scheme must be mqtt or mqtts, got '{parsed.scheme}'")
+    if not parsed.hostname:
+        raise DomainValidationError("URL must include a hostname")
+    if parsed.username or parsed.password:
+        raise DomainValidationError(
+            "URL must not contain credentials — put username/password in extra_config"
+        )
+    if is_private_ip(parsed.hostname) and not get_settings().server.local_mode:
+        raise DomainValidationError(
+            "MQTT broker must not point to a private/loopback address outside "
+            "local mode (exempt via SHOREGUARD_SSRF_ALLOWED_IPS)"
+        )
+    return url
+
+
 def validate_smtp_host(host: str) -> None:
     """Validate an SMTP host is not a private/internal address.
 

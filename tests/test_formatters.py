@@ -419,7 +419,11 @@ class TestFormattersDict:
             "email",
             "ntfy",
             "telegram",
+            "mqtt",
         }
+
+    def test_mqtt_uses_generic_envelope(self):
+        assert FORMATTERS["mqtt"] is format_generic
 
     def test_ntfy_is_format_ntfy(self):
         assert FORMATTERS["ntfy"] is format_ntfy

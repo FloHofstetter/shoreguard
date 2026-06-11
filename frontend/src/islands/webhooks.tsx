@@ -28,7 +28,7 @@ interface Delivery {
   error_message?: string;
 }
 
-const CHANNELS = ["generic", "slack", "discord", "email", "ntfy", "telegram"];
+const CHANNELS = ["generic", "slack", "discord", "email", "ntfy", "telegram", "mqtt"];
 
 function formatDateTime(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleString() : "—";
@@ -228,6 +228,7 @@ export default function WebhooksPage() {
   const [newSmtpHost, setNewSmtpHost] = useState("");
   const [newToAddrs, setNewToAddrs] = useState("");
   const [newNtfyToken, setNewNtfyToken] = useState("");
+  const [newMqttTopic, setNewMqttTopic] = useState("");
   const [createError, setCreateError] = useState("");
   const [lastCreated, setLastCreated] = useState<{
     id: string;
@@ -275,14 +276,17 @@ export default function WebhooksPage() {
     if (newChannel === "email") {
       const host = newSmtpHost.trim();
       const to = splitCsv(newToAddrs);
-      if (!host || to.length === 0) {
-        setCreateError("Email channel needs an SMTP host and at least one to-address.");
+      if (to.length === 0) {
+        setCreateError("Email channel needs at least one to-address.");
         return;
       }
-      body.extra_config = { smtp_host: host, to_addrs: to };
+      body.extra_config = host ? { smtp_host: host, to_addrs: to } : { to_addrs: to };
     }
     if (newChannel === "ntfy" && newNtfyToken.trim()) {
       body.extra_config = { token: newNtfyToken.trim() };
+    }
+    if (newChannel === "mqtt" && newMqttTopic.trim()) {
+      body.extra_config = { topic: newMqttTopic.trim() };
     }
     try {
       const created = await apiFetch<{ id: string; url: string; secret: string }>(
@@ -301,6 +305,7 @@ export default function WebhooksPage() {
       setNewSmtpHost("");
       setNewToAddrs("");
       setNewNtfyToken("");
+      setNewMqttTopic("");
       setShowCreate(false);
       await load();
     } catch (e) {
@@ -450,7 +455,12 @@ export default function WebhooksPage() {
                 <div class="col-12">
                   <div class="row g-2">
                     <div class="col-md-6">
-                      <label class="form-label small text-muted mb-1">SMTP host</label>
+                      <label class="form-label small text-muted mb-1">
+                        SMTP host{" "}
+                        <span class="text-muted">
+                          (optional with <code>SHOREGUARD_SMTP_HOST</code>)
+                        </span>
+                      </label>
                       <input
                         type="text"
                         class="form-control form-control-sm"
@@ -507,6 +517,31 @@ export default function WebhooksPage() {
                       https://api.telegram.org/bot&lt;TOKEN&gt;/sendMessage?chat_id=&lt;CHAT&gt;
                     </code>
                     . Create a bot via @BotFather; @userinfobot tells you the chat id.
+                  </div>
+                </div>
+              )}
+              {newChannel === "mqtt" && (
+                <div class="col-12">
+                  <div class="row g-2">
+                    <div class="col-md-6">
+                      <label class="form-label small text-muted mb-1">
+                        Base topic <span class="text-muted">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        class="form-control form-control-sm"
+                        placeholder="shoreguard"
+                        value={newMqttTopic}
+                        onInput={(e) => setNewMqttTopic((e.target as HTMLInputElement).value)}
+                      />
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                      <div class="form-text small">
+                        Target URL is the broker, e.g. <code>mqtt://192.168.1.10:1883</code>.
+                        Events publish to <code>&lt;topic&gt;/&lt;event&gt;</code> — ideal for
+                        Home Assistant automations.
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

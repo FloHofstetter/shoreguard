@@ -163,6 +163,51 @@ class TestCreateWebhook:
         assert resp.status_code == 400
         assert "chat" in resp.json()["detail"]
 
+    async def test_create_mqtt_with_broker_url(self, admin_client):
+        data = await _create_webhook(
+            admin_client,
+            url="mqtt://broker.example.com:1883",
+            channel_type="mqtt",
+            extra_config={"topic": "home/shoreguard"},
+        )
+        assert data["channel_type"] == "mqtt"
+        assert data["extra_config"]["topic"] == "home/shoreguard"
+
+    async def test_create_mqtt_rejects_http_url(self, admin_client):
+        resp = await admin_client.post(
+            "/api/webhooks",
+            json={
+                "url": "https://broker.example.com",
+                "event_types": ["*"],
+                "channel_type": "mqtt",
+            },
+        )
+        assert resp.status_code == 400
+        assert "mqtt" in resp.json()["detail"]
+
+    async def test_create_generic_rejects_mqtt_url(self, admin_client):
+        resp = await admin_client.post(
+            "/api/webhooks",
+            json={
+                "url": "mqtt://broker.example.com",
+                "event_types": ["*"],
+                "channel_type": "generic",
+            },
+        )
+        assert resp.status_code == 400
+
+    async def test_create_mqtt_private_broker_rejected_outside_local_mode(self, admin_client):
+        resp = await admin_client.post(
+            "/api/webhooks",
+            json={
+                "url": "mqtt://192.168.1.10",
+                "event_types": ["*"],
+                "channel_type": "mqtt",
+            },
+        )
+        assert resp.status_code == 400
+        assert "private" in resp.json()["detail"]
+
     async def test_create_email_missing_config(self, admin_client):
         resp = await admin_client.post(
             "/api/webhooks",

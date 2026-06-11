@@ -649,6 +649,156 @@ class TestEmailDelivery:
         assert any(d["status"] == "failed" for d in deliveries)
 
 
+# ─── MQTT delivery tests ─────────────────────────────────────────────────────
+
+
+def _mqtt_body(event: str = "sandbox.created") -> str:
+    return json.dumps({"event": event, "timestamp": "2026-06-11T00:00:00Z", "data": {"a": 1}})
+
+
+def _patch_paho(mock_pub: MagicMock):
+    """Patch the full paho module chain so `import paho.mqtt.publish` binds the mock."""
+    mock_mqtt = MagicMock(publish=mock_pub)
+    return patch.dict(
+        "sys.modules",
+        {"paho": MagicMock(mqtt=mock_mqtt), "paho.mqtt": mock_mqtt, "paho.mqtt.publish": mock_pub},
+    )
+
+
+class TestMqttDelivery:
+    """Tests for the _deliver_mqtt path."""
+
+    async def _delivery_id(self, webhook_svc, **create_overrides) -> tuple[int, int]:
+        params = {
+            "url": "mqtt://broker.example.com",
+            "event_types": ["*"],
+            "created_by": "admin@test.com",
+            "channel_type": "mqtt",
+        }
+        params.update(create_overrides)
+        wh = await webhook_svc.create(**params)
+        delivery_id = await webhook_svc._create_delivery(wh["id"], "sandbox.created", "{}")
+        return wh["id"], delivery_id
+
+    async def test_mqtt_publish_success_topic_carries_event(self, webhook_svc):
+        wh_id, delivery_id = await self._delivery_id(webhook_svc)
+        target = _make_target(
+            webhook_id=wh_id, url="mqtt://broker.example.com", channel_type="mqtt"
+        )
+
+        mock_mod = MagicMock()
+        with _patch_paho(mock_mod):
+            await webhook_svc._deliver_mqtt(target, _mqtt_body(), delivery_id)
+
+        mock_mod.single.assert_called_once()
+        args, kwargs = mock_mod.single.call_args
+        assert args[0] == "shoreguard/sandbox.created"
+        assert kwargs["hostname"] == "broker.example.com"
+        assert kwargs["port"] == 1883
+        assert kwargs["tls"] is None
+        deliveries = await webhook_svc.list_deliveries(wh_id)
+        assert any(d["status"] == "success" for d in deliveries)
+
+    async def test_mqtt_custom_topic_and_mqtts_defaults(self, webhook_svc):
+        wh_id, delivery_id = await self._delivery_id(
+            webhook_svc,
+            url="mqtts://broker.example.com",
+            extra_config=json.dumps({"topic": "home/sg/"}),
+        )
+        target = _make_target(
+            webhook_id=wh_id,
+            url="mqtts://broker.example.com",
+            channel_type="mqtt",
+            extra_config=json.dumps({"topic": "home/sg/"}),
+        )
+
+        mock_mod = MagicMock()
+        with _patch_paho(mock_mod):
+            await webhook_svc._deliver_mqtt(target, _mqtt_body(), delivery_id)
+
+        args, kwargs = mock_mod.single.call_args
+        assert args[0] == "home/sg/sandbox.created"
+        assert kwargs["port"] == 8883
+        assert kwargs["tls"] == {}
+
+    async def test_mqtt_auth_from_extra_config(self, webhook_svc):
+        cfg = json.dumps({"username": "ha", "password": "pw"})
+        wh_id, delivery_id = await self._delivery_id(webhook_svc, extra_config=cfg)
+        target = _make_target(
+            webhook_id=wh_id,
+            url="mqtt://broker.example.com",
+            channel_type="mqtt",
+            extra_config=cfg,
+        )
+
+        mock_mod = MagicMock()
+        with _patch_paho(mock_mod):
+            await webhook_svc._deliver_mqtt(target, _mqtt_body(), delivery_id)
+
+        assert mock_mod.single.call_args.kwargs["auth"] == {"username": "ha", "password": "pw"}
+
+    async def test_mqtt_private_broker_blocked_outside_local_mode(self, webhook_svc):
+        wh_id, delivery_id = await self._delivery_id(webhook_svc, url="mqtt://192.168.1.10")
+        target = _make_target(webhook_id=wh_id, url="mqtt://192.168.1.10", channel_type="mqtt")
+
+        mock_mod = MagicMock()
+        with _patch_paho(mock_mod):
+            await webhook_svc._deliver_mqtt(target, _mqtt_body(), delivery_id)
+
+        mock_mod.single.assert_not_called()
+        deliveries = await webhook_svc.list_deliveries(wh_id)
+        failed = [d for d in deliveries if d["status"] == "failed"]
+        assert failed and "SSRF" in failed[0]["error_message"]
+
+    async def test_mqtt_private_broker_allowed_in_local_mode(self, webhook_svc, monkeypatch):
+        from shoreguard.settings import reset_settings
+
+        monkeypatch.setenv("SHOREGUARD_LOCAL_MODE", "true")
+        reset_settings()
+        try:
+            wh_id, delivery_id = await self._delivery_id(webhook_svc, url="mqtt://192.168.1.10")
+            target = _make_target(webhook_id=wh_id, url="mqtt://192.168.1.10", channel_type="mqtt")
+
+            mock_mod = MagicMock()
+            with _patch_paho(mock_mod):
+                await webhook_svc._deliver_mqtt(target, _mqtt_body(), delivery_id)
+
+            mock_mod.single.assert_called_once()
+            deliveries = await webhook_svc.list_deliveries(wh_id)
+            assert any(d["status"] == "success" for d in deliveries)
+        finally:
+            reset_settings()
+
+    async def test_mqtt_publish_failure_records_error(self, webhook_svc):
+        wh_id, delivery_id = await self._delivery_id(webhook_svc)
+        target = _make_target(
+            webhook_id=wh_id, url="mqtt://broker.example.com", channel_type="mqtt"
+        )
+
+        mock_mod = MagicMock()
+        mock_mod.single.side_effect = OSError("connection refused")
+        with _patch_paho(mock_mod):
+            await webhook_svc._deliver_mqtt(target, _mqtt_body(), delivery_id)
+
+        deliveries = await webhook_svc.list_deliveries(wh_id)
+        failed = [d for d in deliveries if d["status"] == "failed"]
+        assert failed and "connection refused" in failed[0]["error_message"]
+
+    async def test_fire_mqtt_channel_routes_to_mqtt_deliver(self, webhook_svc):
+        await webhook_svc.create(
+            url="mqtt://broker.example.com",
+            event_types=["*"],
+            created_by="admin@test.com",
+            channel_type="mqtt",
+        )
+        with patch.object(
+            WebhookService, "_deliver_mqtt", new_callable=AsyncMock
+        ) as mock_deliver:
+            await webhook_svc.fire("sandbox.created", {"sandbox": "x"})
+            await asyncio.sleep(0.05)
+        mock_deliver.assert_called_once()
+
+
 # ─── Convenience function tests ─────────────────────────────────────────────
 
 

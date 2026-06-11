@@ -31,6 +31,7 @@ from shoreguard.api.schemas import (
 )
 from shoreguard.api.validation import (
     check_write_rate_limit,
+    validate_mqtt_url,
     validate_smtp_host,
     validate_webhook_url,
 )
@@ -40,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-VALID_CHANNEL_TYPES = ("generic", "slack", "discord", "email", "ntfy", "telegram")
+VALID_CHANNEL_TYPES = ("generic", "slack", "discord", "email", "ntfy", "telegram", "mqtt")
 
 
 def _require_telegram_chat_id(url: str) -> None:
@@ -89,12 +90,15 @@ class WebhookCreateRequest(BaseModel):
     Attributes:
         url: Target URL for POST requests. For ntfy this is the topic URL
             (e.g. ``https://ntfy.sh/my-topic``); for telegram the bot
-            sendMessage endpoint with a ``chat_id`` query parameter.
+            sendMessage endpoint with a ``chat_id`` query parameter; for
+            mqtt the broker URL (``mqtt://host:1883`` or ``mqtts://``).
         event_types: List of event type strings to subscribe to.
         channel_type: Channel type (generic, slack, discord, email, ntfy,
-            telegram).
+            telegram, mqtt).
         extra_config: Optional channel-specific config (e.g. SMTP settings,
-            or ``{"token": "tk_..."}`` for ntfy access tokens).
+            ``{"token": "tk_..."}`` for ntfy access tokens, or
+            ``{"topic": "...", "username": "...", "password": "..."}``
+            for mqtt).
     """
 
     url: str = Field(max_length=2048)
@@ -229,7 +233,10 @@ async def create_webhook(body: WebhookCreateRequest, request: Request) -> dict[s
     """
     check_write_rate_limit(request)
     svc = _get_svc()
-    validate_webhook_url(body.url)
+    if body.channel_type == "mqtt":
+        validate_mqtt_url(body.url)
+    else:
+        validate_webhook_url(body.url)
 
     if body.channel_type == "email":
         from shoreguard.settings import get_settings
@@ -321,7 +328,10 @@ async def update_webhook(
     check_write_rate_limit(request)
     svc = _get_svc()
     if body.url is not None:
-        validate_webhook_url(body.url)
+        if body.channel_type == "mqtt":
+            validate_mqtt_url(body.url)
+        else:
+            validate_webhook_url(body.url)
         if body.channel_type == "ntfy":
             _require_ntfy_topic(body.url)
         if body.channel_type == "telegram":

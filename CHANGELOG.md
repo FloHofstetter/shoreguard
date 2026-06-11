@@ -20,6 +20,13 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **MQTT webhook channel (Home Assistant bridge)** — `channel_type:
+  "mqtt"` publishes the generic event envelope to
+  `<topic>/<event-type>` on an `mqtt://`/`mqtts://` broker (one-shot,
+  write-only, optional auth/qos/retain via `extra_config`). Private
+  broker addresses are allowed in `--local` mode; the docs ship Home
+  Assistant automations for actionable approval notifications and a
+  kill-switch light. New dependency `paho-mqtt`.
 - **Server-wide SMTP defaults** — `SHOREGUARD_SMTP_HOST/_PORT/_USERNAME/
   _PASSWORD/_FROM_ADDR` configure the mail relay once; email webhooks
   then only need `to_addrs` in their `extra_config` (per-webhook values

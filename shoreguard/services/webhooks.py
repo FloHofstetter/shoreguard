@@ -435,6 +435,9 @@ class WebhookService:
         if target.channel_type == "email":
             await self._deliver_email(target, body, delivery_id)
             return
+        if target.channel_type == "mqtt":
+            await self._deliver_mqtt(target, body, delivery_id)
+            return
         await self._deliver_http_with_retry(target, body, delivery_id)
 
     @staticmethod
@@ -567,6 +570,85 @@ class WebhookService:
             max_attempts,
             error_msg,
         )
+
+    async def _deliver_mqtt(self, target: _Target, body: str, delivery_id: int) -> None:
+        """Publish a notification to an MQTT broker (Home Assistant bridge).
+
+        The registered URL names the broker (``mqtt://host[:port]`` or
+        ``mqtts://`` for TLS); the message goes to ``<topic>/<event_type>``
+        where ``topic`` comes from ``extra_config`` (default ``shoreguard``)
+        so consumers can subscribe per event type. Publish is one-shot and
+        write-only — nothing is read back from the broker.
+
+        Unlike HTTP targets, a private broker address is allowed in local
+        mode: in the homelab the broker virtually always lives on the LAN.
+        Outside local mode, exempt it via ``SHOREGUARD_SSRF_ALLOWED_IPS``.
+
+        Args:
+            target: Delivery target with broker URL and topic config.
+            body: JSON-encoded event envelope.
+            delivery_id: Delivery record ID.
+        """
+        try:
+            from urllib.parse import urlsplit
+
+            import paho.mqtt.publish as mqtt_publish
+
+            from shoreguard.settings import get_settings
+
+            config = json.loads(target.extra_config or "{}")
+            parts = urlsplit(target.url)
+            host = parts.hostname or "localhost"
+
+            if is_private_ip(host) and not get_settings().server.local_mode:
+                await self._update_delivery(
+                    delivery_id,
+                    status="failed",
+                    error_message="SSRF blocked: MQTT broker resolves to a private "
+                    "address (run --local or exempt via SHOREGUARD_SSRF_ALLOWED_IPS)",
+                    attempt=1,
+                )
+                self._inc_delivery_counter("failed")
+                return
+
+            port = parts.port or (8883 if parts.scheme == "mqtts" else 1883)
+            try:
+                event = json.loads(body).get("event") or "event"
+            except ValueError:
+                event = "event"
+            base_topic = str(config.get("topic") or "shoreguard").rstrip("/")
+            topic = f"{base_topic}/{event}"
+
+            auth: dict[str, Any] | None = None
+            username = config.get("username")
+            if username:
+                auth = {"username": username, "password": config.get("password")}
+            qos = int(config.get("qos", 0))
+            retain = bool(config.get("retain", False))
+            tls: dict[str, Any] | None = {} if parts.scheme == "mqtts" else None
+
+            await asyncio.to_thread(
+                mqtt_publish.single,
+                topic,
+                payload=body,
+                qos=qos,
+                retain=retain,
+                hostname=host,
+                port=port,
+                auth=auth,
+                tls=tls,
+                client_id="shoreguard",
+                keepalive=10,
+            )
+            await self._update_delivery(delivery_id, status="success", attempt=1)
+            self._inc_delivery_counter("success")
+            logger.info("MQTT notification published for webhook %d", target.webhook_id)
+        except Exception as e:
+            logger.warning("MQTT delivery failed", exc_info=True)
+            await self._update_delivery(
+                delivery_id, status="failed", error_message=str(e), attempt=1
+            )
+            self._inc_delivery_counter("failed")
 
     async def _deliver_email(self, target: _Target, body: str, delivery_id: int) -> None:
         """Send a notification email via SMTP.

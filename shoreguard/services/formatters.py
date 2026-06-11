@@ -374,4 +374,7 @@ FORMATTERS: dict[str, Any] = {
     "email": format_email_body,
     "ntfy": format_ntfy,
     "telegram": format_telegram,
+    # MQTT publishes the same envelope as generic; the topic carries the
+    # event type, so consumers (Home Assistant) can subscribe selectively.
+    "mqtt": format_generic,
 }

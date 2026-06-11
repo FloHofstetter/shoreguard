@@ -43,6 +43,7 @@ Each webhook has a `channel_type` that controls payload formatting and delivery:
 | `email` | SMTP delivery | Plain-text email |
 | `ntfy` | HTTP POST to an [ntfy](https://ntfy.sh) server | ntfy JSON publish with title, priority, and tags |
 | `telegram` | HTTP POST to the Telegram Bot API | `sendMessage` with HTML text and inline buttons |
+| `mqtt` | One-shot MQTT publish to a broker | JSON envelope `{event, timestamp, data}` on topic `<base>/<event>` |
 
 ### ntfy channel (push notifications)
 
@@ -150,6 +151,79 @@ SHOREGUARD_SMTP_FROM_ADDR=shoreguard@example.com
 
 This pairs well with the daily digest (`SHOREGUARD_DIGEST_ENABLED`) — a
 `digest.daily` email at 07:00 is the classic homelab morning report.
+
+### MQTT channel (Home Assistant bridge)
+
+Point the webhook URL at your broker (`mqtt://` or `mqtts://` for TLS).
+Every subscribed event publishes the generic JSON envelope to
+`<base-topic>/<event-type>` — e.g. `shoreguard/kill_switch.engaged` —
+so consumers subscribe per event:
+
+```json
+{
+  "url": "mqtt://192.168.1.10:1883",
+  "channel_type": "mqtt",
+  "event_types": ["gateway.unreachable", "gateway.recovered",
+                  "kill_switch.engaged", "kill_switch.released",
+                  "budget.exceeded", "approval.pending"],
+  "extra_config": {
+    "topic": "shoreguard",
+    "username": "shoreguard",
+    "password": "secret",
+    "qos": 1
+  }
+}
+```
+
+Private broker addresses are allowed in `--local` mode (the homelab
+default — your Mosquitto/Home Assistant broker lives on the LAN);
+outside local mode, exempt the broker via `SHOREGUARD_SSRF_ALLOWED_IPS`.
+Publishing is one-shot and write-only; nothing is read back.
+
+**Home Assistant examples.** A binary sensor that mirrors gateway health:
+
+```yaml
+mqtt:
+  binary_sensor:
+    - name: "OpenShell gateway"
+      state_topic: "shoreguard/gateway.unreachable"
+      value_template: "OFF"   # any message on this topic means down
+      off_delay: 0
+```
+
+More idiomatic is an automation pair — actionable phone notification on
+a pending approval, with the one-tap links from the payload:
+
+```yaml
+automation:
+  - alias: "Agent approval needed"
+    trigger:
+      - platform: mqtt
+        topic: "shoreguard/approval.pending"
+    action:
+      - service: notify.mobile_app_phone
+        data:
+          title: "Agent approval needed"
+          message: "{{ trigger.payload_json.data.sandbox }} requests a rule"
+          data:
+            actions:
+              - action: "URI"
+                title: "Approve"
+                uri: "{{ trigger.payload_json.data.approve_url }}"
+              - action: "URI"
+                title: "Reject"
+                uri: "{{ trigger.payload_json.data.reject_url }}"
+  - alias: "Kill switch engaged — flash the office light"
+    trigger:
+      - platform: mqtt
+        topic: "shoreguard/kill_switch.engaged"
+    action:
+      - service: light.turn_on
+        data: { entity_id: light.office, color_name: red }
+```
+
+The `approve_url`/`reject_url` fields are present when
+[one-tap approvals](#one-tap-approvereject-from-your-phone) are enabled.
 
 ---
 
