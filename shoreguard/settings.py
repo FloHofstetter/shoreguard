@@ -774,6 +774,39 @@ class DigestSettings(BaseSettings):
     )
 
 
+class SmtpSettings(BaseSettings):
+    """Server-wide SMTP defaults for the email webhook channel.
+
+    Per-webhook ``extra_config`` values always win; these fill the gaps
+    so a homelab box configures SMTP once instead of per webhook.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        host (str | None): Default SMTP relay host. When set, email
+            webhooks no longer need ``smtp_host`` in their config.
+        port (int): Default SMTP port.
+        username (str | None): Default SMTP username.
+        password (str | None): Default SMTP password (secret).
+        from_addr (str): Default From address.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_SMTP_")
+
+    host: str | None = Field(
+        default=None,
+        description="Default SMTP relay host for email webhooks. When set, "
+        "email webhooks only need to_addrs in their extra_config; "
+        "per-webhook smtp_host still overrides.",
+    )
+    port: int = Field(default=587, ge=1, le=65535, description="Default SMTP port")
+    username: str | None = Field(default=None, description="Default SMTP username")
+    password: str | None = Field(default=None, description="Default SMTP password (secret)")
+    from_addr: str = Field(
+        default="shoreguard@localhost",
+        description="Default From address for email webhooks",
+    )
+
+
 class CertRotationSettings(BaseSettings):
     """Proactive mTLS client-cert rotation settings.
 
@@ -1179,6 +1212,7 @@ class Settings(BaseSettings):
         cert_rotation (CertRotationSettings): Proactive mTLS cert rotation.
         digest (DigestSettings): Daily activity digest dispatch.
         budget (BudgetSettings): Inference usage metering and budgets.
+        smtp (SmtpSettings): Server-wide SMTP defaults for email webhooks.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -1202,6 +1236,7 @@ class Settings(BaseSettings):
     cert_rotation: CertRotationSettings = Field(default_factory=CertRotationSettings)
     digest: DigestSettings = Field(default_factory=DigestSettings)
     budget: BudgetSettings = Field(default_factory=BudgetSettings)
+    smtp: SmtpSettings = Field(default_factory=SmtpSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

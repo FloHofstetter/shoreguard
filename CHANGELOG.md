@@ -20,6 +20,11 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Server-wide SMTP defaults** — `SHOREGUARD_SMTP_HOST/_PORT/_USERNAME/
+  _PASSWORD/_FROM_ADDR` configure the mail relay once; email webhooks
+  then only need `to_addrs` in their `extra_config` (per-webhook values
+  still override). Pairs with the daily digest for a morning report by
+  mail.
 - **Host resource visibility** — `GET /api/system/node-stats` samples
   CPU load, memory, disk, and GPU utilisation/memory/temperature (via
   `nvidia-smi` when present) for the machine running ShoreGuard, cached

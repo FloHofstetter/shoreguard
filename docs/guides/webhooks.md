@@ -128,6 +128,29 @@ For email webhooks, provide SMTP settings in `extra_config`:
 }
 ```
 
+Instead of repeating the relay per webhook, configure it once server-wide
+and only pass `to_addrs` per webhook — per-webhook values still override:
+
+```bash
+SHOREGUARD_SMTP_HOST=smtp.example.com
+SHOREGUARD_SMTP_PORT=587            # default
+SHOREGUARD_SMTP_USERNAME=user       # optional
+SHOREGUARD_SMTP_PASSWORD=pass       # optional
+SHOREGUARD_SMTP_FROM_ADDR=shoreguard@example.com
+```
+
+```json
+{
+  "url": "smtp://placeholder",
+  "channel_type": "email",
+  "event_types": ["digest.daily"],
+  "extra_config": { "to_addrs": ["ops@example.com"] }
+}
+```
+
+This pairs well with the daily digest (`SHOREGUARD_DIGEST_ENABLED`) — a
+`digest.daily` email at 07:00 is the classic homelab morning report.
+
 ---
 
 ## Event types

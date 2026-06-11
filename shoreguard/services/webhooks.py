@@ -571,6 +571,10 @@ class WebhookService:
     async def _deliver_email(self, target: _Target, body: str, delivery_id: int) -> None:
         """Send a notification email via SMTP.
 
+        Per-webhook ``extra_config`` values win; gaps fall back to the
+        server-wide ``SHOREGUARD_SMTP_*`` defaults so a homelab box can
+        configure its relay once.
+
         Args:
             target: Delivery target with SMTP config in extra_config.
             body: Plain-text email body.
@@ -581,9 +585,12 @@ class WebhookService:
 
             import aiosmtplib
 
+            from shoreguard.settings import get_settings
+
+            smtp_defaults = get_settings().smtp
             config = json.loads(target.extra_config or "{}")
-            smtp_host = config.get("smtp_host", "localhost")
-            smtp_port = config.get("smtp_port", 587)
+            smtp_host = config.get("smtp_host") or smtp_defaults.host or "localhost"
+            smtp_port = config.get("smtp_port") or smtp_defaults.port
 
             # DNS-rebinding protection for SMTP targets
             if is_private_ip(smtp_host):
@@ -601,9 +608,9 @@ class WebhookService:
                 )
                 self._inc_delivery_counter("failed")
                 return
-            smtp_user = config.get("smtp_user")
-            smtp_pass = config.get("smtp_pass")
-            from_addr = config.get("from_addr", "shoreguard@localhost")
+            smtp_user = config.get("smtp_user") or smtp_defaults.username
+            smtp_pass = config.get("smtp_pass") or smtp_defaults.password
+            from_addr = config.get("from_addr") or smtp_defaults.from_addr
             to_addrs = config.get("to_addrs", [target.url])
 
             msg = EmailMessage()

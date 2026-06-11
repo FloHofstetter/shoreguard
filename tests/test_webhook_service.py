@@ -544,6 +544,81 @@ class TestEmailDelivery:
         deliveries = await webhook_svc.list_deliveries(wh["id"])
         assert any(d["status"] == "success" for d in deliveries)
 
+    async def test_email_delivery_global_smtp_fallback(self, webhook_svc, monkeypatch):
+        """extra_config gaps fall back to SHOREGUARD_SMTP_* defaults."""
+        import json
+
+        from shoreguard.settings import reset_settings
+
+        monkeypatch.setenv("SHOREGUARD_SMTP_HOST", "relay.example.com")
+        monkeypatch.setenv("SHOREGUARD_SMTP_PORT", "2525")
+        monkeypatch.setenv("SHOREGUARD_SMTP_FROM_ADDR", "alerts@example.com")
+        reset_settings()
+        try:
+            wh = await webhook_svc.create(
+                url="admin@example.com",
+                event_types=["*"],
+                created_by="admin@test.com",
+                channel_type="email",
+                extra_config=json.dumps({"to_addrs": ["admin@example.com"]}),
+            )
+            delivery_id = await webhook_svc._create_delivery(wh["id"], "webhook.test", "{}")
+            target = _make_target(
+                webhook_id=wh["id"],
+                url="admin@example.com",
+                channel_type="email",
+                extra_config=json.dumps({"to_addrs": ["admin@example.com"]}),
+            )
+
+            mock_smtp_mod = MagicMock()
+            mock_smtp_mod.send = AsyncMock()
+            with patch.dict("sys.modules", {"aiosmtplib": mock_smtp_mod}):
+                await webhook_svc._deliver_email(target, "Subject\nBody", delivery_id)
+                mock_smtp_mod.send.assert_called_once()
+                kwargs = mock_smtp_mod.send.call_args.kwargs
+                assert kwargs["hostname"] == "relay.example.com"
+                assert kwargs["port"] == 2525
+                msg = mock_smtp_mod.send.call_args.args[0]
+                assert msg["From"] == "alerts@example.com"
+        finally:
+            reset_settings()
+
+    async def test_email_delivery_per_webhook_overrides_global(self, webhook_svc, monkeypatch):
+        """Per-webhook smtp_host wins over the global default."""
+        import json
+
+        from shoreguard.settings import reset_settings
+
+        monkeypatch.setenv("SHOREGUARD_SMTP_HOST", "relay.example.com")
+        reset_settings()
+        try:
+            wh = await webhook_svc.create(
+                url="admin@example.com",
+                event_types=["*"],
+                created_by="admin@test.com",
+                channel_type="email",
+                extra_config=json.dumps(
+                    {"smtp_host": "smtp.example.com", "to_addrs": ["a@b.com"]}
+                ),
+            )
+            delivery_id = await webhook_svc._create_delivery(wh["id"], "webhook.test", "{}")
+            target = _make_target(
+                webhook_id=wh["id"],
+                url="admin@example.com",
+                channel_type="email",
+                extra_config=json.dumps(
+                    {"smtp_host": "smtp.example.com", "to_addrs": ["a@b.com"]}
+                ),
+            )
+
+            mock_smtp_mod = MagicMock()
+            mock_smtp_mod.send = AsyncMock()
+            with patch.dict("sys.modules", {"aiosmtplib": mock_smtp_mod}):
+                await webhook_svc._deliver_email(target, "Subject\nBody", delivery_id)
+                assert mock_smtp_mod.send.call_args.kwargs["hostname"] == "smtp.example.com"
+        finally:
+            reset_settings()
+
     async def test_email_delivery_failure(self, webhook_svc):
         """Email delivery failure records error in delivery."""
         import json

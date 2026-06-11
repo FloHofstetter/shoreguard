@@ -170,6 +170,41 @@ class TestCreateWebhook:
         )
         assert resp.status_code == 400
 
+    async def test_create_email_without_smtp_host_uses_global(self, admin_client, monkeypatch):
+        from shoreguard.settings import reset_settings
+
+        monkeypatch.setenv("SHOREGUARD_SMTP_HOST", "relay.example.com")
+        reset_settings()
+        try:
+            data = await _create_webhook(
+                admin_client,
+                channel_type="email",
+                extra_config={"to_addrs": ["a@b.com"]},
+            )
+            assert data["channel_type"] == "email"
+        finally:
+            reset_settings()
+
+    async def test_create_email_without_to_addrs_rejected(self, admin_client, monkeypatch):
+        from shoreguard.settings import reset_settings
+
+        monkeypatch.setenv("SHOREGUARD_SMTP_HOST", "relay.example.com")
+        reset_settings()
+        try:
+            resp = await admin_client.post(
+                "/api/webhooks",
+                json={
+                    "url": "https://x.com",
+                    "event_types": ["*"],
+                    "channel_type": "email",
+                    "extra_config": {},
+                },
+            )
+            assert resp.status_code == 400
+            assert "to_addrs" in resp.json()["detail"]
+        finally:
+            reset_settings()
+
     async def test_create_email_incomplete_config(self, admin_client):
         resp = await admin_client.post(
             "/api/webhooks",

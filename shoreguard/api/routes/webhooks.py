@@ -231,12 +231,21 @@ async def create_webhook(body: WebhookCreateRequest, request: Request) -> dict[s
     svc = _get_svc()
     validate_webhook_url(body.url)
 
-    if body.channel_type == "email" and not body.extra_config:
-        raise HTTPException(400, "Email channel requires extra_config with smtp_host and to_addrs")
-    if body.channel_type == "email" and body.extra_config:
-        if "smtp_host" not in body.extra_config or "to_addrs" not in body.extra_config:
-            raise HTTPException(400, "Email extra_config must include smtp_host and to_addrs")
-        validate_smtp_host(str(body.extra_config["smtp_host"]))
+    if body.channel_type == "email":
+        from shoreguard.settings import get_settings
+
+        has_global_smtp = get_settings().smtp.host is not None
+        config = body.extra_config or {}
+        if "to_addrs" not in config:
+            raise HTTPException(400, "Email channel requires extra_config with to_addrs")
+        if "smtp_host" not in config and not has_global_smtp:
+            raise HTTPException(
+                400,
+                "Email extra_config must include smtp_host "
+                "(or configure SHOREGUARD_SMTP_HOST server-wide)",
+            )
+        if "smtp_host" in config:
+            validate_smtp_host(str(config["smtp_host"]))
     if body.channel_type == "ntfy":
         _require_ntfy_topic(body.url)
     if body.channel_type == "telegram":
