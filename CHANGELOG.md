@@ -12,6 +12,13 @@ local-agent deployment a first-class citizen.
 
 ### Fixed
 
+- **Startup crash on restart after running post-baseline migrations** —
+  the v2-baseline stamp check rejected every `alembic_version` other
+  than the v0.37 head and the baseline itself, so a persistent database
+  that had applied migrations 101+ (kill switch, budgets, …) failed the
+  *next* boot with "predates ShoreGuard v0.37". Revisions known to the
+  embedded migration chain are now handed to the regular `upgrade head`
+  path; only genuinely unknown (pre-squash) revisions raise.
 - **Review fixes for the 0.39 feature train** (multi-agent adversarial
   review): backup restore now stages files next to their destination
   before swapping, so it survives `/tmp`-on-tmpfs (EXDEV) and a failed

@@ -25,6 +25,38 @@ def test_init_db_in_memory():
     engine.dispose()
 
 
+def test_init_db_restart_on_migrated_db():
+    """A DB already at a post-baseline revision must boot again.
+
+    Regression: the v2-baseline stamp check used to reject every revision
+    other than '017' and 'v2_baseline' as "pre-v0.37", so any restart on a
+    persistent DB that had run migrations 101+ crashed at startup.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        url = f"sqlite:///{d}/test.db"
+        engine = init_db(url)
+        engine.dispose()
+        engine = init_db(url)  # second boot on the same file must not raise
+        tables = inspect(engine).get_table_names()
+        assert "gateways" in tables
+        engine.dispose()
+
+
+def test_init_db_rejects_pre_squash_revision():
+    """A revision unknown to the current chain still raises the upgrade hint."""
+    import pytest
+    from sqlalchemy import text
+
+    with tempfile.TemporaryDirectory() as d:
+        url = f"sqlite:///{d}/test.db"
+        engine = init_db(url)
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE alembic_version SET version_num = '009'"))
+        engine.dispose()
+        with pytest.raises(RuntimeError, match="predates ShoreGuard v0.37"):
+            init_db(url)
+
+
 def test_init_db_creates_parent_dirs():
     with tempfile.TemporaryDirectory() as d:
         nested = Path(d) / "deep" / "nested"

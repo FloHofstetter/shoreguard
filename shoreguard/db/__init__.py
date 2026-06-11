@@ -10,6 +10,8 @@ from typing import Any
 
 from alembic import command
 from alembic.config import Config as AlembicConfig
+from alembic.script import ScriptDirectory
+from alembic.util.exc import CommandError
 from sqlalchemy import create_engine as sa_create_engine
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
@@ -76,6 +78,8 @@ def _maybe_stamp_v2_baseline(engine: Engine, cfg: AlembicConfig) -> None:
             version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
     except OperationalError, SQLAlchemyError:
         return  # fresh database — no alembic_version table yet
+    if version is None or version == _BASELINE_REVISION:
+        return
     if version == _PRE_SQUASH_HEAD:
         logger.info(
             "Stamping v0.37 database (revision %s) to squashed baseline %s",
@@ -85,12 +89,18 @@ def _maybe_stamp_v2_baseline(engine: Engine, cfg: AlembicConfig) -> None:
         # purge=True clears the old version row without resolving the
         # (now deleted) pre-squash revision in the script directory.
         command.stamp(cfg, _BASELINE_REVISION, purge=True)
-    elif version is not None and version != _BASELINE_REVISION:
+        return
+    script = ScriptDirectory.from_config(cfg)
+    try:
+        script.get_revision(version)
+    except CommandError:
         raise RuntimeError(
             f"Database schema revision '{version}' predates ShoreGuard v0.37. "
             "The migration chain was squashed in v0.38 — upgrade to v0.37 "
             "first, then to this version."
-        )
+        ) from None
+    # A revision the current chain knows (baseline or any migration on
+    # top of it) — the regular `upgrade head` brings it forward.
 
 
 def init_db(url: str | None = None) -> Engine:
