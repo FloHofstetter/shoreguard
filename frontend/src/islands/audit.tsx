@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import { apiFetch } from "../lib/api";
+import { showToast } from "../lib/notify";
 import { EmptyState, ErrorAlert, Spinner } from "../lib/widgets";
 
 interface AuditEntry {
@@ -88,6 +89,25 @@ export default function AuditPage() {
     window.open(`/api/audit/export?${buildParams({ format })}`, "_blank");
   };
 
+  const verifyChain = async () => {
+    try {
+      const r = await apiFetch<{
+        ok: boolean;
+        checked: number;
+        legacy: number;
+        first_bad_id: number | null;
+      }>(`/api/audit/verify`);
+      if (r.ok) {
+        const legacy = r.legacy ? ` (${r.legacy} pre-chain entries skipped)` : "";
+        showToast(`Hash chain intact — ${r.checked} entries verified${legacy}.`, "success");
+      } else {
+        showToast(`HASH CHAIN BROKEN at entry ${r.first_bad_id}.`, "danger");
+      }
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    }
+  };
+
   return (
     <div>
       <div class="d-flex justify-content-between align-items-center mb-4">
@@ -96,6 +116,14 @@ export default function AuditPage() {
           Audit Log
         </h5>
         <div class="d-flex gap-2">
+          <button
+            class="btn btn-sm btn-outline-secondary"
+            title="Verify the tamper-evidence hash chain"
+            onClick={() => void verifyChain()}
+          >
+            <i class="bi bi-shield-check me-1" />
+            Verify chain
+          </button>
           <button class="btn btn-sm btn-outline-secondary" onClick={() => exportAudit("csv")}>
             <i class="bi bi-filetype-csv me-1" />
             Export CSV

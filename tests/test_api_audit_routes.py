@@ -160,6 +160,21 @@ class TestExportAudit:
         assert len(lines) >= 1  # at least header (+ login entry)
 
 
+class TestVerifyChain:
+    async def test_verify_intact(self, admin_client):
+        await _seed_audit(3)
+        resp = await admin_client.get("/api/audit/verify")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["checked"] >= 3  # seeded rows + login entry
+        assert data["first_bad_id"] is None
+
+    async def test_viewer_cannot_verify(self, viewer_client):
+        resp = await viewer_client.get("/api/audit/verify")
+        assert resp.status_code == 403
+
+
 class TestRoleEnforcement:
     async def test_viewer_cannot_list_audit(self, viewer_client):
         resp = await viewer_client.get("/api/audit")

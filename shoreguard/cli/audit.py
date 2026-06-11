@@ -31,6 +31,41 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+@audit_app.command("verify")
+def audit_verify() -> None:
+    """Verify the tamper-evidence hash chain over the audit log.
+
+    Every audit row written since v0.39 hashes its fields together with
+    the previous row's hash; this command recomputes the chain and
+    reports the first break, if any.
+
+    Raises:
+        typer.Exit: With code 1 when the chain is broken.
+    """
+    import asyncio
+
+    from shoreguard.db import get_async_session_factory, get_engine, init_async_db, init_db
+    from shoreguard.services.audit import AuditService
+
+    try:
+        engine = get_engine()
+    except RuntimeError:
+        engine = init_db()
+
+    init_async_db(str(engine.url))
+    svc = AuditService(get_async_session_factory())
+    result = asyncio.run(svc.verify_chain())
+
+    typer.echo(f"Checked: {result['checked']} chained entries")
+    if result["legacy"]:
+        typer.echo(f"Legacy (pre-chain, unverifiable): {result['legacy']}")
+    if result["ok"]:
+        typer.echo("Chain intact ✓")
+    else:
+        typer.echo(f"CHAIN BROKEN at audit entry id={result['first_bad_id']}", err=True)
+        raise typer.Exit(code=1)
+
+
 @audit_app.command("export")
 def audit_export(
     out: Annotated[

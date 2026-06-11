@@ -15,9 +15,11 @@ no built-in prune.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import csv
 import datetime
+import hashlib
 import io
 import json
 import logging
@@ -37,6 +39,62 @@ if TYPE_CHECKING:
 from shoreguard.models import AuditEntry, Gateway
 
 logger = logging.getLogger(__name__)
+
+
+def compute_entry_hash(
+    prev_hash: str,
+    timestamp: datetime.datetime,
+    actor: str,
+    actor_role: str,
+    action: str,
+    resource_type: str,
+    resource_id: str,
+    gateway_name: str | None,
+    detail: str | None,
+    client_ip: str | None,
+) -> str:
+    """Compute the tamper-evidence hash for one audit row.
+
+    The hash covers every operator-meaningful field plus the previous
+    row's hash, forming a chain: editing any row (or reordering rows)
+    invalidates every later hash. ``gateway_id`` is deliberately
+    excluded — it is mutated to NULL by the FK when a gateway is
+    deleted, which is a legitimate operation, not tampering.
+
+    Args:
+        prev_hash: Entry hash of the previous row ("" at chain start).
+        timestamp: Row timestamp (normalised to naive UTC for hashing,
+            so SQLite and PostgreSQL round-trips agree).
+        actor: Acting identity.
+        actor_role: Effective role.
+        action: Action identifier.
+        resource_type: Affected resource type.
+        resource_id: Affected resource id.
+        gateway_name: Gateway name or ``None``.
+        detail: JSON detail string or ``None``.
+        client_ip: Client IP or ``None``.
+
+    Returns:
+        str: Hex SHA-256 digest.
+    """
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.astimezone(datetime.UTC).replace(tzinfo=None)
+    payload = json.dumps(
+        [
+            prev_hash,
+            timestamp.isoformat(),
+            actor,
+            actor_role,
+            action,
+            resource_type,
+            resource_id,
+            gateway_name or "",
+            detail or "",
+            client_ip or "",
+        ],
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 # ── Append-only enforcement ──────────────────────────────────────────────
@@ -126,6 +184,11 @@ class AuditService:
     ) -> None:
         self._session_factory = session_factory
         self._exporter = exporter
+        # Serialises hash-chain computation + insert within this process
+        # so concurrent writes cannot fork the chain. Multi-replica
+        # deployments should rely on the syslog/stdout export lanes for
+        # cross-writer integrity.
+        self._chain_lock = asyncio.Lock()
 
     async def log(
         self,
@@ -152,7 +215,7 @@ class AuditService:
             client_ip: IP address of the client.
         """
         try:
-            async with self._session_factory() as session:
+            async with self._chain_lock, self._session_factory() as session:
                 gateway_id = None
                 if gateway:
                     gw = (
@@ -160,8 +223,15 @@ class AuditService:
                     ).scalar_one_or_none()
                     if gw:
                         gateway_id = gw.id
+                prev_hash = (
+                    await session.execute(
+                        select(AuditEntry.entry_hash).order_by(AuditEntry.id.desc()).limit(1)
+                    )
+                ).scalar_one_or_none() or ""
+                timestamp = datetime.datetime.now(datetime.UTC)
+                detail_json = json.dumps(detail) if detail else None
                 entry = AuditEntry(
-                    timestamp=datetime.datetime.now(datetime.UTC),
+                    timestamp=timestamp,
                     actor=actor,
                     actor_role=actor_role,
                     action=action,
@@ -169,8 +239,21 @@ class AuditService:
                     resource_id=resource_id,
                     gateway_name=gateway,
                     gateway_id=gateway_id,
-                    detail=json.dumps(detail) if detail else None,
+                    detail=detail_json,
                     client_ip=client_ip,
+                    prev_hash=prev_hash or None,
+                    entry_hash=compute_entry_hash(
+                        prev_hash,
+                        timestamp,
+                        actor,
+                        actor_role,
+                        action,
+                        resource_type,
+                        resource_id,
+                        gateway,
+                        detail_json,
+                        client_ip,
+                    ),
                 )
                 session.add(entry)
                 await session.commit()
@@ -184,6 +267,75 @@ class AuditService:
                         )
         except SQLAlchemyError:
             logger.warning("Failed to write audit entry (action=%s)", action, exc_info=True)
+
+    async def verify_chain(self) -> dict[str, Any]:
+        """Recompute the hash chain and report any break.
+
+        Rows written before the chain existed (``entry_hash IS NULL``)
+        are reported as ``legacy`` and skipped — except when they appear
+        *after* hashed rows, which is itself evidence of tampering.
+        Retention cleanup removes the oldest rows, so the first hashed
+        row's back-link is unverifiable by design; its self-hash still is.
+
+        Returns:
+            dict[str, Any]: ``ok``, ``checked``, ``legacy``, and
+            ``first_bad_id`` (``None`` when the chain is intact).
+        """
+        checked = legacy = 0
+        first_bad_id: int | None = None
+        prev_entry_hash: str | None = None
+        batch = 1000
+        last_id = 0
+        async with self._session_factory() as session:
+            while first_bad_id is None:
+                rows = (
+                    (
+                        await session.execute(
+                            select(AuditEntry)
+                            .where(AuditEntry.id > last_id)
+                            .order_by(AuditEntry.id)
+                            .limit(batch)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                if not rows:
+                    break
+                for row in rows:
+                    last_id = row.id
+                    if row.entry_hash is None:
+                        if checked:
+                            # Unhashed row after hashed ones: not legacy.
+                            first_bad_id = row.id
+                            break
+                        legacy += 1
+                        continue
+                    recomputed = compute_entry_hash(
+                        row.prev_hash or "",
+                        row.timestamp,
+                        row.actor,
+                        row.actor_role,
+                        row.action,
+                        row.resource_type,
+                        row.resource_id,
+                        row.gateway_name,
+                        row.detail,
+                        row.client_ip,
+                    )
+                    if recomputed != row.entry_hash or (
+                        prev_entry_hash is not None and row.prev_hash != prev_entry_hash
+                    ):
+                        first_bad_id = row.id
+                        break
+                    prev_entry_hash = row.entry_hash
+                    checked += 1
+        return {
+            "ok": first_bad_id is None,
+            "checked": checked,
+            "legacy": legacy,
+            "first_bad_id": first_bad_id,
+        }
 
     async def list(
         self,

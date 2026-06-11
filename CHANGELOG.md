@@ -20,6 +20,14 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Tamper-evident audit log (hash chain)** — every new audit row
+  hashes its fields together with the previous row's hash (new
+  `prev_hash`/`entry_hash` columns, migration `105_audit_hash_chain`).
+  Edits, mid-chain deletions, and out-of-band inserts are detectable
+  via `shoreguard audit verify`, `GET /api/audit/verify`, or the
+  **Verify chain** button on the audit page. Pre-upgrade rows are
+  reported as `legacy`; retention cleanup keeps the surviving chain
+  verifiable.
 - **Passkey login (WebAuthn)** — register a passkey on the new
   `/profile` page and sign in with the phone's screen lock instead of a
   password. Discoverable-credential login from the login page, per-user

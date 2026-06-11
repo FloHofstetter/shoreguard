@@ -65,6 +65,17 @@ async def list_audit_entries(
     return {"entries": entries, "total": total}
 
 
+@router.get("/verify")
+async def verify_audit_chain() -> dict[str, Any]:
+    """Verify the tamper-evidence hash chain over the audit log.
+
+    Returns:
+        dict[str, Any]: ``ok``, ``checked``, ``legacy`` (pre-chain rows),
+        and ``first_bad_id`` when a break was found.
+    """
+    return await get_services().audit.verify_chain()
+
+
 @router.get("/export", response_model=None)
 async def export_audit(
     fmt: str = Query("json", alias="format", pattern="^(json|csv)$"),

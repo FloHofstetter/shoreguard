@@ -80,6 +80,36 @@ The maximum number of rows per export is controlled by
 
 ---
 
+## Tamper evidence (hash chain)
+
+Every audit row hashes its fields together with the previous row's
+hash. Editing a row, deleting one from the middle, or inserting one out
+of band breaks the chain from that point on — exactly the property you
+want when the question is "what did my agent (or anyone else) do while
+I slept, and can I trust the answer?".
+
+Verify from the UI (**Verify chain** on the audit page), the API, or the
+CLI:
+
+```bash
+shoreguard audit verify
+```
+
+```http
+GET /api/audit/verify
+→ {"ok": true, "checked": 1423, "legacy": 0, "first_bad_id": null}
+```
+
+Rows written before the upgrade have no hashes and are reported as
+`legacy`; the chain starts with the first post-upgrade row. Retention
+cleanup removes the oldest rows, which is fine — the surviving chain
+still verifies. The check is ORM/process-level tamper evidence, not
+cryptographic proof against an attacker with direct database *and*
+code access; for off-box guarantees pair it with the syslog/stdout
+export lanes.
+
+---
+
 ## Retention
 
 Audit entries are retained for **90 days** by default. Configure the retention

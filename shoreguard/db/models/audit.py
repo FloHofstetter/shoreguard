@@ -32,6 +32,10 @@ class AuditEntry(Base):
         gateway_id: FK to the gateway, or ``None`` if deleted.
         detail: Optional free-text detail or JSON payload.
         client_ip: IP address of the requesting client, if available.
+        prev_hash: Entry hash of the previous row (tamper-evident chain),
+            or ``None`` for pre-chain legacy rows and chain starts.
+        entry_hash: SHA-256 over this row's fields plus ``prev_hash``,
+            or ``None`` for pre-chain legacy rows.
     """
 
     __tablename__ = "audit_log"
@@ -57,3 +61,5 @@ class AuditEntry(Base):
     )
     detail: Mapped[str | None] = mapped_column(Text)
     client_ip: Mapped[str | None] = mapped_column(String(45))
+    prev_hash: Mapped[str | None] = mapped_column(String(64))
+    entry_hash: Mapped[str | None] = mapped_column(String(64))
