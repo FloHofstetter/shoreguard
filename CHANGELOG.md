@@ -12,6 +12,12 @@ local-agent deployment a first-class citizen.
 
 ### Fixed
 
+- **Island modulepreload requests 404ed on every page** — Vite resolved
+  code-split chunk URLs against the default base `/`, so browsers
+  requested `/islands/….js` instead of `/static/dist/islands/….js`.
+  Islands still mounted via the relative fallback import, but every
+  page logged module-load errors and lost the preload optimisation.
+  `vite.config.ts` now sets `base: "/static/dist/"`.
 - **The update check now runs once at startup** — periodic tasks sleep a
   full interval before their first run, so the 24-hour update check
   never produced a result within any realistic homelab uptime and the

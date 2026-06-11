@@ -7,6 +7,10 @@ import { defineConfig } from "vite";
 // loaded on demand by src/main.ts.
 export default defineConfig({
   plugins: [preact()],
+  // The bundle is served under /static/dist (dev and wheel alike). Vite
+  // resolves modulepreload deps against this base; the default "/" made
+  // the browser request /islands/… and 404 on every island load.
+  base: "/static/dist/",
   build: {
     outDir: "dist",
     emptyOutDir: true,
