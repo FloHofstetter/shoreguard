@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 Homelab / DGX-Spark program: ten increments making the single-box,
 local-agent deployment a first-class citizen.
 
+### Fixed
+
+- **Telegram webhooks were rejected by the API** — the `telegram`
+  channel type had a formatter, delivery logic, and frontend UI but was
+  missing from the REST validation allowlist, so creating one returned
+  422. Creation/update now accept it and validate that the bot URL
+  carries the `chat_id` query parameter delivery extracts.
+
 ### Added
 
 - **Host resource visibility** — `GET /api/system/node-stats` samples

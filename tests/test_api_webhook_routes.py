@@ -143,6 +143,26 @@ class TestCreateWebhook:
         assert resp.status_code == 400
         assert "topic" in resp.json()["detail"]
 
+    async def test_create_telegram_with_chat_id(self, admin_client):
+        data = await _create_webhook(
+            admin_client,
+            url="https://api.telegram.org/bot123:abc/sendMessage?chat_id=42",
+            channel_type="telegram",
+        )
+        assert data["channel_type"] == "telegram"
+
+    async def test_create_telegram_without_chat_id_rejected(self, admin_client):
+        resp = await admin_client.post(
+            "/api/webhooks",
+            json={
+                "url": "https://api.telegram.org/bot123:abc/sendMessage",
+                "event_types": ["*"],
+                "channel_type": "telegram",
+            },
+        )
+        assert resp.status_code == 400
+        assert "chat" in resp.json()["detail"]
+
     async def test_create_email_missing_config(self, admin_client):
         resp = await admin_client.post(
             "/api/webhooks",

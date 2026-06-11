@@ -40,7 +40,28 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-VALID_CHANNEL_TYPES = ("generic", "slack", "discord", "email", "ntfy")
+VALID_CHANNEL_TYPES = ("generic", "slack", "discord", "email", "ntfy", "telegram")
+
+
+def _require_telegram_chat_id(url: str) -> None:
+    """Reject telegram URLs without a chat_id query parameter.
+
+    Args:
+        url: The webhook target URL.
+
+    Raises:
+        HTTPException: 400 when the URL has no ``chat_id`` query parameter
+            (delivery extracts the chat from the URL, so without it every
+            send would fail).
+    """
+    from urllib.parse import parse_qs, urlsplit
+
+    if "chat_id" not in parse_qs(urlsplit(url).query):
+        raise HTTPException(
+            400,
+            "telegram webhooks need the chat in the URL, e.g. "
+            "https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=12345",
+        )
 
 
 def _require_ntfy_topic(url: str) -> None:
@@ -67,9 +88,11 @@ class WebhookCreateRequest(BaseModel):
 
     Attributes:
         url: Target URL for POST requests. For ntfy this is the topic URL
-            (e.g. ``https://ntfy.sh/my-topic``).
+            (e.g. ``https://ntfy.sh/my-topic``); for telegram the bot
+            sendMessage endpoint with a ``chat_id`` query parameter.
         event_types: List of event type strings to subscribe to.
-        channel_type: Channel type (generic, slack, discord, email, ntfy).
+        channel_type: Channel type (generic, slack, discord, email, ntfy,
+            telegram).
         extra_config: Optional channel-specific config (e.g. SMTP settings,
             or ``{"token": "tk_..."}`` for ntfy access tokens).
     """
@@ -216,6 +239,8 @@ async def create_webhook(body: WebhookCreateRequest, request: Request) -> dict[s
         validate_smtp_host(str(body.extra_config["smtp_host"]))
     if body.channel_type == "ntfy":
         _require_ntfy_topic(body.url)
+    if body.channel_type == "telegram":
+        _require_telegram_chat_id(body.url)
 
     extra_config_json = json.dumps(body.extra_config) if body.extra_config else None
     actor = getattr(request.state, "user_id", "unknown")
@@ -290,6 +315,8 @@ async def update_webhook(
         validate_webhook_url(body.url)
         if body.channel_type == "ntfy":
             _require_ntfy_topic(body.url)
+        if body.channel_type == "telegram":
+            _require_telegram_chat_id(body.url)
     if body.extra_config and "smtp_host" in body.extra_config:
         validate_smtp_host(str(body.extra_config["smtp_host"]))
 
