@@ -265,9 +265,7 @@ async def verify_authentication(
     async with state.session_factory() as session:
         row = (
             await session.execute(
-                select(WebAuthnCredential).where(
-                    WebAuthnCredential.credential_id == credential_id
-                )
+                select(WebAuthnCredential).where(WebAuthnCredential.credential_id == credential_id)
             )
         ).scalar_one_or_none()
         if row is None:

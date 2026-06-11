@@ -78,9 +78,7 @@ class CurfewService:
         """
         async with self._session_factory() as session:
             row = (
-                await session.execute(
-                    select(GatewayCurfew).where(GatewayCurfew.gateway == gateway)
-                )
+                await session.execute(select(GatewayCurfew).where(GatewayCurfew.gateway == gateway))
             ).scalar_one_or_none()
             return self._to_dict(row) if row else None
 
@@ -119,9 +117,7 @@ class CurfewService:
         now = datetime.datetime.now(datetime.UTC)
         async with self._session_factory() as session:
             row = (
-                await session.execute(
-                    select(GatewayCurfew).where(GatewayCurfew.gateway == gateway)
-                )
+                await session.execute(select(GatewayCurfew).where(GatewayCurfew.gateway == gateway))
             ).scalar_one_or_none()
             if row is None:
                 row = GatewayCurfew(
@@ -154,9 +150,7 @@ class CurfewService:
         """
         async with self._session_factory() as session:
             row = (
-                await session.execute(
-                    select(GatewayCurfew).where(GatewayCurfew.gateway == gateway)
-                )
+                await session.execute(select(GatewayCurfew).where(GatewayCurfew.gateway == gateway))
             ).scalar_one_or_none()
             if row is None:
                 return False

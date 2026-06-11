@@ -104,9 +104,7 @@ class UpdateCheckService:
         return {
             "current": __version__,
             "latest": self._latest,
-            "update_available": (
-                _is_newer(self._latest, __version__) if self._latest else False
-            ),
+            "update_available": (_is_newer(self._latest, __version__) if self._latest else False),
             "checked_at": self._checked_at,
             "check_enabled": self._settings.enabled,
             "gateway_versions": versions,

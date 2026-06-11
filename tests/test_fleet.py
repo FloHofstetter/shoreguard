@@ -146,9 +146,7 @@ async def test_sync_policy_reports_per_target_errors() -> None:
     gw1 = _make_client(["agent-a"], {}, policy=source_policy)
     svc = _fleet({"gw1": gw1})
 
-    result = await svc.sync_policy(
-        source_gateway="gw1", sandbox="agent-a", targets=["gw-dead"]
-    )
+    result = await svc.sync_policy(source_gateway="gw1", sandbox="agent-a", targets=["gw-dead"])
 
     assert result["synced"] == []
     assert "gw-dead" in result["errors"]

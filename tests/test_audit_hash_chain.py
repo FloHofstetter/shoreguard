@@ -66,9 +66,7 @@ async def test_verify_detects_field_tampering(setup) -> None:
     await _write(svc, 3)
 
     async with factory() as session:
-        await session.execute(
-            text("UPDATE audit_log SET actor = 'evil@test.com' WHERE id = 2")
-        )
+        await session.execute(text("UPDATE audit_log SET actor = 'evil@test.com' WHERE id = 2"))
         await session.commit()
 
     result = await svc.verify_chain()

@@ -104,6 +104,8 @@ def test_audit_log_table_columns():
         "gateway_id",
         "detail",
         "client_ip",
+        "prev_hash",
+        "entry_hash",
     }
     assert columns == expected
     engine.dispose()

@@ -200,9 +200,7 @@ class TestProbeEndpoint:
     def test_localhost_allowed(self):
         from shoreguard.services.local_inference import probe_endpoint
 
-        responses = {
-            "http://localhost:1234/v1/models": httpx.Response(200, json={"data": []})
-        }
+        responses = {"http://localhost:1234/v1/models": httpx.Response(200, json={"data": []})}
         with _client_with(responses):
             result = probe_endpoint("http://localhost:1234/v1")
         assert result["ok"] is True

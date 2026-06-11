@@ -78,7 +78,7 @@ class TimelineService:
                     try:
                         parsed = json.loads(row.detail)
                         detail = ", ".join(f"{k}={v}" for k, v in list(parsed.items())[:4])
-                    except (TypeError, ValueError):
+                    except TypeError, ValueError:
                         detail = row.detail[:120]
                 items.append(
                     {
@@ -132,7 +132,7 @@ class TimelineService:
             for row in ks_rows:
                 try:
                     count = len(json.loads(row.providers_json))
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     count = 0
                 items.append(
                     {

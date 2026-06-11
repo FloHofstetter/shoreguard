@@ -80,11 +80,18 @@ class PushService:
 
         Returns:
             str: Base64url-encoded uncompressed P-256 public point.
+
+        Raises:
+            RuntimeError: If the loaded key has no public half (corrupt
+                key file).
         """
         from cryptography.hazmat.primitives import serialization
         from py_vapid import b64urlencode
 
-        raw = self._vapid().public_key.public_bytes(
+        public_key = self._vapid().public_key
+        if public_key is None:  # pragma: no cover — generate/load always sets it
+            raise RuntimeError("VAPID public key unavailable")
+        raw = public_key.public_bytes(
             serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
         )
         return b64urlencode(raw)
@@ -150,7 +157,7 @@ class PushService:
                 sa_delete(PushSubscription).where(PushSubscription.endpoint == endpoint)
             )
             await session.commit()
-            return bool(result.rowcount)
+            return bool(getattr(result, "rowcount", 0))
 
     async def list_for_user(self, user_email: str) -> list[dict[str, Any]]:
         """List subscriptions registered by one user.

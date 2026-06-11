@@ -597,18 +597,14 @@ class TestEmailDelivery:
                 event_types=["*"],
                 created_by="admin@test.com",
                 channel_type="email",
-                extra_config=json.dumps(
-                    {"smtp_host": "smtp.example.com", "to_addrs": ["a@b.com"]}
-                ),
+                extra_config=json.dumps({"smtp_host": "smtp.example.com", "to_addrs": ["a@b.com"]}),
             )
             delivery_id = await webhook_svc._create_delivery(wh["id"], "webhook.test", "{}")
             target = _make_target(
                 webhook_id=wh["id"],
                 url="admin@example.com",
                 channel_type="email",
-                extra_config=json.dumps(
-                    {"smtp_host": "smtp.example.com", "to_addrs": ["a@b.com"]}
-                ),
+                extra_config=json.dumps({"smtp_host": "smtp.example.com", "to_addrs": ["a@b.com"]}),
             )
 
             mock_smtp_mod = MagicMock()
@@ -791,9 +787,7 @@ class TestMqttDelivery:
             created_by="admin@test.com",
             channel_type="mqtt",
         )
-        with patch.object(
-            WebhookService, "_deliver_mqtt", new_callable=AsyncMock
-        ) as mock_deliver:
+        with patch.object(WebhookService, "_deliver_mqtt", new_callable=AsyncMock) as mock_deliver:
             await webhook_svc.fire("sandbox.created", {"sandbox": "x"})
             await asyncio.sleep(0.05)
         mock_deliver.assert_called_once()

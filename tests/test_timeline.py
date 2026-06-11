@@ -103,9 +103,7 @@ async def _seed(factory) -> None:
             )
         )
         session.add(
-            SandboxUsage(
-                gateway="gw2", sandbox="agent-a", day=NOW.date().isoformat(), requests=9
-            )
+            SandboxUsage(gateway="gw2", sandbox="agent-a", day=NOW.date().isoformat(), requests=9)
         )
         await session.commit()
 

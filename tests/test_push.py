@@ -198,9 +198,7 @@ async def test_subscribe_list_delete_flow(client) -> None:
     assert resp.status_code == 200
     assert len(resp.json()) == 1
 
-    resp = await client.delete(
-        "/api/push/subscriptions", params={"endpoint": SUB["endpoint"]}
-    )
+    resp = await client.delete("/api/push/subscriptions", params={"endpoint": SUB["endpoint"]})
     assert resp.status_code == 204
 
     resp = await client.get("/api/push/subscriptions")

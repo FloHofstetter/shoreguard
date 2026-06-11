@@ -132,9 +132,7 @@ def probe_endpoint(base_url: str) -> dict[str, Any]:
         candidates.append(f"{parts.scheme}://{parts.netloc}/api/tags")
 
     last_error = "no response"
-    with httpx.Client(
-        timeout=httpx.Timeout(3.0, connect=1.5), follow_redirects=False
-    ) as client:
+    with httpx.Client(timeout=httpx.Timeout(3.0, connect=1.5), follow_redirects=False) as client:
         for url in candidates:
             try:
                 resp = client.get(url)

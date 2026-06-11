@@ -660,13 +660,15 @@ class WebhookService:
             base_topic = str(config.get("topic") or "shoreguard").rstrip("/")
             topic = f"{base_topic}/{event}"
 
-            auth: dict[str, Any] | None = None
+            # paho types these as TypedDicts; Any keeps the call site honest
+            # without re-declaring its parameter types here.
+            auth: Any = None
             username = config.get("username")
             if username:
                 auth = {"username": username, "password": config.get("password")}
             qos = int(config.get("qos", 0))
             retain = bool(config.get("retain", False))
-            tls: dict[str, Any] | None = {} if parts.scheme == "mqtts" else None
+            tls: Any = {} if parts.scheme == "mqtts" else None
 
             await asyncio.to_thread(
                 mqtt_publish.single,

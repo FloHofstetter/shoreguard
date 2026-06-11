@@ -40,6 +40,8 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_NO_AUTH` | `false` | Disable authentication entirely (development only) |
 | `SHOREGUARD_SINGLE_USER` | `false` | Single-user mode: one admin account whose password is SHOREGUARD_ADMIN_PASSWORD, kept in sync on every startup. The homelab middle ground between --no-auth and full RBAC. |
 | `SHOREGUARD_TAILSCALE_IDENTITY` | `false` | Trust Tailscale Serve identity headers (Tailscale-User-Login) from a loopback proxy as authentication. The login must match an existing user's email. Only honoured for connections from 127.0.0.1/::1 — i.e. `tailscale serve` in front of a loopback-bound ShoreGuard. |
+| `SHOREGUARD_PASSKEYS_ENABLED` | `true` | Enable WebAuthn passkey registration and login (requires HTTPS or localhost in the browser) |
+| `SHOREGUARD_PASSKEY_RP_ID` | `` | Override the WebAuthn relying-party ID; defaults to the host of SHOREGUARD_PUBLIC_URL, else the request host |
 | `SHOREGUARD_SECRET_KEY` | `` | HMAC secret for sessions and signed cookies. Unset falls back to on-disk .secret_key — set explicitly for multi-replica. |
 | `SHOREGUARD_ALLOW_REGISTRATION` | `false` | Allow unauthenticated self-signup via /register |
 | `SHOREGUARD_ADMIN_PASSWORD` | `` | Bootstrap admin password used on first startup if no users exist |
@@ -238,4 +240,48 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_BUDGET_INTERVAL_SECONDS` | `60` | Usage metering poll interval in seconds |
 | `SHOREGUARD_BUDGET_INFERENCE_SOURCES` | `["inference", "proxy"]` | Log source substrings counted as inference requests |
 | `SHOREGUARD_BUDGET_LOG_BATCH_LINES` | `2000` | Maximum log lines fetched per sandbox per metering poll |
+## `smtp`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_SMTP_HOST` | `` | Default SMTP relay host for email webhooks. When set, email webhooks only need to_addrs in their extra_config; per-webhook smtp_host still overrides. |
+| `SHOREGUARD_SMTP_PORT` | `587` | Default SMTP port |
+| `SHOREGUARD_SMTP_USERNAME` | `` | Default SMTP username |
+| `SHOREGUARD_SMTP_PASSWORD` | `` | Default SMTP password (secret) |
+| `SHOREGUARD_SMTP_FROM_ADDR` | `shoreguard@localhost` | Default From address for email webhooks |
+## `node_alert`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_NODE_ALERT_ENABLED` | `true` | Evaluate host thresholds periodically and fire node.threshold_breached / node.recovered webhook events on transitions (no-op unless a webhook subscribes) |
+| `SHOREGUARD_NODE_ALERT_INTERVAL_SECONDS` | `60` | Seconds between host threshold evaluations |
+| `SHOREGUARD_NODE_ALERT_GPU_TEMP_C` | `85.0` | GPU temperature breach threshold in degrees Celsius |
+| `SHOREGUARD_NODE_ALERT_DISK_USED_PCT` | `90.0` | Root-disk usage breach threshold in percent |
+| `SHOREGUARD_NODE_ALERT_MEM_USED_PCT` | `95.0` | Host memory usage breach threshold in percent |
+## `push`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_PUSH_CONTACT` | `mailto:admin@localhost` | VAPID contact claim (mailto: or https:) sent to browser push services with each notification |
+## `curfew`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_CURFEW_ENABLED` | `true` | Evaluate per-gateway curfews periodically (no-op unless a curfew is configured) |
+| `SHOREGUARD_CURFEW_CHECK_INTERVAL` | `60` | Seconds between curfew window evaluations |
+## `backup`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_BACKUP_ENABLED` | `false` | Periodically snapshot the SQLite DB + key material into a tar.gz archive (SHOREGUARD_BACKUP_DIR) |
+| `SHOREGUARD_BACKUP_INTERVAL_HOURS` | `24` | Hours between periodic backup snapshots |
+| `SHOREGUARD_BACKUP_DIR` | `` | Backup target directory (default: <config-dir>/backups) |
+| `SHOREGUARD_BACKUP_KEEP` | `7` | Newest backup archives to retain during rotation |
+## `updates`
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SHOREGUARD_UPDATES_ENABLED` | `false` | Periodically check PyPI for a newer ShoreGuard release and fire a shoreguard.update_available webhook event (off by default — no phone-home without opt-in) |
+| `SHOREGUARD_UPDATES_INTERVAL_HOURS` | `24` | Hours between update checks |
+| `SHOREGUARD_UPDATES_URL` | `https://pypi.org/pypi/shoreguard/json` | Release index JSON endpoint queried by the update check |
 

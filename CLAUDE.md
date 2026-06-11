@@ -92,13 +92,13 @@ everywhere at once. Per-request wrappers (`SandboxService`, `PolicyService`, …
 constructed in route dependencies around the gateway-bound client and are async-native.
 
 **Background tasks:** the periodic loops (cleanup, gateway health, discovery,
-drift detection, cert rotation, usage metering, daily digest) are declarative
-`PeriodicTask` specs in
+drift detection, cert rotation, usage metering, daily digest, node alerts,
+curfew, update check, backup) are declarative `PeriodicTask` specs in
 [tasks/definitions.py](shoreguard/tasks/definitions.py), driven by the generic
 `TaskSupervisor` ([tasks/supervisor.py](shoreguard/tasks/supervisor.py)) with failure
 backoff and a health snapshot consumed by `/readyz`. Disabled features register no task.
 The gateway health loop fires `gateway.unreachable`/`gateway.recovered` webhook events
-on status transitions.
+on status transitions and records each gateway's OpenShell version.
 
 **Database** ([shoreguard/db/](shoreguard/db/)): SQLAlchemy 2.0. Defaults to SQLite (WAL
 mode, 0600 perms); PostgreSQL for production and the integration/postgres suites.
