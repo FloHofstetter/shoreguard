@@ -381,6 +381,148 @@ function KillSwitchCard({ name, connected }: { name: string; connected: boolean 
   );
 }
 
+interface Curfew {
+  configured?: boolean;
+  enabled?: boolean;
+  start_minute?: number;
+  end_minute?: number;
+  timezone?: string;
+}
+
+function minuteToTime(minute: number): string {
+  return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+}
+
+function timeToMinute(value: string): number {
+  const [h, m] = value.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function CurfewCard({ name }: { name: string }) {
+  const [curfew, setCurfew] = useState<Curfew | null>(null);
+  const [start, setStart] = useState("22:00");
+  const [end, setEnd] = useState("07:00");
+  const [tz, setTz] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+  const [enabled, setEnabled] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    apiFetch<Curfew>(`/api/gateway/${name}/curfew`)
+      .then((c) => {
+        setCurfew(c);
+        if (c.start_minute !== undefined) {
+          setStart(minuteToTime(c.start_minute));
+          setEnd(minuteToTime(c.end_minute ?? 0));
+          setTz(c.timezone || "UTC");
+          setEnabled(c.enabled ?? true);
+        }
+      })
+      .catch(() => setCurfew(null));
+  };
+  useEffect(load, [name]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await apiFetch(`/api/gateway/${name}/curfew`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled,
+          start_minute: timeToMinute(start),
+          end_minute: timeToMinute(end),
+          timezone: tz,
+        }),
+      });
+      showToast("Curfew saved.", "success");
+      load();
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    try {
+      await apiFetch(`/api/gateway/${name}/curfew`, { method: "DELETE" });
+      showToast("Curfew removed.", "success");
+      load();
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    }
+  };
+
+  if (curfew === null) return null;
+  const configured = curfew.start_minute !== undefined;
+  return (
+    <div class="card sg-card-themed mb-4">
+      <div class="card-body">
+        <div class="fw-semibold mb-1">
+          <i class="bi bi-moon-stars me-2" />
+          Curfew (quiet hours)
+          {configured && curfew.enabled && (
+            <span class="badge text-bg-info ms-2">
+              {minuteToTime(curfew.start_minute!)}–{minuteToTime(curfew.end_minute!)}{" "}
+              {curfew.timezone}
+            </span>
+          )}
+        </div>
+        <div class="text-muted small mb-2">
+          Inside the window the kill switch engages automatically (reversible — providers
+          re-attach when the window ends). Manually engaged switches are never touched.
+        </div>
+        <div class="d-flex flex-wrap align-items-end gap-2">
+          <div>
+            <label class="form-label small text-muted mb-1">From</label>
+            <input
+              type="time"
+              class="form-control form-control-sm"
+              value={start}
+              onInput={(e) => setStart((e.target as HTMLInputElement).value)}
+            />
+          </div>
+          <div>
+            <label class="form-label small text-muted mb-1">Until</label>
+            <input
+              type="time"
+              class="form-control form-control-sm"
+              value={end}
+              onInput={(e) => setEnd((e.target as HTMLInputElement).value)}
+            />
+          </div>
+          <div>
+            <label class="form-label small text-muted mb-1">Timezone</label>
+            <input
+              type="text"
+              class="form-control form-control-sm"
+              value={tz}
+              onInput={(e) => setTz((e.target as HTMLInputElement).value)}
+            />
+          </div>
+          <div class="form-check form-switch mb-1 ms-1">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled((e.target as HTMLInputElement).checked)}
+            />
+            <label class="form-check-label small">Enabled</label>
+          </div>
+          <button class="btn btn-sm btn-outline-primary" disabled={busy} onClick={() => void save()}>
+            {configured ? "Update" : "Set curfew"}
+          </button>
+          {configured && (
+            <button class="btn btn-sm btn-outline-danger" onClick={() => void remove()}>
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdvancedSettings({ name, isAdmin }: { name: string; isAdmin: boolean }) {
   const [rows, setRows] = useState<Record<string, { current: string; draft: string; busy: boolean }>>(
     {},
@@ -939,6 +1081,7 @@ export default function GatewayDetailPage({ name }: { name: string }) {
       </div>
 
       {isAdmin && <KillSwitchCard name={name} connected={connected} />}
+      {isAdmin && <CurfewCard name={name} />}
 
       {isAdmin && <GatewayTokenCard />}
 

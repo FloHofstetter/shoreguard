@@ -134,4 +134,18 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
                 run=_node_alerts,
             )
         )
+    if settings.curfew.enabled:
+
+        async def _curfew() -> None:
+            actions = await container.curfew.run_once()
+            if actions:
+                logger.info("Curfew transitions: %s", actions)
+
+        tasks.append(
+            PeriodicTask(
+                name="curfew",
+                interval=settings.curfew.check_interval,
+                run=_curfew,
+            )
+        )
     return tasks

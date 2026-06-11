@@ -24,7 +24,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from starlette.responses import JSONResponse
 
 from shoreguard.api.auth import require_role
@@ -965,6 +965,100 @@ async def release_kill_switch(request: Request, name: str) -> dict[str, Any]:
         {"gateway": name, "actor": actor, "sandboxes": len(report["sandboxes"])},
     )
     return report
+
+
+# ─── Curfew (quiet hours) ────────────────────────────────────────────────────
+
+
+class CurfewRequest(BaseModel):
+    """Request body for configuring a gateway curfew.
+
+    Attributes:
+        enabled: Whether the curfew is active.
+        start_minute: Window start as minutes after local midnight.
+        end_minute: Window end; smaller than start wraps overnight.
+        timezone: IANA timezone the window is evaluated in.
+    """
+
+    enabled: bool = True
+    start_minute: int = Field(ge=0, le=1439)
+    end_minute: int = Field(ge=0, le=1439)
+    timezone: str = Field(default="UTC", max_length=64)
+
+
+@router.get("/{name}/curfew", dependencies=[Depends(require_role("operator"))])
+async def get_curfew(name: str) -> dict[str, Any]:
+    """Return the curfew configured for a gateway.
+
+    Args:
+        name: Gateway name.
+
+    Returns:
+        dict[str, Any]: The curfew record, or ``{"configured": False}``.
+    """
+    curfew = await get_services().curfew.get(name)
+    return curfew if curfew else {"configured": False}
+
+
+@router.put("/{name}/curfew", dependencies=[Depends(require_role("admin"))])
+async def set_curfew(request: Request, name: str, body: CurfewRequest) -> dict[str, Any]:
+    """Create or update a gateway's quiet-hours curfew.
+
+    Inside the window the background task engages the reversible kill
+    switch (actor ``curfew``); outside it, only curfew-engaged switches
+    are released.
+
+    Args:
+        request: Incoming HTTP request.
+        name: Gateway name.
+        body: Curfew window configuration.
+
+    Returns:
+        dict[str, Any]: The stored curfew record.
+
+    Raises:
+        HTTPException: 400 on an unknown timezone.
+    """
+    try:
+        result = await get_services().curfew.set(
+            name,
+            enabled=body.enabled,
+            start_minute=body.start_minute,
+            end_minute=body.end_minute,
+            timezone=body.timezone,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await audit_log(
+        request,
+        "curfew.set",
+        "gateway",
+        name,
+        gateway=name,
+        detail={
+            "enabled": body.enabled,
+            "start_minute": body.start_minute,
+            "end_minute": body.end_minute,
+            "timezone": body.timezone,
+        },
+    )
+    return result
+
+
+@router.delete("/{name}/curfew", dependencies=[Depends(require_role("admin"))], status_code=204)
+async def delete_curfew(request: Request, name: str) -> None:
+    """Remove a gateway's curfew (a curfew-engaged switch stays engaged).
+
+    Args:
+        request: Incoming HTTP request.
+        name: Gateway name.
+
+    Raises:
+        HTTPException: 404 when no curfew is configured.
+    """
+    if not await get_services().curfew.delete(name):
+        raise HTTPException(status_code=404, detail="No curfew configured")
+    await audit_log(request, "curfew.delete", "gateway", name, gateway=name)
 
 
 # ─── Filesystem import (adopt local gateways) ────────────────────────────────

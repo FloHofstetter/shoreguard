@@ -820,6 +820,29 @@ class SmtpSettings(BaseSettings):
     )
 
 
+class CurfewSettings(BaseSettings):
+    """Agent curfew (quiet hours) evaluation.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Run the curfew evaluation task.
+        check_interval (int): Seconds between curfew window checks.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_CURFEW_")
+
+    enabled: bool = Field(
+        default=True,
+        description="Evaluate per-gateway curfews periodically (no-op "
+        "unless a curfew is configured)",
+    )
+    check_interval: int = Field(
+        default=60,
+        ge=15,
+        description="Seconds between curfew window evaluations",
+    )
+
+
 class PushSettings(BaseSettings):
     """Web Push (PWA notifications) configuration.
 
@@ -1292,6 +1315,7 @@ class Settings(BaseSettings):
         smtp (SmtpSettings): Server-wide SMTP defaults for email webhooks.
         node_alert (NodeAlertSettings): Host threshold alert evaluation.
         push (PushSettings): Web Push (PWA notification) configuration.
+        curfew (CurfewSettings): Agent curfew (quiet hours) evaluation.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -1318,6 +1342,7 @@ class Settings(BaseSettings):
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     node_alert: NodeAlertSettings = Field(default_factory=NodeAlertSettings)
     push: PushSettings = Field(default_factory=PushSettings)
+    curfew: CurfewSettings = Field(default_factory=CurfewSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

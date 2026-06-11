@@ -20,6 +20,15 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Agent curfew (quiet hours)** — per-gateway schedule
+  (`PUT /api/gateway/{name}/curfew`, card on the gateway page, new
+  `gateway_curfews` table, migration `106_gateway_curfews`): inside the
+  window the reversible kill switch engages automatically (actor
+  `curfew`), outside it the curfew releases its own engagement and
+  agents resume. Manually or budget-engaged switches are never touched;
+  windows may wrap midnight and are evaluated in a configurable IANA
+  timezone. Ends the "agent burned tokens while I slept" failure mode
+  for good.
 - **Tamper-evident audit log (hash chain)** — every new audit row
   hashes its fields together with the previous row's hash (new
   `prev_hash`/`entry_hash` columns, migration `105_audit_hash_chain`).

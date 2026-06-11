@@ -49,3 +49,27 @@ Content-Type: application/json
 
 Either way the event carries `used`, `limit`, and `window`, and the
 decision is yours — budgets never delete sandboxes.
+
+## Curfew (quiet hours)
+
+Budgets cap *how much*; a curfew caps *when*. On the gateway detail page
+(**Curfew**) or via API you define a window — say 22:00–07:00 local —
+during which the reversible kill switch is engaged automatically:
+
+```http
+PUT /api/gateway/{name}/curfew
+Content-Type: application/json
+
+{"enabled": true, "start_minute": 1320, "end_minute": 420,
+ "timezone": "Europe/Berlin"}
+```
+
+At the window start every sandbox's providers are detached (agents keep
+their state); at the window end the curfew releases its own engagement
+and agents resume where they left off. A switch engaged **manually or
+by budget enforcement is never touched** — the curfew only manages what
+it engaged itself (`engaged_by: curfew`). Windows may wrap midnight
+(`start_minute > end_minute`), evaluation runs every
+`SHOREGUARD_CURFEW_CHECK_INTERVAL` seconds, and both transitions fire
+the usual `kill_switch.engaged` / `kill_switch.released` webhook events
+— so the phone learns when the curfew kicks in.

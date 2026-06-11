@@ -12,7 +12,7 @@ from shoreguard.db.models.auth import (
     WebAuthnCredential,
 )
 from shoreguard.db.models.base import Base
-from shoreguard.db.models.gateway import Gateway, KillSwitchEntry
+from shoreguard.db.models.gateway import Gateway, GatewayCurfew, KillSwitchEntry
 from shoreguard.db.models.operations import OperationRecord
 from shoreguard.db.models.policy import (
     ApprovalDecision,
@@ -37,6 +37,7 @@ __all__ = (
     "AuditEntry",
     "Base",
     "Gateway",
+    "GatewayCurfew",
     "Group",
     "GroupGatewayRole",
     "GroupMember",

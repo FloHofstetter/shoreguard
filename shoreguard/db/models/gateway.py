@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Integer,
     LargeBinary,
@@ -55,6 +56,38 @@ class Gateway(Base):
     )
     last_seen: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
     last_status: Mapped[str] = mapped_column(String, default="unknown")
+
+
+class GatewayCurfew(Base):
+    """Quiet-hours schedule that auto-engages the kill switch.
+
+    Inside the window the curfew task engages the (reversible) kill
+    switch with actor ``curfew``; outside it, only curfew-engaged
+    switches are released — a manually engaged or budget-engaged switch
+    is never touched. The window may wrap midnight
+    (``start_minute > end_minute`` means overnight).
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name (unique — one curfew per gateway).
+        enabled: Whether the curfew is active.
+        start_minute: Window start as minutes after local midnight.
+        end_minute: Window end as minutes after local midnight.
+        timezone: IANA timezone the window is evaluated in.
+        created_at: When the curfew was configured.
+        updated_at: Last configuration change.
+    """
+
+    __tablename__ = "gateway_curfews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), unique=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    start_minute: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_minute: Mapped[int] = mapped_column(Integer, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class KillSwitchEntry(Base):

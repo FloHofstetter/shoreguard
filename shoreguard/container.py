@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from shoreguard.services.budgets import BudgetService
     from shoreguard.services.bypass import BypassService
     from shoreguard.services.cert_rotation import CertRotationService
+    from shoreguard.services.curfew import CurfewService
     from shoreguard.services.denial_context import DenialContextService
     from shoreguard.services.digest import DigestService
     from shoreguard.services.discovery import DiscoveryService
@@ -70,6 +71,7 @@ class ServiceContainer:
         drift_detection: Policy drift detection.
         cert_rotation: Proactive client-cert rotation.
         kill_switch: Reversible per-gateway provider kill switch.
+        curfew: Quiet-hours schedules driving the kill switch.
         digest: Daily activity digest builder/dispatcher.
         budget: Inference usage metering and per-sandbox budgets.
         node_stats: Host resource stats for the ShoreGuard machine.
@@ -97,6 +99,7 @@ class ServiceContainer:
     drift_detection: DriftDetectionService
     cert_rotation: CertRotationService
     kill_switch: KillSwitchService
+    curfew: CurfewService
     digest: DigestService
     budget: BudgetService
     node_stats: NodeStatsService
@@ -130,6 +133,7 @@ def build_container(
     from shoreguard.services.budgets import BudgetService
     from shoreguard.services.bypass import BypassService
     from shoreguard.services.cert_rotation import CertRotationService
+    from shoreguard.services.curfew import CurfewService
     from shoreguard.services.denial_context import DenialContextService
     from shoreguard.services.digest import DigestService
     from shoreguard.services.discovery import DiscoveryService
@@ -153,6 +157,7 @@ def build_container(
     sandbox_meta = SandboxMetaStore(async_session_factory)
     audit = AuditService(async_session_factory, exporter=audit_exporter)
     node_stats = NodeStatsService()
+    kill_switch = KillSwitchService(async_session_factory, gateway)
 
     async def _resolve_sandbox_service(gateway_name: str):  # type: ignore[no-untyped-def]  # noqa: D103
         # Build a SandboxService for post-create boot-hook dispatch.
@@ -193,7 +198,8 @@ def build_container(
             threshold_days=settings.cert_rotation.threshold_days,
             max_retries=settings.cert_rotation.max_retries,
         ),
-        kill_switch=KillSwitchService(async_session_factory, gateway),
+        kill_switch=kill_switch,
+        curfew=CurfewService(async_session_factory, kill_switch),
         digest=DigestService(async_session_factory, registry),
         budget=BudgetService(async_session_factory, gateway, registry, settings.budget),
         node_stats=node_stats,
