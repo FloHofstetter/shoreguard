@@ -71,7 +71,11 @@ class NodeAlertService:
         states: list[dict[str, Any]] = []
         for metric, value, threshold in self._checks(stats):
             previously = self._breached.get(metric, False)
-            breached = value is not None and value >= threshold
+            # A missing sample holds the last state: a breached metric
+            # that stops reporting (nvidia-smi hiccup) must not fire a
+            # false recovery — recovery needs an observed value below
+            # the threshold.
+            breached = previously if value is None else value >= threshold
             states.append(
                 {
                     "metric": metric,

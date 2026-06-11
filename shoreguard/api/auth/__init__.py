@@ -65,6 +65,7 @@ from shoreguard.api.auth.groups import (
 from shoreguard.api.auth.rbac import (
     require_auth,
     require_auth_ws,
+    require_gateway_role,
     require_role,
     require_role_ws,
 )
@@ -124,6 +125,7 @@ __all__ = (
     "remove_group_member",
     "require_auth",
     "require_auth_ws",
+    "require_gateway_role",
     "require_role",
     "require_role_ws",
     "reset",

@@ -196,3 +196,40 @@ async def test_fleet_routes_smoke(db) -> None:
             json={"source_gateway": "a", "sandbox": "s", "targets": ["b"]},
         )
         assert resp.status_code == 403
+
+
+async def test_fleet_sync_respects_gateway_downscope(db) -> None:
+    """A global operator down-scoped to viewer on a touched gateway gets 403."""
+    from datetime import UTC, datetime
+
+    from httpx import ASGITransport, AsyncClient
+
+    from shoreguard.api.auth import create_user, set_gateway_role
+    from shoreguard.api.main import app
+    from shoreguard.models import Gateway
+
+    user = await create_user("op@test.com", "operatorpass1", "operator")
+    session = db()
+    session.add(
+        Gateway(
+            name="gw-target",
+            endpoint="10.0.0.2:8443",
+            scheme="https",
+            registered_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+    session.commit()
+    session.close()
+    await set_gateway_role(user_id=user["id"], gateway_name="gw-target", role="viewer")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/auth/login", json={"email": "op@test.com", "password": "operatorpass1"}
+        )
+        assert resp.status_code == 200
+        resp = await client.post(
+            "/api/fleet/policy-sync",
+            json={"source_gateway": "gw-src", "sandbox": "s", "targets": ["gw-target"]},
+        )
+        assert resp.status_code == 403
+        assert "gw-target" in resp.json()["detail"]

@@ -140,3 +140,22 @@ async def test_node_alerts_route_requires_auth(db) -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/api/system/node-alerts")
         assert resp.status_code == 401
+
+
+async def test_missing_sample_holds_breached_state(fire) -> None:
+    """A breached metric whose sample disappears must not fire a false
+    recovery; recovery requires an observed value below the threshold."""
+    stub = _StubNodeStats(_stats(gpu_temp=92.0))
+    svc = NodeAlertService(stub, NodeAlertSettings())  # type: ignore[arg-type]
+
+    await svc.run_once()  # breach
+    stub.stats = _stats(gpu_temp=None)  # nvidia-smi hiccup: no GPUs in sample
+    await svc.run_once()
+
+    assert fire.await_count == 1  # no false node.recovered
+    assert svc.status()["breached"] == ["gpu_temp_c"]
+
+    stub.stats = _stats(gpu_temp=60.0)
+    await svc.run_once()
+    assert fire.await_count == 2
+    assert fire.await_args.args[0] == "node.recovered"

@@ -12,6 +12,25 @@ export function passkeysSupported(): boolean {
   return typeof PublicKeyCredential !== "undefined" && window.isSecureContext;
 }
 
+/** POST for the anonymous login pair — unlike apiFetch, a 401 here is a
+ * normal "wrong passkey" outcome that must surface as an error message,
+ * not a hard redirect to /login (which would poison `next=`). */
+async function postAnonymous<T>(url: string, body: unknown): Promise<T> {
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const detail = await resp
+      .json()
+      .then((d) => d.detail)
+      .catch(() => undefined);
+    throw new Error(typeof detail === "string" ? detail : `HTTP ${resp.status}`);
+  }
+  return resp.json() as Promise<T>;
+}
+
 function b64urlToBuf(value: string): ArrayBuffer {
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
   const raw = atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
@@ -103,17 +122,16 @@ export async function loginWithPasskey(): Promise<{ role: string; email: string 
   if (!passkeysSupported()) {
     throw new Error("Passkeys need HTTPS (or localhost) and a modern browser.");
   }
-  const { options, state } = await apiFetch<{ options: unknown; state: string }>(
+  const { options, state } = await postAnonymous<{ options: unknown; state: string }>(
     `/api/auth/login/passkey/options`,
-    { method: "POST" },
+    undefined,
   );
   const cred = (await navigator.credentials.get({
     publicKey: parseRequestOptions(options),
   })) as PublicKeyCredential | null;
   if (!cred) throw new Error("Passkey sign-in was cancelled.");
-  return apiFetch<{ role: string; email: string }>(`/api/auth/login/passkey/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ state, credential: credentialToJSON(cred) }),
+  return postAnonymous<{ role: string; email: string }>(`/api/auth/login/passkey/verify`, {
+    state,
+    credential: credentialToJSON(cred),
   });
 }

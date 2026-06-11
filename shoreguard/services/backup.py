@@ -16,6 +16,7 @@ import datetime
 import json
 import logging
 import os
+import shutil
 import sqlite3
 import tarfile
 import tempfile
@@ -204,6 +205,19 @@ def restore_backup(archive: Path, *, database_url: str | None = None) -> list[st
     config_dir = shoreguard_config_dir()
     restored: list[str] = []
 
+    def _stage_then_replace(source: Path, target: Path) -> None:
+        # The temp extraction dir usually lives on /tmp (tmpfs), so a
+        # direct rename to the target would fail with EXDEV. Stage a
+        # copy NEXT TO the target first, then displace the old file and
+        # finish with same-filesystem renames — a failed copy never
+        # touches the live file.
+        staged = target.with_name(target.name + ".restore-tmp")
+        shutil.copy2(source, staged)
+        if target.exists():
+            target.replace(target.with_name(target.name + ".pre-restore"))
+        staged.replace(target)
+        os.chmod(target, 0o600)
+
     with tempfile.TemporaryDirectory() as tmp, tarfile.open(archive, "r:gz") as tar:
         tar.extractall(tmp, filter="data")
         tmp_path = Path(tmp)
@@ -212,20 +226,13 @@ def restore_backup(archive: Path, *, database_url: str | None = None) -> list[st
         if not snapshot.is_file():
             raise ValueError("Backup contains no database file")
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        if db_path.exists():
-            db_path.replace(db_path.with_name(db_path.name + ".pre-restore"))
-        snapshot.replace(db_path)
-        os.chmod(db_path, 0o600)
+        _stage_then_replace(snapshot, db_path)
         restored.append(db_path.name)
 
         for key_file in KEY_FILES:
             extracted = tmp_path / key_file
             if extracted.is_file():
-                target = config_dir / key_file
-                if target.exists():
-                    target.replace(target.with_name(target.name + ".pre-restore"))
-                extracted.replace(target)
-                os.chmod(target, 0o600)
+                _stage_then_replace(extracted, config_dir / key_file)
                 restored.append(key_file)
 
     logger.warning("Restored backup %s → %s", archive, restored)

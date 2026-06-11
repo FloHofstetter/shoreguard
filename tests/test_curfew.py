@@ -110,7 +110,10 @@ async def test_run_once_idempotent_when_already_engaged(setup, fire) -> None:
 
 async def test_run_once_releases_outside_window(setup, fire) -> None:
     svc, kill_switch = setup
-    kill_switch.status.return_value = {"engaged": True, "engaged_by": CURFEW_ACTOR}
+    kill_switch.status.side_effect = [
+        {"engaged": True, "engaged_by": CURFEW_ACTOR},  # before resume
+        {"engaged": False, "engaged_by": None},  # after resume
+    ]
     # Empty window: always outside.
     await svc.set("gw1", enabled=True, start_minute=0, end_minute=0, timezone="UTC")
 
@@ -140,6 +143,59 @@ async def test_run_once_skips_disabled(setup, fire) -> None:
 
     kill_switch.status.assert_not_awaited()
     assert actions == []
+
+
+async def test_run_once_fires_once_per_transition_even_without_rows(setup, fire) -> None:
+    """A zero-sandbox engage leaves no kill-switch rows; the second tick
+    must NOT re-engage or re-fire — the transition already happened."""
+    svc, kill_switch = setup
+    kill_switch.status.return_value = {"engaged": False, "engaged_by": None}
+    kill_switch.engage.return_value = {"gateway": "gw1", "sandboxes": [], "errors": []}
+    await svc.set("gw1", enabled=True, start_minute=0, end_minute=1439, timezone="UTC")
+
+    first = await svc.run_once()
+    second = await svc.run_once()
+
+    kill_switch.engage.assert_awaited_once()
+    assert fire.await_count == 1
+    assert first == [{"gateway": "gw1", "action": "engaged"}]
+    assert second == []
+
+
+async def test_run_once_partial_release_retries_without_event(setup, fire) -> None:
+    """A partially failed resume keeps the switch engaged — no released
+    event; the next tick retries the resume."""
+    svc, kill_switch = setup
+    kill_switch.status.side_effect = [
+        {"engaged": True, "engaged_by": CURFEW_ACTOR},  # tick 1: before resume
+        {"engaged": True, "engaged_by": CURFEW_ACTOR},  # tick 1: still engaged after
+        {"engaged": True, "engaged_by": CURFEW_ACTOR},  # tick 2: before resume
+        {"engaged": False, "engaged_by": None},  # tick 2: clean after
+    ]
+    await svc.set("gw1", enabled=True, start_minute=0, end_minute=0, timezone="UTC")
+
+    first = await svc.run_once()
+    second = await svc.run_once()
+
+    assert first == []
+    assert second == [{"gateway": "gw1", "action": "released"}]
+    assert kill_switch.resume.await_count == 2
+    assert fire.await_count == 1
+
+
+async def test_run_once_failed_engage_retries_next_tick(setup, fire) -> None:
+    svc, kill_switch = setup
+    kill_switch.engage.side_effect = [
+        RuntimeError("gateway down"),
+        {"gateway": "gw1", "sandboxes": [{}], "errors": []},
+    ]
+    await svc.set("gw1", enabled=True, start_minute=0, end_minute=1439, timezone="UTC")
+
+    first = await svc.run_once()
+    second = await svc.run_once()
+
+    assert first == []
+    assert second == [{"gateway": "gw1", "action": "engaged"}]
 
 
 async def test_run_once_gateway_error_does_not_block_others(setup, fire) -> None:

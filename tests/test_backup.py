@@ -168,3 +168,32 @@ async def test_backup_route_streams_archive(db, monkeypatch, tmp_path) -> None:
         assert resp.headers["content-type"] == "application/gzip"
         assert "shoreguard-backup-" in resp.headers.get("content-disposition", "")
         assert len(resp.content) > 0
+
+
+def test_restore_failure_keeps_live_db(config_dir, db_file, monkeypatch) -> None:
+    """A failing restore copy must never displace the live database."""
+    import shutil as _shutil
+
+    url = f"sqlite:///{db_file}"
+    archive = create_backup(database_url=url)
+
+    def _boom(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("shoreguard.services.backup.shutil.copy2", _boom)
+    with pytest.raises(OSError, match="disk full"):
+        restore_backup(archive, database_url=url)
+
+    # The live DB is untouched — staging happens before displacement.
+    conn = sqlite3.connect(str(db_file))
+    assert conn.execute("SELECT v FROM t").fetchone()[0] == "original"
+    conn.close()
+    assert not (config_dir / "shoreguard.db.pre-restore").exists()
+    assert _shutil.which is not None  # keep the import honest
+
+
+def test_restore_leaves_no_staging_files(config_dir, db_file) -> None:
+    url = f"sqlite:///{db_file}"
+    archive = create_backup(database_url=url)
+    restore_backup(archive, database_url=url)
+    assert not list(config_dir.glob("*.restore-tmp"))

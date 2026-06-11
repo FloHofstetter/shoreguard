@@ -615,6 +615,84 @@ class TestEmailDelivery:
         finally:
             reset_settings()
 
+    async def test_email_override_host_never_gets_global_credentials(
+        self, webhook_svc, monkeypatch
+    ):
+        """A webhook with its own smtp_host must not receive the global
+        relay's username/password (credential-forwarding hazard)."""
+        import json
+
+        from shoreguard.settings import reset_settings
+
+        monkeypatch.setenv("SHOREGUARD_SMTP_HOST", "relay.example.com")
+        monkeypatch.setenv("SHOREGUARD_SMTP_USERNAME", "global-user")
+        monkeypatch.setenv("SHOREGUARD_SMTP_PASSWORD", "global-pass")
+        reset_settings()
+        try:
+            cfg = json.dumps({"smtp_host": "smtp.example.com", "to_addrs": ["a@b.com"]})
+            wh = await webhook_svc.create(
+                url="admin@example.com",
+                event_types=["*"],
+                created_by="admin@test.com",
+                channel_type="email",
+                extra_config=cfg,
+            )
+            delivery_id = await webhook_svc._create_delivery(wh["id"], "webhook.test", "{}")
+            target = _make_target(
+                webhook_id=wh["id"],
+                url="admin@example.com",
+                channel_type="email",
+                extra_config=cfg,
+            )
+
+            mock_smtp_mod = MagicMock()
+            mock_smtp_mod.send = AsyncMock()
+            with patch.dict("sys.modules", {"aiosmtplib": mock_smtp_mod}):
+                await webhook_svc._deliver_email(target, "Subject\nBody", delivery_id)
+                kwargs = mock_smtp_mod.send.call_args.kwargs
+                assert kwargs["hostname"] == "smtp.example.com"
+                assert "username" not in kwargs
+                assert "password" not in kwargs
+        finally:
+            reset_settings()
+
+    async def test_email_private_relay_allowed_in_local_mode(self, webhook_svc, monkeypatch):
+        """Local mode exempts the LAN relay from the delivery-time SSRF
+        check — mirroring creation-time validate_smtp_host."""
+        import json
+
+        from shoreguard.settings import reset_settings
+
+        monkeypatch.setenv("SHOREGUARD_LOCAL_MODE", "true")
+        reset_settings()
+        try:
+            cfg = json.dumps({"smtp_host": "192.168.1.10", "to_addrs": ["a@b.com"]})
+            wh = await webhook_svc.create(
+                url="admin@example.com",
+                event_types=["*"],
+                created_by="admin@test.com",
+                channel_type="email",
+                extra_config=cfg,
+            )
+            delivery_id = await webhook_svc._create_delivery(wh["id"], "webhook.test", "{}")
+            target = _make_target(
+                webhook_id=wh["id"],
+                url="admin@example.com",
+                channel_type="email",
+                extra_config=cfg,
+            )
+
+            mock_smtp_mod = MagicMock()
+            mock_smtp_mod.send = AsyncMock()
+            with patch.dict("sys.modules", {"aiosmtplib": mock_smtp_mod}):
+                await webhook_svc._deliver_email(target, "Subject\nBody", delivery_id)
+                mock_smtp_mod.send.assert_called_once()
+
+            deliveries = await webhook_svc.list_deliveries(wh["id"])
+            assert any(d["status"] == "success" for d in deliveries)
+        finally:
+            reset_settings()
+
     async def test_email_delivery_failure(self, webhook_svc):
         """Email delivery failure records error in delivery."""
         import json

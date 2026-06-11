@@ -12,6 +12,20 @@ local-agent deployment a first-class citizen.
 
 ### Fixed
 
+- **Review fixes for the 0.39 feature train** (multi-agent adversarial
+  review): backup restore now stages files next to their destination
+  before swapping, so it survives `/tmp`-on-tmpfs (EXDEV) and a failed
+  copy never displaces the live database; the curfew acts exactly once
+  per window transition (no more event repeats on zero-sandbox gateways
+  or partially failed releases, which now retry silently); a breached
+  node metric whose sample disappears no longer fires a false
+  `node.recovered`; MQTT publishes use a unique client id (fixed id
+  caused broker-side session takeover) and resolve DNS off the event
+  loop; SMTP delivery honours `--local` for LAN relays and never sends
+  the server-wide relay credentials to a per-webhook overridden host;
+  fleet policy-sync enforces per-gateway role overrides on the source
+  and every target; a failed passkey login shows the error instead of
+  hard-redirecting to `/login`.
 - **Telegram webhooks were rejected by the API** — the `telegram`
   channel type had a formatter, delivery logic, and frontend UI but was
   missing from the REST validation allowlist, so creating one returned

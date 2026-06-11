@@ -271,6 +271,51 @@ def require_role(minimum: str) -> Callable[..., Coroutine[Any, Any, None]]:
     return _dependency
 
 
+async def require_gateway_role(request: Request, gateway: str, minimum: str) -> None:
+    """Enforce a minimum effective role for one specific gateway.
+
+    Routes that act on gateways *outside* their own URL scope (fleet
+    operations touch a source and several targets) only get the global
+    role from the route-level :func:`require_role` — a per-gateway
+    down-scope (e.g. ``viewer`` override on one gateway) would be
+    bypassed. Call this once per touched gateway.
+
+    Args:
+        request: The (already authenticated) incoming HTTP request.
+        gateway: Gateway name whose role override applies.
+        minimum: The minimum required role.
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 403 if the effective role
+            for this gateway is insufficient, 503 if the role lookup
+            fails (fail closed).
+    """
+    role = getattr(request.state, "role", None)
+    if role is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        gw_role = await _lookup_gateway_role(
+            user_id=getattr(request.state, "user_db_id", None),
+            sp_id=getattr(request.state, "sp_db_id", None),
+            gateway=gateway,
+        )
+    except _GatewayRoleLookupError:
+        raise HTTPException(
+            status_code=503,
+            detail="Gateway role lookup failed — try again later",
+        )
+    effective = gw_role or role
+    if _ROLE_RANK.get(effective, -1) < _ROLE_RANK[minimum]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Requires {minimum} role on gateway '{gateway}'",
+        )
+
+
 async def require_auth_ws(
     websocket: WebSocket,
     token: str | None = Query(default=None),

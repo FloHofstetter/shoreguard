@@ -64,6 +64,12 @@ class CurfewService:
     ) -> None:
         self._session_factory = session_factory
         self._kill_switch = kill_switch
+        # Last successfully handled window state per gateway, so each
+        # transition acts (and notifies) exactly once. A zero-sandbox
+        # engage leaves no kill-switch rows, so raw status alone would
+        # re-fire every tick. Updated only after a successful pass;
+        # failures retry on the next tick.
+        self._last_in_window: dict[str, bool] = {}
 
     # ─── CRUD ────────────────────────────────────────────────────────────────
 
@@ -216,30 +222,46 @@ class CurfewService:
             in_window = minute_in_window(
                 local.hour * 60 + local.minute, curfew["start_minute"], curfew["end_minute"]
             )
+            if self._last_in_window.get(gateway) == in_window:
+                continue
             try:
                 status = await self._kill_switch.status(gateway)
-                if in_window and not status["engaged"]:
-                    report = await self._kill_switch.engage(gateway, actor=CURFEW_ACTOR)
-                    actions.append({"gateway": gateway, "action": "engaged"})
-                    await fire_webhook(
-                        "kill_switch.engaged",
-                        {
-                            "gateway": gateway,
-                            "actor": CURFEW_ACTOR,
-                            "sandboxes": len(report["sandboxes"]),
-                        },
-                    )
-                elif not in_window and status["engaged"] and status["engaged_by"] == CURFEW_ACTOR:
-                    report = await self._kill_switch.resume(gateway, actor=CURFEW_ACTOR)
-                    actions.append({"gateway": gateway, "action": "released"})
-                    await fire_webhook(
-                        "kill_switch.released",
-                        {
-                            "gateway": gateway,
-                            "actor": CURFEW_ACTOR,
-                            "sandboxes": len(report["sandboxes"]),
-                        },
-                    )
+                if in_window:
+                    if not status["engaged"]:
+                        report = await self._kill_switch.engage(gateway, actor=CURFEW_ACTOR)
+                        actions.append({"gateway": gateway, "action": "engaged"})
+                        await fire_webhook(
+                            "kill_switch.engaged",
+                            {
+                                "gateway": gateway,
+                                "actor": CURFEW_ACTOR,
+                                "sandboxes": len(report["sandboxes"]),
+                            },
+                        )
+                    self._last_in_window[gateway] = True
+                else:
+                    if status["engaged"] and status["engaged_by"] == CURFEW_ACTOR:
+                        report = await self._kill_switch.resume(gateway, actor=CURFEW_ACTOR)
+                        # A partial resume keeps providers detached;
+                        # retry next tick instead of announcing a
+                        # release that did not (fully) happen.
+                        after = await self._kill_switch.status(gateway)
+                        if after["engaged"]:
+                            logger.warning(
+                                "Curfew release for %s incomplete — retrying next tick",
+                                gateway,
+                            )
+                            continue
+                        actions.append({"gateway": gateway, "action": "released"})
+                        await fire_webhook(
+                            "kill_switch.released",
+                            {
+                                "gateway": gateway,
+                                "actor": CURFEW_ACTOR,
+                                "sandboxes": len(report["sandboxes"]),
+                            },
+                        )
+                    self._last_in_window[gateway] = False
             except Exception as exc:  # noqa: BLE001 — one gateway must not block the rest
                 logger.warning("Curfew evaluation failed for %s: %s", gateway, exc)
         return actions

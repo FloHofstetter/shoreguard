@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from shoreguard.api.auth import require_role
+from shoreguard.api.auth import require_gateway_role, require_role
 from shoreguard.api.deps import get_services
 from shoreguard.services.audit import audit_log
 
@@ -71,8 +71,14 @@ async def fleet_policy_sync(body: PolicySyncRequest, request: Request) -> dict[s
 
     Raises:
         HTTPException: 400 on an invalid request (unknown source policy,
-            source among targets), 502 when the source is unreachable.
+            source among targets), 403 when a per-gateway role override
+            denies one of the touched gateways, 502 when the source is
+            unreachable.
     """
+    # The route-level operator check only sees the global role; enforce
+    # per-gateway overrides for every gateway this sync touches.
+    for gateway_name in [body.source_gateway, *body.targets]:
+        await require_gateway_role(request, gateway_name, "operator")
     try:
         result = await get_services().fleet.sync_policy(
             source_gateway=body.source_gateway,

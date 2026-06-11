@@ -641,7 +641,11 @@ class WebhookService:
             parts = urlsplit(target.url)
             host = parts.hostname or "localhost"
 
-            if is_private_ip(host) and not get_settings().server.local_mode:
+            # is_private_ip resolves DNS — keep it off the event loop,
+            # and skip it entirely in local mode.
+            if not get_settings().server.local_mode and await asyncio.to_thread(
+                is_private_ip, host
+            ):
                 await self._update_delivery(
                     delivery_id,
                     status="failed",
@@ -680,7 +684,10 @@ class WebhookService:
                 port=port,
                 auth=auth,
                 tls=tls,
-                client_id="shoreguard",
+                # Empty → paho generates a unique id per connection; a
+                # fixed id would make overlapping deliveries take over
+                # each other's broker session.
+                client_id="",
                 keepalive=10,
             )
             await self._update_delivery(delivery_id, status="success", attempt=1)
@@ -712,13 +719,17 @@ class WebhookService:
 
             from shoreguard.settings import get_settings
 
-            smtp_defaults = get_settings().smtp
+            settings = get_settings()
+            smtp_defaults = settings.smtp
             config = json.loads(target.extra_config or "{}")
-            smtp_host = config.get("smtp_host") or smtp_defaults.host or "localhost"
+            host_override = config.get("smtp_host")
+            smtp_host = host_override or smtp_defaults.host or "localhost"
             smtp_port = config.get("smtp_port") or smtp_defaults.port
 
-            # DNS-rebinding protection for SMTP targets
-            if is_private_ip(smtp_host):
+            # DNS-rebinding protection for SMTP targets. Local mode is
+            # exempt — homelab relays live on the LAN (mirrors the
+            # creation-time validate_smtp_host rule and the MQTT path).
+            if not settings.server.local_mode and await asyncio.to_thread(is_private_ip, smtp_host):
                 logger.warning(
                     "SSRF blocked: webhook %d SMTP host %s resolves to private address",
                     target.webhook_id,
@@ -728,14 +739,21 @@ class WebhookService:
                     delivery_id,
                     status="failed",
                     error_message="SSRF blocked: SMTP host resolves to private address "
-                    "(exempt via SHOREGUARD_SSRF_ALLOWED_IPS)",
+                    "(run --local or exempt via SHOREGUARD_SSRF_ALLOWED_IPS)",
                     attempt=1,
                 )
                 self._inc_delivery_counter("failed")
                 return
-            smtp_user = config.get("smtp_user") or smtp_defaults.username
-            smtp_pass = config.get("smtp_pass") or smtp_defaults.password
-            from_addr = config.get("from_addr") or smtp_defaults.from_addr
+            if host_override:
+                # The webhook chose its own relay: never hand the
+                # server-wide relay's credentials to a different host.
+                smtp_user = config.get("smtp_user")
+                smtp_pass = config.get("smtp_pass")
+                from_addr = config.get("from_addr") or "shoreguard@localhost"
+            else:
+                smtp_user = config.get("smtp_user") or smtp_defaults.username
+                smtp_pass = config.get("smtp_pass") or smtp_defaults.password
+                from_addr = config.get("from_addr") or smtp_defaults.from_addr
             to_addrs = config.get("to_addrs", [target.url])
 
             msg = EmailMessage()
