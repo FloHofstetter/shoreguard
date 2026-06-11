@@ -102,6 +102,107 @@ function DigestCard() {
   );
 }
 
+interface NodeStats {
+  scope: string;
+  cpu: { count: number; load_1m: number; load_5m: number; load_15m: number } | null;
+  memory: { total_mb: number; available_mb: number; used_pct: number } | null;
+  disk: { total_gb: number; free_gb: number; used_pct: number } | null;
+  gpus: {
+    name: string;
+    utilization_pct: number | null;
+    memory_used_mb: number | null;
+    memory_total_mb: number | null;
+    temperature_c: number | null;
+  }[];
+}
+
+function UsageBar({ label, pct, detail }: { label: string; pct: number; detail: string }) {
+  const cls = pct >= 90 ? "bg-danger" : pct >= 75 ? "bg-warning" : "bg-success";
+  return (
+    <div class="mb-2">
+      <div class="d-flex justify-content-between small">
+        <span>{label}</span>
+        <span class="text-muted">{detail}</span>
+      </div>
+      <div class="progress" style={{ height: "6px" }}>
+        <div class={`progress-bar ${cls}`} style={{ width: `${Math.min(100, pct)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function NodeStatsCard() {
+  const [stats, setStats] = useState<NodeStats | null>(null);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const load = () => {
+      apiFetch<NodeStats>(`/api/system/node-stats`)
+        .then(setStats)
+        .catch(() => setStats(null));
+    };
+    load();
+    timer = window.setInterval(load, 15000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  if (!stats || (!stats.cpu && !stats.memory)) return null;
+  const cpuPct = stats.cpu ? Math.round((stats.cpu.load_5m / Math.max(1, stats.cpu.count)) * 100) : 0;
+
+  return (
+    <div class="card sg-card-themed h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="mb-0">
+            <i class="bi bi-cpu me-2" />
+            This machine
+          </h6>
+          <span class="badge text-bg-secondary" title="Stats for the host running ShoreGuard">
+            host
+          </span>
+        </div>
+        {stats.cpu && (
+          <UsageBar
+            label="CPU"
+            pct={cpuPct}
+            detail={`load ${stats.cpu.load_5m} / ${stats.cpu.count} cores`}
+          />
+        )}
+        {stats.memory && (
+          <UsageBar
+            label="Memory"
+            pct={stats.memory.used_pct}
+            detail={`${Math.round((stats.memory.total_mb - stats.memory.available_mb) / 1024)} / ${Math.round(stats.memory.total_mb / 1024)} GB`}
+          />
+        )}
+        {stats.gpus.map((gpu, i) => (
+          <div key={i}>
+            <UsageBar
+              label={`GPU ${stats.gpus.length > 1 ? i + " " : ""}util`}
+              pct={gpu.utilization_pct ?? 0}
+              detail={`${gpu.name}${gpu.temperature_c != null ? ` · ${gpu.temperature_c}°C` : ""}`}
+            />
+            {gpu.memory_total_mb != null && gpu.memory_used_mb != null && gpu.memory_total_mb > 0 && (
+              <UsageBar
+                label="GPU memory"
+                pct={Math.round((gpu.memory_used_mb / gpu.memory_total_mb) * 100)}
+                detail={`${Math.round(gpu.memory_used_mb / 1024)} / ${Math.round(gpu.memory_total_mb / 1024)} GB`}
+              />
+            )}
+          </div>
+        ))}
+        {stats.disk && (
+          <UsageBar
+            label="Disk"
+            pct={stats.disk.used_pct}
+            detail={`${stats.disk.free_gb} GB free`}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -222,7 +323,7 @@ export default function DashboardPage() {
 
       <div class="row g-3 mb-4">
         {isAdmin && (
-          <div class="col-lg-7">
+          <div class="col-lg-5">
             <div class="card sg-card-themed h-100">
               <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -264,7 +365,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div class={isAdmin ? "col-lg-5" : "col-12"}>
+        <div class={isAdmin ? "col-lg-4" : "col-lg-8"}>
           <div class="card sg-card-themed h-100">
             <div class="card-body">
               <div class="d-flex justify-content-between align-items-center mb-3">
@@ -317,6 +418,10 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+        </div>
+
+        <div class={isAdmin ? "col-lg-3" : "col-lg-4"}>
+          <NodeStatsCard />
         </div>
       </div>
 

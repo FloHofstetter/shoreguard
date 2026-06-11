@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from shoreguard.services.gateway import GatewayService
     from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
+    from shoreguard.services.node_stats import NodeStatsService
     from shoreguard.services.operations import AsyncOperationService
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
     from shoreguard.services.policy_pin import PolicyPinService
@@ -69,6 +70,7 @@ class ServiceContainer:
         kill_switch: Reversible per-gateway provider kill switch.
         digest: Daily activity digest builder/dispatcher.
         budget: Inference usage metering and per-sandbox budgets.
+        node_stats: Host resource stats for the ShoreGuard machine.
         denial_context: Denial context cache.
         local_gateway: Local gateway manager, or ``None`` outside local mode.
     """
@@ -93,6 +95,7 @@ class ServiceContainer:
     kill_switch: KillSwitchService
     digest: DigestService
     budget: BudgetService
+    node_stats: NodeStatsService
     denial_context: DenialContextService
     local_gateway: LocalGatewayManager | None = None
 
@@ -128,6 +131,7 @@ def build_container(
     from shoreguard.services.gateway import GatewayService
     from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
+    from shoreguard.services.node_stats import NodeStatsService
     from shoreguard.services.operations import AsyncOperationService
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
     from shoreguard.services.policy_pin import PolicyPinService
@@ -183,6 +187,7 @@ def build_container(
         kill_switch=KillSwitchService(async_session_factory, gateway),
         digest=DigestService(async_session_factory, registry),
         budget=BudgetService(async_session_factory, gateway, registry, settings.budget),
+        node_stats=NodeStatsService(),
         denial_context=DenialContextService(),
         local_gateway=(LocalGatewayManager(gateway) if settings.server.local_mode else None),
     )

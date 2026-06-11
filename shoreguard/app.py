@@ -250,6 +250,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         sbom,
         security,
         services,
+        system,
         templates,
         tokens,
         webhooks,
@@ -372,6 +373,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         budgets.summary_router,
         prefix="/api/usage",
         tags=["budgets"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        system.router,
+        prefix="/api/system",
+        tags=["system"],
         dependencies=[Depends(require_auth)],
     )
     app.include_router(

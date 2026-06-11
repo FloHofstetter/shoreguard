@@ -12,6 +12,13 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Host resource visibility** — `GET /api/system/node-stats` samples
+  CPU load, memory, disk, and GPU utilisation/memory/temperature (via
+  `nvidia-smi` when present) for the machine running ShoreGuard, cached
+  a few seconds; the dashboard gains a "This machine" card with usage
+  bars. On a single-box deployment the host is the gateway node — and
+  on GB10's unified memory, host RAM *is* GPU memory. Scoped honestly
+  (`scope: shoreguard-host`) until upstream grows a node-stats RPC.
 - **Usage metering & budgets (phase 1)** — opt-in
   `SHOREGUARD_BUDGET_METERING_ENABLED` meters per-sandbox inference
   requests by polling gateway logs with persisted cursors (new
