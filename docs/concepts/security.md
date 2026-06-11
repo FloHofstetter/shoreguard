@@ -6,6 +6,21 @@ itself.
 
 ---
 
+## Security Check (posture self-audit)
+
+**Admin → Security Check** (`GET /api/security/posture`) audits the running
+deployment and answers "am I exposed?": auth mode vs. bind address,
+`--unsafe-lan` overrides, secret-key hygiene, open self-registration,
+HSTS/CSP, per-gateway transport (mTLS vs. the local-mode plaintext
+exemption), and whether Tailscale is available as the recommended
+remote-access path. Every finding carries a severity (`ok` / `info` /
+`warn` / `error`) and an actionable fix hint. The same conditions that
+abort startup via `enforce_production_safety()` show up here red — the
+page exists so a homelab operator sees them *before* moving the box onto
+a network.
+
+---
+
 ## Authentication
 
 ShoreGuard supports three authentication methods. All resolve to the same

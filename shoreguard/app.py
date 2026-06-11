@@ -245,6 +245,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         providers,
         sandboxes,
         sbom,
+        security,
         services,
         templates,
         tokens,
@@ -349,6 +350,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         webhooks.router,
         prefix="/api/webhooks",
         tags=["webhooks"],
+        dependencies=[Depends(require_auth), Depends(require_role("admin"))],
+    )
+    app.include_router(
+        security.router,
+        prefix="/api/security",
+        tags=["security"],
         dependencies=[Depends(require_auth), Depends(require_role("admin"))],
     )
     app.include_router(

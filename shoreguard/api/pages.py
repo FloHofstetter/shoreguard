@@ -534,6 +534,35 @@ async def audit_page(request: Request) -> TemplateResponse | RedirectResponse | 
     )
 
 
+@router.get("/security", response_model=None)
+async def security_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
+    """Security posture self-check page (admin only).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse | HTMLResponse: Rendered security
+            posture page or access denied error.
+    """
+    redirect = await _require_page_auth(request)
+    if redirect:
+        return redirect
+    if getattr(request.state, "role", None) != "admin":
+        return _render_error(
+            request,
+            403,
+            "Access Denied",
+            "You need admin privileges to view the security check.",
+            icon="shield-lock",
+        )
+    return templates.TemplateResponse(
+        request,
+        "pages/security.html",
+        {"active_page": "security"},
+    )
+
+
 @router.get("/groups", response_model=None)
 async def groups_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
     """Group management page (admin only).

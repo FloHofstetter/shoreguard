@@ -12,6 +12,11 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Security Check page** (Admin → Security Check, `GET
+  /api/security/posture`) — a deployment posture self-audit: auth mode vs.
+  bind address, unsafe-LAN overrides, secret-key hygiene, open
+  registration, HSTS/CSP, per-gateway mTLS status, and Tailscale
+  detection, each with severity and an actionable fix hint.
 - **Single-user mode** (`--single-user` / `SHOREGUARD_SINGLE_USER`) — the
   homelab middle ground between `--no-auth` and full RBAC: authentication
   with exactly one admin account (`admin@localhost`) whose password comes
