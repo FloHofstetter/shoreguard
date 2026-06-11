@@ -1,4 +1,4 @@
-<aside class="sidebar" role="navigation" aria-label="Main navigation" :class="{ 'open': $sidebarOpen }" x-data>
+<aside class="sidebar" role="navigation" aria-label="Main navigation">
 
     <!-- Main -->
     <div class="sidebar-section">
@@ -17,8 +17,8 @@
         </a>
     </div>
 
-    <!-- Admin (only for admin role) -->
-    <div class="sidebar-section" x-show="$isAdmin" x-cloak>
+    <!-- Admin (hidden for non-admins by the shell) -->
+    <div class="sidebar-section" data-sg-min-role="admin">
         <div class="sidebar-label">Admin</div>
         <a class="sidebar-link {{ 'active' if active_page == 'audit' }}"
            href="/audit">
@@ -39,26 +39,7 @@
     </div>
 
     <!-- Theme toggle + Gateway health (bottom) -->
-    <div class="sidebar-section mt-auto">
-        <button class="sidebar-link sg-btn-bare"
-                @click="$toggleTheme()">
-            <i class="bi" :class="$themeMode === 'dark' ? 'bi-sun' : 'bi-moon'"></i>
-            <span x-text="$themeMode === 'dark' ? 'Light Mode' : 'Dark Mode'"></span>
-        </button>
-    </div>
-    <div class="sidebar-section" x-show="GW" x-cloak>
-        <div class="sidebar-health"
-             :class="{
-                 'text-success': $healthConnected,
-                 'text-danger': !$healthConnected && $healthStatus !== 'unknown',
-                 'text-muted': $healthStatus === 'unknown'
-             }">
-            <i class="bi bi-circle-fill"></i>
-            <span x-text="$healthConnected
-                ? ($healthVersion || 'Connected')
-                : ($healthStatus === 'degraded' ? 'Degraded' : 'Disconnected')">
-            </span>
-        </div>
-    </div>
+    <div class="sidebar-section mt-auto" id="sg-theme-toggle"></div>
+    <div class="sidebar-section" id="sg-sidebar-health"></div>
 
 </aside>

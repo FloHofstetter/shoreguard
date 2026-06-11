@@ -4,7 +4,7 @@ import { useEffect, useState } from "preact/hooks";
 
 import { apiFetch } from "../lib/api";
 import { auth, ensureAuth, hasRole } from "../lib/auth";
-import { badgeClass, CONFIG, navigateTo } from "../lib/constants";
+import { API, badgeClass, CONFIG, navigateTo } from "../lib/constants";
 import { formatTimeAgo } from "../lib/format";
 import { showConfirm, showToast } from "../lib/notify";
 import { ErrorAlert, Spinner } from "../lib/widgets";
@@ -35,7 +35,7 @@ interface Bundle {
 
 // ── Gateway token (diagnostic) ───────────────────────────────────────
 
-function GatewayTokenCard({ gwApi }: { gwApi: string }) {
+function GatewayTokenCard() {
   const [token, setToken] = useState("");
   const [expiresAt, setExpiresAt] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -44,7 +44,7 @@ function GatewayTokenCard({ gwApi }: { gwApi: string }) {
     setBusy(true);
     try {
       const resp = await apiFetch<{ token?: string; expires_at_ms?: number }>(
-        `${gwApi}/tokens/${kind}`,
+        `${API}/tokens/${kind}`,
         { method: "POST" },
       );
       setToken(resp?.token ?? "");
@@ -104,7 +104,7 @@ function GatewayTokenCard({ gwApi }: { gwApi: string }) {
 
 // ── Resolved inference bundle ────────────────────────────────────────
 
-function InferenceBundle({ gwApi }: { gwApi: string }) {
+function InferenceBundle() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [bundle, setBundle] = useState<Bundle>({ revision: "", generated_at_ms: 0, routes: [] });
@@ -113,7 +113,7 @@ function InferenceBundle({ gwApi }: { gwApi: string }) {
     setLoading(true);
     setError("");
     try {
-      setBundle(await apiFetch<Bundle>(`${gwApi}/inference/bundle`));
+      setBundle(await apiFetch<Bundle>(`${API}/inference/bundle`));
     } catch (e) {
       setError((e as Error).message || "Failed to load bundle");
       setBundle({ revision: "", generated_at_ms: 0, routes: [] });
@@ -125,7 +125,7 @@ function InferenceBundle({ gwApi }: { gwApi: string }) {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gwApi]);
+  }, []);
 
   const routes = bundle.routes ?? [];
 
@@ -521,7 +521,6 @@ function AdvancedSettings({ name, isAdmin }: { name: string; isAdmin: boolean })
 // ── Main detail page ─────────────────────────────────────────────────
 
 export default function GatewayDetailPage({ name }: { name: string }) {
-  const gwApi = `/api/gateways/${name}`;
   const [gw, setGw] = useState<GatewayRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -558,11 +557,11 @@ export default function GatewayDetailPage({ name }: { name: string }) {
         setInfLoading(true);
         try {
           const [providers, config] = await Promise.all([
-            apiFetch<InferenceProvider[]>(`${gwApi}/providers/inference-providers`).catch(
+            apiFetch<InferenceProvider[]>(`${API}/providers/inference-providers`).catch(
               () => [] as InferenceProvider[],
             ),
             apiFetch<{ provider_name?: string; model_id?: string; timeout_secs?: number }>(
-              `${gwApi}/inference`,
+              `${API}/inference`,
             ).catch(() => null),
           ]);
           setInfProviders(providers);
@@ -590,10 +589,13 @@ export default function GatewayDetailPage({ name }: { name: string }) {
     setActing(true);
     setActionOutput({ text: `${action[0].toUpperCase()}${action.slice(1)}ing gateway...`, cls: "" });
     try {
-      const result = await apiFetch<{ success?: boolean; output?: string; error?: string }>(
-        `/api/gateway/${name}/${action}`,
-        { method: "POST" },
-      );
+      type LifecycleResult = { success?: boolean; output?: string; error?: string };
+      const result =
+        action === "start"
+          ? await apiFetch<LifecycleResult>(`/api/gateway/${name}/start`, { method: "POST" })
+          : action === "stop"
+            ? await apiFetch<LifecycleResult>(`/api/gateway/${name}/stop`, { method: "POST" })
+            : await apiFetch<LifecycleResult>(`/api/gateway/${name}/restart`, { method: "POST" });
       if (result.success) {
         setActionOutput({ text: `Gateway ${action}ed. ${result.output || ""}`, cls: "log-info" });
         showToast(`Gateway ${action}ed.`, "success");
@@ -691,7 +693,7 @@ export default function GatewayDetailPage({ name }: { name: string }) {
 
     if (gw?.connected && infProvider) {
       try {
-        await apiFetch(`${gwApi}/inference`, {
+        await apiFetch(`${API}/inference`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -830,7 +832,7 @@ export default function GatewayDetailPage({ name }: { name: string }) {
         ))}
       </div>
 
-      {isAdmin && <GatewayTokenCard gwApi={gwApi} />}
+      {isAdmin && <GatewayTokenCard />}
 
       <div class="card sg-card-themed mb-4">
         <div class="card-body">
@@ -1056,7 +1058,7 @@ export default function GatewayDetailPage({ name }: { name: string }) {
             </fieldset>
           )}
 
-          {connected && <InferenceBundle gwApi={gwApi} />}
+          {connected && <InferenceBundle />}
           {connected && <ObservabilityFieldset name={name} isAdmin={isAdmin} />}
 
           {isAdmin && (

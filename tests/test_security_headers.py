@@ -67,9 +67,9 @@ def _csp_directives(csp: str) -> dict[str, list[str]]:
 async def test_csp_default_is_strict(api_client: AsyncClient):
     """As of v0.27.0, the default CSP is strict: nonce-gated, no 'unsafe-inline'.
 
-    'unsafe-eval' is retained because Alpine.js uses Function() internally;
+    'unsafe-eval' is gone since the Preact islands rewrite removed Alpine.js;
     the @alpinejs/csp build was evaluated but its expression parser was too
-    restrictive for this UI. See alpine_loader.html for the rationale.
+    restrictive for this UI; the islands rewrite later removed Alpine entirely.
 
     ``style-src-attr 'unsafe-inline'`` (added in 45129f4) is intentionally
     permitted — Alpine's x-show / x-cloak / x-transition emit inline ``style``
@@ -82,7 +82,7 @@ async def test_csp_default_is_strict(api_client: AsyncClient):
     directives = _csp_directives(csp)
 
     assert "nonce-" in csp
-    assert "'unsafe-eval'" in csp  # required for Alpine.js Function() constructor
+    assert "'unsafe-eval'" not in csp  # Alpine.js (Function() constructor) is gone
     # Source directives that govern script + style content must NOT carry
     # 'unsafe-inline'. style-src-attr is allowed (see docstring).
     for d in ("default-src", "script-src", "style-src"):
@@ -112,7 +112,7 @@ async def test_csp_legacy_mode_contains_unsafe(monkeypatch):
 
     csp = resp.headers["Content-Security-Policy"]
     assert "'unsafe-inline'" in csp
-    assert "'unsafe-eval'" in csp
+    assert "'unsafe-eval'" not in csp
     assert "nonce-" not in csp
 
 
@@ -135,7 +135,7 @@ async def test_csp_strict_mode_emits_nonce(monkeypatch):
     csp = resp.headers["Content-Security-Policy"]
     directives = _csp_directives(csp)
     assert "nonce-" in csp
-    assert "'unsafe-eval'" in csp  # retained for Alpine.js Function() constructor
+    assert "'unsafe-eval'" not in csp
     assert "{nonce}" not in csp  # placeholder must be interpolated
     for d in ("default-src", "script-src", "style-src"):
         assert "'unsafe-inline'" not in directives.get(d, []), (
@@ -189,7 +189,7 @@ async def test_theme_init_is_external_in_strict_mode(monkeypatch):
 
     assert resp.status_code == 200
     # Theme-init is now an external script, not inline.
-    assert '<script src="/static/js/theme-init.js">' in resp.text
+    assert '<script src="/static/dist/theme-init.js">' in resp.text
     # The CSP header still carries a nonce (mechanism stays for future M3 use).
     assert "nonce-" in resp.headers["Content-Security-Policy"]
 
@@ -216,19 +216,16 @@ async def test_no_inline_scripts_on_login():
     assert inline == [], f"Unexpected inline <script> blocks on /login: {inline}"
 
 
-async def test_login_uses_regular_alpine_build_in_strict_mode(monkeypatch):
-    """v0.27.0: strict mode uses the regular Alpine build, not @alpinejs/csp.
+async def test_login_ships_no_alpine(monkeypatch):
+    """The islands rewrite removed Alpine.js — no Alpine build is served.
 
-    The CSP build was evaluated during M2.1 but its expression parser only
-    supports plain property chains (no operators, no literals, no method
-    args) — too restrictive for this UI. Strict mode instead allows
-    'unsafe-eval' in script-src for Alpine's Function() constructor while
-    keeping all other hardening (no 'unsafe-inline', nonce-gated, etc.).
+    The login page loads only the Preact module bundle (plus the
+    theme-init FOUC guard); neither the regular nor the CSP Alpine
+    build appears anywhere in the markup.
     """
-    monkeypatch.setenv("SHOREGUARD_CSP_STRICT", "true")
-
     from shoreguard.settings import reset_settings
 
+    monkeypatch.setenv("SHOREGUARD_CSP_STRICT", "true")
     reset_settings()
 
     from shoreguard.api.main import app
@@ -240,8 +237,8 @@ async def test_login_uses_regular_alpine_build_in_strict_mode(monkeypatch):
         resp = await client.get("/login")
 
     assert resp.status_code == 200
-    assert "@alpinejs/csp@" not in resp.text
-    assert 'alpinejs@3.14.9/dist/cdn.min.js"' in resp.text
+    assert "alpinejs" not in resp.text
+    assert '<script type="module" src="/static/dist/main.js">' in resp.text
 
 
 async def test_no_inline_x_data_objects_on_login():

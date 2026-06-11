@@ -8,6 +8,8 @@
 
 import { h, render } from "preact";
 
+import { initShell } from "./shell";
+
 // deno-lint-ignore-file
 // Props are validated by each island; the registry is intentionally loose.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,8 +76,13 @@ async function mountIslands(): Promise<void> {
   }
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => void mountIslands());
-} else {
+function boot(): void {
+  initShell();
   void mountIslands();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
 }

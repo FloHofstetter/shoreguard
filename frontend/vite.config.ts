@@ -12,7 +12,10 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {
-      input: "src/main.ts",
+      input: {
+        main: "src/main.ts",
+        "theme-init": "src/theme-init.ts",
+      },
       output: {
         entryFileNames: "[name].js",
         chunkFileNames: "islands/[name].js",

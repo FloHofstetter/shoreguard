@@ -1054,7 +1054,7 @@ def test_resolve_frontend_dir_dev():
     result = _resolve_frontend_dir()
     assert result.is_dir()
     assert (result / "templates").is_dir()
-    assert (result / "js").is_dir()
+    assert (result / "src").is_dir()
 
 
 def test_resolve_frontend_dir_missing():

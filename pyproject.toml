@@ -88,7 +88,6 @@ shoreguard = "shoreguard.cli:cli"
 # Selective so node_modules / TS sources never land in the wheel; ship
 # the built islands bundle (frontend/dist) alongside the legacy assets.
 "frontend/css" = "shoreguard/_frontend/css"
-"frontend/js" = "shoreguard/_frontend/js"
 "frontend/templates" = "shoreguard/_frontend/templates"
 "frontend/vendor" = "shoreguard/_frontend/vendor"
 "frontend/dist" = "shoreguard/_frontend/dist"

@@ -32,7 +32,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CLIENT_DIR = REPO_ROOT / "shoreguard" / "client"
-FRONTEND_JS_DIR = REPO_ROOT / "frontend" / "js"
+FRONTEND_SRC_DIR = REPO_ROOT / "frontend" / "src"
 PROTO_GRPC = CLIENT_DIR / "_proto" / "openshell_pb2_grpc.py"
 
 # RPCs that are intentionally not consumed by ShoreGuard because they are
@@ -86,18 +86,14 @@ def extract_rest_routes() -> set[str]:
 
 
 def extract_ui_routes() -> set[str]:
-    """Parse ``apiFetch`` call strings from the frontend sources.
-
-    Scans both the legacy vanilla-JS bundle (``frontend/js``) and the
-    TypeScript islands (``frontend/src``) during the incremental
-    migration — an RPC is UI-covered if either stack calls it.
-    """
+    """Parse ``apiFetch`` call strings from the TypeScript islands."""
     routes: set[str] = set()
-    pattern = re.compile(r"apiFetch(?:<[^>]*>)?\(\s*`([^`]+)`")
-    sources = list(FRONTEND_JS_DIR.rglob("*.js"))
-    src_dir = FRONTEND_JS_DIR.parent / "src"
+    # The optional generic may nest (Record<string, unknown>); exclude only
+    # characters that cannot appear inside a type argument list.
+    pattern = re.compile(r"apiFetch(?:<[^`()]*>)?\(\s*`([^`]+)`")
+    sources: list[Path] = []
     for suffix in ("*.ts", "*.tsx"):
-        sources.extend(src_dir.rglob(suffix))
+        sources.extend(FRONTEND_SRC_DIR.rglob(suffix))
     for path in sources:
         text = path.read_text(encoding="utf-8")
         for match in pattern.finditer(text):

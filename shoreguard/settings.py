@@ -374,7 +374,7 @@ class AuthSettings(BaseSettings):
     csp_policy: str = Field(
         default=(
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "font-src 'self' https://cdn.jsdelivr.net; "
             "img-src 'self' data:; connect-src 'self' wss:"
@@ -386,9 +386,8 @@ class AuthSettings(BaseSettings):
         description=(
             "Enforce strict CSP with per-request nonce, no 'unsafe-inline', and "
             "frame-ancestors 'none'. Default as of v0.27.0 — blocks inline scripts, "
-            "inline event handlers, and inline styles (M1–M3 + M2.1). 'unsafe-eval' "
-            "is retained in script-src because Alpine.js uses the Function() "
-            "constructor; the regular Alpine build is used in both modes. "
+            "inline event handlers, and inline styles. Since the Preact islands "
+            "rewrite removed Alpine.js, 'unsafe-eval' is no longer needed. "
             "Set SHOREGUARD_CSP_STRICT=false to fall back to the legacy "
             "'unsafe-inline' policy in `csp_policy`."
         ),
@@ -396,7 +395,7 @@ class AuthSettings(BaseSettings):
     csp_policy_strict: str = Field(
         default=(
             "default-src 'self'; "
-            "script-src 'self' 'nonce-{nonce}' 'unsafe-eval' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net; "
             "style-src 'self' https://cdn.jsdelivr.net; "
             "style-src-attr 'unsafe-inline'; "
             "font-src 'self' https://cdn.jsdelivr.net; "
