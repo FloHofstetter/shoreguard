@@ -18,6 +18,12 @@ const ISLANDS: Record<string, IslandLoader> = {
   "dashboard-page": () => import("./islands/dashboard"),
   "provider-profiles-page": () => import("./islands/provider-profiles"),
   "services-page": () => import("./islands/services"),
+  "auth-login": () => import("./islands/auth-pages").then((m) => ({ default: m.LoginPage })),
+  "auth-register": () => import("./islands/auth-pages").then((m) => ({ default: m.RegisterPage })),
+  "auth-setup": () => import("./islands/auth-pages").then((m) => ({ default: m.SetupPage })),
+  "auth-invite": () => import("./islands/auth-pages").then((m) => ({ default: m.InvitePage })),
+  "user-new-form": () => import("./islands/user-forms").then((m) => ({ default: m.UserNewForm })),
+  "sp-new-form": () => import("./islands/user-forms").then((m) => ({ default: m.SpNewForm })),
 };
 
 async function mountIslands(): Promise<void> {

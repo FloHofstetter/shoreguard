@@ -11,51 +11,12 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="/static/css/style.css" rel="stylesheet">
     <link href="/static/css/auth.css" rel="stylesheet">
-    <script defer src="/static/js/auth.js"></script>
-    {% include "components/alpine_loader.html" %}
+    <script type="module" src="/static/dist/main.js"></script>
 </head>
 <body class="sg-auth-body">
-    <div class="invite-card" x-data="inviteForm">
-        <div class="card sg-card-themed">
-            <div class="card-body p-4">
-                <div class="text-center mb-4">
-                    <i class="bi bi-shield-check fs-1 sg-text-accent"></i>
-                    <h4 class="mt-2 mb-1">Welcome to Shoreguard</h4>
-                    <p class="text-muted small">Set your password to activate your account.</p>
-                </div>
-
-                <form @submit.prevent="submit()">
-                    <div class="mb-3">
-                        <label class="form-label">Password</label>
-                        <input
-                            type="password"
-                            x-model="password"
-                            class="form-control"
-                            placeholder="Choose a strong password"
-                            autocomplete="new-password"
-                            minlength="8"
-                            autofocus
-                            required
-                        >
-                        <div class="form-text">Minimum 8 characters</div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Confirm Password</label>
-                        <input
-                            type="password"
-                            x-model="confirm"
-                            class="form-control"
-                            placeholder="Repeat password"
-                            autocomplete="new-password"
-                            required
-                        >
-                    </div>
-                    <div x-show="error" x-text="error" class="text-danger small mb-3" x-cloak></div>
-                    <button type="submit" class="btn btn-success w-100" :disabled="loading">
-                        <i class="bi bi-check-circle me-1"></i>Set Password & Login
-                    </button>
-                </form>
-            </div>
+    <div class="invite-card" data-island="auth-invite">
+        <div class="text-center text-muted py-5">
+            <div class="spinner-border spinner-border-sm me-2"></div>Loading...
         </div>
     </div>
 </body>
