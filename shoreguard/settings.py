@@ -820,6 +820,35 @@ class SmtpSettings(BaseSettings):
     )
 
 
+class UpdateSettings(BaseSettings):
+    """Opt-in update checks against the release index.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Periodically check PyPI for a newer release.
+        interval_hours (int): Hours between checks.
+        url (str): Release index JSON endpoint.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_UPDATES_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Periodically check PyPI for a newer ShoreGuard "
+        "release and fire a shoreguard.update_available webhook event "
+        "(off by default — no phone-home without opt-in)",
+    )
+    interval_hours: int = Field(
+        default=24,
+        ge=1,
+        description="Hours between update checks",
+    )
+    url: str = Field(
+        default="https://pypi.org/pypi/shoreguard/json",
+        description="Release index JSON endpoint queried by the update check",
+    )
+
+
 class BackupSettings(BaseSettings):
     """Periodic backup snapshots (SQLite deployments).
 
@@ -1352,6 +1381,7 @@ class Settings(BaseSettings):
         push (PushSettings): Web Push (PWA notification) configuration.
         curfew (CurfewSettings): Agent curfew (quiet hours) evaluation.
         backup (BackupSettings): Periodic backup snapshots.
+        updates (UpdateSettings): Opt-in release update checks.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -1380,6 +1410,7 @@ class Settings(BaseSettings):
     push: PushSettings = Field(default_factory=PushSettings)
     curfew: CurfewSettings = Field(default_factory=CurfewSettings)
     backup: BackupSettings = Field(default_factory=BackupSettings)
+    updates: UpdateSettings = Field(default_factory=UpdateSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

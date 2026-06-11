@@ -41,6 +41,17 @@ async def get_node_alerts() -> dict[str, Any]:
     return get_services().node_alerts.status()
 
 
+@router.get("/updates")
+async def get_update_status() -> dict[str, Any]:
+    """Return update availability and gateway version skew.
+
+    Returns:
+        dict[str, Any]: Current/latest ShoreGuard version, check state,
+        per-gateway OpenShell versions, and a skew flag.
+    """
+    return get_services().update_check.status()
+
+
 @router.get("/backup", dependencies=[Depends(require_role("admin"))], response_model=None)
 async def download_backup(request: Request) -> FileResponse:
     """Create a backup archive and stream it as a download (admin only).

@@ -134,6 +134,18 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
                 run=_node_alerts,
             )
         )
+    if settings.updates.enabled:
+
+        async def _update_check() -> None:
+            await container.update_check.run_once()
+
+        tasks.append(
+            PeriodicTask(
+                name="update_check",
+                interval=settings.updates.interval_hours * 3600,
+                run=_update_check,
+            )
+        )
     if settings.backup.enabled:
 
         async def _backup() -> None:

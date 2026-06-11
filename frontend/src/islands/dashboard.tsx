@@ -123,6 +123,45 @@ interface NodeAlerts {
   breached: string[];
 }
 
+interface UpdateStatus {
+  current: string;
+  latest: string | null;
+  update_available: boolean;
+  gateway_versions: Record<string, string>;
+  version_skew: boolean;
+}
+
+function UpdateBanner() {
+  const [status, setStatus] = useState<UpdateStatus | null>(null);
+
+  useEffect(() => {
+    apiFetch<UpdateStatus>(`/api/system/updates`)
+      .then(setStatus)
+      .catch(() => setStatus(null));
+  }, []);
+
+  if (!status || (!status.update_available && !status.version_skew)) return null;
+  return (
+    <div class="alert alert-info d-flex flex-wrap align-items-center gap-2 mb-3">
+      <i class="bi bi-arrow-up-circle" />
+      {status.update_available && (
+        <span>
+          ShoreGuard <strong>{status.latest}</strong> is available (running {status.current}).
+        </span>
+      )}
+      {status.version_skew && (
+        <span>
+          Gateways run <strong>different OpenShell versions</strong>:{" "}
+          {Object.entries(status.gateway_versions)
+            .map(([gw, v]) => `${gw}=${v}`)
+            .join(", ")}
+          .
+        </span>
+      )}
+    </div>
+  );
+}
+
 function UsageBar({ label, pct, detail }: { label: string; pct: number; detail: string }) {
   const cls = pct >= 90 ? "bg-danger" : pct >= 75 ? "bg-warning" : "bg-success";
   return (
@@ -277,6 +316,7 @@ export default function DashboardPage() {
 
   return (
     <div class="sg-fade-in">
+      <UpdateBanner />
       <div class="row g-3 mb-4">
         <div class="col-6 col-lg-3">
           <a href="/gateways" class="text-decoration-none">

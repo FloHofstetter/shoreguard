@@ -37,6 +37,7 @@ _EVENT_LABELS: dict[str, str] = {
     "budget.exceeded": "Budget EXCEEDED",
     "node.threshold_breached": "Host Threshold BREACHED",
     "node.recovered": "Host Threshold Recovered",
+    "shoreguard.update_available": "ShoreGuard Update Available",
     "webhook.test": "Test Event",
 }
 

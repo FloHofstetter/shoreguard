@@ -20,6 +20,12 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Update awareness & gateway version skew** — health probes now
+  record each gateway's OpenShell version; `GET /api/system/updates`
+  reports them plus a skew flag, and the dashboard shows a banner when
+  gateways diverge. Opt-in (`SHOREGUARD_UPDATES_ENABLED`, off by
+  default — no phone-home) daily PyPI check fires a one-shot
+  `shoreguard.update_available` webhook event per new release.
 - **Built-in backup & restore** — `shoreguard backup create` bundles a
   live, consistent SQLite snapshot (online backup API), the
   `.secret_key`, and the VAPID key into one tar.gz; `shoreguard backup

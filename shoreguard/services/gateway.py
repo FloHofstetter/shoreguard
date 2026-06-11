@@ -105,11 +105,23 @@ class GatewayService:
         # Per-gateway connection cache with backoff state. Instance state so
         # each container (prod app, each test) owns its own connections.
         self._clients: dict[str, _ClientEntry] = {}
+        # Last OpenShell version reported by each gateway's health probe
+        # (in-memory; repopulated by the health loop after a restart).
+        self._versions: dict[str, str] = {}
 
     @property
     def registry(self) -> GatewayRegistry:
         """The underlying gateway registry."""
         return self._registry
+
+    def known_versions(self) -> dict[str, str]:
+        """Return the last OpenShell version reported per gateway.
+
+        Returns:
+            dict[str, str]: Gateway name → version string (only gateways
+            whose health probe has succeeded since startup).
+        """
+        return dict(self._versions)
 
     # ── Connection management ─────────────────────────────────────────────
 
@@ -583,6 +595,9 @@ class GatewayService:
                 client = await self.get_client(name=name)
                 health = await client.health()
                 status = health.get("status", "unknown")
+                version = health.get("version")
+                if version:
+                    self._versions[name] = str(version)
             except (GatewayNotConnectedError, grpc.RpcError) as e:
                 logger.debug("Health probe failed for '%s': %s", name, e)
                 status = "unreachable"
