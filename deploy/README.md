@@ -1,8 +1,9 @@
 # ShoreGuard Deployment
 
-This directory contains two **docker-compose** deployment variants for
-single-VM / homelab / laptop installs. For **Kubernetes** deployments,
-see [`../charts/shoreguard`](../charts/shoreguard) instead — install
+This directory contains the **docker-compose** deployment variants for
+single-VM / homelab / laptop installs plus a **systemd** unit for bare
+metal. For **Kubernetes** deployments, see
+[`../charts/shoreguard`](../charts/shoreguard) instead — install
 that chart alongside NVIDIA's upstream OpenShell Helm chart and wire
 them up via the ShoreGuard UI or API. ShoreGuard does not ship an
 umbrella chart that bundles NVIDIA's OpenShell chart; that split is
@@ -10,8 +11,16 @@ intentional (see `memory/project_roadmap.md` scope boundary decision).
 
 | File | What it runs | Use case |
 |------|-------------|----------|
+| `docker-compose.homelab.yml` | ShoreGuard only, SQLite, loopback bind | One box (e.g. a DGX Spark) — smallest install, no Postgres |
 | `docker-compose.yml` + `Caddyfile` | Full stack: ShoreGuard + OpenShell + Paperclip + OpenClaw | Local dev / homelab / CI with real sandboxes (single-VM scale) |
 | `docker-compose.standalone.yml` + `Caddyfile.standalone` | ShoreGuard + PostgreSQL + Caddy | ShoreGuard-only install connecting to a remote gateway |
+| `systemd/shoreguard.service` | Bare-metal install without Docker | systemd hosts; state in `/var/lib/shoreguard` |
+
+All container images are multi-arch (`linux/amd64` + `linux/arm64`) — DGX
+Spark and the other GB10 aarch64 boxes are first-class targets, and CI runs
+the unit suite natively on arm64. Homelab specifics (backup/restore,
+health monitoring, Tailscale access) are documented in
+[docs/operations/homelab.md](../docs/operations/homelab.md).
 
 ## Full Stack (default)
 

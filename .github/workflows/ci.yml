@@ -99,6 +99,20 @@ jobs:
       - run: uv sync --group dev
       - run: uv run pytest -m 'not integration' --cov=shoreguard --cov-report=term-missing
 
+  # Native arm64 run of the unit suite. Every NVIDIA GB10 device
+  # (DGX Spark and all OEM variants) is aarch64 — the release images are
+  # already multi-arch, and this job ensures the code is actually *tested*
+  # on the architecture it ships to, not just cross-built for it.
+  test-arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+      - run: uv sync --group dev
+      - run: uv run pytest -n auto -m 'not integration'
+
   helm-lint:
     runs-on: ubuntu-latest
     steps:

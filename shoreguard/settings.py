@@ -1233,10 +1233,21 @@ class Settings(BaseSettings):
 
             db_url = self.server.database_url or default_database_url()
             if db_url.startswith("sqlite"):
-                warnings.append(
-                    "ERROR: database_url is SQLite in a production-like deployment — "
-                    "use PostgreSQL for concurrent access and durability"
-                )
+                # SQLite (WAL mode) is a supported single-replica deployment —
+                # the homelab/single-box case. It only becomes a correctness
+                # problem when multiple replicas write the same file.
+                if replica_count > 1:
+                    warnings.append(
+                        f"ERROR: database_url is SQLite with SHOREGUARD_REPLICAS="
+                        f"{replica_count} — concurrent replicas corrupt a shared "
+                        "SQLite file; use PostgreSQL for multi-replica deployments"
+                    )
+                else:
+                    warnings.append(
+                        "WARN: database_url is SQLite in a production-like deployment — "
+                        "fine for a single-replica box; use PostgreSQL for multi-replica "
+                        "or write-heavy deployments"
+                    )
 
             if self.server.log_format != "json":
                 warnings.append(

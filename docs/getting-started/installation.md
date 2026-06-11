@@ -48,6 +48,14 @@ The fastest way to get started:
 pip install shoreguard
 ```
 
+!!! info "arm64 / DGX Spark"
+    ShoreGuard is a first-class citizen on aarch64 — DGX Spark and the
+    other NVIDIA GB10 boxes, Raspberry Pi, ARM servers. The release
+    container images are multi-arch (`linux/amd64` + `linux/arm64`) and CI
+    runs the unit suite natively on arm64. See
+    [Homelab / Single Box](../operations/homelab.md) for the
+    one-container SQLite install and the systemd unit.
+
 Or, if you prefer [uv](https://docs.astral.sh/uv/):
 
 ```bash

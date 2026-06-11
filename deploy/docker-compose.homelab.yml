@@ -1,0 +1,44 @@
+# Homelab single-box compose — SQLite, no PostgreSQL, loopback-only by default.
+#
+# This is the smallest possible ShoreGuard deployment: one container, one
+# named volume. State (SQLite DB in WAL mode, on-disk secret key) lives in
+# the `sgdata` volume; back it up with
+#   docker run --rm -v shoreguard_sgdata:/data -v "$PWD":/backup alpine \
+#     tar czf /backup/shoreguard-backup.tar.gz -C /data .
+#
+# The published port binds to 127.0.0.1 on the host. For remote/phone access
+# prefer Tailscale (`tailscale serve 8888`) over exposing the port to the
+# LAN — see docs/operations/homelab.md.
+#
+# Usage (from the deploy/ directory):
+#   SHOREGUARD_SECRET_KEY=$(openssl rand -hex 32) \
+#   SHOREGUARD_ADMIN_PASSWORD=change-me \
+#   docker compose -f docker-compose.homelab.yml up -d
+services:
+  shoreguard:
+    # Multi-arch image: linux/amd64 and linux/arm64 (DGX Spark and all
+    # other GB10 devices are aarch64).
+    image: ghcr.io/flohofstetter/shoreguard:${SHOREGUARD_VERSION:-latest}
+    build:
+      context: ..
+      args:
+        SHOREGUARD_VERSION: ${SHOREGUARD_VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "${SHOREGUARD_BIND:-127.0.0.1}:${SHOREGUARD_PORT:-8888}:8888"
+    environment:
+      # No SHOREGUARD_DATABASE_URL: falls back to SQLite (WAL) inside the
+      # config volume below.
+      SHOREGUARD_SECRET_KEY: ${SHOREGUARD_SECRET_KEY:?set SHOREGUARD_SECRET_KEY}
+      SHOREGUARD_ADMIN_PASSWORD: ${SHOREGUARD_ADMIN_PASSWORD:-}
+      SHOREGUARD_LOG_LEVEL: ${SHOREGUARD_LOG_LEVEL:-info}
+      SHOREGUARD_RELOAD: "false"
+    volumes:
+      - sgdata:/home/shoreguard/.config/shoreguard
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  sgdata:

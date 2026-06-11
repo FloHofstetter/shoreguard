@@ -1,0 +1,52 @@
+# ShoreGuard systemd unit — bare-metal single-box install (e.g. a DGX Spark
+# or any Linux homelab host) without Docker.
+#
+# Install:
+#   sudo useradd --system --home-dir /var/lib/shoreguard --shell /usr/sbin/nologin shoreguard
+#   sudo python3 -m venv /opt/shoreguard
+#   sudo /opt/shoreguard/bin/pip install shoreguard
+#   sudo cp deploy/systemd/shoreguard.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now shoreguard
+#
+# State (SQLite DB, on-disk secret key) lives in /var/lib/shoreguard via
+# StateDirectory + XDG_CONFIG_HOME. Back it up by copying that directory
+# while the service is stopped (or use `sqlite3 ... ".backup"` live).
+#
+# Configuration goes into /etc/shoreguard/env (SHOREGUARD_* variables),
+# e.g. SHOREGUARD_SECRET_KEY, SHOREGUARD_ADMIN_PASSWORD, SHOREGUARD_HOST.
+
+[Unit]
+Description=ShoreGuard control plane for NVIDIA OpenShell
+Documentation=https://github.com/FloHofstetter/shoreguard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shoreguard
+Group=shoreguard
+# Loopback by default — pair with Tailscale Serve or a reverse proxy for
+# remote access instead of binding to 0.0.0.0.
+ExecStart=/opt/shoreguard/bin/shoreguard --host 127.0.0.1 --port 8888 --no-reload
+EnvironmentFile=-/etc/shoreguard/env
+Environment=XDG_CONFIG_HOME=/var/lib/shoreguard
+StateDirectory=shoreguard
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+# For `shoreguard --local` (Docker lifecycle management of local gateways),
+# the service user additionally needs the Docker socket:
+#   SupplementaryGroups=docker
+# and relax ProtectSystem if your Docker socket lives outside /run.
+
+[Install]
+WantedBy=multi-user.target

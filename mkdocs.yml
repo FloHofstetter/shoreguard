@@ -120,6 +120,7 @@ nav:
       - Deployment: admin/deployment.md
       - Production Kubernetes: deploy/production-k8s.md
       - Local Mode: admin/local-mode.md
+      - Homelab / Single Box: operations/homelab.md
       - Database Migrations: admin/database-migrations.md
       - Rollback Runbook: admin/rollback.md
       - Cert Rotation: operations/cert-rotation.md

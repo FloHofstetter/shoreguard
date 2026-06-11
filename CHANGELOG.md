@@ -5,6 +5,26 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.39.0] — Unreleased
+
+Homelab / DGX-Spark program: ten increments making the single-box,
+local-agent deployment a first-class citizen.
+
+### Added
+
+- **arm64 / DGX Spark packaging** — CI now runs the unit suite natively on
+  an arm64 runner (every GB10 device is aarch64); new
+  `deploy/docker-compose.homelab.yml` (one container, SQLite, loopback-only
+  bind) and `deploy/systemd/shoreguard.service` (hardened bare-metal unit,
+  state in `/var/lib/shoreguard`); new "Homelab / Single Box" operations
+  guide covering install, backup/restore, and health monitoring.
+
+### Changed
+
+- **SQLite production check** — single-replica SQLite is now a `WARN`
+  (supported homelab shape, WAL mode) instead of a hard startup `ERROR`;
+  it remains an `ERROR` when `SHOREGUARD_REPLICAS` > 1.
+
 ## [0.38.0] — Unreleased
 
 ### Architecture redesign

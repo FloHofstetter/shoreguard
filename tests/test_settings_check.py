@@ -220,6 +220,7 @@ def test_errors_on_multi_replica_without_secret_key(
 
 def test_warns_on_sqlite_in_prod(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SHOREGUARD_DATABASE_URL", raising=False)
+    monkeypatch.delenv("SHOREGUARD_REPLICAS", raising=False)
     s = _make_settings(
         server=ServerSettings(
             host="0.0.0.0",
@@ -228,7 +229,23 @@ def test_warns_on_sqlite_in_prod(monkeypatch: pytest.MonkeyPatch) -> None:
         ),
     )
     warnings = s.check_production_readiness()
-    assert any("SQLite" in w and "ERROR" in w for w in warnings)
+    # Single-replica SQLite is a supported homelab deployment: WARN, not ERROR.
+    assert any("SQLite" in w and w.startswith("WARN") for w in warnings)
+    assert not any("SQLite" in w and w.startswith("ERROR") for w in warnings)
+
+
+def test_errors_on_sqlite_with_multiple_replicas(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SHOREGUARD_DATABASE_URL", raising=False)
+    monkeypatch.setenv("SHOREGUARD_REPLICAS", "3")
+    s = _make_settings(
+        server=ServerSettings(
+            host="0.0.0.0",
+            log_format="json",
+            database_url="sqlite:///tmp/sg.db",
+        ),
+    )
+    warnings = s.check_production_readiness()
+    assert any("SQLite" in w and w.startswith("ERROR") for w in warnings)
 
 
 def test_warns_on_text_log_format_in_prod(monkeypatch: pytest.MonkeyPatch) -> None:
