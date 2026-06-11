@@ -113,7 +113,14 @@ interface NodeStats {
     memory_used_mb: number | null;
     memory_total_mb: number | null;
     temperature_c: number | null;
+    power_w: number | null;
   }[];
+}
+
+interface NodeAlerts {
+  enabled: boolean;
+  thresholds: Record<string, number>;
+  breached: string[];
 }
 
 function UsageBar({ label, pct, detail }: { label: string; pct: number; detail: string }) {
@@ -133,6 +140,7 @@ function UsageBar({ label, pct, detail }: { label: string; pct: number; detail: 
 
 function NodeStatsCard() {
   const [stats, setStats] = useState<NodeStats | null>(null);
+  const [alerts, setAlerts] = useState<NodeAlerts | null>(null);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -140,6 +148,9 @@ function NodeStatsCard() {
       apiFetch<NodeStats>(`/api/system/node-stats`)
         .then(setStats)
         .catch(() => setStats(null));
+      apiFetch<NodeAlerts>(`/api/system/node-alerts`)
+        .then(setAlerts)
+        .catch(() => setAlerts(null));
     };
     load();
     timer = window.setInterval(load, 15000);
@@ -157,8 +168,19 @@ function NodeStatsCard() {
             <i class="bi bi-cpu me-2" />
             This machine
           </h6>
-          <span class="badge text-bg-secondary" title="Stats for the host running ShoreGuard">
-            host
+          <span>
+            {alerts && alerts.breached.length > 0 && (
+              <span
+                class="badge text-bg-danger me-1"
+                title={`Thresholds breached: ${alerts.breached.join(", ")}`}
+              >
+                <i class="bi bi-thermometer-high me-1" />
+                {alerts.breached.length} alert{alerts.breached.length > 1 ? "s" : ""}
+              </span>
+            )}
+            <span class="badge text-bg-secondary" title="Stats for the host running ShoreGuard">
+              host
+            </span>
           </span>
         </div>
         {stats.cpu && (
@@ -180,7 +202,7 @@ function NodeStatsCard() {
             <UsageBar
               label={`GPU ${stats.gpus.length > 1 ? i + " " : ""}util`}
               pct={gpu.utilization_pct ?? 0}
-              detail={`${gpu.name}${gpu.temperature_c != null ? ` · ${gpu.temperature_c}°C` : ""}`}
+              detail={`${gpu.name}${gpu.temperature_c != null ? ` · ${gpu.temperature_c}°C` : ""}${gpu.power_w != null ? ` · ${Math.round(gpu.power_w)}W` : ""}`}
             />
             {gpu.memory_total_mb != null && gpu.memory_used_mb != null && gpu.memory_total_mb > 0 && (
               <UsageBar

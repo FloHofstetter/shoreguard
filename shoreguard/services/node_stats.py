@@ -29,7 +29,9 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_NVIDIA_SMI_QUERY = "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu"
+_NVIDIA_SMI_QUERY = (
+    "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw"
+)
 
 
 def _read_meminfo() -> dict[str, int]:
@@ -61,7 +63,8 @@ def parse_nvidia_smi_csv(output: str) -> list[dict[str, Any]]:
 
     Returns:
         list[dict[str, Any]]: One dict per GPU with name, utilisation,
-            memory, and temperature (fields ``None`` when unparsable).
+            memory, temperature, and power draw (fields ``None`` when
+            unparsable; ``power_w`` also on boards that do not report it).
     """
 
     def _num(value: str) -> float | None:
@@ -82,6 +85,7 @@ def parse_nvidia_smi_csv(output: str) -> list[dict[str, Any]]:
                 "memory_used_mb": _num(fields[2]),
                 "memory_total_mb": _num(fields[3]),
                 "temperature_c": _num(fields[4]),
+                "power_w": _num(fields[5]) if len(fields) > 5 else None,
             }
         )
     return gpus

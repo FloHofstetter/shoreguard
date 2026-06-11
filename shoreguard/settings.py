@@ -807,6 +807,50 @@ class SmtpSettings(BaseSettings):
     )
 
 
+class NodeAlertSettings(BaseSettings):
+    """Threshold alerts on the host node-stats sample.
+
+    Fires ``node.threshold_breached`` / ``node.recovered`` webhook events
+    on state transitions, so a hot GPU or a filling disk reaches the
+    phone instead of waiting on a dashboard glance. On GB10's unified
+    memory, host memory pressure *is* GPU memory pressure.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Run the periodic threshold-evaluation task.
+        interval_seconds (int): Seconds between evaluations.
+        gpu_temp_c (float): GPU temperature breach threshold in °C.
+        disk_used_pct (float): Root-disk usage breach threshold in percent.
+        mem_used_pct (float): Memory usage breach threshold in percent.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_NODE_ALERT_")
+
+    enabled: bool = Field(
+        default=True,
+        description="Evaluate host thresholds periodically and fire "
+        "node.threshold_breached / node.recovered webhook events on "
+        "transitions (no-op unless a webhook subscribes)",
+    )
+    interval_seconds: int = Field(
+        default=60,
+        ge=10,
+        description="Seconds between host threshold evaluations",
+    )
+    gpu_temp_c: float = Field(
+        default=85.0,
+        description="GPU temperature breach threshold in degrees Celsius",
+    )
+    disk_used_pct: float = Field(
+        default=90.0,
+        description="Root-disk usage breach threshold in percent",
+    )
+    mem_used_pct: float = Field(
+        default=95.0,
+        description="Host memory usage breach threshold in percent",
+    )
+
+
 class CertRotationSettings(BaseSettings):
     """Proactive mTLS client-cert rotation settings.
 
@@ -1213,6 +1257,7 @@ class Settings(BaseSettings):
         digest (DigestSettings): Daily activity digest dispatch.
         budget (BudgetSettings): Inference usage metering and budgets.
         smtp (SmtpSettings): Server-wide SMTP defaults for email webhooks.
+        node_alert (NodeAlertSettings): Host threshold alert evaluation.
     """
 
     server: ServerSettings = Field(default_factory=ServerSettings)
@@ -1237,6 +1282,7 @@ class Settings(BaseSettings):
     digest: DigestSettings = Field(default_factory=DigestSettings)
     budget: BudgetSettings = Field(default_factory=BudgetSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
+    node_alert: NodeAlertSettings = Field(default_factory=NodeAlertSettings)
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

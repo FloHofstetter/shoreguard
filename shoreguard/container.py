@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from shoreguard.services.gateway import GatewayService
     from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
+    from shoreguard.services.node_alerts import NodeAlertService
     from shoreguard.services.node_stats import NodeStatsService
     from shoreguard.services.operations import AsyncOperationService
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
@@ -71,6 +72,7 @@ class ServiceContainer:
         digest: Daily activity digest builder/dispatcher.
         budget: Inference usage metering and per-sandbox budgets.
         node_stats: Host resource stats for the ShoreGuard machine.
+        node_alerts: Threshold alerts over the host node-stats sample.
         denial_context: Denial context cache.
         local_gateway: Local gateway manager, or ``None`` outside local mode.
     """
@@ -96,6 +98,7 @@ class ServiceContainer:
     digest: DigestService
     budget: BudgetService
     node_stats: NodeStatsService
+    node_alerts: NodeAlertService
     denial_context: DenialContextService
     local_gateway: LocalGatewayManager | None = None
 
@@ -131,6 +134,7 @@ def build_container(
     from shoreguard.services.gateway import GatewayService
     from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
+    from shoreguard.services.node_alerts import NodeAlertService
     from shoreguard.services.node_stats import NodeStatsService
     from shoreguard.services.operations import AsyncOperationService
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
@@ -144,6 +148,7 @@ def build_container(
     gateway = GatewayService(registry)
     sandbox_meta = SandboxMetaStore(async_session_factory)
     audit = AuditService(async_session_factory, exporter=audit_exporter)
+    node_stats = NodeStatsService()
 
     async def _resolve_sandbox_service(gateway_name: str):  # type: ignore[no-untyped-def]  # noqa: D103
         # Build a SandboxService for post-create boot-hook dispatch.
@@ -187,7 +192,8 @@ def build_container(
         kill_switch=KillSwitchService(async_session_factory, gateway),
         digest=DigestService(async_session_factory, registry),
         budget=BudgetService(async_session_factory, gateway, registry, settings.budget),
-        node_stats=NodeStatsService(),
+        node_stats=node_stats,
+        node_alerts=NodeAlertService(node_stats, settings.node_alert),
         denial_context=DenialContextService(),
         local_gateway=(LocalGatewayManager(gateway) if settings.server.local_mode else None),
     )

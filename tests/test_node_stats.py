@@ -8,7 +8,7 @@ from shoreguard.services.node_stats import NodeStatsService, parse_nvidia_smi_cs
 
 
 def test_parse_nvidia_smi_csv_single_gpu() -> None:
-    output = "NVIDIA GB10, 42, 12288, 122880, 61\n"
+    output = "NVIDIA GB10, 42, 12288, 122880, 61, 38.5\n"
     gpus = parse_nvidia_smi_csv(output)
     assert gpus == [
         {
@@ -17,17 +17,25 @@ def test_parse_nvidia_smi_csv_single_gpu() -> None:
             "memory_used_mb": 12288.0,
             "memory_total_mb": 122880.0,
             "temperature_c": 61.0,
+            "power_w": 38.5,
         }
     ]
 
 
 def test_parse_nvidia_smi_csv_handles_na_and_garbage() -> None:
-    output = "NVIDIA GB10, [N/A], 1024, 122880, N/A\nshort,line\n"
+    output = "NVIDIA GB10, [N/A], 1024, 122880, N/A, [N/A]\nshort,line\n"
     gpus = parse_nvidia_smi_csv(output)
     assert len(gpus) == 1
     assert gpus[0]["utilization_pct"] is None
     assert gpus[0]["temperature_c"] is None
     assert gpus[0]["memory_used_mb"] == 1024.0
+    assert gpus[0]["power_w"] is None
+
+
+def test_parse_nvidia_smi_csv_five_field_fallback() -> None:
+    gpus = parse_nvidia_smi_csv("NVIDIA GB10, 42, 1024, 122880, 61\n")
+    assert len(gpus) == 1
+    assert gpus[0]["power_w"] is None
 
 
 def test_parse_nvidia_smi_csv_empty() -> None:

@@ -27,3 +27,13 @@ async def get_node_stats() -> dict[str, Any]:
         dict[str, Any]: Host stats sample (``scope: shoreguard-host``).
     """
     return await get_services().node_stats.collect()
+
+
+@router.get("/node-alerts")
+async def get_node_alerts() -> dict[str, Any]:
+    """Return host threshold-alert configuration and current breaches.
+
+    Returns:
+        dict[str, Any]: Enabled flag, thresholds, and breached metrics.
+    """
+    return get_services().node_alerts.status()

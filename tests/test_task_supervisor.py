@@ -119,3 +119,18 @@ def test_build_tasks_respects_feature_flags(container):
         assert "discovery" not in names
     if not settings.drift_detection.enabled:
         assert "drift_detection" not in names
+    assert "node_alerts" in names  # enabled by default
+
+
+def test_build_tasks_node_alerts_disabled(container, monkeypatch):
+    """SHOREGUARD_NODE_ALERT_ENABLED=false removes the node_alerts task."""
+    from shoreguard.settings import Settings, reset_settings
+    from shoreguard.tasks.definitions import build_tasks
+
+    monkeypatch.setenv("SHOREGUARD_NODE_ALERT_ENABLED", "false")
+    reset_settings()
+    try:
+        names = {t.name for t in build_tasks(container, Settings())}
+        assert "node_alerts" not in names
+    finally:
+        reset_settings()

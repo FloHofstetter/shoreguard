@@ -122,4 +122,16 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
                 run=_daily_digest,
             )
         )
+    if settings.node_alert.enabled:
+
+        async def _node_alerts() -> None:
+            await container.node_alerts.run_once()
+
+        tasks.append(
+            PeriodicTask(
+                name="node_alerts",
+                interval=settings.node_alert.interval_seconds,
+                run=_node_alerts,
+            )
+        )
     return tasks

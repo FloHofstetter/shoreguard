@@ -20,6 +20,13 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Host threshold alerts + GPU power draw** — the node-stats sample now
+  includes `power_w` (nvidia-smi `power.draw`), and a new background
+  task (`SHOREGUARD_NODE_ALERT_*`, on by default) evaluates GPU
+  temperature, memory, and disk thresholds, firing
+  `node.threshold_breached` / `node.recovered` webhook events on state
+  transitions — the hot-Spark alert reaches the phone exactly once.
+  `GET /api/system/node-alerts` and a dashboard badge expose the state.
 - **MQTT webhook channel (Home Assistant bridge)** — `channel_type:
   "mqtt"` publishes the generic event envelope to
   `<topic>/<event-type>` on an `mqtt://`/`mqtts://` broker (one-shot,
