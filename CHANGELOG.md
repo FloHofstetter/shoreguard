@@ -28,6 +28,11 @@ local-agent deployment a first-class citizen.
   informational warning instead of an alarming red error. Hand-rolled empty
   states fold into the shared `EmptyState` component and the duplicate
   role-badge map is removed.
+- **UI: accessible modals + dead-CSS cleanup.** The shared Preact modal now
+  closes on Escape, locks background scroll while open, and exposes
+  `role="dialog"` / `aria-modal`. Removes dead CSS — the unused `.detail-tabs`
+  rules, the legacy `#approvalModal` override, and the `.phase-*` badge classes
+  superseded by the shared badge map.
 
 ### Fixed
 

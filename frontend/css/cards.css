@@ -1,16 +1,8 @@
 /**
  * Shoreguard — Card Styles
- * Agent selection cards, phase badges.
+ * Agent selection cards (wizard step 1).
  */
 
-/* Phase badges */
-.phase-ready { color: var(--sg-accent); }
-.phase-provisioning { color: var(--sg-warning); }
-.phase-error { color: var(--sg-danger); }
-.phase-deleting { color: var(--sg-muted); }
-.phase-unknown { color: var(--sg-muted); }
-
-/* Agent selection cards (wizard step 1) */
 .agent-card {
     cursor: pointer;
     transition: border-color 0.2s, transform 0.1s;

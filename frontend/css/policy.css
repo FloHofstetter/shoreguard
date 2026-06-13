@@ -1,17 +1,7 @@
 /**
  * Shoreguard — Policy Styles
- * Detail tabs, overview cards, modal, toast.
+ * Overview cards, toast, policy diff.
  */
-
-/* Detail page tabs */
-.detail-tabs .nav-link {
-    color: var(--sg-text-muted);
-}
-
-.detail-tabs .nav-link.active {
-    color: var(--sg-accent);
-    border-bottom-color: var(--sg-accent);
-}
 
 /* Policy overview cards */
 .policy-overview-card {
@@ -27,12 +17,6 @@
 
 .policy-overview-card .card-footer {
     color: var(--sg-accent);
-}
-
-/* Approval modal */
-#approvalModal .modal-content {
-    background-color: var(--sg-card);
-    border: 1px solid var(--sg-border);
 }
 
 /* Toast */
