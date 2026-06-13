@@ -5,10 +5,19 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.39.0] — Unreleased
+## [0.39.0] — 2026-06-13
 
-Homelab / DGX-Spark program: ten increments making the single-box,
-local-agent deployment a first-class citizen.
+> **Compatibility:** requires a gateway running **OpenShell `v0.0.57` or newer**
+> (see the installation guide). Existing ShoreGuard `v0.37` databases upgrade in
+> place; older databases must pass through `v0.37` first.
+
+A major release in two parts. First, a ground-up internal **architecture
+redesign** — a Preact/TypeScript island frontend, an async-native gRPC client and
+data layer, a single composition root, and a squashed migration baseline — with
+REST paths, responses, and CLI commands unchanged. Second, the **Homelab /
+DGX-Spark program**: making the single-box, local-agent deployment a first-class
+citizen, from phone approvals to overnight digests. The architecture redesign is
+detailed at the end of this entry.
 
 ### Changed
 
@@ -67,6 +76,9 @@ local-agent deployment a first-class citizen.
   two equal-height columns on wide screens (stacking on mobile), and the sandbox
   detail page does the same for its Metadata / Attached-providers blocks —
   roughly halving the desktop scroll while keeping everything visible at once.
+- **SQLite production check** — single-replica SQLite is now a `WARN`
+  (supported homelab shape, WAL mode) instead of a hard startup `ERROR`;
+  it remains an `ERROR` when `SHOREGUARD_REPLICAS` > 1.
 
 ### Fixed
 
@@ -373,20 +385,12 @@ local-agent deployment a first-class citizen.
   state in `/var/lib/shoreguard`); new "Homelab / Single Box" operations
   guide covering install, backup/restore, and health monitoring.
 
-### Changed
-
-- **SQLite production check** — single-replica SQLite is now a `WARN`
-  (supported homelab shape, WAL mode) instead of a hard startup `ERROR`;
-  it remains an `ERROR` when `SHOREGUARD_REPLICAS` > 1.
-
-## [0.38.0] — Unreleased
-
-### Architecture redesign
+### Architecture redesign (internal)
 
 Ground-up internal redesign, applied in-place over eight staged refactors.
 REST API paths/responses and CLI commands are unchanged; internals are not.
 
-### Changed
+#### Changed
 
 - **Composition root** — the 16 module-global service singletons are replaced
   by a single `ServiceContainer` built in `shoreguard/container.py`. The
@@ -415,7 +419,7 @@ REST API paths/responses and CLI commands are unchanged; internals are not.
 - **Gateway request scope** — a typed, frozen `GatewayContext` on
   `request.state` replaces the private string attribute + ContextVar pair.
 
-### Added
+#### Added
 
 - **Preact + TypeScript frontend** *(complete rewrite)* — Vite 6 build in
   `frontend/` (strict tsc, vitest) emitting code-split island bundles into
@@ -430,7 +434,7 @@ REST API paths/responses and CLI commands are unchanged; internals are not.
   `v2_baseline` revision built from the models. v0.37 databases are stamped
   in place; older databases must upgrade through v0.37 first.
 
-### Fixed
+#### Fixed
 
 - Approval escalation no longer crashes comparing tz-naive and tz-aware
   decision timestamps when fresh and round-tripped rows mix.

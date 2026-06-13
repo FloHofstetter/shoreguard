@@ -41,12 +41,19 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 | `SHOREGUARD_SINGLE_USER` | `false` | Single-user mode: one admin account whose password is SHOREGUARD_ADMIN_PASSWORD, kept in sync on every startup. The homelab middle ground between --no-auth and full RBAC. |
 | `SHOREGUARD_TAILSCALE_IDENTITY` | `false` | Trust Tailscale Serve identity headers (Tailscale-User-Login) from a loopback proxy as authentication. The login must match an existing user's email. Only honoured for connections from 127.0.0.1/::1 — i.e. `tailscale serve` in front of a loopback-bound ShoreGuard. |
 | `SHOREGUARD_PASSKEYS_ENABLED` | `true` | Enable WebAuthn passkey registration and login (requires HTTPS or localhost in the browser) |
+| `SHOREGUARD_DEVICE_LINK_ENABLED` | `false` | Enable QR 'device-link' sign-in handoff: a logged-in operator mints a one-time code, the phone that scans it gets its own session after the operator approves the request on the original device. Off by default — opt-in like passkeys/one-tap. |
+| `SHOREGUARD_DEVICE_LINK_TTL` | `120` | Seconds a device-link code stays valid before it must be scanned and claimed (default: 120). |
+| `SHOREGUARD_DEVICE_LINK_SESSION_MAX_AGE` | `86400` | Lifetime in seconds of the session minted for a device-link handoff. Deliberately shorter than the desktop session (default: 24h) — these sessions cannot be individually revoked. |
+| `SHOREGUARD_DEVICE_LINK_RATE_LIMIT_ATTEMPTS` | `20` | Max device-link redeem attempts per IP before rate limit |
+| `SHOREGUARD_DEVICE_LINK_RATE_LIMIT_WINDOW` | `60` | Device-link redeem rate-limit sliding window in seconds |
+| `SHOREGUARD_DEVICE_LINK_RATE_LIMIT_LOCKOUT` | `120` | Device-link redeem rate-limit lockout duration in seconds |
 | `SHOREGUARD_PASSKEY_RP_ID` | `` | Override the WebAuthn relying-party ID; defaults to the host of SHOREGUARD_PUBLIC_URL, else the request host |
 | `SHOREGUARD_SECRET_KEY` | `` | HMAC secret for sessions and signed cookies. Unset falls back to on-disk .secret_key — set explicitly for multi-replica. |
 | `SHOREGUARD_ALLOW_REGISTRATION` | `false` | Allow unauthenticated self-signup via /register |
 | `SHOREGUARD_ADMIN_PASSWORD` | `` | Bootstrap admin password used on first startup if no users exist |
 | `SHOREGUARD_COOKIE_NAME` | `sg_session` | Session cookie name |
 | `SHOREGUARD_SESSION_MAX_AGE` | `604800` | Session cookie lifetime in seconds (default: 7 days) |
+| `SHOREGUARD_SESSION_TRACKING` | `true` | Record each signed-in session (device, IP, last seen) so users can list and individually revoke their active sessions. When off, sessions remain stateless and the only revocation levers are deactivating the user or rotating the secret key. |
 | `SHOREGUARD_INVITE_MAX_AGE` | `604800` | Invite token validity in seconds (default: 7 days) |
 | `SHOREGUARD_PASSWORD_MIN_LENGTH` | `8` | Minimum password length for user registration |
 | `SHOREGUARD_PASSWORD_REQUIRE_COMPLEXITY` | `false` | Require mixed-case, digit, and symbol in passwords |
@@ -229,7 +236,7 @@ Auto-generated from `shoreguard config schema --format markdown`. Every environm
 
 | Environment variable | Default | Description |
 |---|---|---|
-| `SHOREGUARD_DIGEST_ENABLED` | `false` | Dispatch a daily digest.daily webhook event summarising the last 24h (audit activity, sandbox churn, approvals, gateway health, webhook failures) |
+| `SHOREGUARD_DIGEST_ENABLED` | `false` | Dispatch a daily digest.daily webhook event summarising the last 24h (audit activity, sandbox churn, approvals, today's inference spend and top spenders, gateway health, webhook failures). On by default in --local mode unless set explicitly |
 | `SHOREGUARD_DIGEST_HOUR` | `7` | Local hour of day after which the daily digest is sent |
 | `SHOREGUARD_DIGEST_CHECK_INTERVAL` | `600` | Seconds between digest due-checks by the background task |
 ## `budget`

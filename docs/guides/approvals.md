@@ -9,6 +9,17 @@ recommendation** — a set of rules that would allow the access if approved.
 ShoreGuard surfaces these recommendations as **pending approval chunks** in
 the Web UI and pushes real-time notifications via WebSocket.
 
+## The approval inbox (all gateways)
+
+The **Approvals** page (`/approvals` in the sidebar) is a single, cross-gateway
+list of every pending chunk across all sandboxes and all reachable gateways —
+security-flagged ones first, then ranked by hit-count and confidence. Each row
+shows the rule, the sandbox · gateway · binary, the proposed endpoints, and the
+confidence, with **Approve** / **Reject** in place (quorum-aware — a vote on a
+multi-sign-off workflow reports the running tally). It is the click-through
+target for the dashboard's pending-approval badges, so you can clear the
+overnight backlog without tabbing through each sandbox.
+
 ## Reviewing approvals
 
 Each pending chunk shows the endpoint, method, path, and the suggested action.
@@ -28,6 +39,21 @@ You can take any of the following actions:
 When a new approval chunk arrives, ShoreGuard displays a toast notification in
 the browser. The approvals badge in the navigation bar updates automatically
 so you never miss a pending request.
+
+## Phone approvals
+
+For overnight or away-from-keyboard runs, you can approve from your phone. The
+**Set up phone approvals** wizard (`/setup/phone-approvals`, linked from your
+profile) does it in one click: it subscribes the device to web push, wires a
+`webpush` webhook to the approval events, and fires a sample notification to
+tap. In `--local` mode the prerequisites — one-tap approve/reject links
+(`SHOREGUARD_WEBHOOK_ONE_TAP_APPROVALS`) and a reachable `public_url` derived
+from the LAN/Tailscale bind — are on by default, so a `approval.pending`
+notification carries a button that casts a single vote from a mobile
+confirmation page. The phone needs to reach ShoreGuard over a secure context
+(localhost or HTTPS, e.g. `tailscale serve`); see
+[Tailscale remote access](../operations/tailscale.md). One-tap links and the
+Telegram/ntfy channels are described in the [webhooks guide](webhooks.md).
 
 ## API endpoints
 

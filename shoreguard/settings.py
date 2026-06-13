@@ -819,8 +819,9 @@ class DigestSettings(BaseSettings):
     enabled: bool = Field(
         default=False,
         description="Dispatch a daily digest.daily webhook event summarising "
-        "the last 24h (audit activity, sandbox churn, approvals, gateway "
-        "health, webhook failures)",
+        "the last 24h (audit activity, sandbox churn, approvals, today's "
+        "inference spend and top spenders, gateway health, webhook failures). "
+        "On by default in --local mode unless set explicitly",
     )
     hour: int = Field(
         default=7,
