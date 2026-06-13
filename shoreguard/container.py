@@ -180,6 +180,9 @@ def build_container(
             return None
         return SandboxService(client, meta_store=sandbox_meta, gateway_name=gateway_name)
 
+    # Budget is constructed up front so the digest can read today's spend.
+    budget_service = BudgetService(async_session_factory, gateway, registry, settings.budget)
+
     return ServiceContainer(
         settings=settings,
         async_session_factory=async_session_factory,
@@ -212,8 +215,8 @@ def build_container(
         ),
         kill_switch=kill_switch,
         curfew=CurfewService(async_session_factory, kill_switch),
-        digest=DigestService(async_session_factory, registry),
-        budget=BudgetService(async_session_factory, gateway, registry, settings.budget),
+        digest=DigestService(async_session_factory, registry, budget_service),
+        budget=budget_service,
         node_stats=node_stats,
         node_alerts=NodeAlertService(node_stats, settings.node_alert),
         push=PushService(async_session_factory, settings.push),

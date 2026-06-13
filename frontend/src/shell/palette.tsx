@@ -17,6 +17,7 @@ type Row = { type: "group"; label: string } | ({ type: "item" } & Item);
 const NAV_ITEMS: Item[] = [
   { name: "Dashboard", url: "/", icon: "bi-speedometer2" },
   { name: "Gateways", url: "/gateways", icon: "bi-hdd-network" },
+  { name: "Approval Inbox", url: "/approvals", icon: "bi-clipboard-check" },
   { name: "Policy Presets", url: "/policies", icon: "bi-shield-lock" },
   { name: "Audit Log", url: "/audit", icon: "bi-journal-text" },
   { name: "Groups", url: "/groups", icon: "bi-collection" },

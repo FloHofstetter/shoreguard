@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Approval Inbox — Shoreguard{% endblock %}
+
+{% block breadcrumbs %}
+<ol class="breadcrumb mb-0">
+    <li class="breadcrumb-item active">Approval Inbox</li>
+</ol>
+{% endblock %}
+
+{% block content %}
+<div data-island="approvals-inbox">
+    <div class="text-center text-muted py-5">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading approvals...
+    </div>
+</div>
+{% endblock %}

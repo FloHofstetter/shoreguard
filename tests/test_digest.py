@@ -28,6 +28,14 @@ class _FakeAudit:
         self.logged.append(kwargs)
 
 
+class _FakeBudget:
+    def __init__(self, top: list[dict] | None = None) -> None:
+        self._top = top or []
+
+    async def summary(self, *, days: int = 7) -> dict:
+        return {"since": "2026-06-13", "top": self._top}
+
+
 @pytest.fixture
 async def db_factory():
     engine = create_async_engine(
@@ -109,6 +117,27 @@ async def test_build_aggregates_window(db_factory) -> None:
     assert digest["gateways"]["unreachable"] == ["gw1"]
     assert "4 actions" in digest["message"]
     assert "kill switch on: gw1" in digest["message"]
+
+
+async def test_build_includes_todays_spend(db_factory) -> None:
+    budget = _FakeBudget(
+        [
+            {"gateway": "gw1", "sandbox": "claude", "requests": 100},
+            {"gateway": "gw1", "sandbox": "nightly", "requests": 42},
+        ]
+    )
+    svc = DigestService(db_factory, _FakeRegistry(), budget)  # type: ignore[arg-type]
+    digest = await svc.build(hours=24)
+    assert digest["spending"]["today_total"] == 142
+    assert digest["spending"]["top"][0]["sandbox"] == "claude"
+    assert "142 inference requests" in digest["message"]
+
+
+async def test_build_without_budget_omits_spend_phrase(db_factory) -> None:
+    svc = DigestService(db_factory, _FakeRegistry())  # type: ignore[arg-type]
+    digest = await svc.build(hours=24)
+    assert digest["spending"] == {"today_total": 0, "top": []}
+    assert "inference requests" not in digest["message"]
 
 
 async def test_dispatch_if_due_once_per_day(db_factory, monkeypatch) -> None:

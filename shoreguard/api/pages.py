@@ -772,6 +772,48 @@ async def webhooks_page(request: Request) -> TemplateResponse | RedirectResponse
     )
 
 
+@router.get("/approvals", response_model=None)
+async def approvals_inbox_page(request: Request) -> TemplateResponse | RedirectResponse:
+    """Aggregated approval inbox across every gateway and sandbox.
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse: Rendered inbox page, or a redirect
+            to login.
+    """
+    redirect = await _require_page_auth(request)
+    if redirect:
+        return redirect
+    return templates.TemplateResponse(
+        request,
+        "pages/approvals_inbox.html",
+        {"active_page": "approvals"},
+    )
+
+
+@router.get("/setup/phone-approvals", response_model=None)
+async def phone_approvals_setup_page(request: Request) -> TemplateResponse | RedirectResponse:
+    """One-button wizard to enable phone approvals (push + webhook + test).
+
+    Args:
+        request: Incoming HTTP request.
+
+    Returns:
+        TemplateResponse | RedirectResponse: Rendered setup page, or a redirect
+            to login.
+    """
+    redirect = await _require_page_auth(request)
+    if redirect:
+        return redirect
+    return templates.TemplateResponse(
+        request,
+        "pages/phone_approvals_setup.html",
+        {"active_page": "profile"},
+    )
+
+
 @router.get("/users/new", response_model=None)
 async def user_new_page(request: Request) -> TemplateResponse | RedirectResponse | HTMLResponse:
     """Invite user form page (admin only).

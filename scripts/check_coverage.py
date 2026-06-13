@@ -177,6 +177,9 @@ def main() -> int:
         "/users/new",
         "/users/new-service-principal",
         "/groups",
+        # Approval inbox page (server-rendered HTML, reached via <a href>); its
+        # island consumes the per-sandbox approvals/pending RPC, not /approvals.
+        "/approvals",
         # Data endpoints consumed via non-apiFetch patterns or embedded
         # in larger UI components; tracked as known regex blind spots:
         "/gateway/*/config",

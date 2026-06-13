@@ -287,6 +287,40 @@ def main(
     if database_url:
         os.environ["SHOREGUARD_DATABASE_URL"] = database_url
 
+    # Phone approvals need an absolute, externally reachable base URL to build
+    # one-tap approve/reject links. In local mode, derive it from the resolved
+    # bind address so a solo box gets working phone approvals without setting
+    # SHOREGUARD_PUBLIC_URL by hand (an explicit value always wins). Settings are
+    # also exported to the environment so the --reload worker subprocess — which
+    # re-reads settings from env — inherits them, and applied to the in-process
+    # singleton so the --no-reload path is correct too.
+    if local:
+        from shoreguard.services.access_urls import access_urls
+
+        server_update = {}
+        webhooks_update = {}
+        if "SHOREGUARD_PUBLIC_URL" not in os.environ and settings.server.public_url is None:
+            lan = access_urls().get("lan_urls") or []
+            derived = lan[0] if lan else f"http://127.0.0.1:{port}/"
+            os.environ["SHOREGUARD_PUBLIC_URL"] = derived
+            server_update["public_url"] = derived
+        if (
+            "SHOREGUARD_WEBHOOK_ONE_TAP_APPROVALS" not in os.environ
+            and not settings.webhooks.one_tap_approvals
+        ):
+            os.environ["SHOREGUARD_WEBHOOK_ONE_TAP_APPROVALS"] = "true"
+            webhooks_update["one_tap_approvals"] = True
+        if server_update or webhooks_update:
+            override_settings(
+                settings.model_copy(
+                    update={
+                        "server": settings.server.model_copy(update=server_update),
+                        "webhooks": settings.webhooks.model_copy(update=webhooks_update),
+                    },
+                ),
+            )
+            settings = get_settings()
+
     use_json = settings.server.log_format == "json"
 
     # Request-ID filter — must be attached to any handler that renders

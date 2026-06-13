@@ -32,6 +32,10 @@ interface Digest {
   gateways: { total: number; unreachable: string[] };
   webhook_failures: number;
   kill_switch_engaged: string[];
+  spending?: {
+    today_total: number;
+    top: { gateway: string; sandbox: string; requests: number }[];
+  };
 }
 
 interface SbRaw {
@@ -205,6 +209,13 @@ function DigestCard() {
             <i class="bi bi-check-circle me-1" />
             {digest.approvals.approved} approved, {digest.approvals.rejected} rejected
           </span>
+          {digest.spending && digest.spending.today_total > 0 && (
+            <span>
+              <i class="bi bi-lightning-charge me-1" />
+              {digest.spending.today_total.toLocaleString()} requests today
+              {digest.spending.top[0] ? ` · top: ${digest.spending.top[0].sandbox}` : ""}
+            </span>
+          )}
           {digest.webhook_failures > 0 && (
             <span class="text-warning">
               <i class="bi bi-broadcast me-1" />
@@ -513,7 +524,7 @@ export default function DashboardPage() {
         </div>
 
         <div class="col-6 col-lg-3">
-          <a href={sandboxesHref} class="text-decoration-none">
+          <a href="/approvals" class="text-decoration-none">
             <div class="card sg-card-themed h-100">
               <div class="card-body">
                 <div class="d-flex align-items-center mb-2">

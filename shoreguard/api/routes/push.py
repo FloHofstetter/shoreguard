@@ -152,3 +152,38 @@ async def send_test(request: Request) -> dict[str, int]:
         {"title": "ShoreGuard test", "body": "Push notifications are working.", "url": "/"}
     )
     return await svc.send_payload(payload, only_email=email)
+
+
+@router.post("/test-approval")
+async def send_test_approval(request: Request) -> dict[str, int]:
+    """Send a sample *approval* notification to the calling user's devices.
+
+    Mimics the shape of a real ``approval.pending`` push (title, body, and a deep
+    link into the approval inbox) so the operator can confirm — by tapping it on
+    their phone — that the whole notify -> tap -> ShoreGuard loop works, before
+    relying on it overnight. It does not fabricate a real pending approval on a
+    gateway, so the framing is an honest setup test.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        dict[str, int]: ``sent`` / ``failed`` / ``pruned`` counts.
+
+    Raises:
+        HTTPException: 404 when the user has no registered devices.
+    """
+    import json
+
+    email = _actor_email(request)
+    svc = get_services().push
+    if not await svc.list_for_user(email):
+        raise HTTPException(404, "No devices registered — enable push on this device first")
+    payload = json.dumps(
+        {
+            "title": "Approval pending (test)",
+            "body": "This is what an agent approval looks like. Tap to open your inbox.",
+            "url": "/approvals",
+        }
+    )
+    return await svc.send_payload(payload, only_email=email)

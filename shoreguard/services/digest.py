@@ -25,6 +25,7 @@ from shoreguard.models import AuditEntry, KillSwitchEntry, WebhookDelivery
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from shoreguard.services.budgets import BudgetService
     from shoreguard.services.registry import GatewayRegistry
 
 logger = logging.getLogger(__name__)
@@ -39,15 +40,19 @@ class DigestService:
         session_factory: Async SQLAlchemy session factory for the
             aggregate queries.
         registry: Gateway registry for current health states.
+        budget: Optional budget service used to add today's inference spend to
+            the digest. When ``None`` the spend section is omitted.
     """
 
     def __init__(  # noqa: D107
         self,
         session_factory: async_sessionmaker[AsyncSession],
         registry: GatewayRegistry,
+        budget: BudgetService | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._registry = registry
+        self._budget = budget
 
     async def build(self, *, hours: int = 24) -> dict[str, Any]:
         """Build the digest for the trailing time window.
@@ -126,8 +131,28 @@ class DigestService:
             "webhook_failures": int(webhook_failures),
             "kill_switch_engaged": list(engaged),
         }
+        digest["spending"] = await self._spending()
         digest["message"] = self._summary_line(digest)
         return digest
+
+    async def _spending(self) -> dict[str, Any]:
+        """Summarise today's inference spend across all gateways.
+
+        Returns:
+            dict[str, Any]: ``{"today_total": int, "top": [...]}`` — empty when
+                no budget service is wired or the query fails (best-effort).
+        """
+        if self._budget is None:
+            return {"today_total": 0, "top": []}
+        try:
+            summary = await self._budget.summary(days=1)
+        except Exception:  # noqa: BLE001 — spend is best-effort; never break the digest
+            return {"today_total": 0, "top": []}
+        top = summary.get("top", [])
+        return {
+            "today_total": sum(int(t.get("requests", 0)) for t in top),
+            "top": top[:5],
+        }
 
     @staticmethod
     def _summary_line(digest: dict[str, Any]) -> str:
@@ -144,6 +169,9 @@ class DigestService:
             f"{digest['sandboxes']['created']} sandboxes created",
             f"{digest['approvals']['approved']} approvals",
         ]
+        spend = digest.get("spending") or {}
+        if spend.get("today_total"):
+            parts.append(f"{spend['today_total']} inference requests")
         if digest["gateways"]["unreachable"]:
             parts.append(f"⚠ unreachable: {', '.join(digest['gateways']['unreachable'])}")
         if digest["kill_switch_engaged"]:

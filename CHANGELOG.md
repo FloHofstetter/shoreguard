@@ -12,6 +12,14 @@ local-agent deployment a first-class citizen.
 
 ### Changed
 
+- **Phone approvals work out of the box in `--local` mode.** Approving an agent
+  from your phone is ShoreGuard's headline overnight capability, but it shipped
+  *dead by default*: one-tap approve/reject links only attach to approval webhooks
+  when both `webhooks.one_tap_approvals` and `server.public_url` are set, and
+  neither was. Local mode now enables one-tap links (unless
+  `SHOREGUARD_WEBHOOK_ONE_TAP_APPROVALS` is set explicitly) and the CLI derives
+  `public_url` from the resolved LAN/Tailscale bind address — so a notification a
+  solo operator receives actually carries a button to tap.
 - **Solo/local defaults: usage metering and the daily digest are on by default
   in `--local` mode.** Both ship off so a multi-tenant production install never
   starts log-polling or sending digests unexpectedly — but on a single-machine
@@ -20,6 +28,11 @@ local-agent deployment a first-class citizen.
   on unless the operator set `SHOREGUARD_BUDGET_METERING_ENABLED` /
   `SHOREGUARD_DIGEST_ENABLED` explicitly (an explicit value always wins). This is
   what makes the new dashboard's request counts and budget bars real out of the box.
+- **The daily digest now reports today's inference spend.** `digest.build()` never
+  touched usage data; it now adds today's total inference requests and the top
+  spenders (reusing the cross-gateway `budget.summary`), surfaced both in the
+  `digest.daily` webhook/message and as a chip on the dashboard digest card — so
+  the overnight report finally answers "what did my agents cost while I slept?".
 - **UI: one consistent brand-green primary, app-wide.** The web UI already
   ships Bootstrap 5.3, but mixed Bootstrap-blue `.btn-primary` with
   brand-green `.btn-success`, and form focus rings / switches stayed
@@ -126,6 +139,18 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Web approval inbox (`/approvals`).** A single, cross-gateway list of every
+  pending policy approval across all sandboxes — security-flagged first, with the
+  rule, proposed endpoints, confidence and hit-count — that a reviewer approves or
+  rejects in place (quorum-aware), without tabbing through each sandbox. It is the
+  click-through target for the dashboard's pending-approval badges and the
+  reviewer-side companion to phone approvals (mirrors upstream OpenShell #1612).
+- **"Set up phone approvals" wizard (`/setup/phone-approvals`).** One button
+  subscribes this device to web push, wires a `webpush` webhook to the approval
+  events (idempotently), and fires a sample approval notification to tap — so a
+  solo operator goes from zero to "I can approve from my phone" in one click,
+  reachable from the profile page. Degrades clearly when the browser/URL can't do
+  web push (needs localhost/HTTPS, e.g. Tailscale).
 - **Mission control — a single-pane home dashboard.** The home dashboard now
   renders a cross-gateway **Sandbox activity** table: every sandbox across all
   reachable gateways with its phase, 24h inference requests (busiest first) and a

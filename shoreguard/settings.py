@@ -1464,13 +1464,19 @@ class Settings(BaseSettings):
         """Turn on the solo-developer guardrails that a local box wants by default.
 
         On a single-machine ``--local`` deployment (a developer running
-        OpenShell on their own PC), usage metering and the daily digest are the
-        two features that make "what did my agents do / spend?" visible. They
-        default to *off* so a multi-tenant production install never starts
-        log-polling or sending digests unexpectedly — but on ``local_mode`` that
-        caution is backwards: the operator is the only user and wants spend and
-        the overnight report to just work. Flip both on for local mode unless the
-        operator set the env var explicitly (an explicit value always wins).
+        OpenShell on their own PC), usage metering, the daily digest, and
+        one-tap approval links are the features that make "what did my agents do
+        / spend?" and "approve it from my phone" actually work. They default to
+        *off* so a multi-tenant production install never starts log-polling,
+        sending digests, or minting click-to-vote links unexpectedly — but on
+        ``local_mode`` that caution is backwards: the operator is the only user
+        and "one link = one vote" is acceptable on a single-operator box. Flip
+        them on for local mode unless the operator set the env var explicitly (an
+        explicit value always wins).
+
+        Note that one-tap links also require ``server.public_url``; that is
+        derived from the resolved bind address in the CLI startup path (it needs
+        the host/port, which are not known at settings-construction time).
 
         Returns:
             Settings: This instance, with local-mode defaults applied.
@@ -1480,6 +1486,8 @@ class Settings(BaseSettings):
                 self.budget.metering_enabled = True
             if "SHOREGUARD_DIGEST_ENABLED" not in os.environ:
                 self.digest.enabled = True
+            if "SHOREGUARD_WEBHOOK_ONE_TAP_APPROVALS" not in os.environ:
+                self.webhooks.one_tap_approvals = True
         return self
 
     def _is_prod_like(self) -> bool:

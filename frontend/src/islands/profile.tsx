@@ -227,6 +227,15 @@ function PushDevicesSection() {
             Push needs HTTPS (or localhost) and a modern browser.
           </div>
         )}
+        <div class="mt-3 pt-3 border-top">
+          <a href="/setup/phone-approvals" class="btn btn-sm btn-success">
+            <i class="bi bi-phone me-1" />
+            Set up phone approvals
+          </a>
+          <div class="form-text small mt-1">
+            One click: subscribe this device, wire the approval events, and send a test you can tap.
+          </div>
+        </div>
       </div>
     </div>
   );
