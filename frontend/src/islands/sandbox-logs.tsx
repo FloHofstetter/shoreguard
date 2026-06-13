@@ -251,7 +251,7 @@ export default function SandboxLogsPage({ name }: { name: string }) {
               <span class="text-muted">{formatTimestamp(log.timestamp_ms)}</span>{" "}
               {log.ocsf ? (
                 <span>
-                  <span class="badge text-bg-primary me-1">
+                  <span class="badge text-bg-info me-1">
                     {log.ocsf.class_prefix || "OCSF"}
                   </span>
                   {log.ocsf.activity && (
