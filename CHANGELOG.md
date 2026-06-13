@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 Homelab / DGX-Spark program: ten increments making the single-box,
 local-agent deployment a first-class citizen.
 
+### Changed
+
+- **UI: one consistent brand-green primary, app-wide.** The web UI already
+  ships Bootstrap 5.3, but mixed Bootstrap-blue `.btn-primary` with
+  brand-green `.btn-success`, and form focus rings / switches stayed
+  Bootstrap blue. The brand colour is now wired into Bootstrap's tokens once
+  (`--bs-primary`, link colour, focus-ring, 2px radius) with `.btn-primary` /
+  `.btn-outline-primary` themed to the brand green — so every primary action,
+  form focus ring and toggle is the same green in light and dark. Drops the
+  per-component border-radius overrides and the duplicate login focus rule.
+
 ### Fixed
 
 - **"Open on phone" no longer QR-encodes `localhost`** — the dialog

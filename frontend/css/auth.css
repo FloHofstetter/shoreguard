@@ -30,7 +30,4 @@ body.sg-auth-body.sg-auth-login {
 .login-card .form-control {
     transition: border-color 0.2s, box-shadow 0.2s;
 }
-.login-card .form-control:focus {
-    border-color: var(--sg-accent);
-    box-shadow: 0 0 0 0.2rem rgba(118, 185, 0, 0.15);
-}
+/* Focus state now comes from the global brand form-focus rule in style.css. */

@@ -14,6 +14,19 @@
     /* Layout */
     --topbar-height: 48px;
     --sidebar-width: 220px;
+
+    /* Bootstrap theming — brand primary + angular (2px) radius.
+       The accent lime drives text/links/borders/focus; primary BUTTONS use
+       the readable brand green (matches .btn-success) — see .btn-primary
+       below — so the app has ONE primary colour, not Bootstrap blue + green. */
+    --bs-primary: #76b900;
+    --bs-primary-rgb: 118, 185, 0;
+    --bs-link-color-rgb: 118, 185, 0;
+    --bs-link-hover-color: #5a8c00;
+    --bs-focus-ring-color: rgba(118, 185, 0, 0.25);
+    --bs-border-radius: 2px;
+    --bs-border-radius-sm: 2px;
+    --bs-border-radius-lg: 2px;
 }
 
 /* ─── Dark theme (default) ──────────────────────────────────────────── */
@@ -370,38 +383,47 @@ body {
     color: var(--sg-text-muted);
 }
 
-/* ─── Bootstrap overrides (angular NVIDIA feel) ──────────────────────── */
+/* ─── Bootstrap brand theming ────────────────────────────────────────── */
 
-.card {
-    border-radius: 2px;
+/* Angular 2px radius for every Bootstrap component is set once via the
+   --bs-border-radius* tokens in :root — no per-component overrides needed. */
+
+/* Primary actions render in the brand green (identical to .btn-success) so
+   the stray Bootstrap-blue .btn-primary buttons join the green CTAs. */
+.btn-primary {
+    --bs-btn-bg: #198754;
+    --bs-btn-border-color: #198754;
+    --bs-btn-hover-bg: #157347;
+    --bs-btn-hover-border-color: #146c43;
+    --bs-btn-active-bg: #146c43;
+    --bs-btn-active-border-color: #13653f;
+    --bs-btn-disabled-bg: #198754;
+    --bs-btn-disabled-border-color: #198754;
 }
 
-.modal-content {
-    border-radius: 2px;
+.btn-outline-primary {
+    --bs-btn-color: #198754;
+    --bs-btn-border-color: #198754;
+    --bs-btn-hover-bg: #198754;
+    --bs-btn-hover-border-color: #198754;
+    --bs-btn-active-bg: #198754;
+    --bs-btn-active-border-color: #198754;
+    --bs-btn-disabled-color: #198754;
+    --bs-btn-disabled-border-color: #198754;
 }
 
-.badge {
-    border-radius: 2px;
+/* Bootstrap compiles form focus + checked states as literal blue, so the
+   brand accent must be applied explicitly (--bs-primary alone won't do it). */
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+    border-color: var(--sg-accent);
+    box-shadow: 0 0 0 0.25rem rgba(118, 185, 0, 0.25);
 }
 
-.btn {
-    border-radius: 2px;
-}
-
-.form-control, .form-select {
-    border-radius: 2px;
-}
-
-.toast {
-    border-radius: 2px;
-}
-
-.progress {
-    border-radius: 2px;
-}
-
-.alert {
-    border-radius: 2px;
+.form-check-input:checked {
+    background-color: var(--sg-accent);
+    border-color: var(--sg-accent);
 }
 
 /* ─── Sandbox hero header ─────────────────────────────────────────────── */
