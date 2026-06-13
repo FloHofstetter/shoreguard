@@ -11,7 +11,7 @@ const FLAT = [
 ];
 
 const USAGE = [
-  { gateway: "local-demo", sandbox: "claude-dev", requests: 1342 },
+  { gateway: "local-demo", sandbox: "claude-dev", requests: 1342, estimated_cost: 13.42 },
   { gateway: "local-demo", sandbox: "nightly", requests: 7 },
   { gateway: "edge-prod", sandbox: "claude-dev", requests: 50 },
 ];
@@ -25,6 +25,7 @@ test("joins usage by gateway+name, not name alone", () => {
     name: "claude-dev",
     phase: "ready",
     requests: 1342,
+    cost: 13.42,
     pending: 3,
   });
   // same sandbox name on a different gateway keeps its own (50) requests
@@ -33,6 +34,7 @@ test("joins usage by gateway+name, not name alone", () => {
     name: "claude-dev",
     phase: "ready",
     requests: 50,
+    cost: 0,
     pending: 1,
   });
 });
@@ -44,7 +46,14 @@ test("sorts the busiest sandboxes first", () => {
 
 test("defaults missing usage and pending to 0", () => {
   const rows = buildActivity([{ gateway: "g", name: "x", phase: "ready" }], [], []);
-  expect(rows[0]).toEqual({ gateway: "g", name: "x", phase: "ready", requests: 0, pending: 0 });
+  expect(rows[0]).toEqual({
+    gateway: "g",
+    name: "x",
+    phase: "ready",
+    requests: 0,
+    cost: 0,
+    pending: 0,
+  });
 });
 
 test("pending counts sum to the approvals total", () => {

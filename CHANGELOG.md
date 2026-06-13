@@ -5,6 +5,29 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+A control-plane response to where OpenShell users feel the most pain (deep-research
+driven): runaway inference spend with no native visibility, no per-agent throttle,
+no cross-gateway tenant boundary, trial-and-error policy authoring, and silent
+gateway-restart blast radius. ShoreGuard already holds the keys and meters every
+sandbox, so these are squarely the control plane's job.
+
+### Added
+
+- **Estimated-dollar cost overlay for inference spend (Spend Governor, stage 1).**
+  OpenShell logs security events but not tokens or dollars, and its L7 proxy strips
+  usage metadata — so despite repeated $300–1,300/mo runaway-spend reports, operators
+  had no spend figure at all. ShoreGuard already meters per-sandbox inference
+  *request counts*; a new `SHOREGUARD_PRICING_*` price table (a per-provider-type or
+  flat per-request rate) turns those counts into an **estimated** dollar amount,
+  surfaced in the dashboard top-spenders table, the sandbox usage card, and the daily
+  digest. A budget can now be set as a dollar ceiling (`limit_usd`) instead of a
+  request count, taking precedence when both are present. Honestly labelled
+  "estimated": there is no token-accurate cost until an upstream usage RPC lands. On
+  by default in `--local` mode unless `SHOREGUARD_PRICING_ENABLED` is set explicitly
+  (`feat(budgets)`).
+
 ## [0.39.0] — 2026-06-13
 
 > **Compatibility:** requires a gateway running **OpenShell `v0.0.57` or newer**

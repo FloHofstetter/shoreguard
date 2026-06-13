@@ -3961,6 +3961,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/push/test-approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Test Approval
+         * @description Send a sample *approval* notification to the calling user's devices.
+         *
+         *     Mimics the shape of a real ``approval.pending`` push (title, body, and a deep
+         *     link into the approval inbox) so the operator can confirm — by tapping it on
+         *     their phone — that the whole notify -> tap -> ShoreGuard loop works, before
+         *     relying on it overnight. It does not fabricate a real pending approval on a
+         *     gateway, so the framing is an honest setup test.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, int]: ``sent`` / ``failed`` / ``pruned`` counts.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the user has no registered devices.
+         */
+        post: operations["send_test_approval_api_push_test_approval_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fleet/overview": {
         parameters: {
             query?: never;
@@ -5813,6 +5848,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Approvals Inbox Page
+         * @description Aggregated approval inbox across every gateway and sandbox.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *
+         *     Returns:
+         *         TemplateResponse | RedirectResponse: Rendered inbox page, or a redirect
+         *             to login.
+         */
+        get: operations["approvals_inbox_page_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/setup/phone-approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Phone Approvals Setup Page
+         * @description One-button wizard to enable phone approvals (push + webhook + test).
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *
+         *     Returns:
+         *         TemplateResponse | RedirectResponse: Rendered setup page, or a redirect
+         *             to login.
+         */
+        get: operations["phone_approvals_setup_page_setup_phone_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/new": {
         parameters: {
             query?: never;
@@ -6260,12 +6349,16 @@ export interface components {
          *
          *     Attributes:
          *         limit_requests: Inference request ceiling for the window.
+         *         limit_usd: Optional estimated-dollar ceiling; when set it takes
+         *             precedence over ``limit_requests`` (requires pricing enabled).
          *         window: ``daily`` / ``weekly`` / ``monthly`` / ``total``.
          *         action: ``notify`` or ``detach``.
          */
         BudgetRequest: {
             /** Limit Requests */
             limit_requests: number;
+            /** Limit Usd */
+            limit_usd?: number | null;
             /**
              * Window
              * @default daily
@@ -13695,6 +13788,28 @@ export interface operations {
             };
         };
     };
+    send_test_approval_api_push_test_approval_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
     fleet_overview_api_fleet_overview_get: {
         parameters: {
             query?: never;
@@ -15544,6 +15659,46 @@ export interface operations {
         };
     };
     webhooks_page_webhooks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    approvals_inbox_page_approvals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    phone_approvals_setup_page_setup_phone_approvals_get: {
         parameters: {
             query?: never;
             header?: never;

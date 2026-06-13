@@ -12,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from shoreguard.models import Base, KillSwitchEntry, SandboxUsage, UsageCursor
 from shoreguard.services.budgets import BudgetService
-from shoreguard.settings import BudgetSettings
+from shoreguard.settings import BudgetSettings, PricingSettings
 
 
 def _now_ms() -> int:
@@ -74,6 +74,7 @@ async def setup():
         _FakeGatewayService(client),  # type: ignore[arg-type]
         _FakeRegistry(),  # type: ignore[arg-type]
         BudgetSettings(),
+        PricingSettings(),
     )
     yield svc, client, factory
     await engine.dispose()
@@ -183,4 +184,54 @@ async def test_summary_lists_top_consumers(setup) -> None:
     client.sandboxes.logs = [_log(base + i * 100) for i in range(1, 6)]
     await svc.poll_once()
     summary = await svc.summary()
-    assert summary["top"] == [{"gateway": "gw1", "sandbox": "agent-a", "requests": 5}]
+    top = summary["top"]
+    assert len(top) == 1
+    assert top[0]["gateway"] == "gw1"
+    assert top[0]["sandbox"] == "agent-a"
+    assert top[0]["requests"] == 5
+    # Pricing is disabled in the default fixture, so cost is present but zero.
+    assert top[0]["estimated_cost"] == 0.0
+    assert summary["estimated_cost"] == 0.0
+
+
+async def test_usd_budget_trips_on_estimated_cost(monkeypatch) -> None:
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    client = _FakeClient()
+    svc = BudgetService(
+        factory,
+        _FakeGatewayService(client),  # type: ignore[arg-type]
+        _FakeRegistry(),  # type: ignore[arg-type]
+        BudgetSettings(),
+        PricingSettings(enabled=True, usd_per_request_default=1.0),
+    )
+    fired: list[tuple[str, dict]] = []
+
+    async def _fake_fire(event: str, payload: dict) -> None:
+        fired.append((event, payload))
+
+    monkeypatch.setattr("shoreguard.services.webhooks.fire_webhook", _fake_fire)
+    await svc.poll_once()  # establish cursor
+    # At $1/request a $2 ceiling trips at 2 requests; the request ceiling is
+    # set high so only the dollar ceiling can fire.
+    await svc.set_budget(
+        "gw1",
+        "agent-a",
+        limit_requests=10_000,
+        window="daily",
+        action="notify",
+        limit_usd=2.0,
+    )
+    base = _now_ms()
+    client.sandboxes.logs = [_log(base + 1000), _log(base + 2000)]
+    await svc.poll_once()
+    assert [e for e, _ in fired] == ["budget.exceeded"]
+    assert fired[0][1]["limit_usd"] == 2.0
+    assert fired[0][1]["used_cost"] >= 2.0
+    await engine.dispose()

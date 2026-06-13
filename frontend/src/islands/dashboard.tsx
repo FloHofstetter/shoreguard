@@ -34,7 +34,9 @@ interface Digest {
   kill_switch_engaged: string[];
   spending?: {
     today_total: number;
-    top: { gateway: string; sandbox: string; requests: number }[];
+    today_total_cost?: number;
+    currency_label?: string;
+    top: { gateway: string; sandbox: string; requests: number; estimated_cost?: number }[];
   };
 }
 
@@ -47,6 +49,7 @@ interface UsageRow {
   gateway: string;
   sandbox: string;
   requests: number;
+  estimated_cost?: number;
 }
 
 export interface FlatSandbox {
@@ -60,6 +63,7 @@ export interface SbActivity {
   name: string;
   phase: string;
   requests: number;
+  cost: number;
   pending: number;
 }
 
@@ -80,13 +84,18 @@ export function buildActivity(
   pendings: number[],
 ): SbActivity[] {
   const reqByKey = new Map<string, number>();
-  usageTop.forEach((t) => reqByKey.set(`${t.gateway}/${t.sandbox}`, t.requests));
+  const costByKey = new Map<string, number>();
+  usageTop.forEach((t) => {
+    reqByKey.set(`${t.gateway}/${t.sandbox}`, t.requests);
+    costByKey.set(`${t.gateway}/${t.sandbox}`, t.estimated_cost ?? 0);
+  });
   return flat
     .map((s, i) => ({
       gateway: s.gateway,
       name: s.name,
       phase: s.phase,
       requests: reqByKey.get(`${s.gateway}/${s.name}`) ?? 0,
+      cost: costByKey.get(`${s.gateway}/${s.name}`) ?? 0,
       pending: pendings[i] ?? 0,
     }))
     // Busiest sandboxes first — mission control should lead with what is active.
@@ -98,6 +107,8 @@ export function buildActivity(
 
 function SandboxActivityCard({ rows }: { rows: SbActivity[] }) {
   const multiGw = new Set(rows.map((r) => r.gateway)).size > 1;
+  // Only show the estimated-cost column when pricing is on (some row has a cost).
+  const hasCost = rows.some((r) => r.cost > 0);
   return (
     <div class="card sg-card-themed mb-4">
       <div class="card-body">
@@ -122,6 +133,7 @@ function SandboxActivityCard({ rows }: { rows: SbActivity[] }) {
                   {multiGw && <th>Gateway</th>}
                   <th>Phase</th>
                   <th class="text-end">24h requests</th>
+                  {hasCost && <th class="text-end">24h est. $</th>}
                   <th class="text-end">Approvals</th>
                 </tr>
               </thead>
@@ -141,6 +153,11 @@ function SandboxActivityCard({ rows }: { rows: SbActivity[] }) {
                       <span class={`badge ${badgeClass("sandbox", s.phase)}`}>{s.phase}</span>
                     </td>
                     <td class="text-end font-monospace">{s.requests.toLocaleString()}</td>
+                    {hasCost && (
+                      <td class="text-end font-monospace">
+                        {s.cost > 0 ? `$${s.cost.toFixed(2)}` : "—"}
+                      </td>
+                    )}
                     <td class="text-end">
                       {s.pending > 0 ? (
                         <a
@@ -213,6 +230,9 @@ function DigestCard() {
             <span>
               <i class="bi bi-lightning-charge me-1" />
               {digest.spending.today_total.toLocaleString()} requests today
+              {digest.spending.today_total_cost
+                ? ` (est. $${digest.spending.today_total_cost.toFixed(2)})`
+                : ""}
               {digest.spending.top[0] ? ` · top: ${digest.spending.top[0].sandbox}` : ""}
             </span>
           )}

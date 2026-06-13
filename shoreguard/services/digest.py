@@ -151,6 +151,8 @@ class DigestService:
         top = summary.get("top", [])
         return {
             "today_total": sum(int(t.get("requests", 0)) for t in top),
+            "today_total_cost": summary.get("estimated_cost", 0.0),
+            "currency_label": summary.get("currency_label", ""),
             "top": top[:5],
         }
 
@@ -171,7 +173,10 @@ class DigestService:
         ]
         spend = digest.get("spending") or {}
         if spend.get("today_total"):
-            parts.append(f"{spend['today_total']} inference requests")
+            line = f"{spend['today_total']} inference requests"
+            if spend.get("today_total_cost"):
+                line += f" (est. ${spend['today_total_cost']:.2f})"
+            parts.append(line)
         if digest["gateways"]["unreachable"]:
             parts.append(f"⚠ unreachable: {', '.join(digest['gateways']['unreachable'])}")
         if digest["kill_switch_engaged"]:

@@ -181,7 +181,9 @@ def build_container(
         return SandboxService(client, meta_store=sandbox_meta, gateway_name=gateway_name)
 
     # Budget is constructed up front so the digest can read today's spend.
-    budget_service = BudgetService(async_session_factory, gateway, registry, settings.budget)
+    budget_service = BudgetService(
+        async_session_factory, gateway, registry, settings.budget, settings.pricing
+    )
 
     return ServiceContainer(
         settings=settings,

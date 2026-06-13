@@ -31,6 +31,7 @@ function formatTimestamp(ms: number | undefined): string {
 
 interface BudgetInfo {
   limit_requests: number;
+  limit_usd?: number | null;
   window: string;
   action: string;
 }
@@ -38,8 +39,11 @@ interface BudgetInfo {
 interface UsageInfo {
   days: { day: string; requests: number }[];
   today: number;
+  today_cost?: number;
   budget: BudgetInfo | null;
   window_used: number;
+  window_used_cost?: number;
+  currency_label?: string;
 }
 
 interface TimelineItem {
@@ -115,6 +119,8 @@ function BudgetCard({ name }: { name: string }) {
   const [meteringEnabled, setMeteringEnabled] = useState(true);
   const [editing, setEditing] = useState(false);
   const [limit, setLimit] = useState(1000);
+  const [limitUsd, setLimitUsd] = useState(5);
+  const [budgetType, setBudgetType] = useState<"requests" | "usd">("requests");
   const [window_, setWindow] = useState("daily");
   const [action, setAction] = useState("notify");
   const [busy, setBusy] = useState(false);
@@ -135,7 +141,14 @@ function BudgetCard({ name }: { name: string }) {
       await apiFetch(`${API}/sandboxes/${name}/budget`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit_requests: limit, window: window_, action }),
+        body: JSON.stringify({
+          // limit_requests is always required; a $-budget adds limit_usd,
+          // which takes precedence server-side.
+          limit_requests: budgetType === "usd" ? 1 : limit,
+          limit_usd: budgetType === "usd" ? limitUsd : null,
+          window: window_,
+          action,
+        }),
       });
       showToast("Budget saved", "success");
       setEditing(false);
@@ -169,7 +182,12 @@ function BudgetCard({ name }: { name: string }) {
 
   if (!usage) return null;
   const budget = usage.budget;
-  const pct = budget ? Math.min(100, Math.round((usage.window_used / budget.limit_requests) * 100)) : 0;
+  const isUsd = budget?.limit_usd != null;
+  const pct = budget
+    ? isUsd
+      ? Math.min(100, Math.round(((usage.window_used_cost ?? 0) / (budget.limit_usd as number)) * 100))
+      : Math.min(100, Math.round((usage.window_used / budget.limit_requests) * 100))
+    : 0;
 
   return (
     <fieldset class="sg-fieldset mb-4">
@@ -185,6 +203,12 @@ function BudgetCard({ name }: { name: string }) {
         <span class="small">
           <i class="bi bi-activity me-1" />
           Today: <strong>{usage.today}</strong> requests
+          {usage.today_cost ? (
+            <>
+              {" "}
+              · est. <strong>${usage.today_cost.toFixed(2)}</strong>
+            </>
+          ) : null}
         </span>
         {budget ? (
           <>
@@ -196,8 +220,10 @@ function BudgetCard({ name }: { name: string }) {
                 />
               </div>
               <div class="small text-muted mt-1">
-                {usage.window_used} / {budget.limit_requests} ({budget.window}, on limit:{" "}
-                {budget.action})
+                {isUsd
+                  ? `est. $${(usage.window_used_cost ?? 0).toFixed(2)} / $${(budget.limit_usd ?? 0).toFixed(2)}`
+                  : `${usage.window_used} / ${budget.limit_requests}`}{" "}
+                ({budget.window}, on limit: {budget.action})
               </div>
             </div>
             <button class="btn btn-sm btn-outline-danger" disabled={busy} onClick={() => void remove()}>
@@ -206,14 +232,39 @@ function BudgetCard({ name }: { name: string }) {
           </>
         ) : editing ? (
           <span class="d-flex align-items-center gap-2">
-            <input
-              type="number"
-              class="form-control form-control-sm"
-              style={{ width: "110px" }}
-              min={1}
-              value={limit}
-              onInput={(e) => setLimit(Number((e.target as HTMLInputElement).value))}
-            />
+            <select
+              class="form-select form-select-sm"
+              style={{ width: "auto" }}
+              value={budgetType}
+              onChange={(e) =>
+                setBudgetType((e.target as HTMLSelectElement).value as "requests" | "usd")
+              }
+            >
+              <option value="requests">requests</option>
+              <option value="usd">est. $</option>
+            </select>
+            {budgetType === "usd" ? (
+              <div class="input-group input-group-sm" style={{ width: "120px" }}>
+                <span class="input-group-text">$</span>
+                <input
+                  type="number"
+                  class="form-control form-control-sm"
+                  min={0.01}
+                  step={0.01}
+                  value={limitUsd}
+                  onInput={(e) => setLimitUsd(Number((e.target as HTMLInputElement).value))}
+                />
+              </div>
+            ) : (
+              <input
+                type="number"
+                class="form-control form-control-sm"
+                style={{ width: "110px" }}
+                min={1}
+                value={limit}
+                onInput={(e) => setLimit(Number((e.target as HTMLInputElement).value))}
+              />
+            )}
             <select
               class="form-select form-select-sm"
               style={{ width: "auto" }}

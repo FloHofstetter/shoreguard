@@ -8,6 +8,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    Float,
     Index,
     Integer,
     String,
@@ -133,6 +134,9 @@ class SandboxBudget(Base):
         gateway: Gateway name the sandbox lives on.
         sandbox: Sandbox name (unique per gateway).
         limit_requests: Inference request ceiling for the window.
+        limit_usd: Optional estimated-dollar ceiling for the window; when
+            set it takes precedence over ``limit_requests`` (the budget is
+            evaluated against the estimated cost from the pricing overlay).
         window: Budget window — ``daily``, ``weekly``, ``monthly``, ``total``.
         action: What happens at the limit — ``notify`` or ``detach``.
         notified_key: Window key of the last notification (anti-spam).
@@ -147,6 +151,7 @@ class SandboxBudget(Base):
     gateway: Mapped[str] = mapped_column(String(253), nullable=False)
     sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
     limit_requests: Mapped[int] = mapped_column(Integer, nullable=False)
+    limit_usd: Mapped[float | None] = mapped_column(Float)
     window: Mapped[str] = mapped_column(String(16), nullable=False, default="daily")
     action: Mapped[str] = mapped_column(String(16), nullable=False, default="notify")
     notified_key: Mapped[str | None] = mapped_column(String(64))

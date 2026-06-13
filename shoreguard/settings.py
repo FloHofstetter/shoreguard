@@ -803,6 +803,54 @@ class BudgetSettings(BaseSettings):
     )
 
 
+class PricingSettings(BaseSettings):
+    """Estimated-dollar overlay over the request-count metering.
+
+    OpenShell exposes no token/usage RPC and its L7 proxy strips usage
+    metadata, so ShoreGuard can only meter inference *request counts* (see
+    :class:`BudgetSettings`). This group turns those counts into an
+    **estimated** dollar figure via a flat per-request price (optionally
+    per provider type), surfaced in budgets, the dashboard top-spenders,
+    and the daily digest. It is honestly labelled "estimated": there is no
+    token-accurate cost until an upstream usage RPC lands.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Annotate usage/budgets/digest with an estimated
+            dollar cost. On by default in ``--local`` mode.
+        usd_per_request_default (float): Fallback estimated price per
+            inference request when a provider type has no explicit rate.
+        usd_per_request_by_type (dict[str, float]): Per-provider-type price
+            per request, keyed by the provider ``type`` reported by the
+            gateway (e.g. ``{"openai": 0.01}``).
+        currency_label (str): Label shown next to estimated amounts.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_PRICING_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Annotate usage, budgets, and the digest with an "
+        "estimated dollar cost derived from metered request counts "
+        "(honestly 'estimated' — OpenShell exposes no token usage). On by "
+        "default in --local mode unless set explicitly.",
+    )
+    usd_per_request_default: float = Field(
+        default=0.0,
+        ge=0,
+        description="Fallback estimated price per inference request",
+    )
+    usd_per_request_by_type: dict[str, float] = Field(
+        default_factory=dict,
+        description="Per-provider-type estimated price per request, keyed "
+        "by the provider type reported by the gateway",
+    )
+    currency_label: str = Field(
+        default="USD (est.)",
+        description="Label shown next to estimated cost amounts",
+    )
+
+
 class DigestSettings(BaseSettings):
     """Daily activity digest ("what did my agents do while I slept?").
 
@@ -1424,6 +1472,7 @@ class Settings(BaseSettings):
         cert_rotation (CertRotationSettings): Proactive mTLS cert rotation.
         digest (DigestSettings): Daily activity digest dispatch.
         budget (BudgetSettings): Inference usage metering and budgets.
+        pricing (PricingSettings): Estimated-dollar overlay over request counts.
         smtp (SmtpSettings): Server-wide SMTP defaults for email webhooks.
         node_alert (NodeAlertSettings): Host threshold alert evaluation.
         push (PushSettings): Web Push (PWA notification) configuration.
@@ -1453,6 +1502,7 @@ class Settings(BaseSettings):
     cert_rotation: CertRotationSettings = Field(default_factory=CertRotationSettings)
     digest: DigestSettings = Field(default_factory=DigestSettings)
     budget: BudgetSettings = Field(default_factory=BudgetSettings)
+    pricing: PricingSettings = Field(default_factory=PricingSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     node_alert: NodeAlertSettings = Field(default_factory=NodeAlertSettings)
     push: PushSettings = Field(default_factory=PushSettings)
@@ -1485,6 +1535,8 @@ class Settings(BaseSettings):
         if self.server.local_mode:
             if "SHOREGUARD_BUDGET_METERING_ENABLED" not in os.environ:
                 self.budget.metering_enabled = True
+            if "SHOREGUARD_PRICING_ENABLED" not in os.environ:
+                self.pricing.enabled = True
             if "SHOREGUARD_DIGEST_ENABLED" not in os.environ:
                 self.digest.enabled = True
             if "SHOREGUARD_WEBHOOK_ONE_TAP_APPROVALS" not in os.environ:
