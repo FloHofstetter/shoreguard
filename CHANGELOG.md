@@ -33,6 +33,14 @@ local-agent deployment a first-class citizen.
   `role="dialog"` / `aria-modal`. Removes dead CSS — the unused `.detail-tabs`
   rules, the legacy `#approvalModal` override, and the `.phase-*` badge classes
   superseded by the shared badge map.
+- **UI: responsive topbar, scrollable sandbox tabs, wrapping toolbars.** The
+  topbar no longer overflows on phones — the account email collapses to a
+  profile icon below `md` and the bar tightens its padding. The 10-tab sandbox
+  sub-navigation now scrolls horizontally instead of running off-screen
+  (Terminal/Forward were unreachable on mobile), page-header action toolbars
+  wrap below the title, the remaining unwrapped tables (passkeys, boot hooks,
+  wizard templates) gain `.table-responsive`, and auth cards get padding so
+  they're never clipped on short viewports.
 
 ### Fixed
 

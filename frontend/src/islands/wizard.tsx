@@ -601,6 +601,7 @@ export default function WizardPage() {
                 </p>
               )}
               {presets !== null && presets.length > 0 && (
+                <div class="table-responsive">
                 <table class="table table-sm table-hover align-middle mb-0">
                   <thead>
                     <tr>
@@ -649,6 +650,7 @@ export default function WizardPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
             <div class="d-flex justify-content-between">

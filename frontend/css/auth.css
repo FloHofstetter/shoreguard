@@ -11,6 +11,9 @@ body.sg-auth-body {
     align-items: center;
     justify-content: center;
     min-height: 100vh;
+    /* Breathing room so the card is never clipped on short/phone viewports. */
+    padding: 1.5rem;
+    box-sizing: border-box;
 }
 
 /* Login page gets an extra gradient background */

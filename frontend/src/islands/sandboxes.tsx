@@ -68,7 +68,7 @@ export default function SandboxListPage() {
 
   return (
     <div>
-      <div class="d-flex justify-content-between align-items-center mb-3">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <h5 class="mb-0">Sandboxes</h5>
         <div class="btn-group btn-group-sm">
           <button class="btn btn-outline-secondary" onClick={() => void load()} title="Refresh">

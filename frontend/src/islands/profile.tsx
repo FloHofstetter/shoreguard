@@ -97,7 +97,8 @@ function PasskeySection() {
                 with the phone's screen lock.
               </div>
             ) : (
-              <table class="table table-sm align-middle">
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -124,7 +125,8 @@ function PasskeySection() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             )}
             {passkeysSupported() ? (
               <div class="d-flex gap-2">

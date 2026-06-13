@@ -283,6 +283,7 @@ export default function SandboxHooksPage({ name }: { name: string }) {
                 </div>
               )}
               {grouped[phase].length > 0 && (
+                <div class="table-responsive">
                 <table class="table table-sm mb-0 align-middle">
                   <thead>
                     <tr class="text-muted small">
@@ -403,6 +404,7 @@ export default function SandboxHooksPage({ name }: { name: string }) {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </div>

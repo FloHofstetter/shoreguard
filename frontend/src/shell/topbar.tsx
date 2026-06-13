@@ -508,11 +508,16 @@ export function AuthArea() {
   return (
     <span class="d-flex align-items-center">
       {a.email && (
-        <a href="/profile" class="text-muted small ms-2 text-decoration-none" title="Profile">
-          {a.email}
+        <a
+          href="/profile"
+          class="text-muted text-decoration-none ms-2"
+          title={`Profile (${a.email})`}
+        >
+          <span class="small d-none d-md-inline">{a.email}</span>
+          <i class="bi bi-person-circle fs-5 d-md-none" />
         </a>
       )}
-      <span class="badge bg-secondary ms-2">{a.role}</span>
+      <span class="badge text-bg-secondary ms-2 d-none d-sm-inline-block">{a.role}</span>
       <PhoneAccessButton />
       <button
         class="btn btn-sm btn-outline-secondary ms-2"
