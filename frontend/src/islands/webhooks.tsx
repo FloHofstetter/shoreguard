@@ -314,6 +314,15 @@ export default function WebhooksPage() {
   };
 
   const toggleActive = async (wh: Webhook) => {
+    const confirmed = await showConfirm(
+      `${wh.is_active ? "Pause" : "Resume"} webhook ${wh.id}?`,
+      {
+        icon: wh.is_active ? "pause-circle" : "play-circle",
+        btnClass: wh.is_active ? "btn-warning" : "btn-success",
+        btnLabel: wh.is_active ? "Pause" : "Resume",
+      },
+    );
+    if (!confirmed) return;
     try {
       await apiFetch(`/api/webhooks/${wh.id}`, {
         method: "PUT",

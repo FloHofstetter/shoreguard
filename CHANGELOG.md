@@ -49,6 +49,20 @@ local-agent deployment a first-class citizen.
 
 ### Fixed
 
+- **UI click-path polish (follow-ups from the exhaustive click-path test).**
+  Four interaction issues surfaced by clicking every reachable control:
+  (1) The authenticated data-entry forms (register gateway, invite user,
+  new service principal, create/refresh provider, expose service) relied on the
+  browser's native `required` tooltip, which blocked submission *without* any
+  on-page feedback — so an empty submit felt like a dead button. They now opt out
+  of native validation (`noValidate`) and show the same styled inline banner as the
+  groups/webhooks forms. (2) "Remove budget" and webhook Pause/Resume fired
+  instantly; they now route through the shared confirm dialog like every other
+  state change. (3) The command palette (Ctrl/⌘-K) ignored sandboxes — typing
+  "sandbox" returned nothing; on a gateway-scoped page it now lists that gateway's
+  Sandboxes page and indexes its sandboxes by name. (4) The gateways list showed
+  "mtls" for plaintext (`http://`) endpoints; the Auth column now derives an honest
+  transport label from the endpoint scheme.
 - **"Open on phone" no longer QR-encodes `localhost`** — the dialog
   blindly encoded the current location, which is unreachable from any
   other device when browsing via loopback. A new

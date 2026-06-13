@@ -84,6 +84,7 @@ function formatTimestamp(ms: number | undefined): string {
 function ProviderRefreshModal({ provider, onClose }: { provider: string; onClose: () => void }) {
   const [credentials, setCredentials] = useState<RefreshCredential[] | null>(null);
   const [error, setError] = useState("");
+  const [configError, setConfigError] = useState("");
   const [key, setKey] = useState("");
   const [strategy, setStrategy] = useState("static");
   const [material, setMaterial] = useState("");
@@ -109,7 +110,11 @@ function ProviderRefreshModal({ provider, onClose }: { provider: string; onClose
   const submitConfig = async (e: Event) => {
     e.preventDefault();
     const credential_key = key.trim();
-    if (!credential_key) return;
+    if (!credential_key) {
+      setConfigError("Credential key is required.");
+      return;
+    }
+    setConfigError("");
     try {
       await apiFetch(`${API}/providers/${provider}/refresh`, {
         method: "POST",
@@ -249,7 +254,7 @@ function ProviderRefreshModal({ provider, onClose }: { provider: string; onClose
         <i class="bi bi-sliders me-1" />
         Configure refresh
       </h6>
-      <form class="row g-2" onSubmit={(e) => void submitConfig(e)}>
+      <form class="row g-2" noValidate onSubmit={(e) => void submitConfig(e)}>
         <div class="col-md-6">
           <label class="form-label small">Credential key</label>
           <input
@@ -297,6 +302,11 @@ function ProviderRefreshModal({ provider, onClose }: { provider: string; onClose
             onInput={(e) => setSecretKeys((e.target as HTMLInputElement).value)}
           />
         </div>
+        {configError && (
+          <div class="col-12">
+            <div class="alert alert-danger py-1 small mb-0">{configError}</div>
+          </div>
+        )}
         <div class="col-12 text-end">
           <button type="submit" class="btn btn-success btn-sm">
             <i class="bi bi-check2 me-1" />
@@ -660,7 +670,7 @@ export function ProviderForm({ mode, providerName }: { mode: string; providerNam
   return (
     <div class="card sg-card-themed">
       <div class="card-body">
-        <form onSubmit={(e) => void submit(e)}>
+        <form noValidate onSubmit={(e) => void submit(e)}>
           <div class="mb-3">
             <label class="form-label">Name</label>
             <input

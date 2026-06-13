@@ -21,11 +21,24 @@ function ExposeModal({ onDone, onClose }: { onDone: () => void; onClose: () => v
   const [service, setService] = useState("");
   const [port, setPort] = useState("");
   const [domain, setDomain] = useState(false);
+  const [error, setError] = useState("");
 
   const submit = async (e: Event) => {
     e.preventDefault();
     const targetPort = parseInt(port, 10);
-    if (!sandbox.trim() || !service.trim() || !targetPort) return;
+    if (!sandbox.trim()) {
+      setError("Sandbox is required.");
+      return;
+    }
+    if (!service.trim()) {
+      setError("Service name is required.");
+      return;
+    }
+    if (!targetPort) {
+      setError("A target port is required.");
+      return;
+    }
+    setError("");
     try {
       await apiFetch(`${API}/services`, {
         method: "POST",
@@ -54,7 +67,7 @@ function ExposeModal({ onDone, onClose }: { onDone: () => void; onClose: () => v
         </span>
       }
     >
-      <form class="row g-2" onSubmit={(e) => void submit(e)}>
+      <form class="row g-2" noValidate onSubmit={(e) => void submit(e)}>
         <div class="col-md-6">
           <label class="form-label small">Sandbox</label>
           <input
@@ -99,6 +112,11 @@ function ExposeModal({ onDone, onClose }: { onDone: () => void; onClose: () => v
             </label>
           </div>
         </div>
+        {error && (
+          <div class="col-12">
+            <div class="alert alert-danger py-1 small mb-0">{error}</div>
+          </div>
+        )}
         <div class="col-12 text-end mt-3">
           <button type="submit" class="btn btn-success btn-sm">
             <i class="bi bi-plus-lg me-1" />

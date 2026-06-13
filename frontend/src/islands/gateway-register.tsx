@@ -100,7 +100,7 @@ export default function GatewayRegisterPage() {
   return (
     <div class="card sg-card-themed">
       <div class="card-body">
-        <form onSubmit={(e) => void submit(e)}>
+        <form noValidate onSubmit={(e) => void submit(e)}>
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">Name</label>
@@ -242,7 +242,7 @@ export default function GatewayRegisterPage() {
             )}
           </div>
 
-          {output && <div class="mt-2 text-danger small">{output}</div>}
+          {output && <div class="alert alert-danger py-1 small mt-2 mb-0">{output}</div>}
 
           <div class="d-flex gap-2 mt-3">
             <button type="submit" class="btn btn-success" disabled={submitting}>

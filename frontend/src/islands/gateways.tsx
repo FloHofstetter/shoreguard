@@ -14,12 +14,22 @@ export interface GatewayRow extends Record<string, unknown> {
   name: string;
   description?: string;
   endpoint?: string;
+  scheme?: string;
   auth_mode?: string;
   status?: string;
   version?: string;
   connected?: boolean;
   last_seen?: string;
   labels?: Record<string, string>;
+}
+
+/** Honest transport label: a plaintext endpoint cannot be mTLS, whatever the stored auth_mode says. */
+export function transportLabel(
+  gw: Pick<GatewayRow, "scheme" | "endpoint" | "auth_mode">,
+): string {
+  const plaintext =
+    gw.scheme === "http" || gw.scheme === "grpc" || (gw.endpoint?.startsWith("http://") ?? false);
+  return plaintext ? "plaintext" : gw.auth_mode || "—";
 }
 
 const STATUS_ICONS: Record<string, string> = {
@@ -319,7 +329,11 @@ export default function GatewaysPage() {
                     {gw.description || "—"}
                   </td>
                   <td class="font-monospace small">{gw.endpoint || "—"}</td>
-                  <td class="small">{gw.auth_mode || "—"}</td>
+                  <td class="small">
+                    <span class={transportLabel(gw) === "plaintext" ? "text-muted" : ""}>
+                      {transportLabel(gw)}
+                    </span>
+                  </td>
                   <td>
                     <span class={`badge ${badgeClass("gateway", gw.status ?? "offline")}`}>
                       <i class={`bi me-1 bi-${statusIcon(gw.status)}`} />

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import { apiFetch } from "../lib/api";
-import { navigateTo } from "../lib/constants";
+import { API, GW, navigateTo } from "../lib/constants";
 
 interface Item {
   name: string;
@@ -27,12 +27,35 @@ const NAV_ITEMS: Item[] = [
 interface Cache {
   nav: Item[];
   gateways: Item[];
+  sandboxes: Item[];
   policies: Item[];
   users: Item[];
 }
 
 async function buildCache(): Promise<Cache> {
-  const cache: Cache = { nav: NAV_ITEMS, gateways: [], policies: [], users: [] };
+  const cache: Cache = { nav: NAV_ITEMS, gateways: [], sandboxes: [], policies: [], users: [] };
+  // On a gateway-scoped page, surface that gateway's Sandboxes page (so the
+  // literal word "sandbox" resolves) and index its sandboxes by name.
+  if (GW) {
+    cache.nav = [
+      ...NAV_ITEMS,
+      { name: "Sandboxes", url: `/gateways/${GW}/sandboxes`, icon: "bi-box" },
+    ];
+    try {
+      const sb = await apiFetch<
+        { name: string; phase?: string }[] | { items?: { name: string; phase?: string }[] }
+      >(`${API}/sandboxes`);
+      const list = Array.isArray(sb) ? sb : (sb?.items ?? []);
+      cache.sandboxes = list.map((s) => ({
+        name: s.name,
+        url: `/gateways/${GW}/sandboxes/${s.name}`,
+        icon: "bi-box-seam",
+        hint: s.phase,
+      }));
+    } catch {
+      // ignore
+    }
+  }
   try {
     const gwData = await apiFetch<{ items?: { name: string; status?: string }[] }>(
       `/api/gateway/list`,
@@ -76,6 +99,7 @@ async function buildCache(): Promise<Cache> {
 const GROUP_LABELS: Record<keyof Cache, string> = {
   nav: "Navigation",
   gateways: "Gateways",
+  sandboxes: "Sandboxes",
   policies: "Policies",
   users: "Users",
 };

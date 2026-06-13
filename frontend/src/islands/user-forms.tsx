@@ -68,7 +68,7 @@ export function UserNewForm() {
   return (
     <div class="card sg-card-themed">
       <div class="card-body">
-        <form onSubmit={(e) => void submit(e)}>
+        <form noValidate onSubmit={(e) => void submit(e)}>
           <div class="mb-3">
             <label class="form-label">Email</label>
             <input
@@ -173,7 +173,7 @@ export function SpNewForm() {
   return (
     <div class="card sg-card-themed">
       <div class="card-body">
-        <form onSubmit={(e) => void submit(e)}>
+        <form noValidate onSubmit={(e) => void submit(e)}>
           <div class="mb-3">
             <label class="form-label">Name</label>
             <input

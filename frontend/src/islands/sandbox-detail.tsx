@@ -148,6 +148,13 @@ function BudgetCard({ name }: { name: string }) {
   };
 
   const remove = async () => {
+    const confirmed = await showConfirm("Remove the budget for this sandbox?", {
+      icon: "trash",
+      iconColor: "text-danger",
+      btnClass: "btn-danger",
+      btnLabel: "Remove",
+    });
+    if (!confirmed) return;
     setBusy(true);
     try {
       await apiFetch(`${API}/sandboxes/${name}/budget`, { method: "DELETE" });
