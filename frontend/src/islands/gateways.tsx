@@ -9,6 +9,7 @@ import { formatTimeAgo } from "../lib/format";
 import { showConfirm, showToast } from "../lib/notify";
 import { useSortableTable } from "../lib/table";
 import { EmptyState, ErrorAlert, Spinner } from "../lib/widgets";
+import { LocalGatewayCreate } from "./local-gateway-create";
 
 export interface GatewayRow extends Record<string, unknown> {
   name: string;
@@ -236,12 +237,13 @@ export default function GatewaysPage() {
             gateways automatically.
           </p>
           {isAdmin && (
-            <div class="d-flex gap-2 justify-content-center">
+            <div class="d-flex gap-2 justify-content-center flex-wrap">
               <button class="btn btn-primary btn-sm" onClick={() => void importFilesystem()}>
                 <i class="bi bi-pc-display me-1" />
                 Scan this machine
               </button>
-              <a class="btn btn-success btn-sm" href="/gateways/new">
+              <LocalGatewayCreate />
+              <a class="btn btn-outline-success btn-sm" href="/gateways/new">
                 <i class="bi bi-plus me-1" />
                 Register Gateway
               </a>

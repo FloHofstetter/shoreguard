@@ -20,7 +20,7 @@ import ipaddress
 import logging
 import os
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -1458,6 +1458,29 @@ class Settings(BaseSettings):
     curfew: CurfewSettings = Field(default_factory=CurfewSettings)
     backup: BackupSettings = Field(default_factory=BackupSettings)
     updates: UpdateSettings = Field(default_factory=UpdateSettings)
+
+    @model_validator(mode="after")
+    def _apply_local_mode_defaults(self) -> Settings:
+        """Turn on the solo-developer guardrails that a local box wants by default.
+
+        On a single-machine ``--local`` deployment (a developer running
+        OpenShell on their own PC), usage metering and the daily digest are the
+        two features that make "what did my agents do / spend?" visible. They
+        default to *off* so a multi-tenant production install never starts
+        log-polling or sending digests unexpectedly — but on ``local_mode`` that
+        caution is backwards: the operator is the only user and wants spend and
+        the overnight report to just work. Flip both on for local mode unless the
+        operator set the env var explicitly (an explicit value always wins).
+
+        Returns:
+            Settings: This instance, with local-mode defaults applied.
+        """
+        if self.server.local_mode:
+            if "SHOREGUARD_BUDGET_METERING_ENABLED" not in os.environ:
+                self.budget.metering_enabled = True
+            if "SHOREGUARD_DIGEST_ENABLED" not in os.environ:
+                self.digest.enabled = True
+        return self
 
     def _is_prod_like(self) -> bool:
         """Heuristic for whether the current config looks like a production deployment.

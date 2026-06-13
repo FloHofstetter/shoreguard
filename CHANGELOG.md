@@ -12,6 +12,14 @@ local-agent deployment a first-class citizen.
 
 ### Changed
 
+- **Solo/local defaults: usage metering and the daily digest are on by default
+  in `--local` mode.** Both ship off so a multi-tenant production install never
+  starts log-polling or sending digests unexpectedly — but on a single-machine
+  local box that caution is backwards: the operator is the only user and wants
+  spend tracking and the overnight report to just work. Local mode now turns both
+  on unless the operator set `SHOREGUARD_BUDGET_METERING_ENABLED` /
+  `SHOREGUARD_DIGEST_ENABLED` explicitly (an explicit value always wins). This is
+  what makes the new dashboard's request counts and budget bars real out of the box.
 - **UI: one consistent brand-green primary, app-wide.** The web UI already
   ships Bootstrap 5.3, but mixed Bootstrap-blue `.btn-primary` with
   brand-green `.btn-success`, and form focus rings / switches stayed
@@ -49,6 +57,12 @@ local-agent deployment a first-class citizen.
 
 ### Fixed
 
+- **Dashboard cards that never rendered, and a hardcoded approvals count.** The
+  home dashboard's **Sandboxes**, **Approvals** and **Create Sandbox** cards were
+  gated on a single "active gateway" that the home page (`/`) never sets — so they
+  were dead, and the Approvals stat was hardcoded to `0` ("populated by future
+  aggregation"). They are now driven by real cross-gateway aggregation: total
+  sandboxes, summed pending approvals, and gateway-aware navigation.
 - **UI click-path polish (follow-ups from the exhaustive click-path test).**
   Four interaction issues surfaced by clicking every reachable control:
   (1) The authenticated data-entry forms (register gateway, invite user,
@@ -112,6 +126,16 @@ local-agent deployment a first-class citizen.
 
 ### Added
 
+- **Mission control — a single-pane home dashboard.** The home dashboard now
+  renders a cross-gateway **Sandbox activity** table: every sandbox across all
+  reachable gateways with its phase, 24h inference requests (busiest first) and a
+  live pending-approval badge — plus real **Sandboxes** and **Approvals** totals.
+  For a solo box this is the at-a-glance "what are my agents doing / spending /
+  waiting on?" view, without picking a gateway first.
+- **First-gateway bootstrap from the UI.** A fresh local box can create its first
+  gateway from the empty state: a **Create local gateway** action (local mode
+  only) opens an inline name/GPU form and calls the create endpoint, instead of
+  dropping to the CLI. Hidden entirely on remote/production deployments.
 - **Active sessions — see and revoke your signed-in devices** — sessions
   are stateless HMAC cookies, so until now they could not be listed or
   individually killed (the only levers were deactivating the user or

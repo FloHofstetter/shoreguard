@@ -4,9 +4,10 @@ import { useEffect, useState } from "preact/hooks";
 
 import { apiFetch } from "../lib/api";
 import { auth, ensureAuth, hasRole } from "../lib/auth";
-import { API, badgeClass, GW, gwUrl } from "../lib/constants";
+import { badgeClass } from "../lib/constants";
 import { formatTimeAgo } from "../lib/format";
 import { ErrorAlert, Spinner } from "../lib/widgets";
+import { LocalGatewayCreate } from "./local-gateway-create";
 
 interface GatewayItem {
   name: string;
@@ -31,6 +32,132 @@ interface Digest {
   gateways: { total: number; unreachable: string[] };
   webhook_failures: number;
   kill_switch_engaged: string[];
+}
+
+interface SbRaw {
+  name: string;
+  phase?: string;
+}
+
+interface UsageRow {
+  gateway: string;
+  sandbox: string;
+  requests: number;
+}
+
+export interface FlatSandbox {
+  gateway: string;
+  name: string;
+  phase: string;
+}
+
+export interface SbActivity {
+  gateway: string;
+  name: string;
+  phase: string;
+  requests: number;
+  pending: number;
+}
+
+/**
+ * Join every gateway's sandboxes with cross-gateway usage and pending-approval
+ * counts into one at-a-glance activity row per sandbox. The home dashboard has
+ * no single "active" gateway, so this aggregates the whole fleet — for a solo
+ * box that is exactly the single-pane "what are my agents doing?" view.
+ *
+ * @param flat - Sandboxes across all gateways (gateway + name + phase).
+ * @param usageTop - Rows from `/api/usage/summary` (all gateways).
+ * @param pendings - Pending-approval counts, index-aligned to `flat`.
+ * @returns One activity row per sandbox.
+ */
+export function buildActivity(
+  flat: FlatSandbox[],
+  usageTop: UsageRow[],
+  pendings: number[],
+): SbActivity[] {
+  const reqByKey = new Map<string, number>();
+  usageTop.forEach((t) => reqByKey.set(`${t.gateway}/${t.sandbox}`, t.requests));
+  return flat
+    .map((s, i) => ({
+      gateway: s.gateway,
+      name: s.name,
+      phase: s.phase,
+      requests: reqByKey.get(`${s.gateway}/${s.name}`) ?? 0,
+      pending: pendings[i] ?? 0,
+    }))
+    // Busiest sandboxes first — mission control should lead with what is active.
+    .sort(
+      (a, b) =>
+        b.requests - a.requests || b.pending - a.pending || a.name.localeCompare(b.name),
+    );
+}
+
+function SandboxActivityCard({ rows }: { rows: SbActivity[] }) {
+  const multiGw = new Set(rows.map((r) => r.gateway)).size > 1;
+  return (
+    <div class="card sg-card-themed mb-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="mb-0">
+            <i class="bi bi-activity me-2" />
+            Sandbox activity{" "}
+            <span class="text-muted small fw-normal">last 24h, across all gateways</span>
+          </h6>
+        </div>
+        {rows.length === 0 ? (
+          <div class="text-center text-muted py-3">
+            <i class="bi bi-grid fs-3 d-block mb-2" />
+            <p class="small mb-0">No sandboxes running yet.</p>
+          </div>
+        ) : (
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Sandbox</th>
+                  {multiGw && <th>Gateway</th>}
+                  <th>Phase</th>
+                  <th class="text-end">24h requests</th>
+                  <th class="text-end">Approvals</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((s) => (
+                  <tr key={`${s.gateway}/${s.name}`}>
+                    <td>
+                      <a
+                        href={`/gateways/${s.gateway}/sandboxes/${s.name}`}
+                        class="text-decoration-none fw-medium"
+                      >
+                        {s.name}
+                      </a>
+                    </td>
+                    {multiGw && <td class="small text-muted">{s.gateway}</td>}
+                    <td>
+                      <span class={`badge ${badgeClass("sandbox", s.phase)}`}>{s.phase}</span>
+                    </td>
+                    <td class="text-end font-monospace">{s.requests.toLocaleString()}</td>
+                    <td class="text-end">
+                      {s.pending > 0 ? (
+                        <a
+                          href={`/gateways/${s.gateway}/sandboxes/${s.name}/approvals`}
+                          class="badge text-bg-warning text-decoration-none"
+                        >
+                          {s.pending} pending
+                        </a>
+                      ) : (
+                        <span class="text-muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function DigestCard() {
@@ -271,8 +398,8 @@ export default function DashboardPage() {
   const [sandboxCount, setSandboxCount] = useState(0);
   const [presetCount, setPresetCount] = useState(0);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
-  // Pending approvals card — populated by future aggregation; shown as 0.
-  const approvalCount = 0;
+  const [sandboxActivity, setSandboxActivity] = useState<SbActivity[]>([]);
+  const [approvalCount, setApprovalCount] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -282,18 +409,51 @@ export default function DashboardPage() {
           apiFetch<{ items?: GatewayItem[] }>(`/api/gateway/list`).catch(() => null),
           apiFetch<unknown[]>(`/api/policies/presets`).catch(() => null),
         ]);
-        setGateways(gwData?.items ?? []);
+        const gws = gwData?.items ?? [];
+        setGateways(gws);
         setPresetCount((presets ?? []).length);
 
-        if (GW) {
-          try {
-            const sbs = await apiFetch<unknown[] | { items?: unknown[] }>(`${API}/sandboxes`);
-            const items = Array.isArray(sbs) ? sbs : (sbs?.items ?? []);
-            setSandboxCount(items.length);
-          } catch {
-            // no gateway
-          }
+        // Cross-gateway sandbox activity: the home dashboard has no single active
+        // gateway, so aggregate the whole fleet into one mission-control view.
+        try {
+          const usage = await apiFetch<{ top?: UsageRow[] }>(`/api/usage/summary?days=1`).catch(
+            () => null,
+          );
+          const perGw = await Promise.all(
+            gws.map(async (g): Promise<FlatSandbox[]> => {
+              try {
+                const sbs = await apiFetch<SbRaw[] | { items?: SbRaw[] }>(
+                  `/api/gateways/${g.name}/sandboxes`,
+                );
+                const items = Array.isArray(sbs) ? sbs : (sbs?.items ?? []);
+                return items.map((s) => ({
+                  gateway: g.name,
+                  name: s.name,
+                  phase: s.phase ?? "unknown",
+                }));
+              } catch {
+                return [];
+              }
+            }),
+          );
+          const flat = perGw.flat().slice(0, 40); // cap the per-sandbox approval fan-out
+          setSandboxCount(flat.length);
+          const pendings = await Promise.all(
+            flat.map((s) =>
+              apiFetch<unknown[]>(
+                `/api/gateways/${s.gateway}/sandboxes/${s.name}/approvals/pending`,
+              )
+                .then((a) => (Array.isArray(a) ? a.length : 0))
+                .catch(() => 0),
+            ),
+          );
+          const activity = buildActivity(flat, usage?.top ?? [], pendings);
+          setSandboxActivity(activity);
+          setApprovalCount(activity.reduce((n, s) => n + s.pending, 0));
+        } catch {
+          // gateways unreachable — leave the activity view empty
         }
+
         try {
           const audit = await apiFetch<{ entries?: AuditEntry[] }>(`/api/audit?limit=10`);
           setAuditEntries(audit?.entries ?? []);
@@ -313,6 +473,10 @@ export default function DashboardPage() {
 
   const connectedCount = gateways.filter((g) => g.status === "connected").length;
   const isAdmin = auth.value.loaded && hasRole("admin");
+  const firstGw = gateways[0]?.name ?? "";
+  // With a single gateway (the solo-box case) jump straight to its sandboxes;
+  // with several, the gateway picker is the right next step.
+  const sandboxesHref = gateways.length === 1 ? `/gateways/${firstGw}/sandboxes` : "/gateways";
 
   return (
     <div class="sg-fade-in">
@@ -334,7 +498,7 @@ export default function DashboardPage() {
         </div>
 
         <div class="col-6 col-lg-3">
-          <a href={GW ? gwUrl("/sandboxes") : "/gateways"} class="text-decoration-none">
+          <a href={sandboxesHref} class="text-decoration-none">
             <div class="card sg-card-themed h-100">
               <div class="card-body">
                 <div class="d-flex align-items-center mb-2">
@@ -342,28 +506,26 @@ export default function DashboardPage() {
                   <span class="small text-muted">Sandboxes</span>
                 </div>
                 <div class="fs-2 fw-bold">{sandboxCount}</div>
-                <span class="text-muted small">{GW ? `on ${GW}` : "select a gateway"}</span>
+                <span class="text-muted small">running</span>
               </div>
             </div>
           </a>
         </div>
 
-        {GW && (
-          <div class="col-6 col-lg-3">
-            <a href={gwUrl("/sandboxes")} class="text-decoration-none">
-              <div class="card sg-card-themed h-100">
-                <div class="card-body">
-                  <div class="d-flex align-items-center mb-2">
-                    <i class="bi bi-check-circle text-warning me-2" />
-                    <span class="small text-muted">Approvals</span>
-                  </div>
-                  <div class="fs-2 fw-bold">{approvalCount}</div>
-                  <span class="text-muted small">pending</span>
+        <div class="col-6 col-lg-3">
+          <a href={sandboxesHref} class="text-decoration-none">
+            <div class="card sg-card-themed h-100">
+              <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                  <i class="bi bi-check-circle text-warning me-2" />
+                  <span class="small text-muted">Approvals</span>
                 </div>
+                <div class="fs-2 fw-bold">{approvalCount}</div>
+                <span class="text-muted small">pending</span>
               </div>
-            </a>
-          </div>
-        )}
+            </div>
+          </a>
+        </div>
 
         <div class="col-6 col-lg-3">
           <a href="/policies" class="text-decoration-none">
@@ -382,6 +544,8 @@ export default function DashboardPage() {
       </div>
 
       <DigestCard />
+
+      {gateways.length > 0 && <SandboxActivityCard rows={sandboxActivity} />}
 
       <div class="row g-3 mb-4">
         {isAdmin && (
@@ -471,10 +635,13 @@ export default function DashboardPage() {
                     .
                   </p>
                   {isAdmin && (
-                    <a href="/gateways/new" class="btn btn-sm btn-outline-success">
-                      <i class="bi bi-plus me-1" />
-                      Register Gateway
-                    </a>
+                    <div class="d-flex gap-2 justify-content-center flex-wrap">
+                      <LocalGatewayCreate />
+                      <a href="/gateways/new" class="btn btn-sm btn-outline-success">
+                        <i class="bi bi-plus me-1" />
+                        Register Gateway
+                      </a>
+                    </div>
                   )}
                 </div>
               )}
@@ -488,23 +655,26 @@ export default function DashboardPage() {
       </div>
 
       <div class="row g-3">
-        {GW && (
+        {gateways.length > 0 && (
           <div class="col-md-6">
-            <a href={gwUrl("/wizard")} class="btn btn-outline-success w-100 py-3">
+            <a
+              href={gateways.length === 1 ? `/gateways/${firstGw}/wizard` : "/gateways"}
+              class="btn btn-outline-success w-100 py-3"
+            >
               <i class="bi bi-plus-circle me-2" />
               Create Sandbox
             </a>
           </div>
         )}
-        {GW && (
+        {gateways.length > 0 && (
           <div class="col-md-6">
-            <a href={gwUrl("/sandboxes")} class="btn btn-outline-secondary w-100 py-3">
+            <a href={sandboxesHref} class="btn btn-outline-secondary w-100 py-3">
               <i class="bi bi-grid me-2" />
               View Sandboxes
             </a>
           </div>
         )}
-        {!GW && isAdmin && (
+        {gateways.length === 0 && isAdmin && (
           <div class="col-md-6">
             <a href="/gateways/new" class="btn btn-outline-success w-100 py-3">
               <i class="bi bi-plus-circle me-2" />
