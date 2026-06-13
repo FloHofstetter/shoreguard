@@ -41,6 +41,11 @@ local-agent deployment a first-class citizen.
   wrap below the title, the remaining unwrapped tables (passkeys, boot hooks,
   wizard templates) gain `.table-responsive`, and auth cards get padding so
   they're never clipped on short viewports.
+- **UI: de-scrolled the long detail pages.** The gateway detail page now lays
+  the Kill-switch / Curfew controls and the Metadata / Connection blocks out in
+  two equal-height columns on wide screens (stacking on mobile), and the sandbox
+  detail page does the same for its Metadata / Attached-providers blocks —
+  roughly halving the desktop scroll while keeping everything visible at once.
 
 ### Fixed
 

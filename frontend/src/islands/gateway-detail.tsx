@@ -1085,14 +1085,24 @@ export default function GatewayDetailPage({ name }: { name: string }) {
         ))}
       </div>
 
-      {isAdmin && <KillSwitchCard name={name} connected={connected} />}
-      {isAdmin && <CurfewCard name={name} />}
+      {isAdmin && (
+        <div class="row g-3">
+          <div class="col-xl-6">
+            <KillSwitchCard name={name} connected={connected} />
+          </div>
+          <div class="col-xl-6">
+            <CurfewCard name={name} />
+          </div>
+        </div>
+      )}
 
       {isAdmin && <GatewayTokenCard />}
 
       <div class="card sg-card-themed mb-4">
         <div class="card-body">
-          <fieldset class="sg-fieldset mb-3">
+          <div class="row g-3">
+            <div class="col-lg-6">
+          <fieldset class="sg-fieldset mb-3 h-100">
             <legend class="sg-legend">Metadata</legend>
             <div class="row g-3">
               <div class="col-12">
@@ -1186,8 +1196,9 @@ export default function GatewayDetailPage({ name }: { name: string }) {
               </div>
             </div>
           </fieldset>
-
-          <fieldset class="sg-fieldset mb-3">
+            </div>
+            <div class="col-lg-6">
+          <fieldset class="sg-fieldset mb-3 h-100">
             <legend class="sg-legend">Connection</legend>
             <table class="table table-sm table-borderless mb-0 align-middle">
               <tbody>
@@ -1240,6 +1251,8 @@ export default function GatewayDetailPage({ name }: { name: string }) {
               </tbody>
             </table>
           </fieldset>
+            </div>
+          </div>
 
           {connected && (
             <fieldset class="sg-fieldset mb-3">

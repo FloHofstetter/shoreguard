@@ -541,7 +541,9 @@ export default function SandboxDetailPage({ name }: { name: string }) {
 
       <TimelineCard name={name} />
 
-      <fieldset class="sg-fieldset mb-4">
+      <div class="row g-3">
+        <div class="col-lg-6">
+      <fieldset class="sg-fieldset mb-4 h-100">
         <legend class="sg-legend">Metadata</legend>
         <div class="row g-3">
           <div class="col-12">
@@ -653,8 +655,9 @@ export default function SandboxDetailPage({ name }: { name: string }) {
           </div>
         )}
       </fieldset>
-
-      <fieldset class="sg-fieldset mb-4">
+        </div>
+        <div class="col-lg-6">
+      <fieldset class="sg-fieldset mb-4 h-100">
         <legend class="sg-legend">
           <i class="bi bi-plug me-1" />
           Attached Providers
@@ -716,6 +719,8 @@ export default function SandboxDetailPage({ name }: { name: string }) {
           </div>
         )}
       </fieldset>
+        </div>
+      </div>
 
       <h6 class="text-muted mb-3">Properties</h6>
       <dl class="row mb-0 small">
