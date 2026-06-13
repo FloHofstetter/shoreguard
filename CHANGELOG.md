@@ -20,6 +20,14 @@ local-agent deployment a first-class citizen.
   `.btn-outline-primary` themed to the brand green — so every primary action,
   form focus ring and toggle is the same green in light and dark. Drops the
   per-component border-radius overrides and the duplicate login focus rule.
+- **UI: consistent status colours and friendlier capability notices.** Role
+  badges now resolve through one shared map everywhere (admin showed red on
+  Users but grey on the audit log); OCSF log severities, the security check and
+  provider-profile diagnostics share one severity→colour map; and gateway
+  capability gaps ("not supported by the current gateway version") render as an
+  informational warning instead of an alarming red error. Hand-rolled empty
+  states fold into the shared `EmptyState` component and the duplicate
+  role-badge map is removed.
 
 ### Fixed
 

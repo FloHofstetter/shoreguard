@@ -1,13 +1,10 @@
 /** Shared display helpers for islands. */
 
-const ROLE_BADGES: Record<string, string> = {
-  admin: "text-bg-danger",
-  operator: "text-bg-warning",
-  viewer: "text-bg-secondary",
-};
+import { badgeClass } from "./constants";
 
+/** Role → badge class. Single source of truth lives in constants.BADGES.role. */
 export function roleBadge(role: string): string {
-  return ROLE_BADGES[role] ?? "text-bg-secondary";
+  return badgeClass("role", role);
 }
 
 export function formatDate(iso: string | null | undefined): string {

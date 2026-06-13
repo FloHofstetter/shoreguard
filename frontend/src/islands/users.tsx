@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 
 import { apiFetch, type ServicePrincipal, type User } from "../lib/api";
 import { daysUntil, formatDate, formatTimeAgo, roleBadge } from "../lib/format";
+import { EmptyState } from "../lib/widgets";
 import { showConfirm, showToast } from "../lib/notify";
 import { Modal } from "../lib/Modal";
 import { GatewayRolesModal, type RoleEntityType } from "./GatewayRolesModal";
@@ -282,14 +283,12 @@ export default function UsersPage() {
           </table>
         </div>
       ) : (
-        <div class="text-center text-muted py-5 mb-5">
-          <i class="bi bi-people fs-1 d-block mb-3" />
-          <p>No users yet.</p>
+        <EmptyState icon="people" message="No users yet.">
           <a href="/users/new" class="btn btn-success btn-sm">
             <i class="bi bi-plus me-1" />
             Invite User
           </a>
-        </div>
+        </EmptyState>
       )}
 
       <div class="d-flex justify-content-between align-items-center mb-3">
@@ -365,14 +364,12 @@ export default function UsersPage() {
           </table>
         </div>
       ) : (
-        <div class="text-center text-muted py-5">
-          <i class="bi bi-key fs-1 d-block mb-3" />
-          <p>No service principals yet.</p>
+        <EmptyState icon="key" message="No service principals yet.">
           <a href="/users/new-service-principal" class="btn btn-success btn-sm">
             <i class="bi bi-plus me-1" />
             Create Service Principal
           </a>
-        </div>
+        </EmptyState>
       )}
 
       {rolesModal && <GatewayRolesModal {...rolesModal} onClose={closeRolesModal} />}

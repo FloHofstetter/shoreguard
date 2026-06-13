@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import { apiFetch } from "../lib/api";
-import { API, CONFIG, GW } from "../lib/constants";
+import { API, badgeClass, CONFIG, GW } from "../lib/constants";
 import { ErrorAlert, Spinner } from "../lib/widgets";
 
 interface OcsfInfo {
@@ -258,7 +258,9 @@ export default function SandboxLogsPage({ name }: { name: string }) {
                     <span class="badge text-bg-secondary me-1">{log.ocsf.activity}</span>
                   )}
                   {log.ocsf.severity && (
-                    <span class="badge text-bg-dark me-1">{log.ocsf.severity}</span>
+                    <span class={`badge ${badgeClass("severity", log.ocsf.severity)} me-1`}>
+                      {log.ocsf.severity}
+                    </span>
                   )}
                   {log.ocsf.disposition && (
                     <span

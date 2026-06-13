@@ -8,7 +8,7 @@ import { badgeClass, navigateTo } from "../lib/constants";
 import { formatTimeAgo } from "../lib/format";
 import { showConfirm, showToast } from "../lib/notify";
 import { useSortableTable } from "../lib/table";
-import { ErrorAlert, Spinner } from "../lib/widgets";
+import { EmptyState, ErrorAlert, Spinner } from "../lib/widgets";
 
 export interface GatewayRow extends Record<string, unknown> {
   name: string;
@@ -220,9 +220,7 @@ export default function GatewaysPage() {
       {error && <ErrorAlert message={error} />}
 
       {!loading && !error && gateways.length === 0 && !filterLabel && (
-        <div class="text-center text-muted py-5">
-          <i class="bi bi-hdd-network fs-1 d-block mb-3" />
-          <p>No gateways registered.</p>
+        <EmptyState icon="hdd-network" message="No gateways registered.">
           <p class="small">
             Running OpenShell or NemoClaw on this machine? "Scan this machine" adopts its
             gateways automatically.
@@ -239,7 +237,7 @@ export default function GatewaysPage() {
               </a>
             </div>
           )}
-        </div>
+        </EmptyState>
       )}
 
       {!loading && !error && (

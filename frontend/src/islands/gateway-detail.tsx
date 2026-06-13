@@ -7,7 +7,7 @@ import { auth, ensureAuth, hasRole } from "../lib/auth";
 import { API, badgeClass, CONFIG, navigateTo } from "../lib/constants";
 import { formatTimeAgo } from "../lib/format";
 import { showConfirm, showToast } from "../lib/notify";
-import { ErrorAlert, Spinner } from "../lib/widgets";
+import { CapabilityNotice, ErrorAlert, isCapabilityError, Spinner } from "../lib/widgets";
 import { type GatewayRow, statusIcon, statusLabel } from "./gateways";
 
 interface InferenceProvider {
@@ -147,7 +147,12 @@ function InferenceBundle() {
           Loading bundle…
         </div>
       )}
-      {error && <div class="text-danger small">{error}</div>}
+      {error &&
+        (isCapabilityError(error) ? (
+          <CapabilityNotice message={error} />
+        ) : (
+          <div class="text-danger small">{error}</div>
+        ))}
       {!loading && !error && (
         <div>
           <div class="small text-muted mb-2">

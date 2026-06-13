@@ -7,7 +7,13 @@ import { auth, ensureAuth, hasRole } from "../lib/auth";
 import { API, badgeClass, GW } from "../lib/constants";
 import { Modal } from "../lib/Modal";
 import { showConfirm, showToast } from "../lib/notify";
-import { EmptyState, ErrorAlert, Spinner } from "../lib/widgets";
+import {
+  CapabilityNotice,
+  EmptyState,
+  ErrorAlert,
+  isCapabilityError,
+  Spinner,
+} from "../lib/widgets";
 
 const HISTORY_EVENT_TYPES = [
   { type: "denial_detected", label: "Denial detected", badge: "text-bg-warning" },
@@ -309,7 +315,12 @@ function HistoryModal({ sandboxName, onClose }: { sandboxName: string; onClose: 
         </span>
       }
     >
-      {error && <ErrorAlert message={error} />}
+      {error &&
+        (isCapabilityError(error) ? (
+          <CapabilityNotice message={error} />
+        ) : (
+          <ErrorAlert message={error} />
+        ))}
       {!error && history === null && <Spinner message="Loading history..." />}
       {!error && history !== null && history.length === 0 && (
         <EmptyState icon="clock-history" message="No approval history yet." />
@@ -704,7 +715,12 @@ export default function SandboxApprovalsPage({ name }: { name: string }) {
   };
 
   if (loading && chunks.length === 0) return <Spinner message="Loading approvals..." />;
-  if (error) return <ErrorAlert message={error} />;
+  if (error)
+    return isCapabilityError(error) ? (
+      <CapabilityNotice message={error} />
+    ) : (
+      <ErrorAlert message={error} />
+    );
 
   return (
     <div id="approvals-content">

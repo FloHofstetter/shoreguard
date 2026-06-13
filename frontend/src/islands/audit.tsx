@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 
 import { apiFetch } from "../lib/api";
 import { showToast } from "../lib/notify";
+import { badgeClass } from "../lib/constants";
 import { EmptyState, ErrorAlert, Spinner } from "../lib/widgets";
 
 interface AuditEntry {
@@ -212,13 +213,15 @@ export default function AuditPage() {
                   <td class="text-muted small text-nowrap">{formatTs(entry.timestamp)}</td>
                   <td>{entry.actor}</td>
                   <td>
-                    <span class="badge bg-secondary">{entry.actor_role}</span>
+                    <span class={`badge ${badgeClass("role", entry.actor_role)}`}>
+                      {entry.actor_role}
+                    </span>
                   </td>
                   <td>
                     <code>{entry.action}</code>
                   </td>
                   <td>
-                    <span class="badge bg-dark">{entry.resource_type}</span>
+                    <span class="badge text-bg-dark">{entry.resource_type}</span>
                   </td>
                   <td class="font-monospace small">{entry.resource_id || "—"}</td>
                   <td class="text-muted small">{entry.gateway || "—"}</td>

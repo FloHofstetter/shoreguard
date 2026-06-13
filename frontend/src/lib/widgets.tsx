@@ -40,9 +40,31 @@ export function StatusBadge({
   group,
 }: {
   status: string;
-  group: "phase" | "approval" | "gateway" | "role";
+  group: "phase" | "approval" | "gateway" | "role" | "severity";
 }) {
   return <span class={`badge ${badgeClass(group, status)}`}>{status}</span>;
+}
+
+/** True when an error message describes a gateway-capability gap (not a real failure). */
+export function isCapabilityError(message: string): boolean {
+  return /not supported|gateway version|unimplemented/i.test(message);
+}
+
+/**
+ * A gateway capability the current version lacks — an informational warning,
+ * not an error. Use instead of a red ErrorAlert for "not supported" messages.
+ */
+export function CapabilityNotice({
+  message = "Not supported by the current gateway version.",
+}: {
+  message?: string;
+}) {
+  return (
+    <div class="alert alert-warning d-flex align-items-center gap-2 mb-0" role="status">
+      <i class="bi bi-info-circle flex-shrink-0" />
+      <span>{message}</span>
+    </div>
+  );
 }
 
 export function GatewayTypeIcon({ type }: { type: string }) {

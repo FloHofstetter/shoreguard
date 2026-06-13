@@ -40,10 +40,24 @@ export const BADGES: Record<string, Record<string, string>> = {
     operator: "text-bg-warning",
     viewer: "text-bg-secondary",
   },
+  severity: {
+    ok: "text-bg-success",
+    info: "text-bg-info",
+    low: "text-bg-info",
+    medium: "text-bg-warning",
+    med: "text-bg-warning",
+    warn: "text-bg-warning",
+    warning: "text-bg-warning",
+    high: "text-bg-danger",
+    error: "text-bg-danger",
+    critical: "text-bg-danger",
+    crit: "text-bg-danger",
+    fatal: "text-bg-dark",
+  },
 };
 
-export function badgeClass(group: keyof typeof BADGES, value: string): string {
-  return BADGES[group]?.[value] ?? "text-bg-secondary";
+export function badgeClass(group: keyof typeof BADGES, value: string | undefined): string {
+  return BADGES[group]?.[value?.toLowerCase() ?? ""] ?? "text-bg-secondary";
 }
 
 export const GATEWAY_TYPE_ICONS: Record<string, { icon: string; label: string }> = {

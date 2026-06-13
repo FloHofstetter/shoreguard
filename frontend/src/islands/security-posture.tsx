@@ -3,6 +3,7 @@
 import { useEffect, useState } from "preact/hooks";
 
 import { apiFetch } from "../lib/api";
+import { badgeClass } from "../lib/constants";
 
 interface PostureCheck {
   id: string;
@@ -17,13 +18,6 @@ interface PostureReport {
   summary: Record<string, number>;
   tailscale: boolean;
 }
-
-const SEVERITY_BADGE: Record<PostureCheck["severity"], string> = {
-  ok: "text-bg-success",
-  info: "text-bg-info",
-  warn: "text-bg-warning",
-  error: "text-bg-danger",
-};
 
 const SEVERITY_ICON: Record<PostureCheck["severity"], string> = {
   ok: "check-circle",
@@ -129,7 +123,7 @@ export default function SecurityPosturePage() {
         {checks.map((c) => (
           <div key={c.id} class="list-group-item">
             <div class="d-flex align-items-start gap-3">
-              <span class={`badge ${SEVERITY_BADGE[c.severity]} mt-1`}>
+              <span class={`badge ${badgeClass("severity", c.severity)} mt-1`}>
                 <i class={`bi bi-${SEVERITY_ICON[c.severity]} me-1`} />
                 {c.severity.toUpperCase()}
               </span>

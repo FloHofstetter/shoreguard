@@ -4,7 +4,7 @@ import { useEffect, useState } from "preact/hooks";
 
 import { apiFetch } from "../lib/api";
 import { ensureAuth, hasRole } from "../lib/auth";
-import { API } from "../lib/constants";
+import { API, badgeClass } from "../lib/constants";
 import { showConfirm, showToast } from "../lib/notify";
 import { ErrorAlert, Spinner } from "../lib/widgets";
 
@@ -265,11 +265,7 @@ export default function ProviderProfilesPage() {
                           key={idx}
                           class="list-group-item py-1 px-2 d-flex gap-2 align-items-baseline"
                         >
-                          <span
-                            class={`badge ${
-                              d.severity === "error" ? "text-bg-danger" : "text-bg-warning"
-                            }`}
-                          >
+                          <span class={`badge ${badgeClass("severity", d.severity)}`}>
                             {d.severity}
                           </span>
                           <span class="font-monospace">{d.profile_id || "(global)"}</span>
