@@ -136,7 +136,12 @@ async def test_build_includes_todays_spend(db_factory) -> None:
 async def test_build_without_budget_omits_spend_phrase(db_factory) -> None:
     svc = DigestService(db_factory, _FakeRegistry())  # type: ignore[arg-type]
     digest = await svc.build(hours=24)
-    assert digest["spending"] == {"today_total": 0, "top": []}
+    assert digest["spending"] == {
+        "today_total": 0,
+        "today_total_cost": 0.0,
+        "currency_label": "",
+        "top": [],
+    }
     assert "inference requests" not in digest["message"]
 
 

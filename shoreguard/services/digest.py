@@ -54,11 +54,15 @@ class DigestService:
         self._registry = registry
         self._budget = budget
 
-    async def build(self, *, hours: int = 24) -> dict[str, Any]:
+    async def build(self, *, hours: int = 24, scope: set[str] | None = None) -> dict[str, Any]:
         """Build the digest for the trailing time window.
 
         Args:
             hours: Window size in hours (default: last 24).
+            scope: When provided (a tenant user's gateway set), restrict the
+                gateway-attributed sections to these gateways while keeping
+                cross-cutting unattributed (NULL-gateway) audit events. The
+                pushed daily digest passes ``None`` and stays fleet-wide.
 
         Returns:
             dict[str, Any]: The digest payload (JSON-serialisable).
@@ -67,13 +71,18 @@ class DigestService:
         since = until - datetime.timedelta(hours=hours)
 
         async with self._session_factory() as session:
-            action_rows = (
-                await session.execute(
-                    select(AuditEntry.action, func.count())
-                    .where(AuditEntry.timestamp >= since)
-                    .group_by(AuditEntry.action)
+            action_stmt = (
+                select(AuditEntry.action, func.count())
+                .where(AuditEntry.timestamp >= since)
+                .group_by(AuditEntry.action)
+            )
+            if scope is not None:
+                # Keep cross-cutting unattributed events (auth, user/tenant
+                # CRUD) visible alongside the scoped gateways' events.
+                action_stmt = action_stmt.where(
+                    AuditEntry.gateway_name.in_(scope) | AuditEntry.gateway_name.is_(None)
                 )
-            ).all()
+            action_rows = (await session.execute(action_stmt)).all()
             by_action: dict[str, int] = {str(a): int(c) for a, c in action_rows}
             webhook_failures = (
                 await session.execute(
@@ -85,20 +94,17 @@ class DigestService:
                     )
                 )
             ).scalar_one()
-            engaged = (
-                (
-                    await session.execute(
-                        select(KillSwitchEntry.gateway).group_by(KillSwitchEntry.gateway)
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            engaged_stmt = select(KillSwitchEntry.gateway).group_by(KillSwitchEntry.gateway)
+            if scope is not None:
+                engaged_stmt = engaged_stmt.where(KillSwitchEntry.gateway.in_(scope))
+            engaged = (await session.execute(engaged_stmt)).scalars().all()
 
         try:
             gateways = await self._registry.list_all()
         except Exception:  # noqa: BLE001 — digest must render even if the DB hiccups
             gateways = []
+        if scope is not None:
+            gateways = [gw for gw in gateways if gw["name"] in scope]
         unreachable = [
             gw["name"] for gw in gateways if gw.get("last_status") in ("unreachable", "offline")
         ]
@@ -131,27 +137,34 @@ class DigestService:
             "webhook_failures": int(webhook_failures),
             "kill_switch_engaged": list(engaged),
         }
-        digest["spending"] = await self._spending()
+        digest["spending"] = await self._spending(scope)
         digest["message"] = self._summary_line(digest)
         return digest
 
-    async def _spending(self) -> dict[str, Any]:
+    async def _spending(self, scope: set[str] | None = None) -> dict[str, Any]:
         """Summarise today's inference spend across all gateways.
 
+        Args:
+            scope: When provided, restrict the spend rollup to these gateways.
+
         Returns:
-            dict[str, Any]: ``{"today_total": int, "top": [...]}`` — empty when
-                no budget service is wired or the query fails (best-effort).
+            dict[str, Any]: ``{"today_total": int, "today_total_cost": float,
+                "currency_label": str, "top": [...]}`` — empty when no budget
+                service is wired or the query fails (best-effort).
         """
+        empty = {"today_total": 0, "today_total_cost": 0.0, "currency_label": "", "top": []}
         if self._budget is None:
-            return {"today_total": 0, "top": []}
+            return empty
         try:
             summary = await self._budget.summary(days=1)
         except Exception:  # noqa: BLE001 — spend is best-effort; never break the digest
-            return {"today_total": 0, "top": []}
+            return empty
         top = summary.get("top", [])
+        if scope is not None:
+            top = [t for t in top if t.get("gateway") in scope]
         return {
             "today_total": sum(int(t.get("requests", 0)) for t in top),
-            "today_total_cost": summary.get("estimated_cost", 0.0),
+            "today_total_cost": round(sum(float(t.get("estimated_cost", 0.0)) for t in top), 6),
             "currency_label": summary.get("currency_label", ""),
             "top": top[:5],
         }

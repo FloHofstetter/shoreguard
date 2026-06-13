@@ -41,8 +41,13 @@ class FleetService:
         self._registry = registry
         self._gateways = gateway_service
 
-    async def overview(self) -> list[dict[str, Any]]:
+    async def overview(self, scope: set[str] | None = None) -> list[dict[str, Any]]:
         """Collect per-gateway status, version, and sandbox policy hashes.
+
+        Args:
+            scope: When provided, restrict the result to these gateway names
+                (tenant visibility scoping). ``None`` returns the full fleet
+                — the default for identity-free background callers.
 
         Returns:
             list[dict[str, Any]]: One entry per registered gateway with
@@ -51,6 +56,8 @@ class FleetService:
             empty string when the sandbox has no readable policy).
         """
         gateways = await self._registry.list_all()
+        if scope is not None:
+            gateways = [gw for gw in gateways if gw["name"] in scope]
         versions = self._gateways.known_versions()
 
         async def _collect(gw: dict[str, Any]) -> dict[str, Any]:
@@ -87,15 +94,19 @@ class FleetService:
 
         return list(await asyncio.gather(*(_collect(gw) for gw in gateways)))
 
-    async def policy_drift(self) -> list[dict[str, Any]]:
+    async def policy_drift(self, scope: set[str] | None = None) -> list[dict[str, Any]]:
         """Find same-named sandboxes whose policies differ across gateways.
+
+        Args:
+            scope: When provided, restrict to these gateway names (tenant
+                visibility scoping). ``None`` considers the full fleet.
 
         Returns:
             list[dict[str, Any]]: One entry per sandbox name present on
             two or more reachable gateways: ``sandbox``, ``hashes``
             (gateway → policy hash), and ``drifted``.
         """
-        overview = await self.overview()
+        overview = await self.overview(scope)
         by_sandbox: dict[str, dict[str, str]] = {}
         for gw in overview:
             if not gw["reachable"]:

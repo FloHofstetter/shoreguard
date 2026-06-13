@@ -255,6 +255,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         services,
         system,
         templates,
+        tenants,
         tokens,
         webhooks,
     )
@@ -362,6 +363,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         prefix="/api/webhooks",
         tags=["webhooks"],
         dependencies=[Depends(require_auth), Depends(require_role("admin"))],
+    )
+    app.include_router(
+        tenants.router,
+        prefix="/api/tenants",
+        tags=["tenants"],
+        dependencies=[Depends(require_auth)],
     )
     app.include_router(
         security.router,

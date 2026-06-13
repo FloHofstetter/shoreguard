@@ -851,6 +851,37 @@ class PricingSettings(BaseSettings):
     )
 
 
+class TenantSettings(BaseSettings):
+    """Tenant visibility scoping (a governance grouping of gateways).
+
+    Tenants restrict a non-admin user's view (gateway list, fleet
+    overview, digest) to their tenants' gateways. This is a visibility
+    boundary only, never data-plane isolation.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Master gate for read-path visibility scoping. When
+            ``False`` the scope helper always yields the full fleet, so
+            behaviour is identical to having no tenants even if some exist.
+        rollup_window_days (int): Trailing window for the per-tenant spend
+            rollup.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_TENANT_")
+
+    enabled: bool = Field(
+        default=True,
+        description="Restrict non-admin users' gateway list / fleet / digest "
+        "views to their assigned tenants' gateways. Admins, no-auth, and "
+        "users in no tenant always see the full fleet.",
+    )
+    rollup_window_days: int = Field(
+        default=7,
+        ge=1,
+        description="Trailing window (days) for the per-tenant spend rollup",
+    )
+
+
 class DigestSettings(BaseSettings):
     """Daily activity digest ("what did my agents do while I slept?").
 
@@ -1473,6 +1504,7 @@ class Settings(BaseSettings):
         digest (DigestSettings): Daily activity digest dispatch.
         budget (BudgetSettings): Inference usage metering and budgets.
         pricing (PricingSettings): Estimated-dollar overlay over request counts.
+        tenant (TenantSettings): Tenant visibility scoping.
         smtp (SmtpSettings): Server-wide SMTP defaults for email webhooks.
         node_alert (NodeAlertSettings): Host threshold alert evaluation.
         push (PushSettings): Web Push (PWA notification) configuration.
@@ -1503,6 +1535,7 @@ class Settings(BaseSettings):
     digest: DigestSettings = Field(default_factory=DigestSettings)
     budget: BudgetSettings = Field(default_factory=BudgetSettings)
     pricing: PricingSettings = Field(default_factory=PricingSettings)
+    tenant: TenantSettings = Field(default_factory=TenantSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     node_alert: NodeAlertSettings = Field(default_factory=NodeAlertSettings)
     push: PushSettings = Field(default_factory=PushSettings)

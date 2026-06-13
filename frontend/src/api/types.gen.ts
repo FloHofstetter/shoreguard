@@ -2606,7 +2606,12 @@ export interface paths {
          * Gateway List
          * @description List all registered gateways with metadata and status.
          *
+         *     For a non-admin user assigned to tenants, the list is scoped to that
+         *     user's tenants' gateways (a visibility filter applied on top of the
+         *     label/runtime filters); admins and unassigned users see the full fleet.
+         *
          *     Args:
+         *         request: The incoming HTTP request (for tenant scoping).
          *         label: Optional label filters in ``key:value`` format. Multiple
          *             labels are AND-combined.
          *         runtime: Optional runtime tag filter. Rejected with HTTP 400
@@ -3624,6 +3629,224 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tenants
+         * @description List all tenants with gateway and user counts.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"items": [...]}``.
+         */
+        get: operations["list_tenants_api_tenants_get"];
+        put?: never;
+        /**
+         * Create Tenant
+         * @description Create a tenant.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *         body: Tenant parameters.
+         *
+         *     Returns:
+         *         dict[str, Any]: The created tenant record.
+         *
+         *     Raises:
+         *         HTTPException: 409 if a tenant with this name already exists.
+         */
+        post: operations["create_tenant_api_tenants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tenants/{tenant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tenant
+         * @description Return a tenant with its gateway and user membership.
+         *
+         *     Args:
+         *         tenant_id: Tenant primary key.
+         *
+         *     Returns:
+         *         dict[str, Any]: The tenant record with members.
+         *
+         *     Raises:
+         *         HTTPException: 404 if the tenant does not exist.
+         */
+        get: operations["get_tenant_api_tenants__tenant_id__get"];
+        /**
+         * Update Tenant
+         * @description Update a tenant's name/description.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *         tenant_id: Tenant primary key.
+         *         body: New tenant parameters.
+         *
+         *     Returns:
+         *         dict[str, Any]: The updated record.
+         *
+         *     Raises:
+         *         HTTPException: 404 if not found, 409 on a name collision.
+         */
+        put: operations["update_tenant_api_tenants__tenant_id__put"];
+        post?: never;
+        /**
+         * Delete Tenant
+         * @description Delete a tenant (cascades to its memberships).
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *         tenant_id: Tenant primary key.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"deleted": bool}``.
+         *
+         *     Raises:
+         *         HTTPException: 404 if the tenant does not exist.
+         */
+        delete: operations["delete_tenant_api_tenants__tenant_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tenants/{tenant_id}/gateways/{gateway_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add Tenant Gateway
+         * @description Assign a gateway to a tenant.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *         tenant_id: Tenant primary key.
+         *         gateway_name: Gateway name to add.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"added": True}``.
+         *
+         *     Raises:
+         *         HTTPException: 400 on an invalid name, 404 if the tenant or gateway
+         *             is unknown.
+         */
+        put: operations["add_tenant_gateway_api_tenants__tenant_id__gateways__gateway_name__put"];
+        post?: never;
+        /**
+         * Remove Tenant Gateway
+         * @description Remove a gateway from a tenant.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *         tenant_id: Tenant primary key.
+         *         gateway_name: Gateway name to remove.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"removed": bool}``.
+         *
+         *     Raises:
+         *         HTTPException: 400 on an invalid gateway name.
+         */
+        delete: operations["remove_tenant_gateway_api_tenants__tenant_id__gateways__gateway_name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tenants/{tenant_id}/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add Tenant User
+         * @description Assign a user to a tenant.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *         tenant_id: Tenant primary key.
+         *         user_id: User primary key to add.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"added": True}``.
+         *
+         *     Raises:
+         *         HTTPException: 404 if the tenant or user is unknown.
+         */
+        put: operations["add_tenant_user_api_tenants__tenant_id__users__user_id__put"];
+        post?: never;
+        /**
+         * Remove Tenant User
+         * @description Remove a user from a tenant.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *         tenant_id: Tenant primary key.
+         *         user_id: User primary key to remove.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"removed": bool}``.
+         */
+        delete: operations["remove_tenant_user_api_tenants__tenant_id__users__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tenants/{tenant_id}/rollup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tenant Rollup
+         * @description Return a tenant's spend and gateway-health rollup.
+         *
+         *     Readable by an admin or by a member of the tenant. Non-members get 403.
+         *
+         *     Args:
+         *         request: The incoming HTTP request.
+         *         tenant_id: Tenant primary key.
+         *
+         *     Returns:
+         *         dict[str, Any]: The rollup payload.
+         *
+         *     Raises:
+         *         HTTPException: 404 if the tenant is unknown, 403 if the caller is a
+         *             non-admin who is not a member of the tenant.
+         */
+        get: operations["tenant_rollup_api_tenants__tenant_id__rollup_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/security/posture": {
         parameters: {
             query?: never;
@@ -3659,7 +3882,12 @@ export interface paths {
          * Get Digest
          * @description Return the activity digest for the trailing window.
          *
+         *     Scoped to the caller's tenants' gateways for a non-admin tenant user
+         *     (cross-cutting unattributed audit events stay visible); the full fleet
+         *     otherwise. The pushed daily digest is always fleet-wide.
+         *
          *     Args:
+         *         request: The incoming HTTP request (for tenant scoping).
          *         hours: Window size in hours (1-168, default 24).
          *
          *     Returns:
@@ -4007,6 +4235,12 @@ export interface paths {
          * Fleet Overview
          * @description Return per-gateway status, version, and sandbox policy hashes.
          *
+         *     Scoped to the caller's tenants' gateways for a non-admin tenant user;
+         *     the full fleet otherwise.
+         *
+         *     Args:
+         *         request: The incoming HTTP request (for tenant scoping).
+         *
          *     Returns:
          *         dict[str, Any]: ``{"gateways": [...]}``.
          */
@@ -4029,6 +4263,11 @@ export interface paths {
         /**
          * Fleet Policy Drift
          * @description Return policy drift between same-named sandboxes across gateways.
+         *
+         *     Scoped to the caller's tenants' gateways for a non-admin tenant user.
+         *
+         *     Args:
+         *         request: The incoming HTTP request (for tenant scoping).
          *
          *     Returns:
          *         dict[str, Any]: ``{"items": [...]}`` — one entry per sandbox
@@ -5759,6 +5998,33 @@ export interface paths {
          *             posture page or access denied error.
          */
         get: operations["security_page_security_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tenants Page
+         * @description Tenant management page (admin only).
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *
+         *     Returns:
+         *         TemplateResponse | RedirectResponse | HTMLResponse: Rendered tenants page
+         *             or access denied error.
+         */
+        get: operations["tenants_page_tenants_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8418,6 +8684,20 @@ export interface components {
             description?: string | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * TenantRequest
+         * @description Create/update payload for a tenant.
+         *
+         *     Attributes:
+         *         name: Unique tenant name.
+         *         description: Optional human-readable description.
+         */
+        TenantRequest: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
         };
         /**
          * UpdateGatewayMetadataRequest
@@ -13427,6 +13707,335 @@ export interface operations {
             };
         };
     };
+    list_tenants_api_tenants_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    create_tenant_api_tenants_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tenant_api_tenants__tenant_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_tenant_api_tenants__tenant_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_tenant_api_tenants__tenant_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_tenant_gateway_api_tenants__tenant_id__gateways__gateway_name__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: number;
+                gateway_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_tenant_gateway_api_tenants__tenant_id__gateways__gateway_name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: number;
+                gateway_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_tenant_user_api_tenants__tenant_id__users__user_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: number;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_tenant_user_api_tenants__tenant_id__users__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: number;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tenant_rollup_api_tenants__tenant_id__rollup_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_security_posture_api_security_posture_get: {
         parameters: {
             query?: never;
@@ -15599,6 +16208,26 @@ export interface operations {
         };
     };
     security_page_security_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    tenants_page_tenants_get: {
         parameters: {
             query?: never;
             header?: never;

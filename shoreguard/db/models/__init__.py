@@ -31,6 +31,7 @@ from shoreguard.db.models.sandbox import (
     UsageCursor,
 )
 from shoreguard.db.models.sbom import SBOMComponent, SBOMSnapshot
+from shoreguard.db.models.tenant import Tenant, TenantGateway, TenantUser
 from shoreguard.db.models.webhooks import Webhook, WebhookDelivery
 
 __all__ = (
@@ -57,6 +58,9 @@ __all__ = (
     "SandboxMeta",
     "SandboxUsage",
     "ServicePrincipal",
+    "Tenant",
+    "TenantGateway",
+    "TenantUser",
     "UsageCursor",
     "User",
     "UserGatewayRole",

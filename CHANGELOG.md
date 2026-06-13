@@ -27,6 +27,18 @@ sandbox, so these are squarely the control plane's job.
   "estimated": there is no token-accurate cost until an upstream usage RPC lands. On
   by default in `--local` mode unless `SHOREGUARD_PRICING_ENABLED` is set explicitly
   (`feat(budgets)`).
+- **Tenants — a gateway-grouped visibility boundary.** OpenShell is single-operator
+  with no tenant model and no per-tenant observability (its maintainers' #1 enterprise
+  gap), and ShoreGuard itself showed the whole fleet to every user. A tenant groups
+  gateways and users; a non-admin user assigned to tenants now sees only their tenants'
+  gateways in the gateway list, fleet overview, and on-demand digest, with a per-tenant
+  spend/health rollup. This is a **visibility boundary only** — never data-plane
+  namespace/quota/GPU isolation (that stays OpenShell's job). Admins, the `--no-auth`
+  bypass, and users in no tenant always see the full fleet (fail-open); a transient DB
+  error fails closed (503). Every identity-free background loop (metering, health,
+  drift, discovery, cert rotation, metrics, `/readyz`) and the pushed daily digest stay
+  fleet-wide; the audit hash chain stays global. Admin CRUD at `/api/tenants` and a new
+  Tenants admin page; gated by `SHOREGUARD_TENANT_ENABLED` (`feat(tenants)`).
 
 ## [0.39.0] — 2026-06-13
 

@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from shoreguard.services.registry import GatewayRegistry
     from shoreguard.services.sandbox_meta import SandboxMetaStore
     from shoreguard.services.sbom import SBOMService
+    from shoreguard.services.tenant import TenantService
     from shoreguard.services.timeline import TimelineService
     from shoreguard.services.update_check import UpdateCheckService
     from shoreguard.services.webhooks import WebhookService
@@ -84,6 +85,7 @@ class ServiceContainer:
         timeline: Per-sandbox merged activity timeline.
         fleet: Cross-gateway overview, drift, and policy sync.
         denial_context: Denial context cache.
+        tenant: Tenant grouping and per-tenant rollups.
         local_gateway: Local gateway manager, or ``None`` outside local mode.
     """
 
@@ -115,6 +117,7 @@ class ServiceContainer:
     timeline: TimelineService
     fleet: FleetService
     denial_context: DenialContextService
+    tenant: TenantService
     local_gateway: LocalGatewayManager | None = None
 
 
@@ -160,6 +163,7 @@ def build_container(
     from shoreguard.services.registry import GatewayRegistry
     from shoreguard.services.sandbox_meta import SandboxMetaStore
     from shoreguard.services.sbom import SBOMService
+    from shoreguard.services.tenant import TenantService
     from shoreguard.services.timeline import TimelineService
     from shoreguard.services.update_check import UpdateCheckService
     from shoreguard.services.webhooks import WebhookService
@@ -226,6 +230,7 @@ def build_container(
         timeline=TimelineService(async_session_factory),
         fleet=FleetService(registry, gateway),
         denial_context=DenialContextService(),
+        tenant=TenantService(async_session_factory, registry),
         local_gateway=(LocalGatewayManager(gateway) if settings.server.local_mode else None),
     )
 
