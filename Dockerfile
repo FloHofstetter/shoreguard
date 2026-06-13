@@ -1,10 +1,25 @@
+# ── Stage 0: Build the Preact/TypeScript island bundle ──────────────────────
+# frontend/dist is a Vite build artifact (git-ignored), so it must be compiled
+# here — the wheel force-includes it as shoreguard/_frontend/dist.
+FROM node:24-slim AS frontend
+
+WORKDIR /build/frontend
+# Install against the lockfile first so the layer caches across source edits.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 # ── Stage 1: Build wheel ────────────────────────────────────────────────────
 FROM python:3.14-slim AS builder
 
 WORKDIR /build
-COPY pyproject.toml README.md LICENSE ./
+COPY pyproject.toml README.md LICENSE hatch_build.py ./
 COPY shoreguard/ shoreguard/
 COPY frontend/ frontend/
+# Bring the compiled bundle from the node stage so hatchling's force-include
+# ships the real islands, not an empty directory.
+COPY --from=frontend /build/frontend/dist/ frontend/dist/
 
 RUN pip install --no-cache-dir hatchling \
     && python -m hatchling build -t wheel

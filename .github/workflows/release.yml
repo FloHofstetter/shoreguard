@@ -114,6 +114,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # The wheel force-includes the compiled island bundle (frontend/dist),
+      # a git-ignored Vite artifact — build it before uv build.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.14"

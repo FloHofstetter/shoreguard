@@ -148,6 +148,13 @@ detailed at the end of this entry.
   missing from the REST validation allowlist, so creating one returned
   422. Creation/update now accept it and validate that the bot URL
   carries the `chat_id` query parameter delivery extracts.
+- **Packaging: the wheel reliably bundles the compiled island bundle.** The
+  frontend rewrite force-included `frontend/dist` (a git-ignored Vite artifact)
+  in the wheel, which broke `uv sync` (the editable build) anywhere the bundle
+  was not pre-built — including every CI job. A Hatch build hook
+  (`hatch_build.py`) now creates the directory for editable installs (which
+  serve the source tree and do not need it), while the Docker image and the
+  PyPI wheel compile the real bundle first via a Node build stage/step.
 
 ### Added
 

@@ -19,3 +19,6 @@ htmlcov
 Justfile
 Caddyfile
 docker-compose*.yml
+# Rebuilt fresh in the node stage; never copy a host copy into the context.
+frontend/node_modules
+frontend/dist
