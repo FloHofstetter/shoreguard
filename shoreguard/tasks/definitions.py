@@ -34,10 +34,12 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
     """
 
     async def _cleanup() -> None:
-        # Purge expired operations, audit entries, and webhook deliveries.
+        # Purge expired operations, audit entries, and webhook deliveries,
+        # plus aged-out gateway inventory snapshots / reap records.
         await container.operations.cleanup()
         await container.audit.cleanup()
         await container.webhooks.cleanup_old_deliveries()
+        await container.gateway_inventory.prune(settings.reconciler.reap_retention_days)
 
     async def _health_monitor() -> None:
         await container.gateway.check_all_health()

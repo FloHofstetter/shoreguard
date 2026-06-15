@@ -183,6 +183,59 @@ class SandboxUsage(Base):
     requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+class GatewayInventorySnapshot(Base):
+    """A point-in-time snapshot of a gateway's sandboxes and attachments.
+
+    Captured on each successful health probe so a gateway/Docker restart
+    that reaps sandboxes can be diffed (pre-down vs post-recovery). Pure
+    forensic history — append-only, pruned by retention; never reversible
+    state, so it does NOT reuse the kill-switch table.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name.
+        captured_at: When the snapshot was taken.
+        sandboxes_json: JSON map ``{sandbox_name: [provider names sorted]}``.
+        sandbox_count: Number of sandboxes in the snapshot.
+    """
+
+    __tablename__ = "gateway_inventory_snapshots"
+    __table_args__ = (Index("ix_gateway_inventory_gw_time", "gateway", "captured_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False)
+    captured_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sandboxes_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    sandbox_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class GatewayReapRecord(Base):
+    """A record of sandboxes/attachments lost across a gateway restart.
+
+    Written when an ``unreachable → recovered`` transition's inventory diff
+    is non-empty. The durable forensic residue of the reconciler: an
+    append-only log, never reversible state.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name.
+        detected_at: When the reap was detected (on recovery).
+        recovered_from_status: The down status the gateway recovered from.
+        reaped_json: JSON list of ``{sandbox, lost_providers}`` entries.
+        reaped_count: Number of sandboxes reaped.
+    """
+
+    __tablename__ = "gateway_reap_records"
+    __table_args__ = (Index("ix_gateway_reap_gw_time", "gateway", "detected_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False)
+    detected_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    recovered_from_status: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+    reaped_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    reaped_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
 class UsageCursor(Base):
     """Log-poll cursor per sandbox (last metered log timestamp).
 

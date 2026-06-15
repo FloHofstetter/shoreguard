@@ -287,6 +287,8 @@ interface UpdateStatus {
   update_available: boolean;
   gateway_versions: Record<string, string>;
   version_skew: boolean;
+  restart_safe_min_version?: string | null;
+  at_risk_gateways?: string[];
 }
 
 function UpdateBanner() {
@@ -298,7 +300,9 @@ function UpdateBanner() {
       .catch(() => setStatus(null));
   }, []);
 
-  if (!status || (!status.update_available && !status.version_skew)) return null;
+  const atRisk = status?.at_risk_gateways ?? [];
+  if (!status || (!status.update_available && !status.version_skew && atRisk.length === 0))
+    return null;
   return (
     <div class="alert alert-info d-flex flex-wrap align-items-center gap-2 mb-3">
       <i class="bi bi-arrow-up-circle" />
@@ -316,6 +320,51 @@ function UpdateBanner() {
           .
         </span>
       )}
+      {atRisk.length > 0 && (
+        <span class="text-warning-emphasis">
+          <i class="bi bi-exclamation-triangle me-1" />
+          <strong>At risk on restart</strong> (OpenShell &lt; {status.restart_safe_min_version}):{" "}
+          {atRisk.join(", ")} — a gateway restart will reap their sandboxes.
+        </span>
+      )}
+    </div>
+  );
+}
+
+interface ReapRecord {
+  gateway: string;
+  detected_at: string;
+  reaped_count: number;
+  reaped: { sandbox: string; lost_providers: string[] }[];
+}
+
+function RecentReapsCard() {
+  const [reaps, setReaps] = useState<ReapRecord[]>([]);
+
+  useEffect(() => {
+    apiFetch<{ items: ReapRecord[] }>(`/api/reconciler/recent?limit=5`)
+      .then((r) => setReaps(r.items))
+      .catch(() => setReaps([]));
+  }, []);
+
+  if (reaps.length === 0) return null;
+  return (
+    <div class="card sg-card-themed border-warning mb-4">
+      <div class="card-body">
+        <h6 class="mb-3">
+          <i class="bi bi-recycle me-2 text-warning" />
+          Recent gateway-restart reaps
+        </h6>
+        <ul class="list-unstyled small mb-0">
+          {reaps.map((r) => (
+            <li key={`${r.gateway}-${r.detected_at}`} class="mb-1">
+              <strong>{r.gateway}</strong> reaped {r.reaped_count} sandbox(es) on{" "}
+              {new Date(r.detected_at).toLocaleString()}:{" "}
+              <span class="text-muted">{r.reaped.map((x) => x.sandbox).join(", ")}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -575,6 +624,7 @@ export default function DashboardPage() {
       </div>
 
       <DigestCard />
+      <RecentReapsCard />
 
       {gateways.length > 0 && <SandboxActivityCard rows={sandboxActivity} />}
 

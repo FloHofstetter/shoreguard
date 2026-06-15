@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from shoreguard.services.drift_detection import DriftDetectionService
     from shoreguard.services.fleet import FleetService
     from shoreguard.services.gateway import GatewayService
+    from shoreguard.services.gateway_inventory import GatewayInventoryStore
     from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
     from shoreguard.services.node_alerts import NodeAlertService
@@ -61,6 +62,7 @@ class ServiceContainer:
         async_session_factory: Async SQLAlchemy session factory (all data services).
         registry: Persistent gateway CRUD (what gateways exist).
         gateway: Live gateway connections (clients, health, backoff).
+        gateway_inventory: Gateway inventory snapshots and restart reap-diff.
         sandbox_meta: Sandbox metadata store.
         operations: Long-running operation tracking.
         audit: Audit trail service.
@@ -93,6 +95,7 @@ class ServiceContainer:
     async_session_factory: async_sessionmaker[AsyncSession]
     registry: GatewayRegistry
     gateway: GatewayService
+    gateway_inventory: GatewayInventoryStore
     sandbox_meta: SandboxMetaStore
     operations: AsyncOperationService
     audit: AuditService
@@ -152,6 +155,7 @@ def build_container(
     from shoreguard.services.drift_detection import DriftDetectionService
     from shoreguard.services.fleet import FleetService
     from shoreguard.services.gateway import GatewayService
+    from shoreguard.services.gateway_inventory import GatewayInventoryStore
     from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
     from shoreguard.services.node_alerts import NodeAlertService
@@ -169,7 +173,8 @@ def build_container(
     from shoreguard.services.webhooks import WebhookService
 
     registry = GatewayRegistry(async_session_factory)
-    gateway = GatewayService(registry)
+    gateway_inventory = GatewayInventoryStore(async_session_factory)
+    gateway = GatewayService(registry, gateway_inventory)
     sandbox_meta = SandboxMetaStore(async_session_factory)
     audit = AuditService(async_session_factory, exporter=audit_exporter)
     node_stats = NodeStatsService()
@@ -194,6 +199,7 @@ def build_container(
         async_session_factory=async_session_factory,
         registry=registry,
         gateway=gateway,
+        gateway_inventory=gateway_inventory,
         sandbox_meta=sandbox_meta,
         operations=AsyncOperationService(
             async_session_factory,

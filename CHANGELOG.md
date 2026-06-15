@@ -39,6 +39,19 @@ sandbox, so these are squarely the control plane's job.
   drift, discovery, cert rotation, metrics, `/readyz`) and the pushed daily digest stay
   fleet-wide; the audit hash chain stays global. Admin CRUD at `/api/tenants` and a new
   Tenants admin page; gated by `SHOREGUARD_TENANT_ENABLED` (`feat(tenants)`).
+- **Gateway restart reconciler — surface the blast radius.** A gateway/Docker
+  restart destroys all sandboxes and is the highest-engagement reliability pain in
+  the OpenShell community; ShoreGuard can't prevent it (it's data-plane), but it now
+  *surfaces* it. The health loop snapshots each gateway's sandboxes + provider
+  attachments on every successful probe, and on an `unreachable → recovered`
+  transition diffs the last pre-down snapshot against a fresh one and fires a
+  `gateway.sandboxes_reaped` webhook (with the reaped sandboxes + lost attachments),
+  also summed into the daily digest. An "at risk on restart" dashboard badge flags
+  gateways whose OpenShell version is below `SHOREGUARD_RECONCILER_RESTART_SAFE_MIN_VERSION`.
+  Read APIs at `/api/gateways/{gw}/reconciler/{reaps,inventory}` and a fleet-wide
+  `/api/reconciler/{recent,at-risk}`; snapshots/reaps are pruned by the cleanup task.
+  Surfacing/diagnosing only — never self-healing the host daemon, and honestly
+  time-decaying as upstream ships restart-safe state (`feat(reconciler)`).
 
 ## [0.39.0] — 2026-06-13
 

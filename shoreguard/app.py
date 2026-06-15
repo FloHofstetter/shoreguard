@@ -250,6 +250,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         providers,
         push,
         sandboxes,
+        reconciler,
         sbom,
         security,
         services,
@@ -327,6 +328,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     gw_api.include_router(services.router, prefix="/services", tags=["services"])
     gw_api.include_router(tokens.router, prefix="/tokens", tags=["tokens"])
+    gw_api.include_router(reconciler.router, prefix="/reconciler", tags=["reconciler"])
     gw_api.include_router(inference.router)
     app.include_router(gw_api)
 
@@ -380,6 +382,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         digest.router,
         prefix="/api/digest",
         tags=["digest"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        reconciler.summary_router,
+        prefix="/api/reconciler",
+        tags=["reconciler"],
         dependencies=[Depends(require_auth)],
     )
     app.include_router(

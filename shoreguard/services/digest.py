@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
-from shoreguard.models import AuditEntry, KillSwitchEntry, WebhookDelivery
+from shoreguard.models import AuditEntry, GatewayReapRecord, KillSwitchEntry, WebhookDelivery
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -98,6 +98,16 @@ class DigestService:
             if scope is not None:
                 engaged_stmt = engaged_stmt.where(KillSwitchEntry.gateway.in_(scope))
             engaged = (await session.execute(engaged_stmt)).scalars().all()
+            reap_stmt = (
+                select(GatewayReapRecord.gateway, func.sum(GatewayReapRecord.reaped_count))
+                .where(GatewayReapRecord.detected_at >= since)
+                .group_by(GatewayReapRecord.gateway)
+            )
+            if scope is not None:
+                reap_stmt = reap_stmt.where(GatewayReapRecord.gateway.in_(scope))
+            reaped_by_gateway = {
+                str(g): int(c) for g, c in (await session.execute(reap_stmt)).all()
+            }
 
         try:
             gateways = await self._registry.list_all()
@@ -136,6 +146,10 @@ class DigestService:
             },
             "webhook_failures": int(webhook_failures),
             "kill_switch_engaged": list(engaged),
+            "reaped": {
+                "total": sum(reaped_by_gateway.values()),
+                "by_gateway": reaped_by_gateway,
+            },
         }
         digest["spending"] = await self._spending(scope)
         digest["message"] = self._summary_line(digest)
@@ -194,6 +208,9 @@ class DigestService:
             parts.append(f"⚠ unreachable: {', '.join(digest['gateways']['unreachable'])}")
         if digest["kill_switch_engaged"]:
             parts.append(f"⚠ kill switch on: {', '.join(digest['kill_switch_engaged'])}")
+        reaped_total = (digest.get("reaped") or {}).get("total", 0)
+        if reaped_total:
+            parts.append(f"⚠ {reaped_total} sandbox(es) reaped on restart")
         if digest["webhook_failures"]:
             parts.append(f"{digest['webhook_failures']} webhook failures")
         if digest["audit"]["forbidden"]:

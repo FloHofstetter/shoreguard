@@ -24,6 +24,8 @@ from shoreguard.db.models.policy import (
 )
 from shoreguard.db.models.push import PushSubscription
 from shoreguard.db.models.sandbox import (
+    GatewayInventorySnapshot,
+    GatewayReapRecord,
     SandboxBootHook,
     SandboxBudget,
     SandboxMeta,
@@ -42,6 +44,8 @@ __all__ = (
     "DeviceLinkCode",
     "Gateway",
     "GatewayCurfew",
+    "GatewayInventorySnapshot",
+    "GatewayReapRecord",
     "Group",
     "GroupGatewayRole",
     "GroupMember",

@@ -882,6 +882,43 @@ class TenantSettings(BaseSettings):
     )
 
 
+class ReconcilerSettings(BaseSettings):
+    """Gateway restart reconciler (inventory snapshots + reap-diff).
+
+    A gateway/Docker restart destroys all sandboxes; ShoreGuard cannot
+    prevent that, but it snapshots each gateway's inventory on every
+    health probe and, on recovery, reports what the restart reaped, plus
+    an "at risk on restart" badge for OpenShell versions below a known
+    restart-safe floor. Surfacing/diagnosing only — never self-healing.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        snapshot_enabled (bool): Capture an inventory snapshot on each
+            successful health probe (needed for the reap-diff).
+        restart_safe_min_version (str | None): OpenShell versions below this
+            are flagged "at risk on restart"; ``None`` disables the badge.
+        reap_retention_days (int): Age threshold for pruning snapshots/reaps.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_RECONCILER_")
+
+    snapshot_enabled: bool = Field(
+        default=True,
+        description="Snapshot each gateway's sandboxes + provider attachments "
+        "on every successful health probe (enables the restart reap-diff)",
+    )
+    restart_safe_min_version: str | None = Field(
+        default=None,
+        description="OpenShell versions below this are flagged 'at risk on "
+        "restart'; unset disables the badge",
+    )
+    reap_retention_days: int = Field(
+        default=30,
+        ge=1,
+        description="Age (days) after which inventory snapshots and reap records are pruned",
+    )
+
+
 class DigestSettings(BaseSettings):
     """Daily activity digest ("what did my agents do while I slept?").
 
@@ -1505,6 +1542,7 @@ class Settings(BaseSettings):
         budget (BudgetSettings): Inference usage metering and budgets.
         pricing (PricingSettings): Estimated-dollar overlay over request counts.
         tenant (TenantSettings): Tenant visibility scoping.
+        reconciler (ReconcilerSettings): Gateway restart reconciler.
         smtp (SmtpSettings): Server-wide SMTP defaults for email webhooks.
         node_alert (NodeAlertSettings): Host threshold alert evaluation.
         push (PushSettings): Web Push (PWA notification) configuration.
@@ -1536,6 +1574,7 @@ class Settings(BaseSettings):
     budget: BudgetSettings = Field(default_factory=BudgetSettings)
     pricing: PricingSettings = Field(default_factory=PricingSettings)
     tenant: TenantSettings = Field(default_factory=TenantSettings)
+    reconciler: ReconcilerSettings = Field(default_factory=ReconcilerSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     node_alert: NodeAlertSettings = Field(default_factory=NodeAlertSettings)
     push: PushSettings = Field(default_factory=PushSettings)

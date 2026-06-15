@@ -96,11 +96,21 @@ class UpdateCheckService:
 
         Returns:
             dict[str, Any]: ``current``, ``latest``, ``update_available``,
-            ``checked_at``, ``check_enabled``, ``gateway_versions``, and
-            ``version_skew`` (more than one distinct gateway version).
+            ``checked_at``, ``check_enabled``, ``gateway_versions``,
+            ``version_skew`` (more than one distinct gateway version),
+            ``restart_safe_min_version``, and ``at_risk_gateways`` (gateways
+            below the configured restart-safe version floor).
         """
+        from shoreguard.settings import get_settings
+
         versions = self._gateways.known_versions()
         distinct = sorted(set(versions.values()))
+        floor = get_settings().reconciler.restart_safe_min_version
+        at_risk = (
+            sorted(name for name, ver in versions.items() if floor and _is_newer(floor, ver))
+            if floor
+            else []
+        )
         return {
             "current": __version__,
             "latest": self._latest,
@@ -109,4 +119,6 @@ class UpdateCheckService:
             "check_enabled": self._settings.enabled,
             "gateway_versions": versions,
             "version_skew": len(distinct) > 1,
+            "restart_safe_min_version": floor,
+            "at_risk_gateways": at_risk,
         }

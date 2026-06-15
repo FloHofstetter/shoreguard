@@ -2440,6 +2440,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gateways/{gw}/reconciler/reaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gateway Reaps
+         * @description Return recent restart reap records for this gateway.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         limit: Maximum number of records.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"items": [...]}`` newest first.
+         */
+        get: operations["gateway_reaps_api_gateways__gw__reconciler_reaps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gateways/{gw}/reconciler/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gateway Inventory
+         * @description Return the latest inventory snapshot for this gateway.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"snapshot": {...} | None}``.
+         */
+        get: operations["gateway_inventory_api_gateways__gw__reconciler_inventory_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/gateways/{gw}/health": {
         parameters: {
             query?: never;
@@ -3895,6 +3948,55 @@ export interface paths {
          *             approvals, gateway health, webhook failures, kill switch).
          */
         get: operations["get_digest_api_digest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reconciler/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent Reaps
+         * @description Return recent restart reap records across all gateways.
+         *
+         *     Args:
+         *         limit: Maximum number of records.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"items": [...]}`` newest first, fleet-wide.
+         */
+        get: operations["recent_reaps_api_reconciler_recent_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reconciler/at-risk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * At Risk Gateways
+         * @description Return gateways below the configured restart-safe version floor.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"restart_safe_min_version", "at_risk_gateways"}``.
+         */
+        get: operations["at_risk_gateways_api_reconciler_at_risk_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12263,6 +12365,74 @@ export interface operations {
             };
         };
     };
+    gateway_reaps_api_gateways__gw__reconciler_reaps_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gateway_inventory_api_gateways__gw__reconciler_inventory_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     gw_health_api_gateways__gw__health_get: {
         parameters: {
             query?: never;
@@ -14087,6 +14257,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recent_reaps_api_reconciler_recent_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    at_risk_gateways_api_reconciler_at_risk_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
