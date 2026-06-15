@@ -40,6 +40,8 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
         await container.audit.cleanup()
         await container.webhooks.cleanup_old_deliveries()
         await container.gateway_inventory.prune(settings.reconciler.reap_retention_days)
+        if settings.simulator.replay_enabled:
+            await container.denial_store.prune(settings.simulator.retention_days)
 
     async def _health_monitor() -> None:
         await container.gateway.check_all_health()

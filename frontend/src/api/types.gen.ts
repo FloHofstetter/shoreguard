@@ -1428,6 +1428,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gateways/{gw}/sandboxes/{name}/policy/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate Policy
+         * @description Replay the persisted denial corpus against a candidate policy.
+         *
+         *     Best-effort denial replay: for each previously-denied request, predicts
+         *     whether the candidate policy (or the current active policy when none is
+         *     supplied) would now allow it. ``allow`` means the candidate would unblock
+         *     that request; ``deny`` means it stays blocked. Deterministic Z3 evaluation
+         *     that may diverge from the live gateway matcher — labelled best-effort.
+         *
+         *     Args:
+         *         name: Sandbox name.
+         *         body: Simulate request with an optional candidate policy.
+         *         request: Incoming HTTP request (for audit).
+         *         gw: Gateway name from URL path.
+         *         policy_svc: Injected PolicyService.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{results, summary, best_effort: true}``.
+         *
+         *     Raises:
+         *         HTTPException: 503 if denial replay (or the prover) is disabled.
+         */
+        post: operations["simulate_policy_api_gateways__gw__sandboxes__name__policy_simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/gateways/{gw}/sandboxes/{name}/policy/verify/presets": {
         parameters: {
             query?: never;
@@ -8846,6 +8885,20 @@ export interface components {
             password: string;
         };
         /**
+         * SimulateRequest
+         * @description Request body for POST /policy/simulate.
+         *
+         *     Attributes:
+         *         candidate_policy (dict | None): Candidate policy to replay against;
+         *             ``None`` uses the sandbox's current active policy.
+         */
+        SimulateRequest: {
+            /** Candidate Policy */
+            candidate_policy?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
          * SshRevokeResponse
          * @description SSH session revocation confirmation.
          *
@@ -11014,6 +11067,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["VerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulate_policy_api_gateways__gw__sandboxes__name__policy_simulate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulateRequest"];
             };
         };
         responses: {

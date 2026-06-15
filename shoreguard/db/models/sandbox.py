@@ -183,6 +183,46 @@ class SandboxUsage(Base):
     requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+class DenialSample(Base):
+    """A persisted L7 denial sample for policy-simulation replay.
+
+    The gateway has no ``GetDenialSummary`` RPC — denial summaries only flow
+    inbound via ``SubmitPolicyAnalysis`` and the live cache is in-memory and
+    volatile. This table durably records them so the policy simulator can
+    replay them against a candidate policy after a restart. Upserted on
+    ``(gateway, sandbox, binary, host, port)``; pruned by retention.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name.
+        sandbox: Sandbox name.
+        binary: Denied binary path.
+        host: Target host of the denied request.
+        port: Target port of the denied request.
+        l7_samples_json: JSON list of ``{method, path}`` observed requests.
+        deny_reason: Why the request was denied.
+        count: Observed denial count.
+        created_at: When this sample was last recorded.
+    """
+
+    __tablename__ = "denial_samples"
+    __table_args__ = (
+        UniqueConstraint("gateway", "sandbox", "binary", "host", "port", name="uq_denial_sample"),
+        Index("ix_denial_samples_sb", "gateway", "sandbox"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
+    binary: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    host: Mapped[str] = mapped_column(String(253), nullable=False, default="")
+    port: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    l7_samples_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    deny_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class SandboxRateLimit(Base):
     """Per-sandbox inference request-rate ceiling for the rate governor.
 

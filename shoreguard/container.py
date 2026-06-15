@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from shoreguard.services.cert_rotation import CertRotationService
     from shoreguard.services.curfew import CurfewService
     from shoreguard.services.denial_context import DenialContextService
+    from shoreguard.services.denial_store import DenialSampleStore
     from shoreguard.services.digest import DigestService
     from shoreguard.services.discovery import DiscoveryService
     from shoreguard.services.drift_detection import DriftDetectionService
@@ -89,6 +90,7 @@ class ServiceContainer:
         timeline: Per-sandbox merged activity timeline.
         fleet: Cross-gateway overview, drift, and policy sync.
         denial_context: Denial context cache.
+        denial_store: Durable denial-sample corpus for policy replay.
         tenant: Tenant grouping and per-tenant rollups.
         local_gateway: Local gateway manager, or ``None`` outside local mode.
     """
@@ -123,6 +125,7 @@ class ServiceContainer:
     timeline: TimelineService
     fleet: FleetService
     denial_context: DenialContextService
+    denial_store: DenialSampleStore
     tenant: TenantService
     local_gateway: LocalGatewayManager | None = None
 
@@ -153,6 +156,7 @@ def build_container(
     from shoreguard.services.cert_rotation import CertRotationService
     from shoreguard.services.curfew import CurfewService
     from shoreguard.services.denial_context import DenialContextService
+    from shoreguard.services.denial_store import DenialSampleStore
     from shoreguard.services.digest import DigestService
     from shoreguard.services.discovery import DiscoveryService
     from shoreguard.services.drift_detection import DriftDetectionService
@@ -243,6 +247,7 @@ def build_container(
         timeline=TimelineService(async_session_factory),
         fleet=FleetService(registry, gateway),
         denial_context=DenialContextService(),
+        denial_store=DenialSampleStore(async_session_factory),
         tenant=TenantService(async_session_factory, registry),
         local_gateway=(LocalGatewayManager(gateway) if settings.server.local_mode else None),
     )

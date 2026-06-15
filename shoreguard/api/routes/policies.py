@@ -232,6 +232,13 @@ async def submit_policy_analysis(
             "rejected": result["rejected_chunks"],
         },
     )
+    # Durably persist the denial corpus for policy-simulation replay (opt-in).
+    from shoreguard.settings import get_settings
+
+    if get_settings().simulator.replay_enabled:
+        await get_services().denial_store.persist_summaries(
+            get_gateway_name(request), name, body.summaries
+        )
     return result
 
 

@@ -961,6 +961,48 @@ class RateGovernorSettings(BaseSettings):
     )
 
 
+class SimulatorSettings(BaseSettings):
+    """Policy simulator (approval narrowness gate + denial replay).
+
+    The narrowness gate is a cheap, sound breadth heuristic on by default;
+    denial replay persists the inbound denial corpus and replays it against
+    a candidate policy, so it is opt-in (adds persistence + a background
+    prune).
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        narrowness_gate_enabled (bool): Annotate approval chunks with a
+            breadth assessment (badge over-broad grants).
+        replay_enabled (bool): Persist denial samples and enable
+            ``POST .../policy/simulate`` denial replay.
+        max_replay_samples (int): Cap on samples replayed per simulate call.
+        retention_days (int): Age after which persisted denial samples prune.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_SIMULATOR_")
+
+    narrowness_gate_enabled: bool = Field(
+        default=True,
+        description="Annotate pending approval chunks with a proposed-rule "
+        "breadth assessment so over-broad grants are badged for review",
+    )
+    replay_enabled: bool = Field(
+        default=False,
+        description="Persist inbound denial samples and enable denial-replay "
+        "policy simulation (opt-in — adds persistence + a prune task)",
+    )
+    max_replay_samples: int = Field(
+        default=500,
+        ge=1,
+        description="Maximum denial samples replayed per simulate call",
+    )
+    retention_days: int = Field(
+        default=30,
+        ge=1,
+        description="Age (days) after which persisted denial samples are pruned",
+    )
+
+
 class DigestSettings(BaseSettings):
     """Daily activity digest ("what did my agents do while I slept?").
 
@@ -1586,6 +1628,7 @@ class Settings(BaseSettings):
         tenant (TenantSettings): Tenant visibility scoping.
         reconciler (ReconcilerSettings): Gateway restart reconciler.
         rate_governor (RateGovernorSettings): Per-sandbox rate ceilings.
+        simulator (SimulatorSettings): Policy simulator (narrowness + replay).
         smtp (SmtpSettings): Server-wide SMTP defaults for email webhooks.
         node_alert (NodeAlertSettings): Host threshold alert evaluation.
         push (PushSettings): Web Push (PWA notification) configuration.
@@ -1619,6 +1662,7 @@ class Settings(BaseSettings):
     tenant: TenantSettings = Field(default_factory=TenantSettings)
     reconciler: ReconcilerSettings = Field(default_factory=ReconcilerSettings)
     rate_governor: RateGovernorSettings = Field(default_factory=RateGovernorSettings)
+    simulator: SimulatorSettings = Field(default_factory=SimulatorSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     node_alert: NodeAlertSettings = Field(default_factory=NodeAlertSettings)
     push: PushSettings = Field(default_factory=PushSettings)

@@ -24,6 +24,7 @@ from shoreguard.db.models.policy import (
 )
 from shoreguard.db.models.push import PushSubscription
 from shoreguard.db.models.sandbox import (
+    DenialSample,
     GatewayInventorySnapshot,
     GatewayReapRecord,
     RatePauseEntry,
@@ -43,6 +44,7 @@ __all__ = (
     "ApprovalWorkflow",
     "AuditEntry",
     "Base",
+    "DenialSample",
     "DeviceLinkCode",
     "Gateway",
     "GatewayCurfew",

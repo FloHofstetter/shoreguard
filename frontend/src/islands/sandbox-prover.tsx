@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "preact/hooks";
 
-import { GW } from "../lib/constants";
+import { apiFetch } from "../lib/api";
+import { API, GW } from "../lib/constants";
 
 interface Preset {
   query_id: string;
@@ -45,6 +46,100 @@ function verdictBorder(verdict: string): string {
   if (verdict === "VULNERABLE") return "border-danger";
   if (verdict === "TIMEOUT") return "border-warning";
   return "";
+}
+
+interface SimResult {
+  host?: string;
+  port?: number;
+  method?: string;
+  path?: string;
+  predicted_decision: string;
+}
+
+interface SimResponse {
+  results: SimResult[];
+  summary: { total: number; would_allow: number; still_deny: number };
+  best_effort: boolean;
+}
+
+/** Denial-replay simulation: replays the persisted denial corpus against the
+ *  current active policy and predicts which previously-denied requests it now
+ *  allows. Uses apiFetch (not raw fetch) so the /policy/simulate route is
+ *  covered by the surface-coverage check. */
+function DenialReplayPanel({ name }: { name: string }) {
+  const [sim, setSim] = useState<SimResponse | null>(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
+
+  const run = async () => {
+    setRunning(true);
+    setError("");
+    setSim(null);
+    try {
+      const data = await apiFetch<SimResponse>(
+        `${API}/sandboxes/${encodeURIComponent(name)}/policy/simulate`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+      );
+      setSim(data);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div class="card sg-card-themed mb-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="mb-0">
+            <i class="bi bi-arrow-repeat me-2" />
+            Denial replay (best-effort)
+          </h6>
+          <button class="btn btn-sm btn-outline-primary" disabled={running} onClick={() => void run()}>
+            {running ? "Replaying…" : "Replay denials"}
+          </button>
+        </div>
+        <p class="small text-muted mb-2">
+          Replays the recorded denial corpus against the active policy and predicts which
+          previously-blocked requests it would now allow. Best-effort — deterministic evaluation
+          may diverge from the live gateway matcher.
+        </p>
+        {error && <div class="alert alert-warning py-2 small mb-0">{error}</div>}
+        {sim && (
+          <div>
+            <div class="small mb-2">
+              <span class="badge text-bg-success me-1">{sim.summary.would_allow} would allow</span>
+              <span class="badge text-bg-secondary me-1">{sim.summary.still_deny} still deny</span>
+              <span class="text-muted">of {sim.summary.total} sampled requests</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-0">
+                <tbody>
+                  {sim.results.slice(0, 25).map((r, i) => (
+                    <tr key={i}>
+                      <td>
+                        <span
+                          class={`badge ${r.predicted_decision === "allow" ? "text-bg-success" : "text-bg-secondary"}`}
+                        >
+                          {r.predicted_decision}
+                        </span>
+                      </td>
+                      <td class="font-monospace small">
+                        {r.method} {r.host}
+                        {r.port ? `:${r.port}` : ""}
+                        {r.path}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function SandboxProverPage({ name }: { name: string }) {
@@ -127,6 +222,8 @@ export default function SandboxProverPage({ name }: { name: string }) {
           </p>
         </div>
       </div>
+
+      <DenialReplayPanel name={name} />
 
       <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">

@@ -20,12 +20,13 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from shoreguard.api.auth import require_role
-from shoreguard.api.deps import get_client, get_gateway_name
+from shoreguard.api.deps import get_client, get_gateway_name, get_services
 from shoreguard.client import ShoreGuardClient
+from shoreguard.services.audit import audit_log
 from shoreguard.services.policy import PolicyService
 
 if TYPE_CHECKING:
@@ -61,6 +62,17 @@ class VerifyRequest(BaseModel):
     """
 
     queries: list[VerifyQueryItem] = Field(min_length=1, max_length=10)
+
+
+class SimulateRequest(BaseModel):
+    """Request body for POST /policy/simulate.
+
+    Attributes:
+        candidate_policy (dict | None): Candidate policy to replay against;
+            ``None`` uses the sandbox's current active policy.
+    """
+
+    candidate_policy: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +155,108 @@ async def verify_policy(
 
     return {
         "results": results,
+        "total_time_ms": round(total_ms, 2),
+    }
+
+
+@router.post(
+    "/{name}/policy/simulate",
+    dependencies=[Depends(require_role("viewer"))],
+    response_model=None,
+)
+async def simulate_policy(
+    name: str,
+    body: SimulateRequest,
+    request: Request,
+    gw: str = Depends(get_gateway_name),
+    policy_svc: PolicyService = Depends(_get_policy_service),
+) -> dict[str, Any]:
+    """Replay the persisted denial corpus against a candidate policy.
+
+    Best-effort denial replay: for each previously-denied request, predicts
+    whether the candidate policy (or the current active policy when none is
+    supplied) would now allow it. ``allow`` means the candidate would unblock
+    that request; ``deny`` means it stays blocked. Deterministic Z3 evaluation
+    that may diverge from the live gateway matcher — labelled best-effort.
+
+    Args:
+        name: Sandbox name.
+        body: Simulate request with an optional candidate policy.
+        request: Incoming HTTP request (for audit).
+        gw: Gateway name from URL path.
+        policy_svc: Injected PolicyService.
+
+    Returns:
+        dict[str, Any]: ``{results, summary, best_effort: true}``.
+
+    Raises:
+        HTTPException: 503 if denial replay (or the prover) is disabled.
+    """
+    import time
+
+    from shoreguard.settings import get_settings
+
+    settings = get_settings()
+    if not settings.simulator.replay_enabled:
+        raise HTTPException(503, "Denial replay is disabled (SHOREGUARD_SIMULATOR_REPLAY_ENABLED)")
+    prover_svc = _get_prover_service()
+
+    policy = body.candidate_policy
+    if policy is None:
+        policy_data = await policy_svc.get(name)
+        policy = policy_data.get("policy", {})
+
+    samples = await get_services().denial_store.list_for_sandbox(
+        gw, name, limit=settings.simulator.max_replay_samples
+    )
+    # Expand each denial sample into concrete (host, port, method, path) requests.
+    requests: list[dict[str, Any]] = []
+    for s in samples:
+        l7 = s.get("l7") or []
+        if l7:
+            for entry in l7:
+                requests.append(
+                    {
+                        "binary": s["binary"],
+                        "host": s["host"],
+                        "port": s["port"],
+                        "method": entry.get("method", ""),
+                        "path": entry.get("path", ""),
+                    }
+                )
+        else:
+            requests.append(
+                {
+                    "binary": s["binary"],
+                    "host": s["host"],
+                    "port": s["port"],
+                    "method": "",
+                    "path": "",
+                }
+            )
+
+    t0 = time.perf_counter()
+    results = await asyncio.to_thread(prover_svc.replay_denials, policy, requests)
+    total_ms = (time.perf_counter() - t0) * 1000
+
+    would_allow = sum(1 for r in results if r["predicted_decision"] == "allow")
+    still_deny = sum(1 for r in results if r["predicted_decision"] == "deny")
+    await audit_log(
+        request,
+        "policy.simulate",
+        "policy",
+        name,
+        gateway=gw,
+        detail={"samples": len(requests), "would_allow": would_allow, "still_deny": still_deny},
+    )
+    return {
+        "results": results,
+        "summary": {
+            "total": len(requests),
+            "would_allow": would_allow,
+            "still_deny": still_deny,
+        },
+        "best_effort": True,
         "total_time_ms": round(total_ms, 2),
     }
 

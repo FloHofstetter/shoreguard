@@ -66,6 +66,20 @@ sandbox, so these are squarely the control plane's job.
   fleet-wide `/api/rate-governor/paused`, plus a sandbox-detail UI card. Off by default
   even in local mode (`SHOREGUARD_RATEGOV_ENABLED`); per-agent == per-sandbox, and
   "requests" remain proxy log lines, not tokens (`feat(rate-governor)`).
+- **Policy Simulator — narrowness gate + best-effort denial replay.** Policy authoring
+  is trial-and-error and approval chunks often propose a grant far broader than the
+  denial that prompted it. (1) A **narrowness gate** annotates each pending approval
+  chunk with a proposed-rule breadth assessment and badges over-broad grants (`**`
+  host/path) in the approval inbox — a sound, side-effect-free breadth heuristic, on by
+  default (`SHOREGUARD_SIMULATOR_NARROWNESS_GATE_ENABLED`). It deliberately does **not**
+  re-implement the in-progress upstream server-side narrowness scorer
+  ([#1840](https://github.com/NVIDIA/OpenShell/issues/1840)) nor auto-route to quorum —
+  it flags only. (2) **Denial replay** (opt-in, `SHOREGUARD_SIMULATOR_REPLAY_ENABLED`)
+  persists the inbound denial corpus (`denial_samples`, migration 113) — the live cache
+  is in-memory and volatile — and a new `POST /api/gateways/{gw}/sandboxes/{name}/policy/simulate`
+  replays it against a candidate (or the active) policy via the existing Z3 encoders,
+  predicting which previously-blocked requests it would now allow. Labelled **best-effort**:
+  deterministic evaluation that may diverge from the live gateway matcher (`feat(prover)`).
 
 ## [0.39.0] — 2026-06-13
 

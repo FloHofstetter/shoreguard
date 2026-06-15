@@ -46,10 +46,15 @@ class ApprovalService:
         result = await self._client.approvals.get_draft(sandbox_name, status_filter=status_filter)
 
         from shoreguard.container import try_get_container
+        from shoreguard.services.policy_simulator import annotate_narrowness
+        from shoreguard.settings import get_settings
 
         container = try_get_container()
+        chunks = result.get("chunks", [])
         if container is not None:
-            container.denial_context.enrich_chunks(sandbox_name, result.get("chunks", []))
+            container.denial_context.enrich_chunks(sandbox_name, chunks)
+        if get_settings().simulator.narrowness_gate_enabled:
+            annotate_narrowness(chunks)
 
         return result
 
@@ -65,10 +70,14 @@ class ApprovalService:
         chunks = await self._client.approvals.get_pending(sandbox_name)
 
         from shoreguard.container import try_get_container
+        from shoreguard.services.policy_simulator import annotate_narrowness
+        from shoreguard.settings import get_settings
 
         container = try_get_container()
         if container is not None:
             container.denial_context.enrich_chunks(sandbox_name, chunks)
+        if get_settings().simulator.narrowness_gate_enabled:
+            annotate_narrowness(chunks)
 
         return chunks
 
