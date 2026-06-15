@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 from types import SimpleNamespace
+from typing import Any
 
 from shoreguard.api import auth
 from shoreguard.api.auth.rbac import scoped_gateway_names
@@ -14,7 +15,8 @@ def _now() -> datetime.datetime:
     return datetime.datetime.now(datetime.UTC)
 
 
-def _request(*, role: str | None, user_db_id: int | None) -> SimpleNamespace:
+def _request(*, role: str | None, user_db_id: int | None) -> Any:
+    """Build a minimal stand-in for a Starlette Request with .state."""
     return SimpleNamespace(state=SimpleNamespace(role=role, user_db_id=user_db_id))
 
 

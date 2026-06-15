@@ -74,12 +74,16 @@ async def setup():
 async def _set_usage(factory, requests: int) -> None:
     async with factory() as session:
         row = (
-            await session.execute(
-                select(SandboxUsage).where(
-                    SandboxUsage.gateway == "gw1", SandboxUsage.sandbox == "agent-a"
+            (
+                await session.execute(
+                    select(SandboxUsage).where(
+                        SandboxUsage.gateway == "gw1", SandboxUsage.sandbox == "agent-a"
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if row is None:
             session.add(
                 SandboxUsage(gateway="gw1", sandbox="agent-a", day="2026-06-13", requests=requests)

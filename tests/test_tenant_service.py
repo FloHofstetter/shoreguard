@@ -25,9 +25,7 @@ async def _seed(container, *, gateways: list[str], users: list[str]) -> dict[str
         for email in users:
             from sqlalchemy import select
 
-            uid = (
-                await session.execute(select(User.id).where(User.email == email))
-            ).scalar_one()
+            uid = (await session.execute(select(User.id).where(User.email == email))).scalar_one()
             ids[email] = uid
     return ids
 
