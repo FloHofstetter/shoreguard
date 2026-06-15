@@ -303,6 +303,147 @@ function BudgetCard({ name }: { name: string }) {
   );
 }
 
+interface RateLimitInfo {
+  max_requests: number;
+  window_seconds: number;
+  enabled: boolean;
+}
+
+interface RateStatus {
+  rate_limit: RateLimitInfo | null;
+  paused: boolean;
+  resume_after: string | null;
+}
+
+function RateGovernorCard({ name }: { name: string }) {
+  const [status, setStatus] = useState<RateStatus | null>(null);
+  const [enabled, setEnabled] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [maxReq, setMaxReq] = useState(60);
+  const [windowSec, setWindowSec] = useState(60);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    void apiFetch<RateStatus>(`${API}/sandboxes/${name}/rate-status`)
+      .then(setStatus)
+      .catch(() => setStatus(null));
+    void apiFetch<{ enabled: boolean }>(`${API}/sandboxes/${name}/rate-limit`)
+      .then((r) => setEnabled(r.enabled))
+      .catch(() => undefined);
+  };
+  useEffect(load, [name]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await apiFetch(`${API}/sandboxes/${name}/rate-limit`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ max_requests: maxReq, window_seconds: windowSec }),
+      });
+      showToast("Rate limit saved", "success");
+      setEditing(false);
+      load();
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    const ok = await showConfirm("Remove the rate limit for this sandbox?", {
+      icon: "trash",
+      iconColor: "text-danger",
+      btnClass: "btn-danger",
+      btnLabel: "Remove",
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await apiFetch(`${API}/sandboxes/${name}/rate-limit`, { method: "DELETE" });
+      showToast("Rate limit removed", "success");
+      load();
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!status) return null;
+  const rl = status.rate_limit;
+
+  return (
+    <fieldset class="sg-fieldset mb-4">
+      <legend class="sg-legend">Rate governor</legend>
+      {!enabled && (
+        <div class="text-muted small mb-2">
+          <i class="bi bi-info-circle me-1" />
+          The rate governor is off — set <code>SHOREGUARD_RATEGOV_ENABLED=true</code> to enforce
+          per-sandbox rate ceilings with a reversible soft-pause.
+        </div>
+      )}
+      <div class="d-flex flex-wrap align-items-center gap-3">
+        {status.paused && (
+          <span class="badge text-bg-warning">
+            <i class="bi bi-pause-circle me-1" />
+            soft-paused{status.resume_after ? ` until ${new Date(status.resume_after).toLocaleTimeString()}` : ""}
+          </span>
+        )}
+        {rl ? (
+          <>
+            <span class="small">
+              Ceiling: <strong>{rl.max_requests}</strong> requests /{" "}
+              <strong>{rl.window_seconds}s</strong>
+              {rl.enabled ? "" : " (disabled)"}
+            </span>
+            <button
+              class="btn btn-sm btn-outline-danger"
+              disabled={busy}
+              onClick={() => void remove()}
+            >
+              Remove
+            </button>
+          </>
+        ) : editing ? (
+          <span class="d-flex align-items-center gap-2">
+            <input
+              type="number"
+              class="form-control form-control-sm"
+              style={{ width: "90px" }}
+              min={1}
+              value={maxReq}
+              onInput={(e) => setMaxReq(Number((e.target as HTMLInputElement).value))}
+            />
+            <span class="small">requests /</span>
+            <input
+              type="number"
+              class="form-control form-control-sm"
+              style={{ width: "90px" }}
+              min={1}
+              value={windowSec}
+              onInput={(e) => setWindowSec(Number((e.target as HTMLInputElement).value))}
+            />
+            <span class="small">seconds</span>
+            <button class="btn btn-sm btn-success" disabled={busy} onClick={() => void save()}>
+              Save
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button class="btn btn-sm btn-outline-primary" onClick={() => setEditing(true)}>
+            <i class="bi bi-speedometer2 me-1" />
+            Set rate limit
+          </button>
+        )}
+      </div>
+    </fieldset>
+  );
+}
+
 export default function SandboxDetailPage({ name }: { name: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -596,6 +737,7 @@ export default function SandboxDetailPage({ name }: { name: string }) {
       </div>
 
       <BudgetCard name={name} />
+      <RateGovernorCard name={name} />
 
       <TimelineCard name={name} />
 

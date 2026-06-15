@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
     from shoreguard.services.policy_pin import PolicyPinService
     from shoreguard.services.push import PushService
+    from shoreguard.services.rate_governor import RateGovernorService
     from shoreguard.services.registry import GatewayRegistry
     from shoreguard.services.sandbox_meta import SandboxMetaStore
     from shoreguard.services.sbom import SBOMService
@@ -80,6 +81,7 @@ class ServiceContainer:
         curfew: Quiet-hours schedules driving the kill switch.
         digest: Daily activity digest builder/dispatcher.
         budget: Inference usage metering and per-sandbox budgets.
+        rate_governor: Per-sandbox rate ceilings with a reversible soft-pause.
         node_stats: Host resource stats for the ShoreGuard machine.
         node_alerts: Threshold alerts over the host node-stats sample.
         push: Web Push subscriptions and delivery (PWA notifications).
@@ -113,6 +115,7 @@ class ServiceContainer:
     curfew: CurfewService
     digest: DigestService
     budget: BudgetService
+    rate_governor: RateGovernorService
     node_stats: NodeStatsService
     node_alerts: NodeAlertService
     push: PushService
@@ -164,6 +167,7 @@ def build_container(
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
     from shoreguard.services.policy_pin import PolicyPinService
     from shoreguard.services.push import PushService
+    from shoreguard.services.rate_governor import RateGovernorService
     from shoreguard.services.registry import GatewayRegistry
     from shoreguard.services.sandbox_meta import SandboxMetaStore
     from shoreguard.services.sbom import SBOMService
@@ -229,6 +233,9 @@ def build_container(
         curfew=CurfewService(async_session_factory, kill_switch),
         digest=DigestService(async_session_factory, registry, budget_service),
         budget=budget_service,
+        rate_governor=RateGovernorService(
+            async_session_factory, gateway, registry, settings.rate_governor
+        ),
         node_stats=node_stats,
         node_alerts=NodeAlertService(node_stats, settings.node_alert),
         push=PushService(async_session_factory, settings.push),

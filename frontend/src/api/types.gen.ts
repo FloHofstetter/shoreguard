@@ -1902,6 +1902,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/gateways/{gw}/sandboxes/{name}/rate-limit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Rate Limit
+         * @description Return the rate limit configured for a sandbox (or null).
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Sandbox name.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"rate_limit": {...} | None, "enabled": bool}``.
+         */
+        get: operations["get_rate_limit_api_gateways__gw__sandboxes__name__rate_limit_get"];
+        /**
+         * Put Rate Limit
+         * @description Create or update a sandbox rate limit.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Sandbox name.
+         *         body: Rate-limit parameters.
+         *
+         *     Returns:
+         *         dict[str, Any]: The saved rate-limit record.
+         *
+         *     Raises:
+         *         HTTPException: 400 on invalid parameters.
+         */
+        put: operations["put_rate_limit_api_gateways__gw__sandboxes__name__rate_limit_put"];
+        post?: never;
+        /**
+         * Delete Rate Limit
+         * @description Remove a sandbox rate limit.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Sandbox name.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"deleted": bool}``.
+         */
+        delete: operations["delete_rate_limit_api_gateways__gw__sandboxes__name__rate_limit_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/gateways/{gw}/sandboxes/{name}/rate-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Rate Status
+         * @description Return the rate limit plus current soft-pause state for a sandbox.
+         *
+         *     Args:
+         *         request: Incoming HTTP request.
+         *         name: Sandbox name.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"rate_limit", "paused", "resume_after"}``.
+         */
+        get: operations["get_rate_status_api_gateways__gw__sandboxes__name__rate_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/gateways/{gw}/providers/types": {
         parameters: {
             query?: never;
@@ -3997,6 +4077,29 @@ export interface paths {
          *         dict[str, Any]: ``{"restart_safe_min_version", "at_risk_gateways"}``.
          */
         get: operations["at_risk_gateways_api_reconciler_at_risk_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rate-governor/paused": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Paused
+         * @description Return all active rate-governor soft-pauses across the fleet.
+         *
+         *     Returns:
+         *         dict[str, Any]: ``{"items": [...]}``.
+         */
+        get: operations["list_paused_api_rate_governor_paused_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8303,6 +8406,29 @@ export interface components {
             keys: components["schemas"]["PushKeys"];
         };
         /**
+         * RateLimitRequest
+         * @description Rate-limit upsert payload.
+         *
+         *     Attributes:
+         *         max_requests: Inference request ceiling within the window.
+         *         window_seconds: Tumbling window length in seconds.
+         *         enabled: Whether the governor evaluates this limit.
+         */
+        RateLimitRequest: {
+            /** Max Requests */
+            max_requests: number;
+            /**
+             * Window Seconds
+             * @default 60
+             */
+            window_seconds: number;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /**
          * RedeemRequest
          * @description Request body for the phone's redeem poll.
          *
@@ -11563,6 +11689,146 @@ export interface operations {
             };
         };
     };
+    get_rate_limit_api_gateways__gw__sandboxes__name__rate_limit_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_rate_limit_api_gateways__gw__sandboxes__name__rate_limit_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RateLimitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_rate_limit_api_gateways__gw__sandboxes__name__rate_limit_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_rate_status_api_gateways__gw__sandboxes__name__rate_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                gw: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_provider_types_api_gateways__gw__providers_types_get: {
         parameters: {
             query?: never;
@@ -14295,6 +14561,28 @@ export interface operations {
         };
     };
     at_risk_gateways_api_reconciler_at_risk_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    list_paused_api_rate_governor_paused_get: {
         parameters: {
             query?: never;
             header?: never;

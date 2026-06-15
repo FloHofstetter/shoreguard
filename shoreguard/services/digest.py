@@ -20,7 +20,13 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
-from shoreguard.models import AuditEntry, GatewayReapRecord, KillSwitchEntry, WebhookDelivery
+from shoreguard.models import (
+    AuditEntry,
+    GatewayReapRecord,
+    KillSwitchEntry,
+    RatePauseEntry,
+    WebhookDelivery,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -108,6 +114,10 @@ class DigestService:
             reaped_by_gateway = {
                 str(g): int(c) for g, c in (await session.execute(reap_stmt)).all()
             }
+            pause_stmt = select(func.count()).select_from(RatePauseEntry)
+            if scope is not None:
+                pause_stmt = pause_stmt.where(RatePauseEntry.gateway.in_(scope))
+            rate_paused = (await session.execute(pause_stmt)).scalar_one()
 
         try:
             gateways = await self._registry.list_all()
@@ -150,6 +160,7 @@ class DigestService:
                 "total": sum(reaped_by_gateway.values()),
                 "by_gateway": reaped_by_gateway,
             },
+            "rate_paused": int(rate_paused),
         }
         digest["spending"] = await self._spending(scope)
         digest["message"] = self._summary_line(digest)
@@ -211,6 +222,8 @@ class DigestService:
         reaped_total = (digest.get("reaped") or {}).get("total", 0)
         if reaped_total:
             parts.append(f"⚠ {reaped_total} sandbox(es) reaped on restart")
+        if digest.get("rate_paused"):
+            parts.append(f"⚠ {digest['rate_paused']} rate-paused")
         if digest["webhook_failures"]:
             parts.append(f"{digest['webhook_failures']} webhook failures")
         if digest["audit"]["forbidden"]:

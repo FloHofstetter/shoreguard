@@ -183,6 +183,73 @@ class SandboxUsage(Base):
     requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+class SandboxRateLimit(Base):
+    """Per-sandbox inference request-rate ceiling for the rate governor.
+
+    The governor evaluates metered request counts against ``max_requests``
+    per a tumbling ``window_seconds`` window; exceeding it trips a reversible
+    soft-pause (see :class:`RatePauseEntry`). The window state lives on this
+    row so no extra cursor table is needed; it resets when the limit is
+    reconfigured or after an auto-resume.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name the sandbox lives on.
+        sandbox: Sandbox name (unique per gateway).
+        max_requests: Inference request ceiling within the window.
+        window_seconds: Tumbling window length in seconds.
+        enabled: Whether the governor evaluates this limit.
+        window_started_at: Start of the current tumbling window, or ``None``.
+        window_count_start: Cumulative metered count at the window start.
+        created_at: When the limit was created.
+        updated_at: When the limit was last changed.
+    """
+
+    __tablename__ = "sandbox_rate_limits"
+    __table_args__ = (UniqueConstraint("gateway", "sandbox", name="uq_sandbox_rate_limit"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
+    max_requests: Mapped[int] = mapped_column(Integer, nullable=False)
+    window_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    window_started_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    window_count_start: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RatePauseEntry(Base):
+    """A reversible soft-pause engaged by the rate governor.
+
+    Distinct from :class:`KillSwitchEntry` on purpose: the kill switch raises
+    on collision and its resume re-attaches everything, so the governor owns
+    its own table, skips any sandbox already kill-switched, and persists only
+    the providers it itself detached so auto-resume re-attaches exactly that.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name the sandbox lives on.
+        sandbox: Sandbox name (unique per gateway).
+        providers_json: JSON list of the providers the governor detached.
+        paused_at: When the soft-pause was engaged.
+        resume_after: When the cooldown elapses and auto-resume may re-attach.
+        reason: Why it paused (e.g. ``rate_governor``).
+    """
+
+    __tablename__ = "rate_pause_entries"
+    __table_args__ = (UniqueConstraint("gateway", "sandbox", name="uq_rate_pause"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False, index=True)
+    sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
+    providers_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    paused_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resume_after: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False, default="rate_governor")
+
+
 class GatewayInventorySnapshot(Base):
     """A point-in-time snapshot of a gateway's sandboxes and attachments.
 

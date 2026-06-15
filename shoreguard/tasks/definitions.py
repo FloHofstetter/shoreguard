@@ -170,6 +170,20 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
                 run=_backup,
             )
         )
+    if settings.rate_governor.enabled:
+
+        async def _rate_governor() -> None:
+            result = await container.rate_governor.run_once()
+            if result["paused"] or result["resumed"]:
+                logger.info("Rate governor: %s", result)
+
+        tasks.append(
+            PeriodicTask(
+                name="rate_governor",
+                interval=settings.rate_governor.check_interval,
+                run=_rate_governor,
+            )
+        )
     if settings.curfew.enabled:
 
         async def _curfew() -> None:

@@ -249,8 +249,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         provider_profiles,
         providers,
         push,
-        sandboxes,
+        rate_governor,
         reconciler,
+        sandboxes,
         sbom,
         security,
         services,
@@ -322,6 +323,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     gw_api.include_router(sbom.router, prefix="/sandboxes", tags=["sbom"])
     gw_api.include_router(boot_hooks.router, prefix="/sandboxes", tags=["boot_hooks"])
     gw_api.include_router(budgets.router, prefix="/sandboxes", tags=["budgets"])
+    gw_api.include_router(rate_governor.router, prefix="/sandboxes", tags=["rate-governor"])
     gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
     gw_api.include_router(
         provider_profiles.router, prefix="/provider-profiles", tags=["provider-profiles"]
@@ -388,6 +390,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         reconciler.summary_router,
         prefix="/api/reconciler",
         tags=["reconciler"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        rate_governor.summary_router,
+        prefix="/api/rate-governor",
+        tags=["rate-governor"],
         dependencies=[Depends(require_auth)],
     )
     app.include_router(

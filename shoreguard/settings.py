@@ -919,6 +919,48 @@ class ReconcilerSettings(BaseSettings):
     )
 
 
+class RateGovernorSettings(BaseSettings):
+    """Per-sandbox inference rate ceilings with a reversible soft-pause.
+
+    Sits between budgets and the hard kill switch: when a sandbox exceeds
+    its request-rate ceiling the governor detaches its providers into a
+    separate pause table and auto-resumes after a cooldown. Off by default
+    even in local mode — auto-pausing a solo developer's own agents is
+    surprising.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Run the rate-governor background task.
+        check_interval (int): Seconds between governor evaluations.
+        default_window_seconds (int): Default tumbling window for new limits.
+        cooldown_seconds (int): How long a soft-pause lasts before auto-resume.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_RATEGOV_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Evaluate per-sandbox request-rate ceilings and engage a "
+        "reversible soft-pause when exceeded (off by default — even in local "
+        "mode — since auto-pausing your own agents is surprising)",
+    )
+    check_interval: int = Field(
+        default=60,
+        ge=10,
+        description="Seconds between rate-governor evaluations",
+    )
+    default_window_seconds: int = Field(
+        default=60,
+        ge=1,
+        description="Default tumbling window (seconds) for a new rate limit",
+    )
+    cooldown_seconds: int = Field(
+        default=300,
+        ge=1,
+        description="How long a soft-pause lasts before auto-resume",
+    )
+
+
 class DigestSettings(BaseSettings):
     """Daily activity digest ("what did my agents do while I slept?").
 
@@ -1543,6 +1585,7 @@ class Settings(BaseSettings):
         pricing (PricingSettings): Estimated-dollar overlay over request counts.
         tenant (TenantSettings): Tenant visibility scoping.
         reconciler (ReconcilerSettings): Gateway restart reconciler.
+        rate_governor (RateGovernorSettings): Per-sandbox rate ceilings.
         smtp (SmtpSettings): Server-wide SMTP defaults for email webhooks.
         node_alert (NodeAlertSettings): Host threshold alert evaluation.
         push (PushSettings): Web Push (PWA notification) configuration.
@@ -1575,6 +1618,7 @@ class Settings(BaseSettings):
     pricing: PricingSettings = Field(default_factory=PricingSettings)
     tenant: TenantSettings = Field(default_factory=TenantSettings)
     reconciler: ReconcilerSettings = Field(default_factory=ReconcilerSettings)
+    rate_governor: RateGovernorSettings = Field(default_factory=RateGovernorSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     node_alert: NodeAlertSettings = Field(default_factory=NodeAlertSettings)
     push: PushSettings = Field(default_factory=PushSettings)

@@ -52,6 +52,20 @@ sandbox, so these are squarely the control plane's job.
   `/api/reconciler/{recent,at-risk}`; snapshots/reaps are pruned by the cleanup task.
   Surfacing/diagnosing only — never self-healing the host daemon, and honestly
   time-decaying as upstream ships restart-safe state (`feat(reconciler)`).
+- **Spend Governor stage 2 — per-sandbox rate ceilings with a reversible soft-pause.**
+  OpenShell has only a gateway-wide limiter, so one OpenClaw-style retry/parallel storm
+  can exhaust a shared provider key with only the hard kill switch to stop it. A
+  per-sandbox request-rate ceiling (`max_requests` per a tumbling `window_seconds`,
+  evaluated from the metered counts — no second log poll) now trips a **reversible
+  soft-pause**: it detaches the sandbox's providers like the kill switch but into its
+  own `rate_pause_entries` table with an auto-resume cooldown, sitting between budgets
+  and the hard kill switch. It writes its own table (never `KillSwitchEntry`) and
+  **skips any sandbox already kill-switched**, re-attaching only what it detached. New
+  `rate.paused`/`rate.resumed` webhook events, a digest "rate-paused" line, per-sandbox
+  rate-limit CRUD at `/api/gateways/{gw}/sandboxes/{name}/rate-{limit,status}` and a
+  fleet-wide `/api/rate-governor/paused`, plus a sandbox-detail UI card. Off by default
+  even in local mode (`SHOREGUARD_RATEGOV_ENABLED`); per-agent == per-sandbox, and
+  "requests" remain proxy log lines, not tokens (`feat(rate-governor)`).
 
 ## [0.39.0] — 2026-06-13
 
