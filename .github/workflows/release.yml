@@ -24,7 +24,7 @@ jobs:
     needs: ci
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Extract version from tag
         id: version
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # The wheel force-includes the compiled island bundle (frontend/dist),
       # a git-ignored Vite artifact — build it before uv build.
@@ -145,7 +145,7 @@ jobs:
     permissions:
       contents: write  # needed to create releases
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Extract version from tag
         id: version
