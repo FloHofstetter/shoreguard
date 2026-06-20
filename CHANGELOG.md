@@ -5,7 +5,14 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.40.0] — 2026-06-20
+
+> **Compatibility:** no new gateway requirement — these features reuse existing
+> OpenShell RPCs and add no new upstream surface, so the same **OpenShell
+> `v0.0.57`+** as 0.39.0 applies. The ShoreGuard database upgrades in place via the
+> embedded migrations `109`–`113` on startup; no manual step. Every new behavior is
+> off unless its `SHOREGUARD_*` flag is set (the rate governor and denial replay are
+> off even in `--local`).
 
 A control-plane response to where OpenShell users feel the most pain (deep-research
 driven): runaway inference spend with no native visibility, no per-agent throttle,
@@ -80,6 +87,14 @@ sandbox, so these are squarely the control plane's job.
   replays it against a candidate (or the active) policy via the existing Z3 encoders,
   predicting which previously-blocked requests it would now allow. Labelled **best-effort**:
   deterministic evaluation that may diverge from the live gateway matcher (`feat(prover)`).
+
+### Security
+
+- **Raised security floors for four transitive dependencies** flagged by `pip-audit`:
+  `cryptography` (→ 49.0.0, GHSA-537c-gmf6-5ccf), `starlette` (→ 1.3.1,
+  CVE-2026-54282 / CVE-2026-54283), `msgpack` (→ 1.2.1, GHSA-6v7p-g79w-8964), and
+  `pydantic-settings` (→ 2.14.2, GHSA-4xgf-cpjx-pc3j). No API impact; the full suite
+  passes against the bumped versions (`fix(deps)`).
 
 ## [0.39.0] — 2026-06-13
 

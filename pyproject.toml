@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "shoreguard"
-version = "0.39.0"
+version = "0.40.0"
 description = "Open source control plane for NVIDIA OpenShell"
 license = "Apache-2.0"
 readme = "README.md"
@@ -39,7 +39,7 @@ dependencies = [
     "aiosmtplib>=3.0",
     "httpx>=0.28",
     "aiosqlite>=0.22.1",
-    "pydantic-settings>=2.0",
+    "pydantic-settings>=2.14.2",
     "PyJWT[crypto]>=2.13",
     "z3-solver>=4.13",
     "dnspython>=2.6",
@@ -52,6 +52,13 @@ dependencies = [
     "paho-mqtt>=2.1.0",
     "pywebpush>=2.3.0",
     "webauthn>=2.7.1",
+    # Security floors for transitive deps with published CVEs (pip-audit gate).
+    # Pulled in via fastapi (starlette), PyJWT[crypto]/webauthn (cryptography),
+    # and pywebpush (msgpack); pinned here so resolution can't drift back below
+    # the fix. Drop once the parents raise their own floors past these.
+    "cryptography>=48.0.1",  # GHSA-537c-gmf6-5ccf
+    "msgpack>=1.2.1",  # GHSA-6v7p-g79w-8964
+    "starlette>=1.3.1",  # CVE-2026-54282, CVE-2026-54283
 ]
 
 [dependency-groups]
