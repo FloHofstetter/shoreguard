@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v*"
+  # Dispatched by auto-tag.yml against the freshly-created tag ref: a tag pushed
+  # with GITHUB_TOKEN does not fire the `push: tags` trigger above (GitHub
+  # suppresses recursive runs), but an explicit workflow_dispatch is exempt.
+  # Dispatch with `--ref vX.Y.Z` so github.ref_name resolves to the tag.
+  workflow_dispatch:
 
 permissions:
   contents: read

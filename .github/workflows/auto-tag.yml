@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write  # dispatch release.yml after tagging
 
 jobs:
   auto-tag:
@@ -61,10 +62,11 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create and push tag
+      - name: Create and push tag, then dispatch the release pipeline
         if: steps.check.outputs.exists == 'false'
         env:
           VERSION: ${{ steps.parse.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="v$VERSION"
@@ -72,4 +74,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$tag" -m "Release $tag"
           git push origin "$tag"
-          echo "Pushed $tag — release.yml will now take over"
+          # A tag pushed with GITHUB_TOKEN does NOT fire release.yml's
+          # `on: push: tags` trigger — GitHub suppresses runs triggered by the
+          # token to prevent recursion. Dispatch it explicitly against the tag
+          # ref instead (workflow_dispatch via GITHUB_TOKEN is exempt), so
+          # github.ref_name resolves to the tag and the release actually runs.
+          gh workflow run release.yml --ref "$tag"
+          echo "Pushed $tag and dispatched release.yml against it"
