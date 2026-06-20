@@ -5,6 +5,82 @@ All notable changes to Shoreguard are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+A control-plane response to where OpenShell users feel the most pain (deep-research
+driven): runaway inference spend with no native visibility, no per-agent throttle,
+no cross-gateway tenant boundary, trial-and-error policy authoring, and silent
+gateway-restart blast radius. ShoreGuard already holds the keys and meters every
+sandbox, so these are squarely the control plane's job.
+
+### Added
+
+- **Estimated-dollar cost overlay for inference spend (Spend Governor, stage 1).**
+  OpenShell logs security events but not tokens or dollars, and its L7 proxy strips
+  usage metadata — so despite repeated $300–1,300/mo runaway-spend reports, operators
+  had no spend figure at all. ShoreGuard already meters per-sandbox inference
+  *request counts*; a new `SHOREGUARD_PRICING_*` price table (a per-provider-type or
+  flat per-request rate) turns those counts into an **estimated** dollar amount,
+  surfaced in the dashboard top-spenders table, the sandbox usage card, and the daily
+  digest. A budget can now be set as a dollar ceiling (`limit_usd`) instead of a
+  request count, taking precedence when both are present. Honestly labelled
+  "estimated": there is no token-accurate cost until an upstream usage RPC lands. On
+  by default in `--local` mode unless `SHOREGUARD_PRICING_ENABLED` is set explicitly
+  (`feat(budgets)`).
+- **Tenants — a gateway-grouped visibility boundary.** OpenShell is single-operator
+  with no tenant model and no per-tenant observability (its maintainers' #1 enterprise
+  gap), and ShoreGuard itself showed the whole fleet to every user. A tenant groups
+  gateways and users; a non-admin user assigned to tenants now sees only their tenants'
+  gateways in the gateway list, fleet overview, and on-demand digest, with a per-tenant
+  spend/health rollup. This is a **visibility boundary only** — never data-plane
+  namespace/quota/GPU isolation (that stays OpenShell's job). Admins, the `--no-auth`
+  bypass, and users in no tenant always see the full fleet (fail-open); a transient DB
+  error fails closed (503). Every identity-free background loop (metering, health,
+  drift, discovery, cert rotation, metrics, `/readyz`) and the pushed daily digest stay
+  fleet-wide; the audit hash chain stays global. Admin CRUD at `/api/tenants` and a new
+  Tenants admin page; gated by `SHOREGUARD_TENANT_ENABLED` (`feat(tenants)`).
+- **Gateway restart reconciler — surface the blast radius.** A gateway/Docker
+  restart destroys all sandboxes and is the highest-engagement reliability pain in
+  the OpenShell community; ShoreGuard can't prevent it (it's data-plane), but it now
+  *surfaces* it. The health loop snapshots each gateway's sandboxes + provider
+  attachments on every successful probe, and on an `unreachable → recovered`
+  transition diffs the last pre-down snapshot against a fresh one and fires a
+  `gateway.sandboxes_reaped` webhook (with the reaped sandboxes + lost attachments),
+  also summed into the daily digest. An "at risk on restart" dashboard badge flags
+  gateways whose OpenShell version is below `SHOREGUARD_RECONCILER_RESTART_SAFE_MIN_VERSION`.
+  Read APIs at `/api/gateways/{gw}/reconciler/{reaps,inventory}` and a fleet-wide
+  `/api/reconciler/{recent,at-risk}`; snapshots/reaps are pruned by the cleanup task.
+  Surfacing/diagnosing only — never self-healing the host daemon, and honestly
+  time-decaying as upstream ships restart-safe state (`feat(reconciler)`).
+- **Spend Governor stage 2 — per-sandbox rate ceilings with a reversible soft-pause.**
+  OpenShell has only a gateway-wide limiter, so one OpenClaw-style retry/parallel storm
+  can exhaust a shared provider key with only the hard kill switch to stop it. A
+  per-sandbox request-rate ceiling (`max_requests` per a tumbling `window_seconds`,
+  evaluated from the metered counts — no second log poll) now trips a **reversible
+  soft-pause**: it detaches the sandbox's providers like the kill switch but into its
+  own `rate_pause_entries` table with an auto-resume cooldown, sitting between budgets
+  and the hard kill switch. It writes its own table (never `KillSwitchEntry`) and
+  **skips any sandbox already kill-switched**, re-attaching only what it detached. New
+  `rate.paused`/`rate.resumed` webhook events, a digest "rate-paused" line, per-sandbox
+  rate-limit CRUD at `/api/gateways/{gw}/sandboxes/{name}/rate-{limit,status}` and a
+  fleet-wide `/api/rate-governor/paused`, plus a sandbox-detail UI card. Off by default
+  even in local mode (`SHOREGUARD_RATEGOV_ENABLED`); per-agent == per-sandbox, and
+  "requests" remain proxy log lines, not tokens (`feat(rate-governor)`).
+- **Policy Simulator — narrowness gate + best-effort denial replay.** Policy authoring
+  is trial-and-error and approval chunks often propose a grant far broader than the
+  denial that prompted it. (1) A **narrowness gate** annotates each pending approval
+  chunk with a proposed-rule breadth assessment and badges over-broad grants (`**`
+  host/path) in the approval inbox — a sound, side-effect-free breadth heuristic, on by
+  default (`SHOREGUARD_SIMULATOR_NARROWNESS_GATE_ENABLED`). It deliberately does **not**
+  re-implement the in-progress upstream server-side narrowness scorer
+  ([#1840](https://github.com/NVIDIA/OpenShell/issues/1840)) nor auto-route to quorum —
+  it flags only. (2) **Denial replay** (opt-in, `SHOREGUARD_SIMULATOR_REPLAY_ENABLED`)
+  persists the inbound denial corpus (`denial_samples`, migration 113) — the live cache
+  is in-memory and volatile — and a new `POST /api/gateways/{gw}/sandboxes/{name}/policy/simulate`
+  replays it against a candidate (or the active) policy via the existing Z3 encoders,
+  predicting which previously-blocked requests it would now allow. Labelled **best-effort**:
+  deterministic evaluation that may diverge from the live gateway matcher (`feat(prover)`).
+
 ## [0.39.0] — 2026-06-13
 
 > **Compatibility:** requires a gateway running **OpenShell `v0.0.57` or newer**

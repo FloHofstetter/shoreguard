@@ -29,11 +29,13 @@ if TYPE_CHECKING:
     from shoreguard.services.cert_rotation import CertRotationService
     from shoreguard.services.curfew import CurfewService
     from shoreguard.services.denial_context import DenialContextService
+    from shoreguard.services.denial_store import DenialSampleStore
     from shoreguard.services.digest import DigestService
     from shoreguard.services.discovery import DiscoveryService
     from shoreguard.services.drift_detection import DriftDetectionService
     from shoreguard.services.fleet import FleetService
     from shoreguard.services.gateway import GatewayService
+    from shoreguard.services.gateway_inventory import GatewayInventoryStore
     from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
     from shoreguard.services.node_alerts import NodeAlertService
@@ -42,9 +44,11 @@ if TYPE_CHECKING:
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
     from shoreguard.services.policy_pin import PolicyPinService
     from shoreguard.services.push import PushService
+    from shoreguard.services.rate_governor import RateGovernorService
     from shoreguard.services.registry import GatewayRegistry
     from shoreguard.services.sandbox_meta import SandboxMetaStore
     from shoreguard.services.sbom import SBOMService
+    from shoreguard.services.tenant import TenantService
     from shoreguard.services.timeline import TimelineService
     from shoreguard.services.update_check import UpdateCheckService
     from shoreguard.services.webhooks import WebhookService
@@ -60,6 +64,7 @@ class ServiceContainer:
         async_session_factory: Async SQLAlchemy session factory (all data services).
         registry: Persistent gateway CRUD (what gateways exist).
         gateway: Live gateway connections (clients, health, backoff).
+        gateway_inventory: Gateway inventory snapshots and restart reap-diff.
         sandbox_meta: Sandbox metadata store.
         operations: Long-running operation tracking.
         audit: Audit trail service.
@@ -77,6 +82,7 @@ class ServiceContainer:
         curfew: Quiet-hours schedules driving the kill switch.
         digest: Daily activity digest builder/dispatcher.
         budget: Inference usage metering and per-sandbox budgets.
+        rate_governor: Per-sandbox rate ceilings with a reversible soft-pause.
         node_stats: Host resource stats for the ShoreGuard machine.
         node_alerts: Threshold alerts over the host node-stats sample.
         push: Web Push subscriptions and delivery (PWA notifications).
@@ -84,6 +90,8 @@ class ServiceContainer:
         timeline: Per-sandbox merged activity timeline.
         fleet: Cross-gateway overview, drift, and policy sync.
         denial_context: Denial context cache.
+        denial_store: Durable denial-sample corpus for policy replay.
+        tenant: Tenant grouping and per-tenant rollups.
         local_gateway: Local gateway manager, or ``None`` outside local mode.
     """
 
@@ -91,6 +99,7 @@ class ServiceContainer:
     async_session_factory: async_sessionmaker[AsyncSession]
     registry: GatewayRegistry
     gateway: GatewayService
+    gateway_inventory: GatewayInventoryStore
     sandbox_meta: SandboxMetaStore
     operations: AsyncOperationService
     audit: AuditService
@@ -108,6 +117,7 @@ class ServiceContainer:
     curfew: CurfewService
     digest: DigestService
     budget: BudgetService
+    rate_governor: RateGovernorService
     node_stats: NodeStatsService
     node_alerts: NodeAlertService
     push: PushService
@@ -115,6 +125,8 @@ class ServiceContainer:
     timeline: TimelineService
     fleet: FleetService
     denial_context: DenialContextService
+    denial_store: DenialSampleStore
+    tenant: TenantService
     local_gateway: LocalGatewayManager | None = None
 
 
@@ -144,11 +156,13 @@ def build_container(
     from shoreguard.services.cert_rotation import CertRotationService
     from shoreguard.services.curfew import CurfewService
     from shoreguard.services.denial_context import DenialContextService
+    from shoreguard.services.denial_store import DenialSampleStore
     from shoreguard.services.digest import DigestService
     from shoreguard.services.discovery import DiscoveryService
     from shoreguard.services.drift_detection import DriftDetectionService
     from shoreguard.services.fleet import FleetService
     from shoreguard.services.gateway import GatewayService
+    from shoreguard.services.gateway_inventory import GatewayInventoryStore
     from shoreguard.services.kill_switch import KillSwitchService
     from shoreguard.services.local_gateway import LocalGatewayManager
     from shoreguard.services.node_alerts import NodeAlertService
@@ -157,15 +171,18 @@ def build_container(
     from shoreguard.services.policy_apply_proposal import PolicyApplyProposalService
     from shoreguard.services.policy_pin import PolicyPinService
     from shoreguard.services.push import PushService
+    from shoreguard.services.rate_governor import RateGovernorService
     from shoreguard.services.registry import GatewayRegistry
     from shoreguard.services.sandbox_meta import SandboxMetaStore
     from shoreguard.services.sbom import SBOMService
+    from shoreguard.services.tenant import TenantService
     from shoreguard.services.timeline import TimelineService
     from shoreguard.services.update_check import UpdateCheckService
     from shoreguard.services.webhooks import WebhookService
 
     registry = GatewayRegistry(async_session_factory)
-    gateway = GatewayService(registry)
+    gateway_inventory = GatewayInventoryStore(async_session_factory)
+    gateway = GatewayService(registry, gateway_inventory)
     sandbox_meta = SandboxMetaStore(async_session_factory)
     audit = AuditService(async_session_factory, exporter=audit_exporter)
     node_stats = NodeStatsService()
@@ -181,13 +198,16 @@ def build_container(
         return SandboxService(client, meta_store=sandbox_meta, gateway_name=gateway_name)
 
     # Budget is constructed up front so the digest can read today's spend.
-    budget_service = BudgetService(async_session_factory, gateway, registry, settings.budget)
+    budget_service = BudgetService(
+        async_session_factory, gateway, registry, settings.budget, settings.pricing
+    )
 
     return ServiceContainer(
         settings=settings,
         async_session_factory=async_session_factory,
         registry=registry,
         gateway=gateway,
+        gateway_inventory=gateway_inventory,
         sandbox_meta=sandbox_meta,
         operations=AsyncOperationService(
             async_session_factory,
@@ -217,6 +237,9 @@ def build_container(
         curfew=CurfewService(async_session_factory, kill_switch),
         digest=DigestService(async_session_factory, registry, budget_service),
         budget=budget_service,
+        rate_governor=RateGovernorService(
+            async_session_factory, gateway, registry, settings.rate_governor
+        ),
         node_stats=node_stats,
         node_alerts=NodeAlertService(node_stats, settings.node_alert),
         push=PushService(async_session_factory, settings.push),
@@ -224,6 +247,8 @@ def build_container(
         timeline=TimelineService(async_session_factory),
         fleet=FleetService(registry, gateway),
         denial_context=DenialContextService(),
+        denial_store=DenialSampleStore(async_session_factory),
+        tenant=TenantService(async_session_factory, registry),
         local_gateway=(LocalGatewayManager(gateway) if settings.server.local_mode else None),
     )
 

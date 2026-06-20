@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from shoreguard.api.auth import require_gateway_role, require_role
+from shoreguard.api.auth import require_gateway_role, require_role, scoped_gateway_names
 from shoreguard.api.deps import get_services
 from shoreguard.services.audit import audit_log
 
@@ -38,24 +38,37 @@ class PolicySyncRequest(BaseModel):
 
 
 @router.get("/overview")
-async def fleet_overview() -> dict[str, Any]:
+async def fleet_overview(request: Request) -> dict[str, Any]:
     """Return per-gateway status, version, and sandbox policy hashes.
+
+    Scoped to the caller's tenants' gateways for a non-admin tenant user;
+    the full fleet otherwise.
+
+    Args:
+        request: The incoming HTTP request (for tenant scoping).
 
     Returns:
         dict[str, Any]: ``{"gateways": [...]}``.
     """
-    return {"gateways": await get_services().fleet.overview()}
+    scope = await scoped_gateway_names(request)
+    return {"gateways": await get_services().fleet.overview(scope)}
 
 
 @router.get("/policy-drift")
-async def fleet_policy_drift() -> dict[str, Any]:
+async def fleet_policy_drift(request: Request) -> dict[str, Any]:
     """Return policy drift between same-named sandboxes across gateways.
+
+    Scoped to the caller's tenants' gateways for a non-admin tenant user.
+
+    Args:
+        request: The incoming HTTP request (for tenant scoping).
 
     Returns:
         dict[str, Any]: ``{"items": [...]}`` — one entry per sandbox
         name present on two or more reachable gateways.
     """
-    return {"items": await get_services().fleet.policy_drift()}
+    scope = await scoped_gateway_names(request)
+    return {"items": await get_services().fleet.policy_drift(scope)}
 
 
 @router.post("/policy-sync", dependencies=[Depends(require_role("operator"))])

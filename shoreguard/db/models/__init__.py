@@ -24,13 +24,19 @@ from shoreguard.db.models.policy import (
 )
 from shoreguard.db.models.push import PushSubscription
 from shoreguard.db.models.sandbox import (
+    DenialSample,
+    GatewayInventorySnapshot,
+    GatewayReapRecord,
+    RatePauseEntry,
     SandboxBootHook,
     SandboxBudget,
     SandboxMeta,
+    SandboxRateLimit,
     SandboxUsage,
     UsageCursor,
 )
 from shoreguard.db.models.sbom import SBOMComponent, SBOMSnapshot
+from shoreguard.db.models.tenant import Tenant, TenantGateway, TenantUser
 from shoreguard.db.models.webhooks import Webhook, WebhookDelivery
 
 __all__ = (
@@ -38,9 +44,12 @@ __all__ = (
     "ApprovalWorkflow",
     "AuditEntry",
     "Base",
+    "DenialSample",
     "DeviceLinkCode",
     "Gateway",
     "GatewayCurfew",
+    "GatewayInventorySnapshot",
+    "GatewayReapRecord",
     "Group",
     "GroupGatewayRole",
     "GroupMember",
@@ -49,14 +58,19 @@ __all__ = (
     "PolicyApplyProposal",
     "PolicyPin",
     "PushSubscription",
+    "RatePauseEntry",
     "SBOMComponent",
     "SBOMSnapshot",
     "SPGatewayRole",
     "SandboxBootHook",
     "SandboxBudget",
     "SandboxMeta",
+    "SandboxRateLimit",
     "SandboxUsage",
     "ServicePrincipal",
+    "Tenant",
+    "TenantGateway",
+    "TenantUser",
     "UsageCursor",
     "User",
     "UserGatewayRole",

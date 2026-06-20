@@ -26,6 +26,7 @@ interface Chunk {
   hit_count?: number;
   binary?: string;
   proposed_rule?: { endpoints?: { host?: string; port?: number }[] };
+  narrowness?: { verdict: string; reasons?: string[] };
 }
 
 interface SandboxChunks {
@@ -182,6 +183,15 @@ export default function ApprovalsInboxPage() {
                           <span class="badge text-bg-warning">
                             <i class="bi bi-shield-exclamation me-1" />
                             security
+                          </span>
+                        )}
+                        {it.narrowness?.verdict === "over_broad" && (
+                          <span
+                            class="badge text-bg-warning"
+                            title={(it.narrowness.reasons ?? []).join("; ")}
+                          >
+                            <i class="bi bi-arrows-angle-expand me-1" />
+                            over-broad
                           </span>
                         )}
                         {typeof it.confidence === "number" && (

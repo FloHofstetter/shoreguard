@@ -34,7 +34,9 @@ interface Digest {
   kill_switch_engaged: string[];
   spending?: {
     today_total: number;
-    top: { gateway: string; sandbox: string; requests: number }[];
+    today_total_cost?: number;
+    currency_label?: string;
+    top: { gateway: string; sandbox: string; requests: number; estimated_cost?: number }[];
   };
 }
 
@@ -47,6 +49,7 @@ interface UsageRow {
   gateway: string;
   sandbox: string;
   requests: number;
+  estimated_cost?: number;
 }
 
 export interface FlatSandbox {
@@ -60,6 +63,7 @@ export interface SbActivity {
   name: string;
   phase: string;
   requests: number;
+  cost: number;
   pending: number;
 }
 
@@ -80,13 +84,18 @@ export function buildActivity(
   pendings: number[],
 ): SbActivity[] {
   const reqByKey = new Map<string, number>();
-  usageTop.forEach((t) => reqByKey.set(`${t.gateway}/${t.sandbox}`, t.requests));
+  const costByKey = new Map<string, number>();
+  usageTop.forEach((t) => {
+    reqByKey.set(`${t.gateway}/${t.sandbox}`, t.requests);
+    costByKey.set(`${t.gateway}/${t.sandbox}`, t.estimated_cost ?? 0);
+  });
   return flat
     .map((s, i) => ({
       gateway: s.gateway,
       name: s.name,
       phase: s.phase,
       requests: reqByKey.get(`${s.gateway}/${s.name}`) ?? 0,
+      cost: costByKey.get(`${s.gateway}/${s.name}`) ?? 0,
       pending: pendings[i] ?? 0,
     }))
     // Busiest sandboxes first — mission control should lead with what is active.
@@ -98,6 +107,8 @@ export function buildActivity(
 
 function SandboxActivityCard({ rows }: { rows: SbActivity[] }) {
   const multiGw = new Set(rows.map((r) => r.gateway)).size > 1;
+  // Only show the estimated-cost column when pricing is on (some row has a cost).
+  const hasCost = rows.some((r) => r.cost > 0);
   return (
     <div class="card sg-card-themed mb-4">
       <div class="card-body">
@@ -122,6 +133,7 @@ function SandboxActivityCard({ rows }: { rows: SbActivity[] }) {
                   {multiGw && <th>Gateway</th>}
                   <th>Phase</th>
                   <th class="text-end">24h requests</th>
+                  {hasCost && <th class="text-end">24h est. $</th>}
                   <th class="text-end">Approvals</th>
                 </tr>
               </thead>
@@ -141,6 +153,11 @@ function SandboxActivityCard({ rows }: { rows: SbActivity[] }) {
                       <span class={`badge ${badgeClass("sandbox", s.phase)}`}>{s.phase}</span>
                     </td>
                     <td class="text-end font-monospace">{s.requests.toLocaleString()}</td>
+                    {hasCost && (
+                      <td class="text-end font-monospace">
+                        {s.cost > 0 ? `$${s.cost.toFixed(2)}` : "—"}
+                      </td>
+                    )}
                     <td class="text-end">
                       {s.pending > 0 ? (
                         <a
@@ -213,6 +230,9 @@ function DigestCard() {
             <span>
               <i class="bi bi-lightning-charge me-1" />
               {digest.spending.today_total.toLocaleString()} requests today
+              {digest.spending.today_total_cost
+                ? ` (est. $${digest.spending.today_total_cost.toFixed(2)})`
+                : ""}
               {digest.spending.top[0] ? ` · top: ${digest.spending.top[0].sandbox}` : ""}
             </span>
           )}
@@ -267,6 +287,8 @@ interface UpdateStatus {
   update_available: boolean;
   gateway_versions: Record<string, string>;
   version_skew: boolean;
+  restart_safe_min_version?: string | null;
+  at_risk_gateways?: string[];
 }
 
 function UpdateBanner() {
@@ -278,7 +300,9 @@ function UpdateBanner() {
       .catch(() => setStatus(null));
   }, []);
 
-  if (!status || (!status.update_available && !status.version_skew)) return null;
+  const atRisk = status?.at_risk_gateways ?? [];
+  if (!status || (!status.update_available && !status.version_skew && atRisk.length === 0))
+    return null;
   return (
     <div class="alert alert-info d-flex flex-wrap align-items-center gap-2 mb-3">
       <i class="bi bi-arrow-up-circle" />
@@ -296,6 +320,51 @@ function UpdateBanner() {
           .
         </span>
       )}
+      {atRisk.length > 0 && (
+        <span class="text-warning-emphasis">
+          <i class="bi bi-exclamation-triangle me-1" />
+          <strong>At risk on restart</strong> (OpenShell &lt; {status.restart_safe_min_version}):{" "}
+          {atRisk.join(", ")} — a gateway restart will reap their sandboxes.
+        </span>
+      )}
+    </div>
+  );
+}
+
+interface ReapRecord {
+  gateway: string;
+  detected_at: string;
+  reaped_count: number;
+  reaped: { sandbox: string; lost_providers: string[] }[];
+}
+
+function RecentReapsCard() {
+  const [reaps, setReaps] = useState<ReapRecord[]>([]);
+
+  useEffect(() => {
+    apiFetch<{ items: ReapRecord[] }>(`/api/reconciler/recent?limit=5`)
+      .then((r) => setReaps(r.items))
+      .catch(() => setReaps([]));
+  }, []);
+
+  if (reaps.length === 0) return null;
+  return (
+    <div class="card sg-card-themed border-warning mb-4">
+      <div class="card-body">
+        <h6 class="mb-3">
+          <i class="bi bi-recycle me-2 text-warning" />
+          Recent gateway-restart reaps
+        </h6>
+        <ul class="list-unstyled small mb-0">
+          {reaps.map((r) => (
+            <li key={`${r.gateway}-${r.detected_at}`} class="mb-1">
+              <strong>{r.gateway}</strong> reaped {r.reaped_count} sandbox(es) on{" "}
+              {new Date(r.detected_at).toLocaleString()}:{" "}
+              <span class="text-muted">{r.reaped.map((x) => x.sandbox).join(", ")}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -555,6 +624,7 @@ export default function DashboardPage() {
       </div>
 
       <DigestCard />
+      <RecentReapsCard />
 
       {gateways.length > 0 && <SandboxActivityCard rows={sandboxActivity} />}
 

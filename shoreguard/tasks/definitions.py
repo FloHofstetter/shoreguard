@@ -34,10 +34,14 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
     """
 
     async def _cleanup() -> None:
-        # Purge expired operations, audit entries, and webhook deliveries.
+        # Purge expired operations, audit entries, and webhook deliveries,
+        # plus aged-out gateway inventory snapshots / reap records.
         await container.operations.cleanup()
         await container.audit.cleanup()
         await container.webhooks.cleanup_old_deliveries()
+        await container.gateway_inventory.prune(settings.reconciler.reap_retention_days)
+        if settings.simulator.replay_enabled:
+            await container.denial_store.prune(settings.simulator.retention_days)
 
     async def _health_monitor() -> None:
         await container.gateway.check_all_health()
@@ -166,6 +170,20 @@ def build_tasks(container: ServiceContainer, settings: Settings) -> list[Periodi
                 name="backup",
                 interval=settings.backup.interval_hours * 3600,
                 run=_backup,
+            )
+        )
+    if settings.rate_governor.enabled:
+
+        async def _rate_governor() -> None:
+            result = await container.rate_governor.run_once()
+            if result["paused"] or result["resumed"]:
+                logger.info("Rate governor: %s", result)
+
+        tasks.append(
+            PeriodicTask(
+                name="rate_governor",
+                interval=settings.rate_governor.check_interval,
+                run=_rate_governor,
             )
         )
     if settings.curfew.enabled:

@@ -8,6 +8,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    Float,
     Index,
     Integer,
     String,
@@ -133,6 +134,9 @@ class SandboxBudget(Base):
         gateway: Gateway name the sandbox lives on.
         sandbox: Sandbox name (unique per gateway).
         limit_requests: Inference request ceiling for the window.
+        limit_usd: Optional estimated-dollar ceiling for the window; when
+            set it takes precedence over ``limit_requests`` (the budget is
+            evaluated against the estimated cost from the pricing overlay).
         window: Budget window — ``daily``, ``weekly``, ``monthly``, ``total``.
         action: What happens at the limit — ``notify`` or ``detach``.
         notified_key: Window key of the last notification (anti-spam).
@@ -147,6 +151,7 @@ class SandboxBudget(Base):
     gateway: Mapped[str] = mapped_column(String(253), nullable=False)
     sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
     limit_requests: Mapped[int] = mapped_column(Integer, nullable=False)
+    limit_usd: Mapped[float | None] = mapped_column(Float)
     window: Mapped[str] = mapped_column(String(16), nullable=False, default="daily")
     action: Mapped[str] = mapped_column(String(16), nullable=False, default="notify")
     notified_key: Mapped[str | None] = mapped_column(String(64))
@@ -176,6 +181,166 @@ class SandboxUsage(Base):
     sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
     day: Mapped[str] = mapped_column(String(10), nullable=False)
     requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class DenialSample(Base):
+    """A persisted L7 denial sample for policy-simulation replay.
+
+    The gateway has no ``GetDenialSummary`` RPC — denial summaries only flow
+    inbound via ``SubmitPolicyAnalysis`` and the live cache is in-memory and
+    volatile. This table durably records them so the policy simulator can
+    replay them against a candidate policy after a restart. Upserted on
+    ``(gateway, sandbox, binary, host, port)``; pruned by retention.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name.
+        sandbox: Sandbox name.
+        binary: Denied binary path.
+        host: Target host of the denied request.
+        port: Target port of the denied request.
+        l7_samples_json: JSON list of ``{method, path}`` observed requests.
+        deny_reason: Why the request was denied.
+        count: Observed denial count.
+        created_at: When this sample was last recorded.
+    """
+
+    __tablename__ = "denial_samples"
+    __table_args__ = (
+        UniqueConstraint("gateway", "sandbox", "binary", "host", "port", name="uq_denial_sample"),
+        Index("ix_denial_samples_sb", "gateway", "sandbox"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
+    binary: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    host: Mapped[str] = mapped_column(String(253), nullable=False, default="")
+    port: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    l7_samples_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    deny_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SandboxRateLimit(Base):
+    """Per-sandbox inference request-rate ceiling for the rate governor.
+
+    The governor evaluates metered request counts against ``max_requests``
+    per a tumbling ``window_seconds`` window; exceeding it trips a reversible
+    soft-pause (see :class:`RatePauseEntry`). The window state lives on this
+    row so no extra cursor table is needed; it resets when the limit is
+    reconfigured or after an auto-resume.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name the sandbox lives on.
+        sandbox: Sandbox name (unique per gateway).
+        max_requests: Inference request ceiling within the window.
+        window_seconds: Tumbling window length in seconds.
+        enabled: Whether the governor evaluates this limit.
+        window_started_at: Start of the current tumbling window, or ``None``.
+        window_count_start: Cumulative metered count at the window start.
+        created_at: When the limit was created.
+        updated_at: When the limit was last changed.
+    """
+
+    __tablename__ = "sandbox_rate_limits"
+    __table_args__ = (UniqueConstraint("gateway", "sandbox", name="uq_sandbox_rate_limit"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False)
+    sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
+    max_requests: Mapped[int] = mapped_column(Integer, nullable=False)
+    window_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    window_started_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    window_count_start: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RatePauseEntry(Base):
+    """A reversible soft-pause engaged by the rate governor.
+
+    Distinct from :class:`KillSwitchEntry` on purpose: the kill switch raises
+    on collision and its resume re-attaches everything, so the governor owns
+    its own table, skips any sandbox already kill-switched, and persists only
+    the providers it itself detached so auto-resume re-attaches exactly that.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name the sandbox lives on.
+        sandbox: Sandbox name (unique per gateway).
+        providers_json: JSON list of the providers the governor detached.
+        paused_at: When the soft-pause was engaged.
+        resume_after: When the cooldown elapses and auto-resume may re-attach.
+        reason: Why it paused (e.g. ``rate_governor``).
+    """
+
+    __tablename__ = "rate_pause_entries"
+    __table_args__ = (UniqueConstraint("gateway", "sandbox", name="uq_rate_pause"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False, index=True)
+    sandbox: Mapped[str] = mapped_column(String(253), nullable=False)
+    providers_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    paused_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resume_after: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False, default="rate_governor")
+
+
+class GatewayInventorySnapshot(Base):
+    """A point-in-time snapshot of a gateway's sandboxes and attachments.
+
+    Captured on each successful health probe so a gateway/Docker restart
+    that reaps sandboxes can be diffed (pre-down vs post-recovery). Pure
+    forensic history — append-only, pruned by retention; never reversible
+    state, so it does NOT reuse the kill-switch table.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name.
+        captured_at: When the snapshot was taken.
+        sandboxes_json: JSON map ``{sandbox_name: [provider names sorted]}``.
+        sandbox_count: Number of sandboxes in the snapshot.
+    """
+
+    __tablename__ = "gateway_inventory_snapshots"
+    __table_args__ = (Index("ix_gateway_inventory_gw_time", "gateway", "captured_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False)
+    captured_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sandboxes_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    sandbox_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class GatewayReapRecord(Base):
+    """A record of sandboxes/attachments lost across a gateway restart.
+
+    Written when an ``unreachable → recovered`` transition's inventory diff
+    is non-empty. The durable forensic residue of the reconciler: an
+    append-only log, never reversible state.
+
+    Attributes:
+        id: Auto-incremented primary key.
+        gateway: Gateway name.
+        detected_at: When the reap was detected (on recovery).
+        recovered_from_status: The down status the gateway recovered from.
+        reaped_json: JSON list of ``{sandbox, lost_providers}`` entries.
+        reaped_count: Number of sandboxes reaped.
+    """
+
+    __tablename__ = "gateway_reap_records"
+    __table_args__ = (Index("ix_gateway_reap_gw_time", "gateway", "detected_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    gateway: Mapped[str] = mapped_column(String(253), nullable=False)
+    detected_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    recovered_from_status: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+    reaped_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    reaped_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class UsageCursor(Base):

@@ -173,6 +173,7 @@ async def test_health_transition_fires_events(monkeypatch) -> None:
 
     svc = GatewayService.__new__(GatewayService)
     svc._registry = _Registry()  # type: ignore[attr-defined]
+    svc._inventory = None  # type: ignore[attr-defined]  # reconciler disabled here
 
     async def _get_client(*, name: str) -> _Client:
         return _Client(statuses[name])

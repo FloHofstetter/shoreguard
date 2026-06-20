@@ -31,13 +31,14 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from shoreguard.models import KillSwitchEntry, SandboxBudget, SandboxUsage, UsageCursor
+from shoreguard.services.pricing import annotate_rows, estimate_cost
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from shoreguard.services.gateway import GatewayService
     from shoreguard.services.registry import GatewayRegistry
-    from shoreguard.settings import BudgetSettings
+    from shoreguard.settings import BudgetSettings, PricingSettings
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ class BudgetService:
         gateway_service: Live-connection service used to reach gateways.
         registry: Gateway registry (which gateways to meter).
         settings: Active ``BudgetSettings``.
+        pricing: Active ``PricingSettings`` (estimated-cost overlay).
     """
 
     def __init__(  # noqa: D107
@@ -88,11 +90,13 @@ class BudgetService:
         gateway_service: GatewayService,
         registry: GatewayRegistry,
         settings: BudgetSettings,
+        pricing: PricingSettings,
     ) -> None:
         self._session_factory = session_factory
         self._gateways = gateway_service
         self._registry = registry
         self._settings = settings
+        self._pricing = pricing
 
     # ── budget CRUD ────────────────────────────────────────────────────────
 
@@ -111,7 +115,14 @@ class BudgetService:
             return self._budget_dict(row) if row else None
 
     async def set_budget(
-        self, gateway: str, sandbox: str, *, limit_requests: int, window: str, action: str
+        self,
+        gateway: str,
+        sandbox: str,
+        *,
+        limit_requests: int,
+        window: str,
+        action: str,
+        limit_usd: float | None = None,
     ) -> dict[str, Any]:
         """Create or update a sandbox budget.
 
@@ -121,6 +132,8 @@ class BudgetService:
             limit_requests: Inference request ceiling (>= 1).
             window: ``daily`` / ``weekly`` / ``monthly`` / ``total``.
             action: ``notify`` or ``detach``.
+            limit_usd: Optional estimated-dollar ceiling; when set it takes
+                precedence over ``limit_requests`` (requires pricing enabled).
 
         Returns:
             dict[str, Any]: The saved budget record.
@@ -134,6 +147,8 @@ class BudgetService:
             raise ValueError(f"Invalid action: {action!r}")
         if limit_requests < 1:
             raise ValueError("limit_requests must be >= 1")
+        if limit_usd is not None and limit_usd <= 0:
+            raise ValueError("limit_usd must be > 0 when set")
         now = datetime.datetime.now(datetime.UTC)
         async with self._session_factory() as session:
             row = await self._get_budget_row(session, gateway, sandbox)
@@ -142,6 +157,7 @@ class BudgetService:
                     gateway=gateway,
                     sandbox=sandbox,
                     limit_requests=limit_requests,
+                    limit_usd=limit_usd,
                     window=window,
                     action=action,
                     created_at=now,
@@ -150,6 +166,7 @@ class BudgetService:
                 session.add(row)
             else:
                 row.limit_requests = limit_requests
+                row.limit_usd = limit_usd
                 row.window = window
                 row.action = action
                 row.notified_key = None
@@ -213,11 +230,17 @@ class BudgetService:
             if budget_row is not None:
                 window_used = await self._window_usage(session, gateway, sandbox, budget_row.window)
         today = _today()
+        day_rows = [{"day": r.day, "requests": r.requests} for r in rows]
+        annotate_rows(day_rows, self._pricing)
+        today_requests = next((r.requests for r in rows if r.day == today), 0)
         return {
-            "days": [{"day": r.day, "requests": r.requests} for r in rows],
-            "today": next((r.requests for r in rows if r.day == today), 0),
+            "days": day_rows,
+            "today": today_requests,
+            "today_cost": estimate_cost(today_requests, None, self._pricing),
             "budget": self._budget_dict(budget_row) if budget_row else None,
             "window_used": window_used,
+            "window_used_cost": estimate_cost(window_used, None, self._pricing),
+            "currency_label": self._pricing.currency_label,
         }
 
     async def summary(self, *, days: int = 7, limit: int = 20) -> dict[str, Any]:
@@ -248,9 +271,13 @@ class BudgetService:
                     .limit(limit)
                 )
             ).all()
+        top = [{"gateway": g, "sandbox": s, "requests": int(t)} for g, s, t in rows]
+        total_cost = annotate_rows(top, self._pricing)
         return {
             "since": start,
-            "top": [{"gateway": g, "sandbox": s, "requests": int(t)} for g, s, t in rows],
+            "top": top,
+            "estimated_cost": total_cost,
+            "currency_label": self._pricing.currency_label,
         }
 
     # ── metering ───────────────────────────────────────────────────────────
@@ -421,7 +448,14 @@ class BudgetService:
                 used = await self._window_usage(
                     session, budget.gateway, budget.sandbox, budget.window
                 )
-                if used < budget.limit_requests:
+                # A dollar ceiling (when set) wins over the request ceiling;
+                # it requires pricing to be enabled (else used_cost is 0.0
+                # and the budget never trips).
+                used_cost = estimate_cost(used, None, self._pricing)
+                if budget.limit_usd is not None:
+                    if used_cost < budget.limit_usd:
+                        continue
+                elif used < budget.limit_requests:
                     continue
                 window_key = _window_start(budget.window) or "total"
                 if budget.notified_key == window_key:
@@ -432,16 +466,21 @@ class BudgetService:
                     "gateway": budget.gateway,
                     "sandbox": budget.sandbox,
                     "used": used,
+                    "used_cost": used_cost,
                     "limit": budget.limit_requests,
+                    "limit_usd": budget.limit_usd,
                     "window": budget.window,
                     "action": budget.action,
                 }
                 logger.warning(
-                    "Budget exceeded (gw=%s, sb=%s, %d/%d %s, action=%s)",
+                    "Budget exceeded (gw=%s, sb=%s, %d req / est %.4f, "
+                    "limit=%s req / %s usd, %s, action=%s)",
                     budget.gateway,
                     budget.sandbox,
                     used,
+                    used_cost,
                     budget.limit_requests,
+                    budget.limit_usd,
                     budget.window,
                     budget.action,
                 )
@@ -552,6 +591,7 @@ class BudgetService:
             "gateway": row.gateway,
             "sandbox": row.sandbox,
             "limit_requests": row.limit_requests,
+            "limit_usd": row.limit_usd,
             "window": row.window,
             "action": row.action,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,

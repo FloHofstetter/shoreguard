@@ -27,7 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from starlette.responses import JSONResponse
 
-from shoreguard.api.auth import require_role
+from shoreguard.api.auth import require_role, scoped_gateway_names
 from shoreguard.api.deps import _get_gateway_service, get_actor, get_services
 from shoreguard.api.lro import run_lro
 from shoreguard.api.schemas import (
@@ -282,6 +282,7 @@ async def discovery_status() -> dict[str, Any]:
 
 @router.get("/list", response_model=PaginatedResponse)
 async def gateway_list(
+    request: Request,
     label: list[str] | None = Query(None),
     runtime: str | None = Query(
         None,
@@ -290,7 +291,12 @@ async def gateway_list(
 ) -> dict[str, Any]:
     """List all registered gateways with metadata and status.
 
+    For a non-admin user assigned to tenants, the list is scoped to that
+    user's tenants' gateways (a visibility filter applied on top of the
+    label/runtime filters); admins and unassigned users see the full fleet.
+
     Args:
+        request: The incoming HTTP request (for tenant scoping).
         label: Optional label filters in ``key:value`` format. Multiple
             labels are AND-combined.
         runtime: Optional runtime tag filter. Rejected with HTTP 400
@@ -319,6 +325,9 @@ async def gateway_list(
             raise HTTPException(400, str(exc)) from exc
     svc = _get_gateway_service()
     items = await svc.list_all(labels_filter=labels_filter)
+    scope = await scoped_gateway_names(request)
+    if scope is not None:
+        items = [gw for gw in items if gw.get("name") in scope]
     if runtime_normalized is not None:
         items = [gw for gw in items if get_runtime(gw.get("metadata")) == runtime_normalized]
     return {"items": items, "total": len(items)}

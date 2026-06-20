@@ -68,6 +68,7 @@ from shoreguard.api.auth.rbac import (
     require_gateway_role,
     require_role,
     require_role_ws,
+    scoped_gateway_names,
 )
 from shoreguard.api.auth.service_principals import (
     create_service_principal,
@@ -131,6 +132,7 @@ __all__ = (
     "reset",
     "reset_lockouts",
     "rotate_service_principal",
+    "scoped_gateway_names",
     "set_gateway_role",
     "set_group_gateway_role",
     "set_no_auth",

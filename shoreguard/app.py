@@ -249,12 +249,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         provider_profiles,
         providers,
         push,
+        rate_governor,
+        reconciler,
         sandboxes,
         sbom,
         security,
         services,
         system,
         templates,
+        tenants,
         tokens,
         webhooks,
     )
@@ -320,12 +323,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     gw_api.include_router(sbom.router, prefix="/sandboxes", tags=["sbom"])
     gw_api.include_router(boot_hooks.router, prefix="/sandboxes", tags=["boot_hooks"])
     gw_api.include_router(budgets.router, prefix="/sandboxes", tags=["budgets"])
+    gw_api.include_router(rate_governor.router, prefix="/sandboxes", tags=["rate-governor"])
     gw_api.include_router(providers.router, prefix="/providers", tags=["providers"])
     gw_api.include_router(
         provider_profiles.router, prefix="/provider-profiles", tags=["provider-profiles"]
     )
     gw_api.include_router(services.router, prefix="/services", tags=["services"])
     gw_api.include_router(tokens.router, prefix="/tokens", tags=["tokens"])
+    gw_api.include_router(reconciler.router, prefix="/reconciler", tags=["reconciler"])
     gw_api.include_router(inference.router)
     app.include_router(gw_api)
 
@@ -364,6 +369,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dependencies=[Depends(require_auth), Depends(require_role("admin"))],
     )
     app.include_router(
+        tenants.router,
+        prefix="/api/tenants",
+        tags=["tenants"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
         security.router,
         prefix="/api/security",
         tags=["security"],
@@ -373,6 +384,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         digest.router,
         prefix="/api/digest",
         tags=["digest"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        reconciler.summary_router,
+        prefix="/api/reconciler",
+        tags=["reconciler"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        rate_governor.summary_router,
+        prefix="/api/rate-governor",
+        tags=["rate-governor"],
         dependencies=[Depends(require_auth)],
     )
     app.include_router(

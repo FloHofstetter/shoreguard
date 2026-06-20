@@ -29,11 +29,14 @@ class BudgetRequest(BaseModel):
 
     Attributes:
         limit_requests: Inference request ceiling for the window.
+        limit_usd: Optional estimated-dollar ceiling; when set it takes
+            precedence over ``limit_requests`` (requires pricing enabled).
         window: ``daily`` / ``weekly`` / ``monthly`` / ``total``.
         action: ``notify`` or ``detach``.
     """
 
     limit_requests: int = Field(ge=1)
+    limit_usd: float | None = Field(default=None, gt=0)
     window: str = "daily"
     action: str = "notify"
 
@@ -106,6 +109,7 @@ async def put_budget(request: Request, name: str, body: BudgetRequest) -> dict[s
             limit_requests=body.limit_requests,
             window=body.window,
             action=body.action,
+            limit_usd=body.limit_usd,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -115,7 +119,12 @@ async def put_budget(request: Request, name: str, body: BudgetRequest) -> dict[s
         "sandbox",
         name,
         gateway=gateway,
-        detail={"limit": body.limit_requests, "window": body.window, "action": body.action},
+        detail={
+            "limit": body.limit_requests,
+            "limit_usd": body.limit_usd,
+            "window": body.window,
+            "action": body.action,
+        },
     )
     return budget
 

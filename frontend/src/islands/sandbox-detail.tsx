@@ -31,6 +31,7 @@ function formatTimestamp(ms: number | undefined): string {
 
 interface BudgetInfo {
   limit_requests: number;
+  limit_usd?: number | null;
   window: string;
   action: string;
 }
@@ -38,8 +39,11 @@ interface BudgetInfo {
 interface UsageInfo {
   days: { day: string; requests: number }[];
   today: number;
+  today_cost?: number;
   budget: BudgetInfo | null;
   window_used: number;
+  window_used_cost?: number;
+  currency_label?: string;
 }
 
 interface TimelineItem {
@@ -115,6 +119,8 @@ function BudgetCard({ name }: { name: string }) {
   const [meteringEnabled, setMeteringEnabled] = useState(true);
   const [editing, setEditing] = useState(false);
   const [limit, setLimit] = useState(1000);
+  const [limitUsd, setLimitUsd] = useState(5);
+  const [budgetType, setBudgetType] = useState<"requests" | "usd">("requests");
   const [window_, setWindow] = useState("daily");
   const [action, setAction] = useState("notify");
   const [busy, setBusy] = useState(false);
@@ -135,7 +141,14 @@ function BudgetCard({ name }: { name: string }) {
       await apiFetch(`${API}/sandboxes/${name}/budget`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit_requests: limit, window: window_, action }),
+        body: JSON.stringify({
+          // limit_requests is always required; a $-budget adds limit_usd,
+          // which takes precedence server-side.
+          limit_requests: budgetType === "usd" ? 1 : limit,
+          limit_usd: budgetType === "usd" ? limitUsd : null,
+          window: window_,
+          action,
+        }),
       });
       showToast("Budget saved", "success");
       setEditing(false);
@@ -169,7 +182,12 @@ function BudgetCard({ name }: { name: string }) {
 
   if (!usage) return null;
   const budget = usage.budget;
-  const pct = budget ? Math.min(100, Math.round((usage.window_used / budget.limit_requests) * 100)) : 0;
+  const isUsd = budget?.limit_usd != null;
+  const pct = budget
+    ? isUsd
+      ? Math.min(100, Math.round(((usage.window_used_cost ?? 0) / (budget.limit_usd as number)) * 100))
+      : Math.min(100, Math.round((usage.window_used / budget.limit_requests) * 100))
+    : 0;
 
   return (
     <fieldset class="sg-fieldset mb-4">
@@ -185,6 +203,12 @@ function BudgetCard({ name }: { name: string }) {
         <span class="small">
           <i class="bi bi-activity me-1" />
           Today: <strong>{usage.today}</strong> requests
+          {usage.today_cost ? (
+            <>
+              {" "}
+              · est. <strong>${usage.today_cost.toFixed(2)}</strong>
+            </>
+          ) : null}
         </span>
         {budget ? (
           <>
@@ -196,8 +220,10 @@ function BudgetCard({ name }: { name: string }) {
                 />
               </div>
               <div class="small text-muted mt-1">
-                {usage.window_used} / {budget.limit_requests} ({budget.window}, on limit:{" "}
-                {budget.action})
+                {isUsd
+                  ? `est. $${(usage.window_used_cost ?? 0).toFixed(2)} / $${(budget.limit_usd ?? 0).toFixed(2)}`
+                  : `${usage.window_used} / ${budget.limit_requests}`}{" "}
+                ({budget.window}, on limit: {budget.action})
               </div>
             </div>
             <button class="btn btn-sm btn-outline-danger" disabled={busy} onClick={() => void remove()}>
@@ -206,14 +232,39 @@ function BudgetCard({ name }: { name: string }) {
           </>
         ) : editing ? (
           <span class="d-flex align-items-center gap-2">
-            <input
-              type="number"
-              class="form-control form-control-sm"
-              style={{ width: "110px" }}
-              min={1}
-              value={limit}
-              onInput={(e) => setLimit(Number((e.target as HTMLInputElement).value))}
-            />
+            <select
+              class="form-select form-select-sm"
+              style={{ width: "auto" }}
+              value={budgetType}
+              onChange={(e) =>
+                setBudgetType((e.target as HTMLSelectElement).value as "requests" | "usd")
+              }
+            >
+              <option value="requests">requests</option>
+              <option value="usd">est. $</option>
+            </select>
+            {budgetType === "usd" ? (
+              <div class="input-group input-group-sm" style={{ width: "120px" }}>
+                <span class="input-group-text">$</span>
+                <input
+                  type="number"
+                  class="form-control form-control-sm"
+                  min={0.01}
+                  step={0.01}
+                  value={limitUsd}
+                  onInput={(e) => setLimitUsd(Number((e.target as HTMLInputElement).value))}
+                />
+              </div>
+            ) : (
+              <input
+                type="number"
+                class="form-control form-control-sm"
+                style={{ width: "110px" }}
+                min={1}
+                value={limit}
+                onInput={(e) => setLimit(Number((e.target as HTMLInputElement).value))}
+              />
+            )}
             <select
               class="form-select form-select-sm"
               style={{ width: "auto" }}
@@ -245,6 +296,147 @@ function BudgetCard({ name }: { name: string }) {
           <button class="btn btn-sm btn-outline-primary" onClick={() => setEditing(true)}>
             <i class="bi bi-cash-coin me-1" />
             Set budget
+          </button>
+        )}
+      </div>
+    </fieldset>
+  );
+}
+
+interface RateLimitInfo {
+  max_requests: number;
+  window_seconds: number;
+  enabled: boolean;
+}
+
+interface RateStatus {
+  rate_limit: RateLimitInfo | null;
+  paused: boolean;
+  resume_after: string | null;
+}
+
+function RateGovernorCard({ name }: { name: string }) {
+  const [status, setStatus] = useState<RateStatus | null>(null);
+  const [enabled, setEnabled] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [maxReq, setMaxReq] = useState(60);
+  const [windowSec, setWindowSec] = useState(60);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    void apiFetch<RateStatus>(`${API}/sandboxes/${name}/rate-status`)
+      .then(setStatus)
+      .catch(() => setStatus(null));
+    void apiFetch<{ enabled: boolean }>(`${API}/sandboxes/${name}/rate-limit`)
+      .then((r) => setEnabled(r.enabled))
+      .catch(() => undefined);
+  };
+  useEffect(load, [name]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await apiFetch(`${API}/sandboxes/${name}/rate-limit`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ max_requests: maxReq, window_seconds: windowSec }),
+      });
+      showToast("Rate limit saved", "success");
+      setEditing(false);
+      load();
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    const ok = await showConfirm("Remove the rate limit for this sandbox?", {
+      icon: "trash",
+      iconColor: "text-danger",
+      btnClass: "btn-danger",
+      btnLabel: "Remove",
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await apiFetch(`${API}/sandboxes/${name}/rate-limit`, { method: "DELETE" });
+      showToast("Rate limit removed", "success");
+      load();
+    } catch (e) {
+      showToast((e as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!status) return null;
+  const rl = status.rate_limit;
+
+  return (
+    <fieldset class="sg-fieldset mb-4">
+      <legend class="sg-legend">Rate governor</legend>
+      {!enabled && (
+        <div class="text-muted small mb-2">
+          <i class="bi bi-info-circle me-1" />
+          The rate governor is off — set <code>SHOREGUARD_RATEGOV_ENABLED=true</code> to enforce
+          per-sandbox rate ceilings with a reversible soft-pause.
+        </div>
+      )}
+      <div class="d-flex flex-wrap align-items-center gap-3">
+        {status.paused && (
+          <span class="badge text-bg-warning">
+            <i class="bi bi-pause-circle me-1" />
+            soft-paused{status.resume_after ? ` until ${new Date(status.resume_after).toLocaleTimeString()}` : ""}
+          </span>
+        )}
+        {rl ? (
+          <>
+            <span class="small">
+              Ceiling: <strong>{rl.max_requests}</strong> requests /{" "}
+              <strong>{rl.window_seconds}s</strong>
+              {rl.enabled ? "" : " (disabled)"}
+            </span>
+            <button
+              class="btn btn-sm btn-outline-danger"
+              disabled={busy}
+              onClick={() => void remove()}
+            >
+              Remove
+            </button>
+          </>
+        ) : editing ? (
+          <span class="d-flex align-items-center gap-2">
+            <input
+              type="number"
+              class="form-control form-control-sm"
+              style={{ width: "90px" }}
+              min={1}
+              value={maxReq}
+              onInput={(e) => setMaxReq(Number((e.target as HTMLInputElement).value))}
+            />
+            <span class="small">requests /</span>
+            <input
+              type="number"
+              class="form-control form-control-sm"
+              style={{ width: "90px" }}
+              min={1}
+              value={windowSec}
+              onInput={(e) => setWindowSec(Number((e.target as HTMLInputElement).value))}
+            />
+            <span class="small">seconds</span>
+            <button class="btn btn-sm btn-success" disabled={busy} onClick={() => void save()}>
+              Save
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button class="btn btn-sm btn-outline-primary" onClick={() => setEditing(true)}>
+            <i class="bi bi-speedometer2 me-1" />
+            Set rate limit
           </button>
         )}
       </div>
@@ -545,6 +737,7 @@ export default function SandboxDetailPage({ name }: { name: string }) {
       </div>
 
       <BudgetCard name={name} />
+      <RateGovernorCard name={name} />
 
       <TimelineCard name={name} />
 

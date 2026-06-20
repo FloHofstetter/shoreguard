@@ -20,6 +20,7 @@ from .prover_queries import (
     PRESET_QUERIES,
     FsVars,
     NetVars,
+    encode_network_policy,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,63 @@ class ProverService:
             query_id = q.get("query_id", "")
             params = q.get("params", {})
             results.append(self._run_query(policy, query_id, params))
+        return results
+
+    def replay_denials(
+        self,
+        policy: dict[str, Any],
+        requests: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Predict, per previously-denied request, whether a candidate allows it.
+
+        Best-effort: this is deterministic Z3 evaluation of the candidate
+        policy under each request's fixed assignment, and may diverge from the
+        live gateway matcher on canonicalization edge cases. ``allow`` means the
+        candidate would now permit a previously-denied request (i.e. would
+        unblock the agent); ``deny`` means it stays blocked.
+
+        Args:
+            policy: Candidate policy dict (the ``"policy"`` key from
+                ``PolicyService.get()``, or an operator-supplied candidate).
+            requests: ``{binary, host, port, method, path}`` denied requests.
+
+        Returns:
+            list[dict[str, Any]]: One result per request with
+                ``predicted_decision`` in ``allow`` / ``deny`` / ``unknown`` /
+                ``error``.
+        """
+        results: list[dict[str, Any]] = []
+        for req in requests:
+            base = {
+                "binary": req.get("binary"),
+                "host": req.get("host"),
+                "port": req.get("port"),
+                "method": req.get("method"),
+                "path": req.get("path"),
+            }
+            try:
+                v = NetVars()
+                allow_formula = encode_network_policy(policy, v)
+            except (ValueError, KeyError, TypeError) as exc:
+                results.append({**base, "predicted_decision": "error", "error": str(exc)})
+                continue
+            constraints = []
+            if req.get("host"):
+                constraints.append(v.host == z3.StringVal(str(req["host"])))
+            if int(req.get("port") or 0) > 0:
+                constraints.append(v.port == z3.IntVal(int(req["port"])))
+            if req.get("binary"):
+                constraints.append(v.binary == z3.StringVal(str(req["binary"])))
+            if req.get("method"):
+                constraints.append(v.method == z3.StringVal(str(req["method"])))
+            if req.get("path"):
+                constraints.append(v.path == z3.StringVal(str(req["path"])))
+            solver = z3.Solver()
+            solver.set("timeout", self.timeout_ms)
+            solver.add(z3.And(*constraints, allow_formula) if constraints else allow_formula)
+            check = solver.check()
+            decision = "allow" if check == z3.sat else "deny" if check == z3.unsat else "unknown"
+            results.append({**base, "predicted_decision": decision})
         return results
 
     def _run_query(

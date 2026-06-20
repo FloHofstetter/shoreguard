@@ -19,6 +19,7 @@ type IslandLoader = () => Promise<{ default: IslandComponent }>;
 const ISLANDS: Record<string, IslandLoader> = {
   "users-page": () => import("./islands/users"),
   "groups-page": () => import("./islands/groups"),
+  "tenants-page": () => import("./islands/tenants"),
   "webhooks-page": () => import("./islands/webhooks"),
   "audit-page": () => import("./islands/audit"),
   "security-posture": () => import("./islands/security-posture"),

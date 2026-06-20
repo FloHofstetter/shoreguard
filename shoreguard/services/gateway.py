@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import grpc
 
@@ -33,6 +33,9 @@ from shoreguard.config import is_private_ip
 from shoreguard.exceptions import GatewayNotConnectedError, NotFoundError
 from shoreguard.services.registry import _UNSET, GatewayRegistry
 from shoreguard.settings import get_settings
+
+if TYPE_CHECKING:
+    from shoreguard.services.gateway_inventory import GatewayInventoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -95,13 +98,21 @@ class GatewayService:
 
     Args:
         registry: Gateway registry for persistence.
+        inventory: Optional restart-reconciler inventory store; ``None``
+            disables inventory snapshots and the reap-diff.
 
     Attributes:
         registry: The underlying gateway registry.
     """
 
-    def __init__(self, registry: GatewayRegistry) -> None:  # noqa: D107
+    def __init__(  # noqa: D107
+        self, registry: GatewayRegistry, inventory: GatewayInventoryStore | None = None
+    ) -> None:
         self._registry = registry
+        # Optional restart reconciler: snapshots inventory on each successful
+        # probe and diffs it on recovery. None disables the feature (and keeps
+        # direct GatewayService(registry) construction in tests working).
+        self._inventory = inventory
         # Per-gateway connection cache with backoff state. Instance state so
         # each container (prod app, each test) owns its own connections.
         self._clients: dict[str, _ClientEntry] = {}
@@ -608,14 +619,87 @@ class GatewayService:
 
             was_up = previous not in down_statuses and previous != "unknown"
             is_down = status in down_statuses
+            recovered = previous in down_statuses and not is_down and status != "unknown"
             if was_up and is_down:
                 await self._fire_health_event("gateway.unreachable", name, previous, status)
-            elif previous in down_statuses and not is_down and status != "unknown":
+            elif recovered:
                 await self._fire_health_event("gateway.recovered", name, previous, status)
+
+            # Restart reconciler: on recovery diff the pre-down snapshot against
+            # a fresh one; otherwise just snapshot the live inventory. Each step
+            # is swallowed so it never breaks the health pass.
+            if self._inventory is not None and not is_down and status != "unknown":
+                if recovered:
+                    await self._reconcile_on_recovery(name, previous)
+                else:
+                    await self._capture_inventory(name)
 
         await asyncio.gather(
             *(_probe(gw["name"], str(gw.get("last_status") or "unknown")) for gw in gateways)
         )
+
+    async def _capture_inventory(self, name: str) -> None:
+        """Snapshot a gateway's live inventory, swallowing errors.
+
+        Args:
+            name: Gateway name.
+        """
+        if self._inventory is None:
+            return
+        try:
+            client = await self.get_client(name=name)
+            await self._inventory.capture(name, client)
+        except Exception:  # noqa: BLE001 — snapshotting must not break the health loop
+            logger.debug("Inventory snapshot failed for '%s'", name, exc_info=True)
+
+    async def _reconcile_on_recovery(self, name: str, previous: str) -> None:
+        """Diff the pre-down vs post-recovery inventory and fire a reap event.
+
+        Reads the last snapshot (pre-down) BEFORE capturing a fresh one, so the
+        diff reflects what the restart actually reaped.
+
+        Args:
+            name: Gateway name.
+            previous: The down status the gateway recovered from.
+        """
+        if self._inventory is None:
+            return
+        try:
+            pre = await self._inventory.latest(name)
+            client = await self.get_client(name=name)
+            post = await self._inventory.capture(name, client)
+            if pre is None:
+                return  # never saw it before the restart — nothing to diff
+            reaped = await self._inventory.diff_and_record(name, pre, post, previous)
+            if reaped:
+                await self._fire_reaped_event(name, previous, reaped)
+        except Exception:  # noqa: BLE001 — reconciliation must not break the health loop
+            logger.debug("Reap reconciliation failed for '%s'", name, exc_info=True)
+
+    @staticmethod
+    async def _fire_reaped_event(name: str, previous: str, reaped: list[dict[str, Any]]) -> None:
+        """Fire the ``gateway.sandboxes_reaped`` webhook, never raising.
+
+        Args:
+            name: Gateway name.
+            previous: The down status the gateway recovered from.
+            reaped: The reaped sandboxes/attachments payload.
+        """
+        from shoreguard.services.webhooks import fire_webhook
+
+        logger.warning("Gateway restart reaped %d sandbox(es) on '%s'", len(reaped), name)
+        try:
+            await fire_webhook(
+                "gateway.sandboxes_reaped",
+                {
+                    "gateway": name,
+                    "recovered_from_status": previous,
+                    "reaped": reaped,
+                    "reaped_count": len(reaped),
+                },
+            )
+        except Exception:  # noqa: BLE001 — health loop must survive webhook errors
+            logger.exception("Failed to fire gateway.sandboxes_reaped for %s", name)
 
     @staticmethod
     async def _fire_health_event(event: str, name: str, previous: str, status: str) -> None:

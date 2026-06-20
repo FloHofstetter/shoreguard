@@ -803,6 +803,206 @@ class BudgetSettings(BaseSettings):
     )
 
 
+class PricingSettings(BaseSettings):
+    """Estimated-dollar overlay over the request-count metering.
+
+    OpenShell exposes no token/usage RPC and its L7 proxy strips usage
+    metadata, so ShoreGuard can only meter inference *request counts* (see
+    :class:`BudgetSettings`). This group turns those counts into an
+    **estimated** dollar figure via a flat per-request price (optionally
+    per provider type), surfaced in budgets, the dashboard top-spenders,
+    and the daily digest. It is honestly labelled "estimated": there is no
+    token-accurate cost until an upstream usage RPC lands.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Annotate usage/budgets/digest with an estimated
+            dollar cost. On by default in ``--local`` mode.
+        usd_per_request_default (float): Fallback estimated price per
+            inference request when a provider type has no explicit rate.
+        usd_per_request_by_type (dict[str, float]): Per-provider-type price
+            per request, keyed by the provider ``type`` reported by the
+            gateway (e.g. ``{"openai": 0.01}``).
+        currency_label (str): Label shown next to estimated amounts.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_PRICING_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Annotate usage, budgets, and the digest with an "
+        "estimated dollar cost derived from metered request counts "
+        "(honestly 'estimated' — OpenShell exposes no token usage). On by "
+        "default in --local mode unless set explicitly.",
+    )
+    usd_per_request_default: float = Field(
+        default=0.0,
+        ge=0,
+        description="Fallback estimated price per inference request",
+    )
+    usd_per_request_by_type: dict[str, float] = Field(
+        default_factory=dict,
+        description="Per-provider-type estimated price per request, keyed "
+        "by the provider type reported by the gateway",
+    )
+    currency_label: str = Field(
+        default="USD (est.)",
+        description="Label shown next to estimated cost amounts",
+    )
+
+
+class TenantSettings(BaseSettings):
+    """Tenant visibility scoping (a governance grouping of gateways).
+
+    Tenants restrict a non-admin user's view (gateway list, fleet
+    overview, digest) to their tenants' gateways. This is a visibility
+    boundary only, never data-plane isolation.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Master gate for read-path visibility scoping. When
+            ``False`` the scope helper always yields the full fleet, so
+            behaviour is identical to having no tenants even if some exist.
+        rollup_window_days (int): Trailing window for the per-tenant spend
+            rollup.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_TENANT_")
+
+    enabled: bool = Field(
+        default=True,
+        description="Restrict non-admin users' gateway list / fleet / digest "
+        "views to their assigned tenants' gateways. Admins, no-auth, and "
+        "users in no tenant always see the full fleet.",
+    )
+    rollup_window_days: int = Field(
+        default=7,
+        ge=1,
+        description="Trailing window (days) for the per-tenant spend rollup",
+    )
+
+
+class ReconcilerSettings(BaseSettings):
+    """Gateway restart reconciler (inventory snapshots + reap-diff).
+
+    A gateway/Docker restart destroys all sandboxes; ShoreGuard cannot
+    prevent that, but it snapshots each gateway's inventory on every
+    health probe and, on recovery, reports what the restart reaped, plus
+    an "at risk on restart" badge for OpenShell versions below a known
+    restart-safe floor. Surfacing/diagnosing only — never self-healing.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        snapshot_enabled (bool): Capture an inventory snapshot on each
+            successful health probe (needed for the reap-diff).
+        restart_safe_min_version (str | None): OpenShell versions below this
+            are flagged "at risk on restart"; ``None`` disables the badge.
+        reap_retention_days (int): Age threshold for pruning snapshots/reaps.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_RECONCILER_")
+
+    snapshot_enabled: bool = Field(
+        default=True,
+        description="Snapshot each gateway's sandboxes + provider attachments "
+        "on every successful health probe (enables the restart reap-diff)",
+    )
+    restart_safe_min_version: str | None = Field(
+        default=None,
+        description="OpenShell versions below this are flagged 'at risk on "
+        "restart'; unset disables the badge",
+    )
+    reap_retention_days: int = Field(
+        default=30,
+        ge=1,
+        description="Age (days) after which inventory snapshots and reap records are pruned",
+    )
+
+
+class RateGovernorSettings(BaseSettings):
+    """Per-sandbox inference rate ceilings with a reversible soft-pause.
+
+    Sits between budgets and the hard kill switch: when a sandbox exceeds
+    its request-rate ceiling the governor detaches its providers into a
+    separate pause table and auto-resumes after a cooldown. Off by default
+    even in local mode — auto-pausing a solo developer's own agents is
+    surprising.
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        enabled (bool): Run the rate-governor background task.
+        check_interval (int): Seconds between governor evaluations.
+        default_window_seconds (int): Default tumbling window for new limits.
+        cooldown_seconds (int): How long a soft-pause lasts before auto-resume.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_RATEGOV_")
+
+    enabled: bool = Field(
+        default=False,
+        description="Evaluate per-sandbox request-rate ceilings and engage a "
+        "reversible soft-pause when exceeded (off by default — even in local "
+        "mode — since auto-pausing your own agents is surprising)",
+    )
+    check_interval: int = Field(
+        default=60,
+        ge=10,
+        description="Seconds between rate-governor evaluations",
+    )
+    default_window_seconds: int = Field(
+        default=60,
+        ge=1,
+        description="Default tumbling window (seconds) for a new rate limit",
+    )
+    cooldown_seconds: int = Field(
+        default=300,
+        ge=1,
+        description="How long a soft-pause lasts before auto-resume",
+    )
+
+
+class SimulatorSettings(BaseSettings):
+    """Policy simulator (approval narrowness gate + denial replay).
+
+    The narrowness gate is a cheap, sound breadth heuristic on by default;
+    denial replay persists the inbound denial corpus and replays it against
+    a candidate policy, so it is opt-in (adds persistence + a background
+    prune).
+
+    Attributes:
+        model_config (SettingsConfigDict): Pydantic settings configuration.
+        narrowness_gate_enabled (bool): Annotate approval chunks with a
+            breadth assessment (badge over-broad grants).
+        replay_enabled (bool): Persist denial samples and enable
+            ``POST .../policy/simulate`` denial replay.
+        max_replay_samples (int): Cap on samples replayed per simulate call.
+        retention_days (int): Age after which persisted denial samples prune.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="SHOREGUARD_SIMULATOR_")
+
+    narrowness_gate_enabled: bool = Field(
+        default=True,
+        description="Annotate pending approval chunks with a proposed-rule "
+        "breadth assessment so over-broad grants are badged for review",
+    )
+    replay_enabled: bool = Field(
+        default=False,
+        description="Persist inbound denial samples and enable denial-replay "
+        "policy simulation (opt-in — adds persistence + a prune task)",
+    )
+    max_replay_samples: int = Field(
+        default=500,
+        ge=1,
+        description="Maximum denial samples replayed per simulate call",
+    )
+    retention_days: int = Field(
+        default=30,
+        ge=1,
+        description="Age (days) after which persisted denial samples are pruned",
+    )
+
+
 class DigestSettings(BaseSettings):
     """Daily activity digest ("what did my agents do while I slept?").
 
@@ -1424,6 +1624,11 @@ class Settings(BaseSettings):
         cert_rotation (CertRotationSettings): Proactive mTLS cert rotation.
         digest (DigestSettings): Daily activity digest dispatch.
         budget (BudgetSettings): Inference usage metering and budgets.
+        pricing (PricingSettings): Estimated-dollar overlay over request counts.
+        tenant (TenantSettings): Tenant visibility scoping.
+        reconciler (ReconcilerSettings): Gateway restart reconciler.
+        rate_governor (RateGovernorSettings): Per-sandbox rate ceilings.
+        simulator (SimulatorSettings): Policy simulator (narrowness + replay).
         smtp (SmtpSettings): Server-wide SMTP defaults for email webhooks.
         node_alert (NodeAlertSettings): Host threshold alert evaluation.
         push (PushSettings): Web Push (PWA notification) configuration.
@@ -1453,6 +1658,11 @@ class Settings(BaseSettings):
     cert_rotation: CertRotationSettings = Field(default_factory=CertRotationSettings)
     digest: DigestSettings = Field(default_factory=DigestSettings)
     budget: BudgetSettings = Field(default_factory=BudgetSettings)
+    pricing: PricingSettings = Field(default_factory=PricingSettings)
+    tenant: TenantSettings = Field(default_factory=TenantSettings)
+    reconciler: ReconcilerSettings = Field(default_factory=ReconcilerSettings)
+    rate_governor: RateGovernorSettings = Field(default_factory=RateGovernorSettings)
+    simulator: SimulatorSettings = Field(default_factory=SimulatorSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     node_alert: NodeAlertSettings = Field(default_factory=NodeAlertSettings)
     push: PushSettings = Field(default_factory=PushSettings)
@@ -1485,6 +1695,8 @@ class Settings(BaseSettings):
         if self.server.local_mode:
             if "SHOREGUARD_BUDGET_METERING_ENABLED" not in os.environ:
                 self.budget.metering_enabled = True
+            if "SHOREGUARD_PRICING_ENABLED" not in os.environ:
+                self.pricing.enabled = True
             if "SHOREGUARD_DIGEST_ENABLED" not in os.environ:
                 self.digest.enabled = True
             if "SHOREGUARD_WEBHOOK_ONE_TAP_APPROVALS" not in os.environ:

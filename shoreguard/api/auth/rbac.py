@@ -147,6 +147,80 @@ async def _lookup_group_global_role(user_id: int) -> str | None:
             raise _GatewayRoleLookupError(f"Group global role lookup failed for user_id={user_id}")
 
 
+# ─── Tenant visibility scoping ─────────────────────────────────────────────
+
+
+async def scoped_gateway_names(request: Request) -> set[str] | None:
+    """Return the gateway names the caller may see, or None for the full fleet.
+
+    This is a visibility filter only — it never elevates or blocks a role.
+    Returns ``None`` (unrestricted) for the ``--no-auth`` dev bypass, admins,
+    service principals, and any user that belongs to no tenant (preserving
+    today's fleet-wide behaviour). A non-admin user assigned to one or more
+    tenants is restricted to the union of those tenants' gateways (an empty
+    set means "in a tenant, but it holds no gateways" — i.e. sees nothing).
+    Gated by ``settings.tenant.enabled``.
+
+    Args:
+        request: The (already authenticated) incoming HTTP request.
+
+    Returns:
+        set[str] | None: Allowed gateway names, or ``None`` for no restriction.
+
+    Raises:
+        HTTPException: 503 if the tenant lookup fails (fail closed — a
+            transient DB error must never silently widen or hide scope).
+    """
+    from shoreguard.settings import get_settings
+
+    if not get_settings().tenant.enabled:
+        return None
+    if state.no_auth:
+        return None
+    if getattr(request.state, "role", None) == "admin":
+        return None
+    user_db_id = getattr(request.state, "user_db_id", None)
+    if user_db_id is None:
+        # Service principals and unidentified callers are not tenant-scoped.
+        return None
+    if state.session_factory is None:
+        return None
+
+    from shoreguard.models import Gateway, TenantGateway, TenantUser
+
+    async with state.session_factory() as session:
+        try:
+            tenant_ids = (
+                (
+                    await session.execute(
+                        select(TenantUser.tenant_id).where(TenantUser.user_id == user_db_id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not tenant_ids:
+                return None  # not in any tenant → full fleet (today's behaviour)
+            names = (
+                (
+                    await session.execute(
+                        select(Gateway.name)
+                        .join(TenantGateway, TenantGateway.gateway_id == Gateway.id)
+                        .where(TenantGateway.tenant_id.in_(tenant_ids))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        except SQLAlchemyError:
+            logger.exception("Tenant scope lookup failed (user_id=%s)", user_db_id)
+            raise HTTPException(
+                status_code=503,
+                detail="Tenant scope lookup failed — try again later",
+            )
+    return set(names)
+
+
 # ─── FastAPI dependencies ──────────────────────────────────────────────────
 
 
