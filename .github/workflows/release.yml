@@ -116,7 +116,7 @@ jobs:
 
       # The wheel force-includes the compiled island bundle (frontend/dist),
       # a git-ignored Vite artifact — build it before uv build.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
