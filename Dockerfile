@@ -1,7 +1,7 @@
 # ── Stage 0: Build the Preact/TypeScript island bundle ──────────────────────
 # frontend/dist is a Vite build artifact (git-ignored), so it must be compiled
 # here — the wheel force-includes it as shoreguard/_frontend/dist.
-FROM node:24-slim AS frontend
+FROM node:26-slim AS frontend
 
 WORKDIR /build/frontend
 # Install against the lockfile first so the layer caches across source edits.
